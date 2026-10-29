@@ -9,7 +9,7 @@ import {
 import { Camera } from './camera.js';
 import {
   buildWorld, sizeLayers, renderMap, renderGrid, renderTerrain, renderDrawings, renderWalls, renderMarkers,
-  renderAreas, renderTokens, renderFog, renderOverlay, pingAt,
+  renderAreas, renderAuras, renderTokens, renderFog, renderOverlay, pingAt,
 } from './world.js';
 import { computeVision, isVisible, visibleCells } from './fog.js';
 import { cellOf, gridSize, key } from '../../rules/geometry.js';
@@ -171,7 +171,7 @@ export function mountTable(root, cid) {
     }
     if (all || dirty.has('tokens')) renderTokens(L, ctx);
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
-    if (all || dirty.has('areas') || dirty.has('tokens')) renderAreas(L, ctx);
+    if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);
     if (all || dirty.has('chrome')) renderChrome(ctx);
     if (all || dirty.has('panels')) ctx.panels.refresh();

@@ -5,7 +5,7 @@ import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
 import { tokenStats } from '../../core/campaign.js';
-import { sizeById, conditionById, LIGHT_COLORS, woundLabel } from '../../data/rules.js';
+import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -21,6 +21,7 @@ export function buildWorld(viewport) {
     terrain: svg('terrain-layer'),
     drawings: svg('drawings-layer'),
     areas: svg('areas-layer'),
+    auras: svg('auras-layer'),
     walls: svg('walls-layer'),
     markers: el('<div class="layer markers-layer"></div>'),
     tokens: el('<div class="layer tokens-layer"></div>'),
@@ -29,14 +30,14 @@ export function buildWorld(viewport) {
     labels: el('<div class="layer labels-layer"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.markers, L.tokens, L.fog, L.areas, L.overlay, L.labels);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.fog, L.areas, L.overlay, L.labels);
   viewport.append(world);
   return L;
 }
 
 export function sizeLayers(L, scene) {
   const { width: W, height: H } = scene.map;
-  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'walls', 'overlay']) {
+  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'auras', 'walls', 'overlay']) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
@@ -152,14 +153,6 @@ export function renderAreas(L, ctx) {
   if (ctx.ui.reach?.size) {
     for (const [k] of ctx.ui.reach) { const { c, r } = unkey(k); out.push(`<rect class="cell reach" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   }
-  // Ауры токенов
-  for (const t of scene.tokens) {
-    if (!t.aura || !ctx.tokenShown(t)) continue;
-    const p = ctx.posOf(t);
-    const n = sizeById(t.size).cells;
-    const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;
-    out.push(`<circle class="aura" cx="${p.x}" cy="${p.y}" r="${rad}"/>`);
-  }
   // Радиусы света в режиме «Свет»
   if (ctx.isMasterView && ctx.ui.tool === 'lights') {
     for (const l of scene.lights) {
@@ -181,6 +174,22 @@ export function renderAreas(L, ctx) {
   // Выделенные клетки ловушки
   if (ctx.ui.trapCells?.length) for (const k of ctx.ui.trapCells) { const { c, r } = unkey(k); out.push(`<rect class="cell template" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   L.areas.innerHTML = out.join('');
+}
+
+/** Ауры — отдельным слоем под всеми токенами, со своим цветом и прозрачностью. */
+export function renderAuras(L, ctx) {
+  const { scene } = ctx;
+  const s = gridSize(scene.grid);
+  const out = [];
+  for (const t of scene.tokens) {
+    if (!t.aura || !ctx.tokenShown(t)) continue;
+    const p = ctx.posOf(t);
+    const n = sizeById(t.size).cells;
+    const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;
+    const hex = auraHex(t.aura), a = auraAlpha(t.aura);
+    out.push(`<circle class="aura" cx="${p.x}" cy="${p.y}" r="${rad}" style="--ac:${hex};--aa:${a};--as:${Math.min(1, a + 0.45)}"/>`);
+  }
+  L.auras.innerHTML = out.join('');
 }
 
 // ——— Токены ———

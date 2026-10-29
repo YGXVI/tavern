@@ -79,6 +79,29 @@ export const LIGHT_COLORS = {
   magic: { name: 'Магия', rgb: [167, 139, 250] },
 };
 
+/** Цвета аур: выбираются в настройках токена; можно задать и свой (#rrggbb). */
+export const AURA_COLORS = [
+  { id: 'magic', name: 'Магия', hex: '#a78bfa' },
+  { id: 'holy', name: 'Свет', hex: '#f4c34d' },
+  { id: 'fire', name: 'Огонь', hex: '#f0703c' },
+  { id: 'nature', name: 'Природа', hex: '#4fc27a' },
+  { id: 'frost', name: 'Холод', hex: '#5fb8f0' },
+  { id: 'blood', name: 'Кровь', hex: '#e5484d' },
+  { id: 'shadow', name: 'Тень', hex: '#8a8fa6' },
+];
+export const AURA_OPACITY = 16;
+/** Цвет ауры в #rrggbb: свой цвет или из палитры. */
+export function auraHex(a) {
+  const c = a?.color;
+  if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) return c;
+  return (AURA_COLORS.find((x) => x.id === c) || AURA_COLORS[0]).hex;
+}
+/** Непрозрачность заливки ауры, 0–1. */
+export function auraAlpha(a) {
+  const v = Number(a?.opacity);
+  return Math.max(0, Math.min(100, Number.isFinite(v) ? v : AURA_OPACITY)) / 100;
+}
+
 export const CLASSES = [
   { id: 'barbarian', name: 'Варвар', hd: 12, saves: ['str', 'con'] },
   { id: 'bard', name: 'Бард', hd: 8, saves: ['dex', 'cha'], spell: 'cha' },
