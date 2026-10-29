@@ -13,7 +13,13 @@ const ib = (act, name, tip, { active = false, kbd = '', extra = '', disabled = f
   `<button class="icon-btn ${active ? 'active' : ''}" data-act="${act}" ${extra} ${disabled ? 'disabled' : ''} data-tip="${esc(tip)}" ${kbd ? `data-kbd="${esc(kbd)}"` : ''} aria-label="${esc(tip)}" aria-pressed="${active}">${icon(name, 22)}${count ? `<span class="count">${count}</span>` : ''}</button>`;
 const div = '<span class="divider"></span>';
 
-function cache(node, html) { if (node && node.__html !== html) { node.innerHTML = html; node.__html = html; } }
+function cache(node, html) {
+  if (!node || node.__html === html) return;
+  // Пока человек печатает в поле панели (например, хиты), не перерисовываем её под ним.
+  const a = document.activeElement;
+  if (a && node.contains(a) && a.matches('input:not([type="range"]):not([type="checkbox"]), textarea')) return;
+  node.innerHTML = html; node.__html = html;
+}
 
 export function renderChrome(ctx) {
   const root = ctx.root.querySelector('.chrome');
@@ -30,6 +36,25 @@ export function renderChrome(ctx) {
       if (r) { ctx.panels.range(r.dataset.range, Number(r.value), r); r.style.setProperty('--fill', `${((r.value - r.min) / (r.max - r.min)) * 100}%`); }
     });
     root.addEventListener('change', (e) => { const s = e.target.closest('[data-select]'); if (s) ctx.panels.selectChange(s.dataset.select, s.value); });
+    // Хиты прямо в токен-баре: Enter — записать, Esc — вернуть как было.
+    root.addEventListener('focusin', (e) => { const h = e.target.closest('[data-hp-input]'); if (h) { h.dataset.was = h.value; h.select(); h.dataset.fresh = '1'; } });
+    // Первый mouseup после фокуса не сбрасывает выделение — можно сразу печатать новое число.
+    root.addEventListener('mouseup', (e) => { const h = e.target.closest('[data-hp-input]'); if (h?.dataset.fresh) { e.preventDefault(); delete h.dataset.fresh; } });
+    root.addEventListener('keydown', (e) => {
+      const h = e.target.closest('[data-hp-input]'); if (!h) return;
+      if (e.key === 'Enter') { e.preventDefault(); h.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); h.value = h.dataset.was ?? h.value; h.dataset.cancel = '1'; h.blur(); }
+      e.stopPropagation();
+    });
+    root.addEventListener('focusout', (e) => {
+      const h = e.target.closest('[data-hp-input]'); if (!h) return;
+      const cancel = h.dataset.cancel; delete h.dataset.cancel;
+      if (!cancel && h.value.trim() !== (h.dataset.was ?? '').trim()) {
+        if (!ctx.panels.commitHp(h.dataset.hpInput, h.value)) { h.value = h.dataset.was ?? h.value; ctx.toast({ title: 'Не понял число', body: 'Впишите, сколько осталось (12), или урон −5 / лечение +3', icon: 'alert-circle' }); }
+      }
+      root.querySelector('.ch-bc').__html = ''; // перерисовать с новыми хитами
+      requestAnimationFrame(() => renderChrome(ctx));
+    });
   }
   const c = ctx.c;
   if (!c) return;

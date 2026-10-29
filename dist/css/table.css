@@ -264,6 +264,15 @@
 .hp-num { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .hp-num small { font: 500 10px/12px var(--font-text); color: var(--text-tertiary); text-transform: uppercase; }
 .hp-num b { font: 600 14px/16px var(--font-text); }
+.hp-num b.hp-max { color: var(--text-secondary); font-weight: 500; }
+.hp-input {
+  width: 4ch; min-width: 0; height: 22px; padding: 0 4px; margin: -3px 0; border: 0; border-radius: 6px; text-align: right;
+  background: var(--bg-control); color: var(--text-primary); font: 600 14px/16px var(--font-text); font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 0 0 1px var(--stroke-divider); cursor: text;
+}
+.hp-input:hover { box-shadow: inset 0 0 0 1px var(--stroke-accent); }
+.hp-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--brand-500); width: 6ch; }
+.hp-input.negative, .hp-num b.negative { color: var(--red-400); }
 .hp-num em { font: 600 11px/12px var(--font-text); color: var(--blue-300); font-style: normal; }
 .hp-cell .hp-bar { width: 100%; }
 .death-mini { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; white-space: nowrap; }

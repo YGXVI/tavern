@@ -367,6 +367,7 @@ export class Panels {
 
   // ——— Хиты и смерть ———
   hpEditor(tokenId, anchor, mode) { T.hpEditor(this.ctx, Array.isArray(tokenId) ? tokenId : [tokenId], anchor, mode); }
+  commitHp(tokenId, text) { return T.commitHpInput(this.ctx, tokenId, text); }
   applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
 
   deathSave(chId) {
