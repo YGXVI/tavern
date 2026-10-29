@@ -1,8 +1,40 @@
 # Данные и владельцы
 
-## Реализовано: локальный прототип
+## Реализовано: демо-стол v2 (TASK-007, DEC-011)
 
-Источник — `dist/app.js`, `dist/access.js`, `dist/themes.js`. Данные привязаны к origin сайта и профилю браузера. Localhost и опубликованный сайт имеют независимые хранилища. Нет аккаунтов, сервера, синхронизации и безопасной границы между мастером и игроком.
+Источник — `dist/js/**`. Это по-прежнему локальная демонстрация: данные лежат в браузере, сервера, проверки личности и защиты закрытых полей нет. «Онлайн» имитируется между вкладками одного браузера: данные — событием `storage`, мгновенные действия (пинг, перетаскивание, линейка, шаблон, бросок, присутствие) — `BroadcastChannel('rasputye-v2')`.
+
+| Хранилище | Ключ | Форма | Назначение |
+| --- | --- | --- | --- |
+| localStorage | `rasputye-v2-db` | `{version: 1, rev, users, campaigns}` | Все пользователи-заглушки и кампании. При другом `version` читается как пустое и засевается демо (миграций пока нет). |
+| sessionStorage | `rasputye-v2-session` | `{userId, at}` | Кто «вошёл» в этой вкладке: у каждой вкладки свой человек. Не токен. |
+| localStorage | `rasputye-v2-last-user` | строка `userId` | Кого подставить в новой вкладке (кроме ссылки-приглашения). |
+| sessionStorage | `rasputye-v2-cam:<campaignId>:<sceneId>` | `{x, y, z}` | Камера стола в этой вкладке. |
+| IndexedDB | `rasputye-v2-assets` / `images` | Blob по UUID | Загруженные карты. В данных — ссылка `idb:<uuid>`, файл живёт только в этом браузере. |
+
+Старые ключи прототипа (ниже) новый интерфейс не читает и не стирает.
+
+### Схема `rasputye-v2-db` (версия 1)
+
+- `users: {[id]: {id, name, handle, hue, provider: 'discord-demo', createdAt}}` — заглушки «входа через Discord», без токенов и почты.
+- `campaigns: {[id]: Campaign}`.
+- `Campaign = {id, name, description, cover, level, seats, createdAt, ownerId, status, members, invite, characters, scenes, activeSceneId, combat, paused, log, settings, saveRequests?, portalRequests?}`.
+- `Member = {userId, role: 'master'|'player', status: 'active'|'pending', characterId, joinedAt, lastSeen?, sceneId?}`. `sceneId` — личная сцена игрока, если отряд разделился.
+- `invite = {code: 'RSP-XXXX', createdAt?, expiresAt|null, manual}`.
+- `Character` — базовый шаблон листа (`makeCharacter` в `dist/js/data/demo.js`): `id, ownerId, name, portrait, classId/className, raceId/raceName, level, stats{str…cha}, saves[], skills[], ac, hp, hpMax, tempHp, speed, darkvision, deathSaves{s,f}, conditions[], attacks[], slots{}, spells, inventory, features, notes, initBonus, light, aura`. Детали листа — TASK-004.
+- `Scene = {id, name, note, status, map{src, width, height}, grid{size, offsetX, offsetY, feet, visible, calibrated?}, lighting: 'bright'|'dark', fog{mode: 'vision'|'manual'|'off', ops[], explored[]}, walls[], lights[], terrain{difficult[], blocked[]}, tokens[], drawings[], pins[], portals[], traps[]}`.
+- Мировые координаты — пиксели исходной картинки карты; клетка — `"c,r"` от смещения сетки.
+- `Token = {id, kind: 'hero'|'foe'|'item', characterId?, monsterId?, name, img, size, x, y, hidden, conditions[], hp?, hpMax?, ac?, light?, aura?, disengaged?}`. Хиты героя берутся из листа, существа — с токена.
+- `Wall = {id, a{x,y}, b{x,y}, kind: 'wall'|'window'|'invisible'|'door'|'secret', open, locked, lockDc?, discovered?, name?}`.
+- `combat = {active, sceneId, round, turn, entries[{tokenId, init|null}], moved{tokenId: футы}}`; `init: null` — игрок бросит сам.
+- `log` — последние 120 записей `{id, at, userId, kind, label|text, total?, detail?, hidden?}`.
+- `settings = {diagonal: '5'|'5-10-5', sharedVision, playersSeeHp: 'status'|'exact'}`.
+
+Права в демо проверяются только интерфейсом (`canControlToken`, роль в членстве). Любая вкладка может записать что угодно в `localStorage`; скрытые токены, заметки мастера и ловушки физически лежат у игрока в браузере. Перед настоящей игрой по сети нужен сервер (DEC-008).
+
+## Старый прототип (`dist/legacy/`)
+
+Источник — `dist/legacy/app.js`, `dist/access.js`, `dist/legacy/themes.js`. Данные привязаны к origin сайта и профилю браузера. Localhost и опубликованный сайт имеют независимые хранилища. Нет аккаунтов, сервера, синхронизации и безопасной границы между мастером и игроком.
 
 | Ключ localStorage | Форма | Назначение |
 | --- | --- | --- |

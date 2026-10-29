@@ -1,0 +1,159 @@
+/* Дизайн-токены «Распутья» — перенесены из Figma (коллекции primitives → theme → components).
+   Названия повторяют переменные макета: background/canvas → --bg-canvas и т. д.
+   Меняйте значения здесь, а не в компонентах. */
+:root {
+  color-scheme: dark;
+
+  /* primitives */
+  --neutral-0: #0e1018;
+  --neutral-100: #141725;
+  --neutral-150: #1a1d2d;
+  --neutral-200: #1e2233;
+  --neutral-250: #252a3d;
+  --neutral-300: #2e3448;
+  --neutral-350: #3a4057;
+  --neutral-400: #4a5068;
+  --neutral-500: #5d6378;
+  --neutral-600: #7a8094;
+  --neutral-650: #8c92a5;
+  --neutral-700: #a3a8b8;
+  --neutral-800: #c9ccd6;
+  --neutral-900: #e8e9ee;
+  --neutral-950: #f3f4f7;
+  --neutral-1000: #ffffff;
+  --brand-300: #efc777;
+  --brand-400: #ecbc63;
+  --brand-500: #e9b052;
+  --brand-600: #d19a3e;
+  --brand-700: #a9792e;
+  --brand-800: #6b4e22;
+  --brand-900: #3f382c;
+  --red-300: #f08a83;
+  --red-400: #ea6f67;
+  --red-500: #e5584f;
+  --red-600: #c8423a;
+  --red-900: #3b1f23;
+  --blue-300: #9cc4f0;
+  --blue-400: #85b5ec;
+  --blue-500: #6fa8e8;
+  --blue-600: #4f8ed6;
+  --blue-900: #1e2b40;
+  --green-400: #6ad3a1;
+  --green-500: #4cc38a;
+  --green-900: #1b3329;
+  --violet-500: #a78bfa;
+  --bone-100: #f3e8d2;
+  --bone-300: #d9c49c;
+  --bone-600: #9a7f55;
+  --wood-500: #5e412b;
+  --wood-800: #2b1e15;
+  --felt-500: #18171d;
+  --discord-500: #5865f2;
+
+  /* theme */
+  --bg-canvas: var(--neutral-200);
+  --bg-surface: var(--neutral-150);
+  --bg-glass: rgb(0 0 0 / 0.5);
+  --bg-glass-light: rgb(255 255 255 / 0.65);
+  --bg-hover: rgb(255 255 255 / 0.05);
+  --bg-pressed: rgb(255 255 255 / 0.1);
+  --bg-accent: var(--brand-500);
+  --bg-accent-subtle: var(--brand-900);
+  --bg-accent-glow: rgb(233 176 82 / 0.16);
+  --bg-tooltip: var(--neutral-950);
+  --bg-badge: var(--neutral-200);
+  --bg-nameplate: rgb(0 0 0 / 0.85);
+  --bg-overlay: rgb(0 0 0 / 0.6);
+  --bg-panel: rgb(0 0 0 / 0.85);
+  --bg-row-current: var(--brand-900);
+  --bg-control: rgb(255 255 255 / 0.1);
+  --bg-control-off: rgb(255 255 255 / 0.2);
+  --bg-hp-track: rgb(255 255 255 / 0.1);
+  --bg-hp: var(--red-500);
+  --bg-negative: var(--red-500);
+  --bg-negative-subtle: rgb(229 88 79 / 0.16);
+  --bg-positive: var(--green-500);
+  --bg-positive-subtle: rgb(76 195 138 / 0.16);
+
+  --text-primary: var(--neutral-1000);
+  --text-secondary: var(--neutral-700);
+  --text-tertiary: var(--neutral-600);
+  --text-accent: var(--brand-500);
+  --text-on-light: var(--neutral-100);
+  --text-on-accent: var(--neutral-100);
+  --text-negative: var(--red-400);
+  --text-positive: var(--green-500);
+  --text-magic: var(--violet-500);
+
+  --icon-primary: var(--neutral-1000);
+  --icon-secondary: var(--neutral-700);
+  --icon-accent: var(--brand-500);
+  --icon-disabled: rgb(255 255 255 / 0.4);
+
+  --stroke-divider: rgb(255 255 255 / 0.2);
+  --stroke-subtle: rgb(255 255 255 / 0.1);
+  --stroke-accent: var(--brand-500);
+  --stroke-focus: var(--brand-300);
+
+  --side-hero: var(--blue-500);
+  --side-foe: var(--red-500);
+  --side-neutral: var(--neutral-700);
+  --status-online: var(--green-500);
+  --status-offline: var(--neutral-500);
+  --status-negative: var(--red-500);
+
+  /* components — карта и стол */
+  --map-grid: rgb(255 255 255 / 0.4);
+  --fog-master: rgb(0 0 0 / 0.85);
+  --fog-unexplored: rgb(0 0 0 / 0.94);
+  --fog-explored: rgb(0 0 0 / 0.55);
+  --wall-stroke: var(--brand-500);
+  --wall-door: var(--blue-500);
+  --light-warm: var(--brand-500);
+  --light-glow: rgb(233 176 82 / 0.16);
+  --cell-template-fill: rgb(233 176 82 / 0.16);
+  --cell-template-stroke: var(--brand-500);
+  --cell-reach-fill: rgb(111 168 232 / 0.16);
+  --cell-reach-stroke: var(--blue-500);
+  --cell-threat-fill: rgb(229 88 79 / 0.16);
+  --cell-threat-stroke: var(--red-500);
+  --terrain-fill: rgb(0 0 0 / 0.3);
+  --terrain-hatch: rgb(255 255 255 / 0.4);
+  --aura-fill: rgb(167 139 250 / 0.16);
+  --aura-stroke: var(--violet-500);
+  --ping-player: var(--blue-500);
+  --ping-master: var(--brand-500);
+
+  --dice-frame: var(--wood-500);
+  --dice-frame-dark: var(--wood-800);
+  --dice-felt: var(--felt-500);
+  --die-light: var(--bone-100);
+  --die-base: var(--bone-300);
+  --die-dark: var(--bone-600);
+  --die-number: var(--wood-800);
+
+  /* dimensions */
+  --r-4: 4px; --r-6: 6px; --r-8: 8px; --r-10: 10px; --r-12: 12px; --r-14: 14px;
+  --r-16: 16px; --r-20: 20px; --r-24: 24px; --r-32: 32px; --r-full: 9999px;
+  --s-2: 2px; --s-4: 4px; --s-6: 6px; --s-8: 8px; --s-10: 10px; --s-12: 12px; --s-14: 14px;
+  --s-16: 16px; --s-20: 20px; --s-24: 24px; --s-28: 28px; --s-32: 32px; --s-40: 40px; --s-48: 48px;
+
+  /* effects */
+  --shadow-panel: 0 4px 16px rgb(0 0 0 / 0.18), 0 20px 48px rgb(0 0 0 / 0.22);
+  --shadow-token: 0 4px 8px rgb(0 0 0 / 0.6);
+  --glow-turn: 0 0 14px rgb(233 176 82 / 0.8);
+  --glass-blur: blur(12px);
+
+  /* typography */
+  --font-display: "Unbounded", "Inter", system-ui, sans-serif;
+  --font-text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "PT Mono", ui-monospace, monospace;
+
+  --z-world: 0;
+  --z-chrome: 20;
+  --z-panel: 30;
+  --z-popover: 40;
+  --z-modal: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+}

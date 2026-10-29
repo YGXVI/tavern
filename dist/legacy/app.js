@@ -1,6 +1,6 @@
-import {isMaster,canManageToken,validSession} from './access.js';
+import {isMaster,canManageToken,validSession} from '../access.js';
 import {initThemePicker} from './themes.js';
-import {roll,initiativeOrder} from './engine.js';
+import {roll,initiativeOrder} from '../engine.js';
 const $=s=>document.querySelector(s), key='tavern-campaign-v1';
 const initial={name:'Затерянные в тумане',round:1,turn:0,notes:'',logs:[],grid:true,fog:false,paths:[],tokens:[{id:'a',name:'Элиан',kind:'hero',hp:28,max:28,ac:15,mod:3,x:42,y:67,init:null},{id:'b',name:'Торин',kind:'hero',hp:38,max:38,ac:18,mod:1,x:51,y:73,init:null},{id:'c',name:'Лира',kind:'hero',hp:22,max:22,ac:13,mod:2,x:59,y:65,init:null},{id:'d',name:'Гоблин 1',kind:'enemy',hp:7,max:7,ac:15,mod:2,x:44,y:40,init:null},{id:'e',name:'Гоблин 2',kind:'enemy',hp:7,max:7,ac:15,mod:2,x:58,y:34,init:null}]};
 let state;try{state=JSON.parse(localStorage.getItem(key))||structuredClone(initial)}catch{state=structuredClone(initial)}let mode='move',filter='all',drag=null,activePath=null;const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
