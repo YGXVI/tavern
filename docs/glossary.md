@@ -32,4 +32,4 @@
 | Тема | `data-theme`, `themes[]` | `midnight`, `parchment`, `graphite`, `wine`. |
 | Локальный вход | `session`, `validSession()` | Сохранённый выбор роли/героя, без идентификации пользователя. |
 | Резервирование задачи | строка `TASK-*` в `docs/status.md` | Видимое соглашение команды, не программный lock. |
-| Публикация | Sites deployment | Не равна commit в GitHub. Vercel ещё не настроен. |
+| Публикация | Vercel deployment из GitHub Actions | Происходит сама после commit в `main` с зелёными тестами (DEC-010). Commit в ветке или PR — ещё не публикация. |
