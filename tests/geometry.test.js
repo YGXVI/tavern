@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cellOf, cellCenter, snapCenter, cellDistance, footprintGap, findPath, reachable, templateCells, freeSpots, moveBlocked, key,
+  cellOf, cellCenter, snapCenter, cellDistance, footprintGap, findPath, reachable, templateCells, freeSpots, moveBlocked, key, softSnap,
 } from '../dist/js/rules/geometry.js';
 
 const grid = { size: 50, offsetX: 10, offsetY: 20, feet: 5 };
@@ -89,4 +89,16 @@ test('свободные клетки не занимают чужие и неп
     assert.notDeepEqual(p, { x: 25, y: 25 });
     assert.notDeepEqual(p, { x: 25, y: 35 });
   }
+});
+
+test('полупривязка: свободно, но у центра клетки — магнит', () => {
+  const g = { size: 100 };
+  // Далеко от центра — точка остаётся как есть.
+  assert.deepEqual(softSnap(g, { x: 120, y: 160 }, 1), { x: 120, y: 160 });
+  // В пределах 0.28 клетки от центра — ровно в центр.
+  assert.deepEqual(softSnap(g, { x: 140, y: 160 }, 1), { x: 150, y: 150 });
+  // Большой токен 2×2 магнитится к узлу сетки.
+  assert.deepEqual(softSnap(g, { x: 210, y: 190 }, 2), { x: 200, y: 200 });
+  // Жёсткая привязка (Shift) — всегда в клетку.
+  assert.deepEqual(softSnap(g, { x: 120, y: 160 }, 1, true), { x: 150, y: 150 });
 });

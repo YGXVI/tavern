@@ -5,7 +5,7 @@ import { uid, clamp } from '../../core/dom.js';
 import { bus } from '../../core/store.js';
 import {
   cellOf, cellCenter, footprintAt, footprintCenter, findPath, reachable, gridDims, gridSize, key, unkey,
-  cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells,
+  cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap,
 } from '../../rules/geometry.js';
 import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
@@ -239,6 +239,12 @@ function cellsOfToken(t) { return sizeById(t.size).cells; }
 function dims(ctx) { const s = ctx.scene; return gridDims(s.grid, s.map.width, s.map.height); }
 
 function snapToCellCenter(ctx, w) { const g = sceneGrid(ctx); const { c, r } = cellOf(g, w.x, w.y); return cellCenter(g, c, r); }
+
+/** Удержать центр токена n×n в пределах карты. */
+function clampToMap(ctx, p, n = 1) {
+  const s = gridSize(sceneGrid(ctx)), half = (n * s) / 2, m = ctx.scene.map;
+  return { x: clamp(p.x, Math.min(half, m.width / 2), Math.max(m.width - half, m.width / 2)), y: clamp(p.y, Math.min(half, m.height / 2), Math.max(m.height - half, m.height / 2)) };
+}
 function snapToVertex(ctx, w, step = 1) {
   const g = sceneGrid(ctx), s = gridSize(g) * step, ox = g.offsetX || 0, oy = g.offsetY || 0;
   return { x: ox + Math.round((w.x - ox) / s) * s, y: oy + Math.round((w.y - oy) / s) * s };
@@ -403,25 +409,28 @@ function dragTokens(ctx, g, w, e) {
   } else {
     const n = lead.n;
     const from = footprintAt(grid, lead.x0, lead.y0, n);
-    let to = footprintAt(grid, raw.x, raw.y, n);
+    // Полупривязка: токен идёт за курсором свободно и примагничивается к клетке только рядом с её центром.
+    // С Shift — жёсткая привязка к клетке.
+    let target = clampToMap(ctx, softSnap(grid, raw, n, e.shiftKey), n);
+    let to = footprintAt(grid, target.x, target.y, n);
     const { cols, rows } = dims(ctx);
     to = { c: clamp(to.c, 0, cols - n), r: clamp(to.r, 0, rows - n) };
     const opts = moveOpts(ctx, leaderTok);
     let found = findPath(grid, from, to, opts);
     let blocked = false;
     if (!found && ctx.isMaster) { found = findPath(grid, from, to, { ...opts, walls: [], blocked: new Set() }); blocked = true; }
+    // Последний отрезок до свободной точки внутри клетки тоже не должен проходить сквозь стену.
+    if (found && !ctx.isMaster && found.cells.length && moveBlocked(footprintCenter(grid, to.c, to.r, n), target, ctx.scene.walls)) target = footprintCenter(grid, to.c, to.r, n);
     if (!found) {
-      // Игрок упёрся: оставляем последнюю достижимую клетку.
-      to = g.lastFp || from;
+      // Игрок упёрся: оставляем последнюю достижимую точку.
+      target = g.lastTarget || { x: lead.x0, y: lead.y0 };
+      to = footprintAt(grid, target.x, target.y, n);
       found = findPath(grid, from, to, opts) || { cells: [from], cost: 0 };
       blocked = true;
     }
-    g.lastFp = to;
-    const dc = to.c - from.c, dr = to.r - from.r;
-    for (const it of g.drag.items) {
-      const f = footprintAt(grid, it.x0, it.y0, it.n);
-      positions.set(it.id, footprintCenter(grid, f.c + dc, f.r + dr, it.n));
-    }
+    g.lastTarget = target;
+    const dx = target.x - lead.x0, dy = target.y - lead.y0;
+    for (const it of g.drag.items) positions.set(it.id, it.id === lead.id ? target : clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n));
     const feet = found.cost * (grid.feet || 5);
     const left = movementLeft(ctx, leaderTok);
     let label = `${feet} фт`;
@@ -429,7 +438,8 @@ function dragTokens(ctx, g, w, e) {
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
     else if (found.cells.length > 1) label = `${feet} фт · ${found.cells.length - 1} кл.`;
     if (blocked && ctx.isMaster && feet) label += ' · сквозь стену';
-    path = { pts: found.cells.map((cc) => footprintCenter(grid, cc.c, cc.r, n)), label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
+    const mid = found.cells.slice(1, -1).map((cc) => footprintCenter(grid, cc.c, cc.r, n));
+    path = { pts: [{ x: lead.x0, y: lead.y0 }, ...mid, target], label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
     g.cost = feet;
     g.path = found;
   }
