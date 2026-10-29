@@ -46,6 +46,19 @@ export function snapCenter(grid, x, y, n = 1) {
   return footprintCenter(grid, fp.c, fp.r, n);
 }
 
+/** Доля клетки, в пределах которой токен примагничивается к своему месту на сетке. */
+export const MAGNET = 0.28;
+
+/**
+ * Полупривязка: свободная точка, но рядом с центром клетки (для n×n — с узлом сетки)
+ * токен встаёт ровно в него. hard — привязать всегда.
+ */
+export function softSnap(grid, p, n = 1, hard = false) {
+  const c = snapCenter(grid, p.x, p.y, n);
+  if (hard || Math.hypot(p.x - c.x, p.y - c.y) <= gridSize(grid) * MAGNET) return c;
+  return { x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 };
+}
+
 export function footprintCells(c, r, n = 1) {
   const out = [];
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) out.push({ c: c + i, r: r + j });
