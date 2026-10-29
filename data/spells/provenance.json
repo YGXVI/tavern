@@ -1,0 +1,54 @@
+{
+  "catalogue_sha256": "4edefd7f0e9d591d3772ce720919d8c0f07d1fc99b6ba61d605d1c5844ca1ada",
+  "class_count": 13,
+  "component_header_discrepancies": [
+    {
+      "components_text": "В, С, А (1 зм)",
+      "index_flags": {
+        "material": true,
+        "somatic": true,
+        "verbal": true
+      },
+      "spell_id": "dndsu:spell:2341"
+    }
+  ],
+  "concentration_count": 234,
+  "descriptions_imported": false,
+  "duplicate_ids": 0,
+  "images_imported": false,
+  "levels": {
+    "0": 46,
+    "1": 79,
+    "2": 88,
+    "3": 74,
+    "4": 53,
+    "5": 62,
+    "6": 48,
+    "7": 28,
+    "8": 24,
+    "9": 22
+  },
+  "missing_headers": 0,
+  "permission_for_full_text": "not_established",
+  "publication_count": 15,
+  "retrieved_at": "2026-10-29T16:49:27.102941+00:00",
+  "ritual_count": 34,
+  "schema_version": 1,
+  "school_count": 8,
+  "schools": {
+    "abjuration": 54,
+    "conjuration": 95,
+    "divination": 36,
+    "enchantment": 51,
+    "evocation": 109,
+    "illusion": 33,
+    "necromancy": 43,
+    "transmutation": 103
+  },
+  "snapshot_sha256": "2a58e25c09a3e954e80c8f99f3a1856bc41af166041b4722e2f85e4b4d4e41f3",
+  "source_url": "https://dnd.su/spells/",
+  "spell_count": 524,
+  "spell_list_class_count": 9,
+  "subclass_count": 61,
+  "tce_optional_class_links": 65
+}
