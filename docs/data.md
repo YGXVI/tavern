@@ -25,6 +25,7 @@
 - `Scene = {id, name, note, status, map{src, width, height}, grid{size, offsetX, offsetY, feet, visible, calibrated?}, lighting: 'bright'|'dark', fog{mode: 'vision'|'manual'|'off', ops[], explored[]}, walls[], lights[], terrain{difficult[], blocked[]}, tokens[], drawings[], pins[], portals[], traps[]}`.
 - Мировые координаты — пиксели исходной картинки карты; клетка — `"c,r"` от смещения сетки.
 - `Token = {id, kind: 'hero'|'foe'|'item', characterId?, monsterId?, name, img, size, x, y, hidden, conditions[], hp?, hpMax?, ac?, light?, aura?, disengaged?}`. Хиты героя берутся из листа, существа — с токена.
+- `movedAt` (TASK-024, необязательное) — время последнего перемещения токена, мс; кого двигали позже, тот рисуется поверх. Нет поля — порядок по списку токенов сцены.
 - Поля токена (TASK-023, необязательные): `disposition: 'hostile'|'neutral'|'friendly'|'secret'` (нет поля — враг для `foe`), `nameHidden` (игроки видят «Неизвестное существо»), `elevation` (фт над полом).
 - Запись журнала броска: `vis: 'all'|'gm'|'blind'|'self'` (TASK-023); старое `hidden: true` без `vis` читается как `gm`.
 - `aura = {name, radius (фт), color: 'magic'|'holy'|'fire'|'nature'|'frost'|'blood'|'shadow'|'#rrggbb', opacity?: 5–100 (%; нет поля = 16), text?, concentration?}`; у героя копия хранится и в листе. Ауры рисуются отдельным слоем под токенами (TASK-020).
