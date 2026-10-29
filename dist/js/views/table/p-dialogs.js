@@ -233,38 +233,41 @@ export function pausePopover(ctx, anchor) {
 }
 
 // ——— Начать бой ———
+/**
+ * Подготовка боя — в виджете инициативы, как в макете: список участников с уже брошенной
+ * инициативой, «Перебросить врагов», «Начать бой». Состояние — в ctx.ui.setup.
+ */
 export function combatSetup(ctx, preselect = []) {
   const sc = ctx.scene;
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
-  const checked = (t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden);
-  // Инициатива бросается сразу и видна в списке; врагов можно перебросить, героев — бросают игроки или мы.
-  const rolls = Object.fromEntries(toks.map((t) => [t.id, rollInitiative(ctx.c, t).init]));
-  const hasPlayer = (t) => !!t.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player');
-  const state = { self: true };
-  const rowInit = (t) => (state.self && hasPlayer(t) ? '<span class="chip">бросает игрок</span>' : `<span class="init-num">${rolls[t.id]}</span>`);
-  const m = modal(`${panelHeader('Начать бой', 'Отметьте участников — инициатива уже брошена')}
-    <div class="modal-body scroll"><div class="panel-section">${toks.map((t) => {
-      const st = tokenStats(ctx.c, t);
-      return `<label class="list-row check-row"><input type="checkbox" class="check-input" data-id="${esc(t.id)}" ${checked(t) ? 'checked' : ''}><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow col-tight"><span class="primary">${esc(st.name)}${t.hidden ? ` <span class="chip">${icon('view-off', 12)}скрыт</span>` : ''}</span><span class="secondary">ИНЦ ${st.initBonus >= 0 ? '+' : '−'}${Math.abs(st.initBonus)}${t.kind === 'hero' ? ' · герой' : ''}</span></span><span data-init="${esc(t.id)}">${rowInit(t)}</span></label>`;
-    }).join('')}</div>
-    <hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('dice-faces-06', 20)}<span class="titles"><span class="label-main">Игроки бросают сами</span><span class="hint">Иначе берём числа из списка — быстрее</span></span><input type="checkbox" class="switch" data-self checked aria-label="Игроки бросают сами"></div></div></div>
-    <div class="panel-footer"><button class="btn btn-ghost" data-reroll>${icon('refresh', 16)}Перебросить врагов</button><span class="t-sm muted grow" data-count></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icon('sword-03', 16)}Начать бой</button></div>`);
-  const count = () => { const n = m.box.querySelectorAll('[data-id]:checked').length; m.box.querySelector('[data-count]').textContent = `${n} ${plural(n, 'участник', 'участника', 'участников')}`; m.box.querySelector('[data-ok]').disabled = !n; };
-  const redraw = () => { for (const t of toks) { const n = m.box.querySelector(`[data-init="${CSS.escape(t.id)}"]`); if (n) n.innerHTML = rowInit(t); } };
-  count();
-  m.box.addEventListener('change', (e) => { if (e.target.matches('[data-self]')) { state.self = e.target.checked; redraw(); } count(); });
-  m.box.querySelector('[data-reroll]').addEventListener('click', () => { for (const t of toks) if (t.kind !== 'hero') rolls[t.id] = rollInitiative(ctx.c, t).init; redraw(); });
-  m.box.querySelector('[data-ok]').addEventListener('click', () => {
-    const ids = [...m.box.querySelectorAll('[data-id]:checked')].map((x) => x.dataset.id);
+  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
+  ctx.ui.setup = { ids: new Set(on), rolls: Object.fromEntries(toks.map((t) => [t.id, rollInitiative(ctx.c, t).init])), self: true };
+  ctx.panels.openWidget('initiative', true);
+  ctx.panels.refreshWidget(true);
+}
+
+export const hasPlayerHero = (ctx, t) => !!t.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player');
+
+/** Действия подготовки боя из виджета. */
+export function setupAction(ctx, act, b) {
+  const st = ctx.ui.setup; if (!st) return;
+  const sc = ctx.scene;
+  if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-self') st.self = !st.self;
+  else if (act === 'setup-reroll') { for (const t of sc.tokens) if (t.kind === 'foe' && t.id in st.rolls) st.rolls[t.id] = rollInitiative(ctx.c, t).init; }
+  else if (act === 'setup-cancel') ctx.ui.setup = null;
+  else if (act === 'setup-start') {
+    const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
+    if (!ids.length) return;
     const use = {};
-    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); use[id] = state.self && t && hasPlayer(t) ? null : rolls[id]; }
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); use[id] = st.self && hasPlayerHero(ctx, t) ? null : st.rolls[id]; }
     const sid = ctx.sceneId;
+    ctx.ui.setup = null;
     updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
-    m.close();
-    ctx.panels.openWidget('initiative', true);
     ctx.select([]);
-  });
+  }
+  ctx.panels.refreshWidget(true);
 }
 
 // ——— Запрос спасброска ———

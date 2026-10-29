@@ -240,15 +240,21 @@
 
 /* ——— Края стола ——— */
 .chrome { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-chrome); }
-.chrome > div { position: absolute; display: flex; gap: var(--s-8); pointer-events: none; }
+.table { --edge: 24px; }
+.chrome > div { position: absolute; display: flex; gap: 12px; pointer-events: none; }
 .chrome > div > * { pointer-events: auto; }
-.ch-tl { top: 16px; left: 16px; align-items: center; flex-wrap: wrap; max-width: calc(50vw - 40px); }
-.ch-tc { top: 16px; left: 50%; transform: translateX(-50%); justify-content: center; max-width: min(640px, calc(100vw - 600px)); }
-.ch-tr { top: 16px; right: 16px; flex-direction: column; align-items: flex-end; }
-.ch-widget { top: 92px; left: 16px; flex-direction: column; }
-.ch-bl { bottom: 16px; left: 16px; }
-.ch-bc { bottom: 16px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; max-width: calc(100vw - 200px); }
-.ch-br { bottom: 16px; right: 16px; }
+.ch-tl { top: var(--edge); left: var(--edge); align-items: center; flex-wrap: wrap; max-width: calc(50vw - 40px); }
+.ch-tc { top: var(--edge); left: 50%; transform: translateX(-50%); justify-content: center; max-width: min(640px, calc(100vw - 600px)); }
+.ch-tr { top: var(--edge); right: var(--edge); flex-direction: column; align-items: flex-end; }
+/* Виджеты — под своей кнопкой, как в макетах: зрение/отряд/инициатива — под их панелью, кубы — под кнопкой кубов. */
+.ch-widget { top: calc(var(--edge) + 72px); left: calc(var(--edge) + 72px); flex-direction: column; }
+.ch-widget:has(.dice-widget) { left: calc(var(--edge) + 244px); }
+.ch-bl { bottom: var(--edge); left: var(--edge); }
+.ch-bc { bottom: var(--edge); left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; max-width: calc(100vw - 200px); }
+/* Мастер: «добавить» и «инструменты» — в один ряд, как в макетах; на узком экране — друг над другом. */
+.ch-bc:has(> .add-bar) { flex-direction: row; gap: 24px; }
+@media (max-width: 1180px) { .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; } }
+.ch-br { bottom: var(--edge); right: var(--edge); }
 .chrome-logo { width: 60px; height: 60px; box-shadow: var(--shadow-panel); }
 .chrome-logo:hover { filter: brightness(1.05); }
 .combat-chip { height: 28px; padding: 0 12px; font-size: 12px; background: var(--brand-500); color: var(--text-on-accent); box-shadow: var(--glow-turn); }
@@ -258,7 +264,7 @@
 .scene-pill-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 200px; }
 .scene-pill-text small { font: 500 10px/12px var(--font-text); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
 .scene-pill-text b { font: 600 14px/16px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.party-col { padding: 8px; gap: 8px; border-radius: 30px; }
+.party-col { padding: 8px; gap: 6px; border-radius: 30px; }
 .sheet-avatar { position: relative; width: 44px; height: 44px; border-radius: 50%; padding: 2.5px; background: var(--side-hero); flex: none; }
 .sheet-avatar.mine { width: 52px; height: 52px; padding: 3px; background: var(--brand-500); }
 .sheet-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
@@ -285,7 +291,7 @@
 /* Токен-бар */
 .token-bar { max-width: calc(100vw - 32px); overflow-x: auto; scrollbar-width: none; }
 .token-bar::-webkit-scrollbar { display: none; }
-.tb-avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; background: var(--neutral-300) center / cover no-repeat; box-shadow: inset 0 0 0 3px var(--side-neutral); }
+.tb-avatar { width: 36px; height: 36px; margin-left: 4px; border-radius: 50%; flex: none; background: var(--neutral-300) center / cover no-repeat; box-shadow: inset 0 0 0 3px var(--side-neutral); }
 .tb-avatar.hero { box-shadow: inset 0 0 0 3px var(--side-hero); }
 .tb-avatar.foe { box-shadow: inset 0 0 0 3px var(--side-foe); }
 .tb-avatar.mine { box-shadow: inset 0 0 0 3px var(--brand-500); }
@@ -449,7 +455,12 @@ button.tray-die:hover { filter: brightness(1.1); }
 
 /* ——— Боковая панель мастера ——— */
 .side-panel, .sheet-drawer { background: rgb(12 14 22 / .96); }
-.side-panel { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 364px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; z-index: var(--z-panel); overflow: hidden; animation: slidein .18s ease-out; }
+/* Сцены — колонкой левее отряда, как в макете; правая колонка остаётся на месте. */
+.side-panel { position: absolute; top: var(--edge); right: calc(var(--edge) + 178px); bottom: calc(var(--edge) + 76px); width: 380px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; z-index: var(--z-panel); overflow: hidden; animation: slidein .18s ease-out; }
+/* Бестиарий — над панелью «добавить», как в макете. */
+.side-panel[data-panel="bestiary"] { top: auto; right: auto; left: max(var(--edge), calc(50% - 429px)); bottom: calc(var(--edge) + 72px); height: min(649px, calc(100vh - 2 * var(--edge) - 84px)); animation: rise .18s ease-out; }
+@media (max-width: 1180px) { .side-panel[data-panel="bestiary"] { left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + 140px); height: min(560px, calc(100vh - 2 * var(--edge) - 152px)); } }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .scene-pill-text { max-width: 90px; }
 @keyframes slidein { from { opacity: 0; transform: translateX(16px); } }
 .side-body { flex: 1; min-height: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
 .side-panel .panel-footer { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
@@ -473,7 +484,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .b-foot { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
 
 /* ——— Карточки сверху: спасброски, переходы, шаблоны игроков ——— */
-.float-stack { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: var(--z-panel); pointer-events: none; }
+.float-stack { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: var(--z-panel); pointer-events: none; }
 .float-card { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 18px; }
 .float-card.new { animation: rise .2s ease-out; }
 .float-card > .ic { color: var(--icon-accent); flex: none; }
@@ -597,21 +608,31 @@ button.tray-die:hover { filter: brightness(1.1); }
 .empty-ic .ic { width: 32px; height: 32px; }
 .empty-ic.hourglass .ic { animation: flip 3s ease-in-out infinite; }
 
-/* Тосты стола — справа внизу, над масштабом, как результаты бросков. */
-.table-toasts { top: auto; bottom: 84px; left: auto; right: 16px; transform: none; flex-direction: column-reverse; width: min(360px, calc(100vw - 32px)); }
-.table:has(.side-panel:not(.hidden)) .table-toasts { right: 396px; }
-/* Открыта панель справа: всё, что было у правого края и по центру сверху, живёт в оставшейся части экрана. */
-.table:has(.side-panel:not(.hidden)) .ch-tr { right: 392px; }
+/* Тосты стола — сверху справа, левее колонки отряда, как в макетах. */
+.table-toasts { top: var(--edge); bottom: auto; left: auto; right: calc(var(--edge) + 182px); transform: none; flex-direction: column; width: min(380px, calc(100vw - 32px)); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .table-toasts { right: calc(var(--edge) + 570px); }
+/* На экранах поуже сверху тесно (баннер по центру) — тосты уходят вниз направо, над масштабом. */
+@media (max-width: 1500px) {
+  .table-toasts { top: auto; bottom: calc(var(--edge) + 72px); right: var(--edge); flex-direction: column-reverse; width: min(360px, calc(100vw - 32px)); }
+  .table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .table-toasts { right: calc(var(--edge) + 570px); }
+}
+/* Открыты сцены: центр сверху и снизу — в свободной части экрана левее панели. */
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 582px) / 2); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-bc { max-width: calc(100vw - 640px); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-tc { max-width: max(300px, calc(100vw - 1180px)); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .float-stack { width: min(520px, calc(100vw - 640px)); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; }
+/* Лист героя — справа во всю высоту: правая колонка уходит левее. */
 .table:has(.sheet-drawer) .ch-tr { right: 428px; }
-.table:has(.side-panel:not(.hidden)) .chrome > .ch-br, .table:has(.sheet-drawer) .chrome > .ch-br { display: none; }
-.table:has(.side-panel:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 380px) / 2); }
+.table:has(.sheet-drawer) .chrome > .ch-br { display: none; }
 .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 416px) / 2); }
-.table:has(.side-panel:not(.hidden)) .ch-bc, .table:has(.sheet-drawer) .ch-bc { max-width: calc(100vw - 440px); }
-.table:has(.side-panel:not(.hidden)) .ch-tc, .table:has(.sheet-drawer) .ch-tc { max-width: max(300px, calc(100vw - 1040px)); }
-.table:has(.side-panel:not(.hidden)) .float-stack, .table:has(.sheet-drawer) .float-stack { width: min(520px, calc(100vw - 460px)); }
+.table:has(.sheet-drawer) .ch-bc { max-width: calc(100vw - 440px); }
+.table:has(.sheet-drawer) .ch-tc { max-width: max(300px, calc(100vw - 1040px)); }
+.table:has(.sheet-drawer) .float-stack { width: min(520px, calc(100vw - 460px)); }
 .table:has(.sheet-drawer) .table-toasts { right: 432px; }
 
 /* ——— Узкий экран ——— */
+@media (max-width: 1100px) { .table { --edge: 16px; } }
 @media (max-width: 900px) {
   .ch-tc { top: 84px; max-width: calc(100vw - 32px); width: max-content; }
   .float-stack { top: 148px; }
@@ -625,7 +646,7 @@ button.tray-die:hover { filter: brightness(1.1); }
   .ch-tl .icon-btn, .ch-tr .icon-btn { width: 40px; height: 40px; }
   .ch-tr .toolbar { padding: 4px; }
   .party-col { display: none; }
-  .ch-widget { top: 72px; left: 8px; right: 8px; }
+  .ch-widget, .ch-widget:has(.dice-widget) { top: 72px; left: 8px; right: 8px; }
   .widget, .dice-widget { width: calc(100vw - 16px); max-height: calc(100vh - 170px); }
   .ch-bc { bottom: 8px; max-width: calc(100vw - 16px); width: max-content; }
   .ch-bc .toolbar { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; padding: 4px; }
@@ -638,10 +659,10 @@ button.tray-die:hover { filter: brightness(1.1); }
   .chrome > .ch-bl, .chrome > .ch-br { display: none; }
   .ch-tc { top: 128px; }
   .float-stack { top: 190px; }
-  .side-panel, .sheet-drawer { top: 8px; right: 8px; bottom: 8px; left: 8px; width: auto; }
-  .table:has(.side-panel:not(.hidden)) .ch-tr, .table:has(.sheet-drawer) .ch-tr { right: 8px; }
-  .table:has(.side-panel:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack), .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: 50%; max-width: calc(100vw - 16px); }
-  .table-toasts { bottom: 140px; right: 8px; left: 8px; width: auto; }
+  .side-panel, .side-panel[data-panel], .sheet-drawer { top: 8px; right: 8px; bottom: 8px; left: 8px; width: auto; height: auto; max-width: none; transform: none; }
+  .table:has(.sheet-drawer) .ch-tr { right: 8px; }
+  .table:has(.side-panel[data-panel]:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack), .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: 50%; max-width: calc(100vw - 16px); }
+  .table-toasts { top: auto; bottom: 140px; right: 8px; left: 8px; width: auto; flex-direction: column-reverse; }
   .help-grid { grid-template-columns: 1fr; }
   .map-pick { grid-template-columns: repeat(3, 1fr); }
   .float-card { flex-wrap: wrap; }
@@ -655,3 +676,10 @@ button.tray-die:hover { filter: brightness(1.1); }
 .side-group:first-child { padding-top: 2px; }
 .pause-timer { display: block; margin: 6px 0 2px; font: 600 28px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--brand-500); }
 .pause-timer.sm { display: inline; margin: 0; font: inherit; color: inherit; }
+
+/* ——— Подготовка боя в виджете инициативы ——— */
+.setup-widget { width: 340px; }
+.setup-widget .setup-row { gap: 10px; padding: 6px 12px; cursor: pointer; }
+.setup-widget .setup-row.off { opacity: .55; }
+.setup-widget .setup-row .init-num { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--bg-control); font: 600 13px/1 var(--font-text); }
+.setting-row.compact { padding: 6px 16px; }
