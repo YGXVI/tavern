@@ -1,0 +1,36 @@
+import fs from 'node:fs';
+import crypto from 'node:crypto';
+import {calculate,allLevels} from './engine.js';
+const here=new URL('./',import.meta.url);
+const output=process.env.SPELL_DAMAGE_OUTPUT ? new URL('file://'+process.env.SPELL_DAMAGE_OUTPUT.replace(/\/$/,'')+'/') : here;
+const source=JSON.parse(fs.readFileSync(new URL('srd-2014.json',here)));
+const cataloguePath=process.argv[2];
+if (!cataloguePath) throw Error('Pass the existing spells.json path (PR #4)');
+const raw=fs.readFileSync(cataloguePath), catalogue=JSON.parse(raw);
+if(catalogue.edition!=='5e-2014'||catalogue.spells.length!==524) throw Error('Unverified catalogue version');
+const rules=JSON.parse(fs.readFileSync(new URL('rules.json',here)));
+const norm=s=>s.normalize('NFKC').replace(/[’]/g,"'").toLowerCase().replace(/\s+/g,' ').trim();
+const seen=new Set();
+const entries=catalogue.spells.map(spell=>{
+ if(seen.has(spell.id))throw Error('Duplicate stable ID');seen.add(spell.id);
+ const matches=source.spells.filter(x=>norm(x.name)===norm(spell.name_en)||rules.aliases[x.index]?.id===spell.id);
+ const base={id:spell.id,baseLevel:spell.level,concentration:spell.concentration};
+ if(matches.length!==1)return {...base,status:'manual_review',reason:matches.length?'ambiguous_match':'not_in_srd_or_name_unverified'};
+ const api=matches[0],alias=rules.aliases[api.index];
+ if(alias && (alias.id!==spell.id || alias.name!==spell.name_en))throw Error('Alias drift');
+ if(api.level!==spell.level||api.concentration!==spell.concentration)return {...base,status:'manual_review',apiIndex:api.index,reason:'metadata_conflict'};
+ const profile=rules.profiles[api.index];
+ if(profile && (profile.catalogueId!==spell.id || profile.expectedName!==spell.name_en))return {...base,status:'manual_review',reason:'stable_identity_conflict'};
+ const evidence={apiIndex:api.index,sourceUrl:'https://www.dnd5eapi.co'+api.url,evidenceHash:crypto.createHash('sha256').update(JSON.stringify(api)).digest('hex')};
+ if(!profile)return {...base,...evidence,status:'manual_review',reason:rules.review[api.index]||'damage_semantics_not_reviewed'};
+ const {catalogueId,expectedName,...damageProfile}=profile;
+ return {...base,...evidence,...damageProfile,status:'supported'};
+});
+const materialized=entries.filter(e=>e.status==='supported').map(e=>({id:e.id,levels:allLevels(e).map(options=>calculate(e,options))}));
+const report={schemaVersion:1,catalogueSha256:crypto.createHash('sha256').update(raw).digest('hex'),sourceSha256:crypto.createHash('sha256').update(fs.readFileSync(new URL('srd-2014.json',here))).digest('hex'),processed:entries.length,supported:materialized.length,manualReview:entries.filter(e=>e.status!=='supported').map(e=>({id:e.id,reason:e.reason,apiIndex:e.apiIndex})),unsupportedMechanics:['unreviewed non-SRD damage rules','summoned creature stat blocks and transformations','random/prismatic branches','weapon damage and class features','HP-dependent damage caps and damage reflection','automatic saves, resistance, critical hits and encounter state']};
+for(const [name,data]of Object.entries({'damage.json':{schemaVersion:1,entries},'levels.json':materialized,'report.json':report}))fs.writeFileSync(new URL(name,output),JSON.stringify(data,null,2)+'\n');
+console.log({processed:report.processed,supported:report.supported,manual:report.manualReview.length});
+
+const byId=new Map(catalogue.spells.map(s=>[s.id,s]));
+const lines=['# Отчёт TASK-009: урон заклинаний 2014','',`Обработано: ${report.processed}. Проверенные профили расчёта формул: ${report.supported}. Ручная проверка: ${report.manualReview.length} (включает непроверенные неатакующие заклинания).`,'','Все допустимые круги/пороги: levels.json. Сфера поддержки и ограничения: README.md.','','## Поддерживаемые профили','',...entries.filter(e=>e.status==='supported').map(e=>`- ${e.id} — ${byId.get(e.id).name_ru} (${e.apiIndex})`),'','## Требуют проверки','',...report.manualReview.map(e=>`- ${e.id} — ${byId.get(e.id).name_ru}: ${e.reason}`),'','## Пока не реализовано','',...report.unsupportedMechanics.map(s=>'- '+s),''];
+fs.writeFileSync(new URL('REPORT.md',output),lines.join('\n'));

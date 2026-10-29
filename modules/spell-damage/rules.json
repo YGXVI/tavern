@@ -1,0 +1,1177 @@
+{
+  "schemaVersion": 1,
+  "aliases": {
+    "acid-arrow": {
+      "id": "dndsu:spell:159",
+      "name": "Melf's acid arrow"
+    },
+    "arcane-sword": {
+      "id": "dndsu:spell:166",
+      "name": "Mordenkainen's sword"
+    },
+    "black-tentacles": {
+      "id": "dndsu:spell:67",
+      "name": "Evard's black tentacles"
+    },
+    "freezing-sphere": {
+      "id": "dndsu:spell:215",
+      "name": "Otiluke's Freezing Sphere"
+    },
+    "faithful-hound": {
+      "id": "dndsu:spell:17",
+      "name": "Mordenkainen's Faithful Hound"
+    },
+    "arcane-hand": {
+      "id": "dndsu:spell:57",
+      "name": "Bigby's Hand"
+    }
+  },
+  "profiles": {
+    "burning-hands": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:203",
+      "expectedName": "Burning hands"
+    },
+    "fireball": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:205",
+      "expectedName": "Fireball"
+    },
+    "lightning-bolt": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "lightning",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:175",
+      "expectedName": "Lightning bolt"
+    },
+    "circle-of-death": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "2d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:136",
+      "expectedName": "Circle of death"
+    },
+    "cone-of-cold": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d8",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:133",
+      "expectedName": "Cone of cold"
+    },
+    "guiding-bolt": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d6",
+          "type": "radiant",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:178",
+      "expectedName": "Guiding bolt"
+    },
+    "hellish-rebuke": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d10",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:1",
+      "expectedName": "Hellish rebuke"
+    },
+    "inflict-wounds": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:177",
+      "expectedName": "Inflict wounds"
+    },
+    "shatter": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d8",
+          "type": "thunder",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:62",
+      "expectedName": "Shatter"
+    },
+    "thunderwave": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d8",
+          "type": "thunder",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:25",
+      "expectedName": "Thunderwave"
+    },
+    "cloudkill": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "5d8",
+          "type": "poison",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:191",
+      "expectedName": "Cloudkill"
+    },
+    "flaming-sphere": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "ram OR end turn within 5 feet; save, count actual triggers"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:289",
+      "expectedName": "Flaming sphere"
+    },
+    "moonbeam": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d10",
+          "type": "radiant",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:146",
+      "expectedName": "Moonbeam"
+    },
+    "heat-metal": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d8",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "initial casting or later bonus action; creature in physical contact"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:298",
+      "expectedName": "Heat metal"
+    },
+    "insect-plague": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d10",
+          "type": "piercing",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, first entry on turn, or end of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:180",
+      "expectedName": "Insect plague"
+    },
+    "vampiric-touch": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; repeat with action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:277",
+      "expectedName": "Vampiric touch"
+    },
+    "freezing-sphere": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:215",
+      "expectedName": "Otiluke's Freezing Sphere"
+    },
+    "phantasmal-killer": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d10",
+          "type": "psychic",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "failed end-of-turn save while frightened"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:32",
+      "expectedName": "Phantasmal killer"
+    },
+    "wall-of-fire": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "5d8",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "appearance save, OR first entry/end turn on damaging side within 10 feet (no save for later damage)"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:202",
+      "expectedName": "Wall of fire"
+    },
+    "acid-splash": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d6",
+          "type": "acid",
+          "scaling": "character",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:13",
+      "expectedName": "Acid splash"
+    },
+    "chill-touch": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "necrotic",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:140",
+      "expectedName": "Chill touch"
+    },
+    "fire-bolt": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d10",
+          "type": "fire",
+          "scaling": "character",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:204",
+      "expectedName": "Fire bolt"
+    },
+    "poison-spray": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d12",
+          "type": "poison",
+          "scaling": "character",
+          "increment": "1d12",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:63",
+      "expectedName": "Poison spray"
+    },
+    "produce-flame": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "fire",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:336",
+      "expectedName": "Produce flame"
+    },
+    "ray-of-frost": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "cold",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:149",
+      "expectedName": "Ray of frost"
+    },
+    "sacred-flame": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "radiant",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:311",
+      "expectedName": "Sacred flame"
+    },
+    "shocking-grasp": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "lightning",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:66",
+      "expectedName": "Shocking grasp"
+    },
+    "vicious-mockery": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4",
+          "type": "psychic",
+          "scaling": "character",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:112",
+      "expectedName": "Vicious mockery"
+    },
+    "arcane-sword": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; later bonus action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:166",
+      "expectedName": "Mordenkainen's sword"
+    },
+    "black-tentacles": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry/start turn failing save OR start turn already restrained (not both)"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:67",
+      "expectedName": "Evard's black tentacles"
+    },
+    "blade-barrier": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "6d10",
+          "type": "slashing",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:338",
+      "expectedName": "Blade barrier"
+    },
+    "sunbeam": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "6d8",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one beam exposure; subsequent beams require action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:329",
+      "expectedName": "Sunbeam"
+    },
+    "sunburst": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "12d6",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:330",
+      "expectedName": "Sunburst"
+    },
+    "fire-storm": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "7d10",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:201",
+      "expectedName": "Fire storm"
+    },
+    "feeblemind": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d6",
+          "type": "psychic",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:317",
+      "expectedName": "Feeblemind"
+    },
+    "finger-of-death": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "7d8+30",
+          "type": "necrotic",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:229",
+      "expectedName": "Finger of death"
+    },
+    "incendiary-cloud": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d8",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "appearance, first entry on turn, or end turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:34",
+      "expectedName": "Incendiary cloud"
+    },
+    "wind-wall": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d8",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:337",
+      "expectedName": "Wind wall"
+    },
+    "divine-favor": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "extra damage on each weapon hit; weapon damage excluded"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:10",
+      "expectedName": "Divine favor"
+    },
+    "flame-blade": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 2,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack using action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:48",
+      "expectedName": "Flame blade"
+    },
+    "spiritual-weapon": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "force",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 2,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; creation or later bonus action",
+          "modifier": true
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:11",
+      "expectedName": "Spiritual weapon"
+    },
+    "disintegrate": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d6+40",
+          "type": "force",
+          "scaling": "slot",
+          "increment": "3d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "creature fails Dexterity save; objects use separate disintegration rules"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:299",
+      "expectedName": "Disintegrate"
+    },
+    "magic-missile": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4+1",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one dart actually dealing damage; not an attack roll"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 3,
+        "perSlot": 1,
+        "kind": "dart"
+      },
+      "catalogueId": "dndsu:spell:27",
+      "expectedName": "Magic missile"
+    },
+    "scorching-ray": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d6",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one successful separate ranged spell attack"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 3,
+        "perSlot": 1,
+        "kind": "attack"
+      },
+      "catalogueId": "dndsu:spell:225",
+      "expectedName": "Scorching ray"
+    },
+    "eldritch-blast": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d10",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one successful separate ranged spell attack; invocations excluded"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 1,
+        "perTier": 1,
+        "kind": "attack"
+      },
+      "catalogueId": "dndsu:spell:168",
+      "expectedName": "Eldritch blast"
+    },
+    "chain-lightning": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d8",
+          "type": "lightning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one distinct target, save; damage does not scale"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "targetLimit": {
+        "base": 4,
+        "perSlot": 1
+      },
+      "catalogueId": "dndsu:spell:233",
+      "expectedName": "Chain lightning"
+    },
+    "spike-growth": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d4",
+          "type": "piercing",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one 5-foot segment of movement into/within area; no slot scaling"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:77",
+      "expectedName": "Spike growth"
+    },
+    "call-lightning": {
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "lightning",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one bolt exposure, save; storm=true only outdoors in existing storm at casting",
+          "stormBonus": "1d10"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:272",
+      "expectedName": "Call lightning"
+    },
+    "acid-arrow": {
+      "components": [
+        {
+          "key": "initial",
+          "base": "4d4",
+          "type": "acid",
+          "scaling": "slot",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "initial successful attack; miss deals half rolled initial damage instead"
+        },
+        {
+          "key": "later",
+          "base": "2d4",
+          "type": "acid",
+          "scaling": "slot",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "end of target next turn, only after initial hit"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:159",
+      "expectedName": "Melf's acid arrow"
+    },
+    "ice-storm": {
+      "components": [
+        {
+          "key": "impact",
+          "base": "2d8",
+          "type": "bludgeoning",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        },
+        {
+          "key": "cold",
+          "base": "4d6",
+          "type": "cold",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:49",
+      "expectedName": "Ice Storm"
+    },
+    "wall-of-ice": {
+      "components": [
+        {
+          "key": "appearance",
+          "base": "10d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "2d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, save"
+        },
+        {
+          "key": "air",
+          "base": "5d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first passage through destroyed section on turn, save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:141",
+      "expectedName": "Wall of ice"
+    },
+    "wall-of-thorns": {
+      "components": [
+        {
+          "key": "appearance",
+          "base": "7d8",
+          "type": "piercing",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, save"
+        },
+        {
+          "key": "later",
+          "base": "7d8",
+          "type": "slashing",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on turn or end turn, save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "catalogueId": "dndsu:spell:347",
+      "expectedName": "Wall of thorns"
+    },
+    "meteor-swarm": {
+      "components": [
+        {
+          "key": "fire",
+          "base": "20d6",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        },
+        {
+          "key": "impact",
+          "base": "20d6",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures.",
+        "A creature in overlapping bursts is affected only once, not once per meteor."
+      ],
+      "catalogueId": "dndsu:spell:163",
+      "expectedName": "Meteor swarm"
+    }
+  },
+  "review": {
+    "sleep": "HP_pool_not_damage",
+    "flame-strike": "choose_fire_or_radiant_upcast_increment",
+    "blight": "plant_max_damage_and_target_immunity",
+    "delayed-blast-fireball": "time_accumulation_and_early_detonation",
+    "prismatic-spray": "random_color_and_double_ray_branches",
+    "prismatic-wall": "multiple_layer_and_random_effects",
+    "storm-of-vengeance": "round_specific_damage_types",
+    "harm": "cannot_reduce_target_below_1_HP",
+    "guardian-of-faith": "fixed_damage_and_60_HP_budget",
+    "spirit-guardians": "alignment_selected_damage_type",
+    "arcane-hand": "mode_specific_dice_and_modifier",
+    "faithful-hound": "conditional_target_detection_and_attack"
+  }
+}

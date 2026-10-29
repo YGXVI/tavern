@@ -1,0 +1,544 @@
+# Отчёт TASK-009: урон заклинаний 2014
+
+Обработано: 524. Проверенные профили расчёта формул: 53. Ручная проверка: 471 (включает непроверенные неатакующие заклинания).
+
+Все допустимые круги/пороги: levels.json. Сфера поддержки и ограничения: README.md.
+
+## Поддерживаемые профили
+
+- dndsu:spell:1 — Адское возмездие (hellish-rebuke)
+- dndsu:spell:10 — Божественное благоволение (divine-favor)
+- dndsu:spell:11 — Божественное оружие (spiritual-weapon)
+- dndsu:spell:13 — Брызги кислоты (acid-splash)
+- dndsu:spell:25 — Волна грома (thunderwave)
+- dndsu:spell:27 — Волшебная стрела (magic-missile)
+- dndsu:spell:32 — Воображаемый убийца (phantasmal-killer)
+- dndsu:spell:34 — Воспламеняющаяся туча (incendiary-cloud)
+- dndsu:spell:48 — Горящий клинок (flame-blade)
+- dndsu:spell:49 — Град (ice-storm)
+- dndsu:spell:62 — Дребезги (shatter)
+- dndsu:spell:63 — Ядовитые брызги (poison-spray)
+- dndsu:spell:66 — Электрошок (shocking-grasp)
+- dndsu:spell:67 — Эвардовы чёрные щупальца (black-tentacles)
+- dndsu:spell:77 — Шипы (spike-growth)
+- dndsu:spell:112 — Злая насмешка (vicious-mockery)
+- dndsu:spell:133 — Конус холода (cone-of-cold)
+- dndsu:spell:136 — Круг смерти (circle-of-death)
+- dndsu:spell:140 — Леденящее прикосновение (chill-touch)
+- dndsu:spell:141 — Ледяная стена (wall-of-ice)
+- dndsu:spell:146 — Лунный луч (moonbeam)
+- dndsu:spell:149 — Луч холода (ray-of-frost)
+- dndsu:spell:159 — Мельфова кислотная стрела (acid-arrow)
+- dndsu:spell:163 — Метеоритный дождь (meteor-swarm)
+- dndsu:spell:166 — Меч Морденкайнена (arcane-sword)
+- dndsu:spell:168 — Мистический заряд (eldritch-blast)
+- dndsu:spell:175 — Молния (lightning-bolt)
+- dndsu:spell:177 — Нанесение ран (inflict-wounds)
+- dndsu:spell:178 — Направляющий снаряд (guiding-bolt)
+- dndsu:spell:180 — Нашествие насекомых (insect-plague)
+- dndsu:spell:191 — Облако смерти (cloudkill)
+- dndsu:spell:201 — Огненная буря (fire-storm)
+- dndsu:spell:202 — Огненная стена (wall-of-fire)
+- dndsu:spell:203 — Огненные ладони (burning-hands)
+- dndsu:spell:204 — Огненный снаряд (fire-bolt)
+- dndsu:spell:205 — Огненный шар (fireball)
+- dndsu:spell:215 — Отилюков ледяной шар (freezing-sphere)
+- dndsu:spell:225 — Палящий луч (scorching-ray)
+- dndsu:spell:229 — Перст смерти (finger-of-death)
+- dndsu:spell:233 — Пляшущая молния (chain-lightning)
+- dndsu:spell:272 — Призыв молнии (call-lightning)
+- dndsu:spell:277 — Прикосновение вампира (vampiric-touch)
+- dndsu:spell:289 — Пылающий шар (flaming-sphere)
+- dndsu:spell:298 — Раскалённый металл (heat-metal)
+- dndsu:spell:299 — Распад (disintegrate)
+- dndsu:spell:311 — Священное пламя (sacred-flame)
+- dndsu:spell:317 — Слабоумие (feeblemind)
+- dndsu:spell:329 — Солнечный луч (sunbeam)
+- dndsu:spell:330 — Солнечный ожог (sunburst)
+- dndsu:spell:336 — Сотворение пламени (produce-flame)
+- dndsu:spell:337 — Стена ветров (wind-wall)
+- dndsu:spell:338 — Стена клинков (blade-barrier)
+- dndsu:spell:347 — Терновая стена (wall-of-thorns)
+
+## Требуют проверки
+
+- dndsu:spell:2 — Антипатия/симпатия: damage_semantics_not_reviewed
+- dndsu:spell:3 — Аура живучести: not_in_srd_or_name_unverified
+- dndsu:spell:4 — Аура жизни: not_in_srd_or_name_unverified
+- dndsu:spell:5 — Аура очищения: not_in_srd_or_name_unverified
+- dndsu:spell:6 — Аура святости: damage_semantics_not_reviewed
+- dndsu:spell:7 — Безмолвный образ: damage_semantics_not_reviewed
+- dndsu:spell:8 — Бесследное передвижение: damage_semantics_not_reviewed
+- dndsu:spell:9 — Благословение: damage_semantics_not_reviewed
+- dndsu:spell:12 — Божественное слово: damage_semantics_not_reviewed
+- dndsu:spell:14 — Быстрый колчан: not_in_srd_or_name_unverified
+- dndsu:spell:15 — Ведьмин снаряд: not_in_srd_or_name_unverified
+- dndsu:spell:16 — Великолепный особняк Морденкайнена: not_in_srd_or_name_unverified
+- dndsu:spell:17 — Верный пёс Морденкайнена: conditional_target_detection_and_attack
+- dndsu:spell:18 — Вечный огонь: damage_semantics_not_reviewed
+- dndsu:spell:19 — Вещий сон: damage_semantics_not_reviewed
+- dndsu:spell:20 — Видение невидимого: damage_semantics_not_reviewed
+- dndsu:spell:21 — Власть над водами: damage_semantics_not_reviewed
+- dndsu:spell:22 — Власть над погодой: damage_semantics_not_reviewed
+- dndsu:spell:23 — Внушение: damage_semantics_not_reviewed
+- dndsu:spell:24 — Возрождение: damage_semantics_not_reviewed
+- dndsu:spell:26 — Волшебная рука: damage_semantics_not_reviewed
+- dndsu:spell:28 — Волшебные уста: damage_semantics_not_reviewed
+- dndsu:spell:29 — Волшебный замок: damage_semantics_not_reviewed
+- dndsu:spell:30 — Волшебный сосуд: damage_semantics_not_reviewed
+- dndsu:spell:31 — Воображаемая сила: not_in_srd_or_name_unverified
+- dndsu:spell:33 — Воскрешение: damage_semantics_not_reviewed
+- dndsu:spell:35 — Восставший труп: damage_semantics_not_reviewed
+- dndsu:spell:36 — Врата: damage_semantics_not_reviewed
+- dndsu:spell:37 — Вызов на дуэль: not_in_srd_or_name_unverified
+- dndsu:spell:38 — Высшая невидимость: damage_semantics_not_reviewed
+- dndsu:spell:39 — Высшее восстановление: damage_semantics_not_reviewed
+- dndsu:spell:40 — Гадание: damage_semantics_not_reviewed
+- dndsu:spell:41 — Газообразная форма: damage_semantics_not_reviewed
+- dndsu:spell:42 — Героизм: damage_semantics_not_reviewed
+- dndsu:spell:43 — Гигантское насекомое: damage_semantics_not_reviewed
+- dndsu:spell:44 — Гипнотический узор: damage_semantics_not_reviewed
+- dndsu:spell:45 — Глухота/слепота: damage_semantics_not_reviewed
+- dndsu:spell:46 — Гневная кара: not_in_srd_or_name_unverified
+- dndsu:spell:47 — Голод Хадара: not_in_srd_or_name_unverified
+- dndsu:spell:50 — Град шипов: not_in_srd_or_name_unverified
+- dndsu:spell:51 — Гроза гнева: round_specific_damage_types
+- dndsu:spell:52 — Громовая кара: not_in_srd_or_name_unverified
+- dndsu:spell:53 — Движение почвы: damage_semantics_not_reviewed
+- dndsu:spell:54 — Двойник: damage_semantics_not_reviewed
+- dndsu:spell:55 — Демиплан: damage_semantics_not_reviewed
+- dndsu:spell:56 — Диссонирующий шёпот: not_in_srd_or_name_unverified
+- dndsu:spell:57 — Длань Бигби: mode_specific_dice_and_modifier
+- dndsu:spell:58 — Дневной свет: damage_semantics_not_reviewed
+- dndsu:spell:59 — Доспех Агатиса: not_in_srd_or_name_unverified
+- dndsu:spell:60 — Доспехи мага: damage_semantics_not_reviewed
+- dndsu:spell:61 — Языки: damage_semantics_not_reviewed
+- dndsu:spell:64 — Эфирность: damage_semantics_not_reviewed
+- dndsu:spell:65 — Древесный путь: damage_semantics_not_reviewed
+- dndsu:spell:68 — Дромиджево появление: not_in_srd_or_name_unverified
+- dndsu:spell:69 — Щит веры: damage_semantics_not_reviewed
+- dndsu:spell:70 — Щит: damage_semantics_not_reviewed
+- dndsu:spell:71 — Дружба: not_in_srd_or_name_unverified
+- dndsu:spell:72 — Дружба с животными: damage_semantics_not_reviewed
+- dndsu:spell:73 — Дубинка: damage_semantics_not_reviewed
+- dndsu:spell:74 — Дубовая кора: damage_semantics_not_reviewed
+- dndsu:spell:75 — Духовные стражи: alignment_selected_damage_type
+- dndsu:spell:76 — Животные чувства: not_in_srd_or_name_unverified
+- dndsu:spell:78 — Чудо-ягоды: damage_semantics_not_reviewed
+- dndsu:spell:79 — Жуткий смех Таши: not_in_srd_or_name_unverified
+- dndsu:spell:80 — Чудотворство: damage_semantics_not_reviewed
+- dndsu:spell:81 — Завеса стрел: not_in_srd_or_name_unverified
+- dndsu:spell:82 — Заданная иллюзия: damage_semantics_not_reviewed
+- dndsu:spell:83 — Замедление: damage_semantics_not_reviewed
+- dndsu:spell:84 — Цунами: not_in_srd_or_name_unverified
+- dndsu:spell:85 — Цепкая лоза: not_in_srd_or_name_unverified
+- dndsu:spell:86 — Цветной шарик: not_in_srd_or_name_unverified
+- dndsu:spell:87 — Замедленный огненный шар: time_accumulation_and_early_detonation
+- dndsu:spell:88 — Хождение по воде: damage_semantics_not_reviewed
+- dndsu:spell:89 — Запрет: damage_semantics_not_reviewed
+- dndsu:spell:90 — Хождение по ветру: damage_semantics_not_reviewed
+- dndsu:spell:91 — Фокусы: damage_semantics_not_reviewed
+- dndsu:spell:92 — Заражение: damage_semantics_not_reviewed
+- dndsu:spell:93 — Фальшивый двойник: damage_semantics_not_reviewed
+- dndsu:spell:94 — Уход за умирающим: damage_semantics_not_reviewed
+- dndsu:spell:95 — Уход в иной мир: damage_semantics_not_reviewed
+- dndsu:spell:96 — Усыхание: plant_max_damage_and_target_immunity
+- dndsu:spell:97 — Заточение: damage_semantics_not_reviewed
+- dndsu:spell:98 — Усыпление: HP_pool_not_damage
+- dndsu:spell:99 — Защита от зла и добра: damage_semantics_not_reviewed
+- dndsu:spell:100 — Ускорение: damage_semantics_not_reviewed
+- dndsu:spell:101 — Защита от оружия: not_in_srd_or_name_unverified
+- dndsu:spell:102 — Умиротворение: damage_semantics_not_reviewed
+- dndsu:spell:103 — Улучшение характеристики: damage_semantics_not_reviewed
+- dndsu:spell:104 — Защита от смерти: damage_semantics_not_reviewed
+- dndsu:spell:105 — Указание: damage_semantics_not_reviewed
+- dndsu:spell:106 — Защита от энергии: damage_semantics_not_reviewed
+- dndsu:spell:107 — Узилище: damage_semantics_not_reviewed
+- dndsu:spell:108 — Защита от яда: damage_semantics_not_reviewed
+- dndsu:spell:109 — Ужас: damage_semantics_not_reviewed
+- dndsu:spell:110 — Удержание чудовища: damage_semantics_not_reviewed
+- dndsu:spell:111 — Землетрясение: damage_semantics_not_reviewed
+- dndsu:spell:113 — Зловонное облако: damage_semantics_not_reviewed
+- dndsu:spell:114 — Знак: damage_semantics_not_reviewed
+- dndsu:spell:115 — Знание легенд: damage_semantics_not_reviewed
+- dndsu:spell:116 — Изгнание: damage_semantics_not_reviewed
+- dndsu:spell:117 — Изгоняющая кара: not_in_srd_or_name_unverified
+- dndsu:spell:118 — Изготовление: damage_semantics_not_reviewed
+- dndsu:spell:119 — Изменение памяти: damage_semantics_not_reviewed
+- dndsu:spell:120 — Изменение тяготения: damage_semantics_not_reviewed
+- dndsu:spell:121 — Изменение формы камня: damage_semantics_not_reviewed
+- dndsu:spell:122 — Изоляция: damage_semantics_not_reviewed
+- dndsu:spell:123 — Искусство друидов: damage_semantics_not_reviewed
+- dndsu:spell:124 — Исполнение желаний: damage_semantics_not_reviewed
+- dndsu:spell:125 — Истинное воскрешение: damage_semantics_not_reviewed
+- dndsu:spell:126 — Истинное зрение: damage_semantics_not_reviewed
+- dndsu:spell:127 — Истинное превращение: damage_semantics_not_reviewed
+- dndsu:spell:128 — Кабинет Морденкайнена: not_in_srd_or_name_unverified
+- dndsu:spell:129 — Каменная кожа: damage_semantics_not_reviewed
+- dndsu:spell:130 — Каменная стена: damage_semantics_not_reviewed
+- dndsu:spell:131 — Клеймящая кара: damage_semantics_not_reviewed
+- dndsu:spell:132 — Контрзаклинание: damage_semantics_not_reviewed
+- dndsu:spell:134 — Корона безумия: not_in_srd_or_name_unverified
+- dndsu:spell:135 — Круг силы: not_in_srd_or_name_unverified
+- dndsu:spell:137 — Круг телепортации: damage_semantics_not_reviewed
+- dndsu:spell:138 — Лабиринт: damage_semantics_not_reviewed
+- dndsu:spell:139 — Левитация: damage_semantics_not_reviewed
+- dndsu:spell:142 — Леомундов потайной сундук: not_in_srd_or_name_unverified
+- dndsu:spell:143 — Леомундова хижина: not_in_srd_or_name_unverified
+- dndsu:spell:144 — Лечащее слово: damage_semantics_not_reviewed
+- dndsu:spell:145 — Лечение ран: damage_semantics_not_reviewed
+- dndsu:spell:147 — Луч болезни: not_in_srd_or_name_unverified
+- dndsu:spell:148 — Луч слабости: damage_semantics_not_reviewed
+- dndsu:spell:150 — Магические врата: not_in_srd_or_name_unverified
+- dndsu:spell:151 — Магический глаз: damage_semantics_not_reviewed
+- dndsu:spell:152 — Магический круг: damage_semantics_not_reviewed
+- dndsu:spell:153 — Магическое оружие: damage_semantics_not_reviewed
+- dndsu:spell:154 — Малая иллюзия: damage_semantics_not_reviewed
+- dndsu:spell:155 — Малое восстановление: damage_semantics_not_reviewed
+- dndsu:spell:156 — Мантия крестоносца: not_in_srd_or_name_unverified
+- dndsu:spell:157 — Маскировка: damage_semantics_not_reviewed
+- dndsu:spell:158 — Маяк надежды: damage_semantics_not_reviewed
+- dndsu:spell:160 — Ментальная связь Рэри: not_in_srd_or_name_unverified
+- dndsu:spell:161 — Мерцание: damage_semantics_not_reviewed
+- dndsu:spell:162 — Метель: damage_semantics_not_reviewed
+- dndsu:spell:164 — Метка охотника: damage_semantics_not_reviewed
+- dndsu:spell:165 — Меткий удар: damage_semantics_not_reviewed
+- dndsu:spell:167 — Мираж: damage_semantics_not_reviewed
+- dndsu:spell:169 — Множественное внушение: damage_semantics_not_reviewed
+- dndsu:spell:170 — Множественное лечащее слово: damage_semantics_not_reviewed
+- dndsu:spell:171 — Множественное лечение ран: damage_semantics_not_reviewed
+- dndsu:spell:172 — Множественное полное исцеление: damage_semantics_not_reviewed
+- dndsu:spell:173 — Молебен лечения: damage_semantics_not_reviewed
+- dndsu:spell:174 — Молниевая стрела: not_in_srd_or_name_unverified
+- dndsu:spell:176 — Наблюдение: damage_semantics_not_reviewed
+- dndsu:spell:179 — Находчивость: damage_semantics_not_reviewed
+- dndsu:spell:181 — Небесный огонь: choose_fire_or_radiant_upcast_increment
+- dndsu:spell:182 — Невидимое письмо: damage_semantics_not_reviewed
+- dndsu:spell:183 — Невидимость: damage_semantics_not_reviewed
+- dndsu:spell:184 — Невидимый слуга: damage_semantics_not_reviewed
+- dndsu:spell:185 — Необнаружимость: damage_semantics_not_reviewed
+- dndsu:spell:186 — Нетленные останки: damage_semantics_not_reviewed
+- dndsu:spell:187 — Неудержимая пляска Отто: not_in_srd_or_name_unverified
+- dndsu:spell:188 — Нистулова ложная аура: not_in_srd_or_name_unverified
+- dndsu:spell:189 — Обет: damage_semantics_not_reviewed
+- dndsu:spell:190 — Облако кинжалов: not_in_srd_or_name_unverified
+- dndsu:spell:192 — Область истины: damage_semantics_not_reviewed
+- dndsu:spell:193 — Обнаружение болезней и яда: damage_semantics_not_reviewed
+- dndsu:spell:194 — Обнаружение зла и добра: damage_semantics_not_reviewed
+- dndsu:spell:195 — Обнаружение магии: damage_semantics_not_reviewed
+- dndsu:spell:196 — Обнаружение мыслей: damage_semantics_not_reviewed
+- dndsu:spell:197 — Образ: damage_semantics_not_reviewed
+- dndsu:spell:198 — Общение: damage_semantics_not_reviewed
+- dndsu:spell:199 — Общение с природой: damage_semantics_not_reviewed
+- dndsu:spell:200 — Оглушающая кара: not_in_srd_or_name_unverified
+- dndsu:spell:206 — Огненный щит: damage_semantics_not_reviewed
+- dndsu:spell:207 — Огонь фей: damage_semantics_not_reviewed
+- dndsu:spell:208 — Оживление: damage_semantics_not_reviewed
+- dndsu:spell:209 — Окаменение: damage_semantics_not_reviewed
+- dndsu:spell:210 — Опознание: damage_semantics_not_reviewed
+- dndsu:spell:211 — Опутывание: damage_semantics_not_reviewed
+- dndsu:spell:212 — Опутывающий удар: not_in_srd_or_name_unverified
+- dndsu:spell:213 — Ослепляющая кара: not_in_srd_or_name_unverified
+- dndsu:spell:214 — Остановка времени: damage_semantics_not_reviewed
+- dndsu:spell:216 — Отилюков упругий шар: not_in_srd_or_name_unverified
+- dndsu:spell:217 — Открывание: damage_semantics_not_reviewed
+- dndsu:spell:218 — Отражения: damage_semantics_not_reviewed
+- dndsu:spell:219 — Охранная руна: damage_semantics_not_reviewed
+- dndsu:spell:220 — Охраняющая связь: damage_semantics_not_reviewed
+- dndsu:spell:221 — Очарование личности: damage_semantics_not_reviewed
+- dndsu:spell:222 — Очищение пищи и питья: damage_semantics_not_reviewed
+- dndsu:spell:223 — Падение пёрышком: damage_semantics_not_reviewed
+- dndsu:spell:224 — Палящая кара: not_in_srd_or_name_unverified
+- dndsu:spell:226 — Паук: damage_semantics_not_reviewed
+- dndsu:spell:227 — Паутина: damage_semantics_not_reviewed
+- dndsu:spell:228 — Переносящая дверь: damage_semantics_not_reviewed
+- dndsu:spell:230 — Пир героев: damage_semantics_not_reviewed
+- dndsu:spell:231 — Планарные узы: damage_semantics_not_reviewed
+- dndsu:spell:232 — Планарный союзник: damage_semantics_not_reviewed
+- dndsu:spell:234 — Пляшущие огоньки: damage_semantics_not_reviewed
+- dndsu:spell:235 — Подводное дыхание: damage_semantics_not_reviewed
+- dndsu:spell:236 — Подмога: damage_semantics_not_reviewed
+- dndsu:spell:237 — Подобие: damage_semantics_not_reviewed
+- dndsu:spell:238 — Подсматривание: damage_semantics_not_reviewed
+- dndsu:spell:239 — Подчинение зверя: damage_semantics_not_reviewed
+- dndsu:spell:240 — Подчинение личности: damage_semantics_not_reviewed
+- dndsu:spell:241 — Подчинение чудовища: damage_semantics_not_reviewed
+- dndsu:spell:242 — Поиск животных или растений: damage_semantics_not_reviewed
+- dndsu:spell:243 — Поиск ловушек: damage_semantics_not_reviewed
+- dndsu:spell:244 — Поиск предмета: damage_semantics_not_reviewed
+- dndsu:spell:245 — Поиск пути: damage_semantics_not_reviewed
+- dndsu:spell:246 — Поиск скакуна: damage_semantics_not_reviewed
+- dndsu:spell:247 — Поиск существа: damage_semantics_not_reviewed
+- dndsu:spell:248 — Поиск фамильяра: damage_semantics_not_reviewed
+- dndsu:spell:249 — Полёт: damage_semantics_not_reviewed
+- dndsu:spell:250 — Полное исцеление: damage_semantics_not_reviewed
+- dndsu:spell:251 — Полное превращение: damage_semantics_not_reviewed
+- dndsu:spell:252 — Понимание языков: damage_semantics_not_reviewed
+- dndsu:spell:253 — Поражение: cannot_reduce_target_below_1_HP
+- dndsu:spell:254 — Порча: damage_semantics_not_reviewed
+- dndsu:spell:255 — Порыв ветра: damage_semantics_not_reviewed
+- dndsu:spell:256 — Послание: damage_semantics_not_reviewed
+- dndsu:spell:257 — Поспешное отступление: damage_semantics_not_reviewed
+- dndsu:spell:258 — Починка: damage_semantics_not_reviewed
+- dndsu:spell:259 — Почтовое животное: damage_semantics_not_reviewed
+- dndsu:spell:260 — Превращение: damage_semantics_not_reviewed
+- dndsu:spell:261 — Превращение в животных: damage_semantics_not_reviewed
+- dndsu:spell:262 — Преграда жизни: damage_semantics_not_reviewed
+- dndsu:spell:263 — Преграда магии: damage_semantics_not_reviewed
+- dndsu:spell:264 — Предвидение: damage_semantics_not_reviewed
+- dndsu:spell:265 — Предосторожность: damage_semantics_not_reviewed
+- dndsu:spell:266 — Предсказание: damage_semantics_not_reviewed
+- dndsu:spell:267 — Призыв животных: damage_semantics_not_reviewed
+- dndsu:spell:268 — Призыв заграждения: not_in_srd_or_name_unverified
+- dndsu:spell:269 — Призыв залпа: not_in_srd_or_name_unverified
+- dndsu:spell:270 — Призыв лесных обитателей: damage_semantics_not_reviewed
+- dndsu:spell:271 — Призыв малых элементалей: damage_semantics_not_reviewed
+- dndsu:spell:273 — Призыв небожителя: damage_semantics_not_reviewed
+- dndsu:spell:274 — Призыв феи: damage_semantics_not_reviewed
+- dndsu:spell:275 — Призыв элементаля: damage_semantics_not_reviewed
+- dndsu:spell:276 — Приказ: damage_semantics_not_reviewed
+- dndsu:spell:278 — Принуждение: damage_semantics_not_reviewed
+- dndsu:spell:279 — Призрачный скакун: damage_semantics_not_reviewed
+- dndsu:spell:280 — Притворная смерть: not_in_srd_or_name_unverified
+- dndsu:spell:281 — Притворство: damage_semantics_not_reviewed
+- dndsu:spell:282 — Пробуждение разума: damage_semantics_not_reviewed
+- dndsu:spell:283 — Проекция: damage_semantics_not_reviewed
+- dndsu:spell:284 — Проекция в астрал: damage_semantics_not_reviewed
+- dndsu:spell:285 — Проклятие: damage_semantics_not_reviewed
+- dndsu:spell:286 — Прыжок: damage_semantics_not_reviewed
+- dndsu:spell:287 — Псевдожизнь: damage_semantics_not_reviewed
+- dndsu:spell:288 — Путешествие через растения: damage_semantics_not_reviewed
+- dndsu:spell:290 — Радужная стена: multiple_layer_and_random_effects
+- dndsu:spell:291 — Радужные брызги: random_color_and_double_ray_branches
+- dndsu:spell:292 — Разговор с животными: damage_semantics_not_reviewed
+- dndsu:spell:293 — Разговор с мёртвыми: damage_semantics_not_reviewed
+- dndsu:spell:294 — Разговор с растениями: damage_semantics_not_reviewed
+- dndsu:spell:295 — Размытый образ: damage_semantics_not_reviewed
+- dndsu:spell:296 — Разрушительная волна: not_in_srd_or_name_unverified
+- dndsu:spell:297 — Разящее око: damage_semantics_not_reviewed
+- dndsu:spell:300 — Рассеивание зла и добра: damage_semantics_not_reviewed
+- dndsu:spell:301 — Рассеивание магии: damage_semantics_not_reviewed
+- dndsu:spell:302 — Регенерация: damage_semantics_not_reviewed
+- dndsu:spell:303 — Речь златоуста: damage_semantics_not_reviewed
+- dndsu:spell:304 — Рост растений: damage_semantics_not_reviewed
+- dndsu:spell:305 — Руки Хадара: not_in_srd_or_name_unverified
+- dndsu:spell:306 — Сверкающие брызги: damage_semantics_not_reviewed
+- dndsu:spell:307 — Свет: damage_semantics_not_reviewed
+- dndsu:spell:308 — Свобода перемещения: damage_semantics_not_reviewed
+- dndsu:spell:309 — Связь с иным миром: damage_semantics_not_reviewed
+- dndsu:spell:310 — Святилище: damage_semantics_not_reviewed
+- dndsu:spell:312 — Сглаз: not_in_srd_or_name_unverified
+- dndsu:spell:313 — Сигнал тревоги: damage_semantics_not_reviewed
+- dndsu:spell:314 — Силовая стена: damage_semantics_not_reviewed
+- dndsu:spell:315 — Скольжение: damage_semantics_not_reviewed
+- dndsu:spell:316 — Скороход: damage_semantics_not_reviewed
+- dndsu:spell:318 — Слияние с камнем: damage_semantics_not_reviewed
+- dndsu:spell:319 — Слово возврата: damage_semantics_not_reviewed
+- dndsu:spell:320 — Слово силы: исцеление: not_in_srd_or_name_unverified
+- dndsu:spell:321 — Слово силы: ошеломление: damage_semantics_not_reviewed
+- dndsu:spell:322 — Слово силы: смерть: damage_semantics_not_reviewed
+- dndsu:spell:323 — Смена обличья: damage_semantics_not_reviewed
+- dndsu:spell:324 — Смертный ужас: damage_semantics_not_reviewed
+- dndsu:spell:325 — Смятение: damage_semantics_not_reviewed
+- dndsu:spell:326 — Снятие проклятия: damage_semantics_not_reviewed
+- dndsu:spell:327 — Создание прохода: damage_semantics_not_reviewed
+- dndsu:spell:328 — Сокрытие разума: damage_semantics_not_reviewed
+- dndsu:spell:331 — Сообщение: damage_semantics_not_reviewed
+- dndsu:spell:332 — Сопротивление: damage_semantics_not_reviewed
+- dndsu:spell:333 — Сотворение или уничтожение воды: damage_semantics_not_reviewed
+- dndsu:spell:334 — Сотворение нежити: damage_semantics_not_reviewed
+- dndsu:spell:335 — Сотворение пищи и воды: damage_semantics_not_reviewed
+- dndsu:spell:339 — Стихийное оружие: not_in_srd_or_name_unverified
+- dndsu:spell:340 — Страж веры: fixed_damage_and_60_HP_budget
+- dndsu:spell:341 — Стражи: damage_semantics_not_reviewed
+- dndsu:spell:342 — Сфера неуязвимости: damage_semantics_not_reviewed
+- dndsu:spell:343 — Таинственный мираж: damage_semantics_not_reviewed
+- dndsu:spell:344 — Телекинез: damage_semantics_not_reviewed
+- dndsu:spell:345 — Телепатия: not_in_srd_or_name_unverified
+- dndsu:spell:346 — Тензеров парящий диск: not_in_srd_or_name_unverified
+- dndsu:spell:348 — Терновый кнут: not_in_srd_or_name_unverified
+- dndsu:spell:349 — Тишина: damage_semantics_not_reviewed
+- dndsu:spell:350 — Трюк с верёвкой: damage_semantics_not_reviewed
+- dndsu:spell:351 — Туманное облако: damage_semantics_not_reviewed
+- dndsu:spell:352 — Туманный шаг: damage_semantics_not_reviewed
+- dndsu:spell:353 — Тьма: damage_semantics_not_reviewed
+- dndsu:spell:354 — Убежище: damage_semantics_not_reviewed
+- dndsu:spell:355 — Увеличение/уменьшение: damage_semantics_not_reviewed
+- dndsu:spell:356 — Удержание личности: damage_semantics_not_reviewed
+- dndsu:spell:364 — Оживление вещей: damage_semantics_not_reviewed
+- dndsu:spell:365 — Реинкарнация: damage_semantics_not_reviewed
+- dndsu:spell:366 — Сотворение: damage_semantics_not_reviewed
+- dndsu:spell:367 — Телепортация: damage_semantics_not_reviewed
+- dndsu:spell:368 — Тёмное зрение: damage_semantics_not_reviewed
+- dndsu:spell:373 — Власть над ветрами: not_in_srd_or_name_unverified
+- dndsu:spell:374 — Власть над огнём: not_in_srd_or_name_unverified
+- dndsu:spell:375 — Водоворот: not_in_srd_or_name_unverified
+- dndsu:spell:376 — Водяная стена: not_in_srd_or_name_unverified
+- dndsu:spell:377 — Водяная сфера: not_in_srd_or_name_unverified
+- dndsu:spell:378 — Волшебный камень: not_in_srd_or_name_unverified
+- dndsu:spell:379 — Дрожь земли: not_in_srd_or_name_unverified
+- dndsu:spell:380 — Едкий шар: not_in_srd_or_name_unverified
+- dndsu:spell:381 — Защитный ветер: not_in_srd_or_name_unverified
+- dndsu:spell:382 — Звериные узы: not_in_srd_or_name_unverified
+- dndsu:spell:383 — Земляная хватка Максимилиана: not_in_srd_or_name_unverified
+- dndsu:spell:384 — Извержение земли: not_in_srd_or_name_unverified
+- dndsu:spell:385 — Испепеление: not_in_srd_or_name_unverified
+- dndsu:spell:386 — Катапульта: not_in_srd_or_name_unverified
+- dndsu:spell:387 — Кости земли: not_in_srd_or_name_unverified
+- dndsu:spell:388 — Ледяной кинжал: not_in_srd_or_name_unverified
+- dndsu:spell:389 — Лепка земли: not_in_srd_or_name_unverified
+- dndsu:spell:390 — Мельфовы маленькие метеоры: not_in_srd_or_name_unverified
+- dndsu:spell:391 — Небесные письмена: not_in_srd_or_name_unverified
+- dndsu:spell:392 — Облачение ветра: not_in_srd_or_name_unverified
+- dndsu:spell:393 — Облачение камня: not_in_srd_or_name_unverified
+- dndsu:spell:394 — Облачение льда: not_in_srd_or_name_unverified
+- dndsu:spell:395 — Облачение огня: not_in_srd_or_name_unverified
+- dndsu:spell:396 — Обморожение: not_in_srd_or_name_unverified
+- dndsu:spell:397 — Пекло Аганаззара: not_in_srd_or_name_unverified
+- dndsu:spell:398 — Первородный страж: not_in_srd_or_name_unverified
+- dndsu:spell:399 — Песчаная стена: not_in_srd_or_name_unverified
+- dndsu:spell:400 — Пиротехника: not_in_srd_or_name_unverified
+- dndsu:spell:401 — Поглощение стихий: not_in_srd_or_name_unverified
+- dndsu:spell:402 — Преобразование камня: not_in_srd_or_name_unverified
+- dndsu:spell:403 — Приливная волна: not_in_srd_or_name_unverified
+- dndsu:spell:404 — Проклятие стихии: not_in_srd_or_name_unverified
+- dndsu:spell:405 — Пылающие стрелы: not_in_srd_or_name_unverified
+- dndsu:spell:406 — Пылевой вихрь: not_in_srd_or_name_unverified
+- dndsu:spell:407 — Раскат грома: not_in_srd_or_name_unverified
+- dndsu:spell:408 — Смерч: not_in_srd_or_name_unverified
+- dndsu:spell:409 — Снежный шквал Сниллока: not_in_srd_or_name_unverified
+- dndsu:spell:410 — Сотворение костра: not_in_srd_or_name_unverified
+- dndsu:spell:411 — Сфера бури: not_in_srd_or_name_unverified
+- dndsu:spell:412 — Ужасное увядание Аби-Далзима: not_in_srd_or_name_unverified
+- dndsu:spell:413 — Узы земли: not_in_srd_or_name_unverified
+- dndsu:spell:414 — Формование воды: not_in_srd_or_name_unverified
+- dndsu:spell:415 — Шквал: not_in_srd_or_name_unverified
+- dndsu:spell:454 — Первобытная дикость: not_in_srd_or_name_unverified
+- dndsu:spell:455 — Слово сияния: not_in_srd_or_name_unverified
+- dndsu:spell:456 — Нашествие: not_in_srd_or_name_unverified
+- dndsu:spell:457 — Погребальный звон: not_in_srd_or_name_unverified
+- dndsu:spell:458 — Громовой клинок: not_in_srd_or_name_unverified
+- dndsu:spell:459 — Клинок зелёного пламени: not_in_srd_or_name_unverified
+- dndsu:spell:460 — Лассо молнии: not_in_srd_or_name_unverified
+- dndsu:spell:461 — Вспышка мечей: not_in_srd_or_name_unverified
+- dndsu:spell:462 — Вызов страха: not_in_srd_or_name_unverified
+- dndsu:spell:463 — Силок: not_in_srd_or_name_unverified
+- dndsu:spell:464 — Снаряд хаоса: not_in_srd_or_name_unverified
+- dndsu:spell:465 — Церемония: not_in_srd_or_name_unverified
+- dndsu:spell:466 — Удар Зефира: not_in_srd_or_name_unverified
+- dndsu:spell:467 — Дыхание дракона: not_in_srd_or_name_unverified
+- dndsu:spell:468 — Исцеляющий дух: not_in_srd_or_name_unverified
+- dndsu:spell:469 — Пронзание разума: not_in_srd_or_name_unverified
+- dndsu:spell:470 — Теневой клинок: not_in_srd_or_name_unverified
+- dndsu:spell:471 — Громовой шаг: not_in_srd_or_name_unverified
+- dndsu:spell:472 — Дрёма: not_in_srd_or_name_unverified
+- dndsu:spell:473 — Изобилие врагов: not_in_srd_or_name_unverified
+- dndsu:spell:474 — Крошечный слуга: not_in_srd_or_name_unverified
+- dndsu:spell:475 — Передача жизни: not_in_srd_or_name_unverified
+- dndsu:spell:477 — Болезненное сияние: not_in_srd_or_name_unverified
+- dndsu:spell:478 — Облачение тени: not_in_srd_or_name_unverified
+- dndsu:spell:479 — Очарование чудовища: not_in_srd_or_name_unverified
+- dndsu:spell:480 — Поиск высшего скакуна: not_in_srd_or_name_unverified
+- dndsu:spell:481 — Призыв высшего демона: not_in_srd_or_name_unverified
+- dndsu:spell:482 — Страж природы: not_in_srd_or_name_unverified
+- dndsu:spell:483 — Гнев природы: not_in_srd_or_name_unverified
+- dndsu:spell:484 — Далёкий шаг: not_in_srd_or_name_unverified
+- dndsu:spell:485 — Инфернальный зов: not_in_srd_or_name_unverified
+- dndsu:spell:486 — Обессиливание: not_in_srd_or_name_unverified
+- dndsu:spell:487 — Пляска смерти: not_in_srd_or_name_unverified
+- dndsu:spell:488 — Поток негативной энергии: not_in_srd_or_name_unverified
+- dndsu:spell:489 — Рассвет: not_in_srd_or_name_unverified
+- dndsu:spell:490 — Священное оружие: not_in_srd_or_name_unverified
+- dndsu:spell:491 — Синаптический разряд: not_in_srd_or_name_unverified
+- dndsu:spell:492 — Стена света: not_in_srd_or_name_unverified
+- dndsu:spell:493 — Удар стального ветра: not_in_srd_or_name_unverified
+- dndsu:spell:494 — Усиление навыка: not_in_srd_or_name_unverified
+- dndsu:spell:495 — Клетка душ: not_in_srd_or_name_unverified
+- dndsu:spell:496 — Ментальная тюрьма: not_in_srd_or_name_unverified
+- dndsu:spell:497 — Раскидывание: not_in_srd_or_name_unverified
+- dndsu:spell:498 — Роща друида: not_in_srd_or_name_unverified
+- dndsu:spell:499 — Сотворение гомункула: not_in_srd_or_name_unverified
+- dndsu:spell:500 — Трансформация Тензера: not_in_srd_or_name_unverified
+- dndsu:spell:501 — Корона звёзд: not_in_srd_or_name_unverified
+- dndsu:spell:502 — Слово силы: боль: not_in_srd_or_name_unverified
+- dndsu:spell:503 — Храм богов: not_in_srd_or_name_unverified
+- dndsu:spell:504 — Иллюзорный дракон: not_in_srd_or_name_unverified
+- dndsu:spell:505 — Могучая крепость: not_in_srd_or_name_unverified
+- dndsu:spell:506 — Одуряющая тьма: not_in_srd_or_name_unverified
+- dndsu:spell:507 — Множественное превращение: not_in_srd_or_name_unverified
+- dndsu:spell:508 — Неуязвимость: not_in_srd_or_name_unverified
+- dndsu:spell:509 — Психический крик: not_in_srd_or_name_unverified
+- dndsu:spell:741 — Кодировка мыслей: not_in_srd_or_name_unverified
+- dndsu:spell:1921 — Быстрые друзья: not_in_srd_or_name_unverified
+- dndsu:spell:1922 — Подарок болтуна: not_in_srd_or_name_unverified
+- dndsu:spell:1923 — Спровоцированная жадность: not_in_srd_or_name_unverified
+- dndsu:spell:2018 — Искажение цены: not_in_srd_or_name_unverified
+- dndsu:spell:2202 — Призыв низших демонов: not_in_srd_or_name_unverified
+- dndsu:spell:2340 — Сверкающая монета Джима: not_in_srd_or_name_unverified
+- dndsu:spell:2341 — Волшебная стрела Джима: not_in_srd_or_name_unverified
+- dndsu:spell:2344 — Мотивирующая речь: not_in_srd_or_name_unverified
+- dndsu:spell:2441 — Иссушающий укол: not_in_srd_or_name_unverified
+- dndsu:spell:2442 — Дар готовности: not_in_srd_or_name_unverified
+- dndsu:spell:2444 — Притяжение: not_in_srd_or_name_unverified
+- dndsu:spell:2445 — Благословение удачи: not_in_srd_or_name_unverified
+- dndsu:spell:2446 — Неподвижный предмет: not_in_srd_or_name_unverified
+- dndsu:spell:2447 — Карман на запястье: not_in_srd_or_name_unverified
+- dndsu:spell:2448 — Силовая волна: not_in_srd_or_name_unverified
+- dndsu:spell:2449 — Центр притяжения: not_in_srd_or_name_unverified
+- dndsu:spell:2450 — Временной сдвиг: not_in_srd_or_name_unverified
+- dndsu:spell:2451 — Гравитационный разлом: not_in_srd_or_name_unverified
+- dndsu:spell:2452 — Единство сущностей: not_in_srd_or_name_unverified
+- dndsu:spell:2453 — Тёмная звезда: not_in_srd_or_name_unverified
+- dndsu:spell:2454 — Брешь в реальности: not_in_srd_or_name_unverified
+- dndsu:spell:2455 — Ревущая бездна: not_in_srd_or_name_unverified
+- dndsu:spell:2456 — Утрата времени: not_in_srd_or_name_unverified
+- dndsu:spell:3022 — Ледяные пальцы: not_in_srd_or_name_unverified
+- dndsu:spell:3023 — Сотворение магена: not_in_srd_or_name_unverified
+- dndsu:spell:3047 — Едкое варево Таши: not_in_srd_or_name_unverified
+- dndsu:spell:3048 — Клинок разрушения: not_in_srd_or_name_unverified
+- dndsu:spell:3049 — Крепость интеллекта: not_in_srd_or_name_unverified
+- dndsu:spell:3050 — Расщепление разума: not_in_srd_or_name_unverified
+- dndsu:spell:3051 — Покров духа: not_in_srd_or_name_unverified
+- dndsu:spell:3052 — Потусторонний облик Таши: not_in_srd_or_name_unverified
+- dndsu:spell:3053 — Психическая плеть Таши: not_in_srd_or_name_unverified
+- dndsu:spell:3054 — Сон синей вуали: not_in_srd_or_name_unverified
+- dndsu:spell:3062 — Призыв духа аберрации: not_in_srd_or_name_unverified
+- dndsu:spell:3063 — Призыв духа зверя: not_in_srd_or_name_unverified
+- dndsu:spell:3064 — Призыв духа исчадия: not_in_srd_or_name_unverified
+- dndsu:spell:3065 — Призыв духа конструкта: not_in_srd_or_name_unverified
+- dndsu:spell:3066 — Призыв духа небожителя: not_in_srd_or_name_unverified
+- dndsu:spell:3067 — Призыв духа нежити: not_in_srd_or_name_unverified
+- dndsu:spell:3068 — Призыв духа стихии: not_in_srd_or_name_unverified
+- dndsu:spell:3069 — Призыв духа тени: not_in_srd_or_name_unverified
+- dndsu:spell:3070 — Призыв духа феи: not_in_srd_or_name_unverified
+- dndsu:spell:3813 — Ашардалонова поступь: not_in_srd_or_name_unverified
+- dndsu:spell:3814 — Драконоподобное превращение: not_in_srd_or_name_unverified
+- dndsu:spell:3815 — Платиновый щит Физбана: not_in_srd_or_name_unverified
+- dndsu:spell:3816 — Натайрово озорство: not_in_srd_or_name_unverified
+- dndsu:spell:3817 — Психическое копьё Раулотима: not_in_srd_or_name_unverified
+- dndsu:spell:3818 — Сковывающий лёд Раймы: not_in_srd_or_name_unverified
+- dndsu:spell:3819 — Призыв духа дракона: not_in_srd_or_name_unverified
+- dndsu:spell:3847 — Стая фамильяров: not_in_srd_or_name_unverified
+- dndsu:spell:3848 — Быстрый гонец Гальдера: not_in_srd_or_name_unverified
+- dndsu:spell:3849 — Гальдерова башня: not_in_srd_or_name_unverified
+- dndsu:spell:3938 — Заимствованные знания: not_in_srd_or_name_unverified
+- dndsu:spell:3939 — Увлекательная прогулка: not_in_srd_or_name_unverified
+- dndsu:spell:3946 — Искусная острота: not_in_srd_or_name_unverified
+- dndsu:spell:3947 — Вихрь искривления: not_in_srd_or_name_unverified
+- dndsu:spell:3948 — Увядание и цветение: not_in_srd_or_name_unverified
+- dndsu:spell:4660 — Враждебность: not_in_srd_or_name_unverified
+- dndsu:spell:4663 — Дух смерти: not_in_srd_or_name_unverified
+- dndsu:spell:4664 — Разбрасывание карт: not_in_srd_or_name_unverified
+- dndsu:spell:4760 — Воздушный пузырь: not_in_srd_or_name_unverified
+- dndsu:spell:4761 — Сотворение магического руля: not_in_srd_or_name_unverified
+- dndsu:spell:6578 — Запечатывание врат: not_in_srd_or_name_unverified
+- dndsu:spell:6579 — Чувство искажения: not_in_srd_or_name_unverified
+
+## Пока не реализовано
+
+- unreviewed non-SRD damage rules
+- summoned creature stat blocks and transformations
+- random/prismatic branches
+- weapon damage and class features
+- HP-dependent damage caps and damage reflection
+- automatic saves, resistance, critical hits and encounter state

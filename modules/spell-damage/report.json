@@ -1,0 +1,2156 @@
+{
+  "schemaVersion": 1,
+  "catalogueSha256": "4edefd7f0e9d591d3772ce720919d8c0f07d1fc99b6ba61d605d1c5844ca1ada",
+  "sourceSha256": "beaa6a747e693aeaf49b3e6ef624b8240128ac824479305a75a1649e9d053098",
+  "processed": 524,
+  "supported": 53,
+  "manualReview": [
+    {
+      "id": "dndsu:spell:2",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "antipathy-sympathy"
+    },
+    {
+      "id": "dndsu:spell:3",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:5",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "holy-aura"
+    },
+    {
+      "id": "dndsu:spell:7",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "silent-image"
+    },
+    {
+      "id": "dndsu:spell:8",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "pass-without-trace"
+    },
+    {
+      "id": "dndsu:spell:9",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "bless"
+    },
+    {
+      "id": "dndsu:spell:12",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "divine-word"
+    },
+    {
+      "id": "dndsu:spell:14",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:15",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:16",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:17",
+      "reason": "conditional_target_detection_and_attack",
+      "apiIndex": "faithful-hound"
+    },
+    {
+      "id": "dndsu:spell:18",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "continual-flame"
+    },
+    {
+      "id": "dndsu:spell:19",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dream"
+    },
+    {
+      "id": "dndsu:spell:20",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "see-invisibility"
+    },
+    {
+      "id": "dndsu:spell:21",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "control-water"
+    },
+    {
+      "id": "dndsu:spell:22",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "control-weather"
+    },
+    {
+      "id": "dndsu:spell:23",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "suggestion"
+    },
+    {
+      "id": "dndsu:spell:24",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "revivify"
+    },
+    {
+      "id": "dndsu:spell:26",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mage-hand"
+    },
+    {
+      "id": "dndsu:spell:28",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "magic-mouth"
+    },
+    {
+      "id": "dndsu:spell:29",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "arcane-lock"
+    },
+    {
+      "id": "dndsu:spell:30",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "magic-jar"
+    },
+    {
+      "id": "dndsu:spell:31",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:33",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "resurrection"
+    },
+    {
+      "id": "dndsu:spell:35",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "animate-dead"
+    },
+    {
+      "id": "dndsu:spell:36",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "gate"
+    },
+    {
+      "id": "dndsu:spell:37",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:38",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "greater-invisibility"
+    },
+    {
+      "id": "dndsu:spell:39",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "greater-restoration"
+    },
+    {
+      "id": "dndsu:spell:40",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "augury"
+    },
+    {
+      "id": "dndsu:spell:41",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "gaseous-form"
+    },
+    {
+      "id": "dndsu:spell:42",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "heroism"
+    },
+    {
+      "id": "dndsu:spell:43",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "giant-insect"
+    },
+    {
+      "id": "dndsu:spell:44",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hypnotic-pattern"
+    },
+    {
+      "id": "dndsu:spell:45",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "blindness-deafness"
+    },
+    {
+      "id": "dndsu:spell:46",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:47",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:50",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:51",
+      "reason": "round_specific_damage_types",
+      "apiIndex": "storm-of-vengeance"
+    },
+    {
+      "id": "dndsu:spell:52",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:53",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "move-earth"
+    },
+    {
+      "id": "dndsu:spell:54",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "clone"
+    },
+    {
+      "id": "dndsu:spell:55",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "demiplane"
+    },
+    {
+      "id": "dndsu:spell:56",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:57",
+      "reason": "mode_specific_dice_and_modifier",
+      "apiIndex": "arcane-hand"
+    },
+    {
+      "id": "dndsu:spell:58",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "daylight"
+    },
+    {
+      "id": "dndsu:spell:59",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:60",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mage-armor"
+    },
+    {
+      "id": "dndsu:spell:61",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "tongues"
+    },
+    {
+      "id": "dndsu:spell:64",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "etherealness"
+    },
+    {
+      "id": "dndsu:spell:65",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "tree-stride"
+    },
+    {
+      "id": "dndsu:spell:68",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:69",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "shield-of-faith"
+    },
+    {
+      "id": "dndsu:spell:70",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "shield"
+    },
+    {
+      "id": "dndsu:spell:71",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:72",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "animal-friendship"
+    },
+    {
+      "id": "dndsu:spell:73",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "shillelagh"
+    },
+    {
+      "id": "dndsu:spell:74",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "barkskin"
+    },
+    {
+      "id": "dndsu:spell:75",
+      "reason": "alignment_selected_damage_type",
+      "apiIndex": "spirit-guardians"
+    },
+    {
+      "id": "dndsu:spell:76",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:78",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "goodberry"
+    },
+    {
+      "id": "dndsu:spell:79",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:80",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "thaumaturgy"
+    },
+    {
+      "id": "dndsu:spell:81",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:82",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "programmed-illusion"
+    },
+    {
+      "id": "dndsu:spell:83",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "slow"
+    },
+    {
+      "id": "dndsu:spell:84",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:85",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:86",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:87",
+      "reason": "time_accumulation_and_early_detonation",
+      "apiIndex": "delayed-blast-fireball"
+    },
+    {
+      "id": "dndsu:spell:88",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "water-walk"
+    },
+    {
+      "id": "dndsu:spell:89",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "forbiddance"
+    },
+    {
+      "id": "dndsu:spell:90",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "wind-walk"
+    },
+    {
+      "id": "dndsu:spell:91",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "prestidigitation"
+    },
+    {
+      "id": "dndsu:spell:92",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "contagion"
+    },
+    {
+      "id": "dndsu:spell:93",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mislead"
+    },
+    {
+      "id": "dndsu:spell:94",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "spare-the-dying"
+    },
+    {
+      "id": "dndsu:spell:95",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "plane-shift"
+    },
+    {
+      "id": "dndsu:spell:96",
+      "reason": "plant_max_damage_and_target_immunity",
+      "apiIndex": "blight"
+    },
+    {
+      "id": "dndsu:spell:97",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "imprisonment"
+    },
+    {
+      "id": "dndsu:spell:98",
+      "reason": "HP_pool_not_damage",
+      "apiIndex": "sleep"
+    },
+    {
+      "id": "dndsu:spell:99",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "protection-from-evil-and-good"
+    },
+    {
+      "id": "dndsu:spell:100",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "haste"
+    },
+    {
+      "id": "dndsu:spell:101",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:102",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "calm-emotions"
+    },
+    {
+      "id": "dndsu:spell:103",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "enhance-ability"
+    },
+    {
+      "id": "dndsu:spell:104",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "death-ward"
+    },
+    {
+      "id": "dndsu:spell:105",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "guidance"
+    },
+    {
+      "id": "dndsu:spell:106",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "protection-from-energy"
+    },
+    {
+      "id": "dndsu:spell:107",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "forcecage"
+    },
+    {
+      "id": "dndsu:spell:108",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "protection-from-poison"
+    },
+    {
+      "id": "dndsu:spell:109",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "fear"
+    },
+    {
+      "id": "dndsu:spell:110",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hold-monster"
+    },
+    {
+      "id": "dndsu:spell:111",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "earthquake"
+    },
+    {
+      "id": "dndsu:spell:113",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "stinking-cloud"
+    },
+    {
+      "id": "dndsu:spell:114",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "symbol"
+    },
+    {
+      "id": "dndsu:spell:115",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "legend-lore"
+    },
+    {
+      "id": "dndsu:spell:116",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "banishment"
+    },
+    {
+      "id": "dndsu:spell:117",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:118",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "fabricate"
+    },
+    {
+      "id": "dndsu:spell:119",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "modify-memory"
+    },
+    {
+      "id": "dndsu:spell:120",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "reverse-gravity"
+    },
+    {
+      "id": "dndsu:spell:121",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "stone-shape"
+    },
+    {
+      "id": "dndsu:spell:122",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "sequester"
+    },
+    {
+      "id": "dndsu:spell:123",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "druidcraft"
+    },
+    {
+      "id": "dndsu:spell:124",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "wish"
+    },
+    {
+      "id": "dndsu:spell:125",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "true-resurrection"
+    },
+    {
+      "id": "dndsu:spell:126",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "true-seeing"
+    },
+    {
+      "id": "dndsu:spell:127",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "true-polymorph"
+    },
+    {
+      "id": "dndsu:spell:128",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:129",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "stoneskin"
+    },
+    {
+      "id": "dndsu:spell:130",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "wall-of-stone"
+    },
+    {
+      "id": "dndsu:spell:131",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "branding-smite"
+    },
+    {
+      "id": "dndsu:spell:132",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "counterspell"
+    },
+    {
+      "id": "dndsu:spell:134",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:135",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:137",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "teleportation-circle"
+    },
+    {
+      "id": "dndsu:spell:138",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "maze"
+    },
+    {
+      "id": "dndsu:spell:139",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "levitate"
+    },
+    {
+      "id": "dndsu:spell:142",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:143",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:144",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "healing-word"
+    },
+    {
+      "id": "dndsu:spell:145",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "cure-wounds"
+    },
+    {
+      "id": "dndsu:spell:147",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:148",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "ray-of-enfeeblement"
+    },
+    {
+      "id": "dndsu:spell:150",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:151",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "arcane-eye"
+    },
+    {
+      "id": "dndsu:spell:152",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "magic-circle"
+    },
+    {
+      "id": "dndsu:spell:153",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "magic-weapon"
+    },
+    {
+      "id": "dndsu:spell:154",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "minor-illusion"
+    },
+    {
+      "id": "dndsu:spell:155",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "lesser-restoration"
+    },
+    {
+      "id": "dndsu:spell:156",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:157",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "disguise-self"
+    },
+    {
+      "id": "dndsu:spell:158",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "beacon-of-hope"
+    },
+    {
+      "id": "dndsu:spell:160",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:161",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "blink"
+    },
+    {
+      "id": "dndsu:spell:162",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "sleet-storm"
+    },
+    {
+      "id": "dndsu:spell:164",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hunters-mark"
+    },
+    {
+      "id": "dndsu:spell:165",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "true-strike"
+    },
+    {
+      "id": "dndsu:spell:167",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hallucinatory-terrain"
+    },
+    {
+      "id": "dndsu:spell:169",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mass-suggestion"
+    },
+    {
+      "id": "dndsu:spell:170",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mass-healing-word"
+    },
+    {
+      "id": "dndsu:spell:171",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mass-cure-wounds"
+    },
+    {
+      "id": "dndsu:spell:172",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mass-heal"
+    },
+    {
+      "id": "dndsu:spell:173",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "prayer-of-healing"
+    },
+    {
+      "id": "dndsu:spell:174",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:176",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "scrying"
+    },
+    {
+      "id": "dndsu:spell:179",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "glibness"
+    },
+    {
+      "id": "dndsu:spell:181",
+      "reason": "choose_fire_or_radiant_upcast_increment",
+      "apiIndex": "flame-strike"
+    },
+    {
+      "id": "dndsu:spell:182",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "illusory-script"
+    },
+    {
+      "id": "dndsu:spell:183",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "invisibility"
+    },
+    {
+      "id": "dndsu:spell:184",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "unseen-servant"
+    },
+    {
+      "id": "dndsu:spell:185",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "nondetection"
+    },
+    {
+      "id": "dndsu:spell:186",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "gentle-repose"
+    },
+    {
+      "id": "dndsu:spell:187",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:188",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:189",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "geas"
+    },
+    {
+      "id": "dndsu:spell:190",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:192",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "zone-of-truth"
+    },
+    {
+      "id": "dndsu:spell:193",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "detect-poison-and-disease"
+    },
+    {
+      "id": "dndsu:spell:194",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "detect-evil-and-good"
+    },
+    {
+      "id": "dndsu:spell:195",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "detect-magic"
+    },
+    {
+      "id": "dndsu:spell:196",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "detect-thoughts"
+    },
+    {
+      "id": "dndsu:spell:197",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "major-image"
+    },
+    {
+      "id": "dndsu:spell:198",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "commune"
+    },
+    {
+      "id": "dndsu:spell:199",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "commune-with-nature"
+    },
+    {
+      "id": "dndsu:spell:200",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:206",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "fire-shield"
+    },
+    {
+      "id": "dndsu:spell:207",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "faerie-fire"
+    },
+    {
+      "id": "dndsu:spell:208",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "raise-dead"
+    },
+    {
+      "id": "dndsu:spell:209",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "flesh-to-stone"
+    },
+    {
+      "id": "dndsu:spell:210",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "identify"
+    },
+    {
+      "id": "dndsu:spell:211",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "entangle"
+    },
+    {
+      "id": "dndsu:spell:212",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:213",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:214",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "time-stop"
+    },
+    {
+      "id": "dndsu:spell:216",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:217",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "knock"
+    },
+    {
+      "id": "dndsu:spell:218",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mirror-image"
+    },
+    {
+      "id": "dndsu:spell:219",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "glyph-of-warding"
+    },
+    {
+      "id": "dndsu:spell:220",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "warding-bond"
+    },
+    {
+      "id": "dndsu:spell:221",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "charm-person"
+    },
+    {
+      "id": "dndsu:spell:222",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "purify-food-and-drink"
+    },
+    {
+      "id": "dndsu:spell:223",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "feather-fall"
+    },
+    {
+      "id": "dndsu:spell:224",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:226",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "spider-climb"
+    },
+    {
+      "id": "dndsu:spell:227",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "web"
+    },
+    {
+      "id": "dndsu:spell:228",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dimension-door"
+    },
+    {
+      "id": "dndsu:spell:230",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "heroes-feast"
+    },
+    {
+      "id": "dndsu:spell:231",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "planar-binding"
+    },
+    {
+      "id": "dndsu:spell:232",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "planar-ally"
+    },
+    {
+      "id": "dndsu:spell:234",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dancing-lights"
+    },
+    {
+      "id": "dndsu:spell:235",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "water-breathing"
+    },
+    {
+      "id": "dndsu:spell:236",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "aid"
+    },
+    {
+      "id": "dndsu:spell:237",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "simulacrum"
+    },
+    {
+      "id": "dndsu:spell:238",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "clairvoyance"
+    },
+    {
+      "id": "dndsu:spell:239",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dominate-beast"
+    },
+    {
+      "id": "dndsu:spell:240",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dominate-person"
+    },
+    {
+      "id": "dndsu:spell:241",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dominate-monster"
+    },
+    {
+      "id": "dndsu:spell:242",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "locate-animals-or-plants"
+    },
+    {
+      "id": "dndsu:spell:243",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "find-traps"
+    },
+    {
+      "id": "dndsu:spell:244",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "locate-object"
+    },
+    {
+      "id": "dndsu:spell:245",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "find-the-path"
+    },
+    {
+      "id": "dndsu:spell:246",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "find-steed"
+    },
+    {
+      "id": "dndsu:spell:247",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "locate-creature"
+    },
+    {
+      "id": "dndsu:spell:248",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "find-familiar"
+    },
+    {
+      "id": "dndsu:spell:249",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "fly"
+    },
+    {
+      "id": "dndsu:spell:250",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "heal"
+    },
+    {
+      "id": "dndsu:spell:251",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "shapechange"
+    },
+    {
+      "id": "dndsu:spell:252",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "comprehend-languages"
+    },
+    {
+      "id": "dndsu:spell:253",
+      "reason": "cannot_reduce_target_below_1_HP",
+      "apiIndex": "harm"
+    },
+    {
+      "id": "dndsu:spell:254",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "bane"
+    },
+    {
+      "id": "dndsu:spell:255",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "gust-of-wind"
+    },
+    {
+      "id": "dndsu:spell:256",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "sending"
+    },
+    {
+      "id": "dndsu:spell:257",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "expeditious-retreat"
+    },
+    {
+      "id": "dndsu:spell:258",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mending"
+    },
+    {
+      "id": "dndsu:spell:259",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "animal-messenger"
+    },
+    {
+      "id": "dndsu:spell:260",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "polymorph"
+    },
+    {
+      "id": "dndsu:spell:261",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "animal-shapes"
+    },
+    {
+      "id": "dndsu:spell:262",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "antilife-shell"
+    },
+    {
+      "id": "dndsu:spell:263",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "antimagic-field"
+    },
+    {
+      "id": "dndsu:spell:264",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "foresight"
+    },
+    {
+      "id": "dndsu:spell:265",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "contingency"
+    },
+    {
+      "id": "dndsu:spell:266",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "divination"
+    },
+    {
+      "id": "dndsu:spell:267",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-animals"
+    },
+    {
+      "id": "dndsu:spell:268",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:269",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:270",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-woodland-beings"
+    },
+    {
+      "id": "dndsu:spell:271",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-minor-elementals"
+    },
+    {
+      "id": "dndsu:spell:273",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-celestial"
+    },
+    {
+      "id": "dndsu:spell:274",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-fey"
+    },
+    {
+      "id": "dndsu:spell:275",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "conjure-elemental"
+    },
+    {
+      "id": "dndsu:spell:276",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "command"
+    },
+    {
+      "id": "dndsu:spell:278",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "compulsion"
+    },
+    {
+      "id": "dndsu:spell:279",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "phantom-steed"
+    },
+    {
+      "id": "dndsu:spell:280",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:281",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "seeming"
+    },
+    {
+      "id": "dndsu:spell:282",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "awaken"
+    },
+    {
+      "id": "dndsu:spell:283",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "project-image"
+    },
+    {
+      "id": "dndsu:spell:284",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "astral-projection"
+    },
+    {
+      "id": "dndsu:spell:285",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "bestow-curse"
+    },
+    {
+      "id": "dndsu:spell:286",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "jump"
+    },
+    {
+      "id": "dndsu:spell:287",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "false-life"
+    },
+    {
+      "id": "dndsu:spell:288",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "transport-via-plants"
+    },
+    {
+      "id": "dndsu:spell:290",
+      "reason": "multiple_layer_and_random_effects",
+      "apiIndex": "prismatic-wall"
+    },
+    {
+      "id": "dndsu:spell:291",
+      "reason": "random_color_and_double_ray_branches",
+      "apiIndex": "prismatic-spray"
+    },
+    {
+      "id": "dndsu:spell:292",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "speak-with-animals"
+    },
+    {
+      "id": "dndsu:spell:293",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "speak-with-dead"
+    },
+    {
+      "id": "dndsu:spell:294",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "speak-with-plants"
+    },
+    {
+      "id": "dndsu:spell:295",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "blur"
+    },
+    {
+      "id": "dndsu:spell:296",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:297",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "eyebite"
+    },
+    {
+      "id": "dndsu:spell:300",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dispel-evil-and-good"
+    },
+    {
+      "id": "dndsu:spell:301",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "dispel-magic"
+    },
+    {
+      "id": "dndsu:spell:302",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "regenerate"
+    },
+    {
+      "id": "dndsu:spell:303",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "enthrall"
+    },
+    {
+      "id": "dndsu:spell:304",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "plant-growth"
+    },
+    {
+      "id": "dndsu:spell:305",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:306",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "color-spray"
+    },
+    {
+      "id": "dndsu:spell:307",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "light"
+    },
+    {
+      "id": "dndsu:spell:308",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "freedom-of-movement"
+    },
+    {
+      "id": "dndsu:spell:309",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "contact-other-plane"
+    },
+    {
+      "id": "dndsu:spell:310",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hallow"
+    },
+    {
+      "id": "dndsu:spell:312",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:313",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "alarm"
+    },
+    {
+      "id": "dndsu:spell:314",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "wall-of-force"
+    },
+    {
+      "id": "dndsu:spell:315",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "grease"
+    },
+    {
+      "id": "dndsu:spell:316",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "longstrider"
+    },
+    {
+      "id": "dndsu:spell:318",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "meld-into-stone"
+    },
+    {
+      "id": "dndsu:spell:319",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "word-of-recall"
+    },
+    {
+      "id": "dndsu:spell:320",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:321",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "power-word-stun"
+    },
+    {
+      "id": "dndsu:spell:322",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "power-word-kill"
+    },
+    {
+      "id": "dndsu:spell:323",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "alter-self"
+    },
+    {
+      "id": "dndsu:spell:324",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "weird"
+    },
+    {
+      "id": "dndsu:spell:325",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "confusion"
+    },
+    {
+      "id": "dndsu:spell:326",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "remove-curse"
+    },
+    {
+      "id": "dndsu:spell:327",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "passwall"
+    },
+    {
+      "id": "dndsu:spell:328",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mind-blank"
+    },
+    {
+      "id": "dndsu:spell:331",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "message"
+    },
+    {
+      "id": "dndsu:spell:332",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "resistance"
+    },
+    {
+      "id": "dndsu:spell:333",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "create-or-destroy-water"
+    },
+    {
+      "id": "dndsu:spell:334",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "create-undead"
+    },
+    {
+      "id": "dndsu:spell:335",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "create-food-and-water"
+    },
+    {
+      "id": "dndsu:spell:339",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:340",
+      "reason": "fixed_damage_and_60_HP_budget",
+      "apiIndex": "guardian-of-faith"
+    },
+    {
+      "id": "dndsu:spell:341",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "guards-and-wards"
+    },
+    {
+      "id": "dndsu:spell:342",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "globe-of-invulnerability"
+    },
+    {
+      "id": "dndsu:spell:343",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "mirage-arcane"
+    },
+    {
+      "id": "dndsu:spell:344",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "telekinesis"
+    },
+    {
+      "id": "dndsu:spell:345",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:346",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:348",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:349",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "silence"
+    },
+    {
+      "id": "dndsu:spell:350",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "rope-trick"
+    },
+    {
+      "id": "dndsu:spell:351",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "fog-cloud"
+    },
+    {
+      "id": "dndsu:spell:352",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "misty-step"
+    },
+    {
+      "id": "dndsu:spell:353",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "darkness"
+    },
+    {
+      "id": "dndsu:spell:354",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "sanctuary"
+    },
+    {
+      "id": "dndsu:spell:355",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "enlarge-reduce"
+    },
+    {
+      "id": "dndsu:spell:356",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "hold-person"
+    },
+    {
+      "id": "dndsu:spell:364",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "animate-objects"
+    },
+    {
+      "id": "dndsu:spell:365",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "reincarnate"
+    },
+    {
+      "id": "dndsu:spell:366",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "creation"
+    },
+    {
+      "id": "dndsu:spell:367",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "teleport"
+    },
+    {
+      "id": "dndsu:spell:368",
+      "reason": "damage_semantics_not_reviewed",
+      "apiIndex": "darkvision"
+    },
+    {
+      "id": "dndsu:spell:373",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:374",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:375",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:376",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:377",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:378",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:379",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:380",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:381",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:382",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:383",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:384",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:385",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:386",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:387",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:388",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:389",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:390",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:391",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:392",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:393",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:394",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:395",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:396",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:397",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:398",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:399",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:400",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:401",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:402",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:403",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:404",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:405",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:406",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:407",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:408",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:409",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:410",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:411",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:412",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:413",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:414",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:415",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:454",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:455",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:456",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:457",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:458",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:459",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:460",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:461",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:462",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:463",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:464",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:465",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:466",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:467",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:468",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:469",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:470",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:471",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:472",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:473",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:474",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:475",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:477",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:478",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:479",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:480",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:481",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:482",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:483",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:484",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:485",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:486",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:487",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:488",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:489",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:490",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:491",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:492",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:493",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:494",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:495",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:496",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:497",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:498",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:499",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:500",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:501",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:502",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:503",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:504",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:505",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:506",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:507",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:508",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:509",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:741",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1921",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1922",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1923",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2018",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2202",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2340",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2341",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2344",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2441",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2442",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2444",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2445",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2446",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2447",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2448",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2449",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2450",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2451",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2452",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2453",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2454",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2455",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2456",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3022",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3023",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3047",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3048",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3049",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3050",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3051",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3052",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3053",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3054",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3062",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3063",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3064",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3065",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3066",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3067",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3068",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3069",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3070",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3813",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3814",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3815",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3816",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3817",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3818",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3819",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3847",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3848",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3849",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3938",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3939",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3946",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3947",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3948",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4660",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4663",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4664",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4760",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4761",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6578",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6579",
+      "reason": "not_in_srd_or_name_unverified"
+    }
+  ],
+  "unsupportedMechanics": [
+    "unreviewed non-SRD damage rules",
+    "summoned creature stat blocks and transformations",
+    "random/prismatic branches",
+    "weapon damage and class features",
+    "HP-dependent damage caps and damage reflection",
+    "automatic saves, resistance, critical hits and encounter state"
+  ]
+}
