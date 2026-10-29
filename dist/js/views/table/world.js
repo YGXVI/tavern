@@ -25,12 +25,13 @@ export function buildWorld(viewport) {
     walls: svg('walls-layer'),
     markers: el('<div class="layer markers-layer"></div>'),
     tokens: el('<div class="layer tokens-layer"></div>'),
+    auraLabels: el('<div class="layer aura-labels"></div>'),
     fog: el('<canvas class="layer fog-canvas"></canvas>'),
     overlay: svg('overlay-layer'),
     labels: el('<div class="layer labels-layer"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.fog, L.areas, L.overlay, L.labels);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels);
   viewport.append(world);
   return L;
 }
@@ -41,7 +42,7 @@ export function sizeLayers(L, scene) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
-  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
+  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels', 'auraLabels']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
   L.map.style.width = `${W}px`; L.map.style.height = `${H}px`;
   L.world.style.width = `${W}px`; L.world.style.height = `${H}px`;
 }
@@ -180,7 +181,7 @@ export function renderAreas(L, ctx) {
 export function renderAuras(L, ctx) {
   const { scene } = ctx;
   const s = gridSize(scene.grid);
-  const out = [];
+  const out = [], labels = [];
   for (const t of scene.tokens) {
     if (!t.aura || !ctx.tokenShown(t)) continue;
     const p = ctx.posOf(t);
@@ -188,8 +189,10 @@ export function renderAuras(L, ctx) {
     const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;
     const hex = auraHex(t.aura), a = auraAlpha(t.aura);
     out.push(`<circle class="aura" cx="${p.x}" cy="${p.y}" r="${rad}" style="--ac:${hex};--aa:${a};--as:${Math.min(1, a + 0.45)}"/>`);
+    labels.push(`<button class="aura-label" data-aura="${esc(t.id)}" style="left:${p.x}px;top:${p.y - rad}px;--ac:${hex}">${esc(t.aura.name)} · ${t.aura.radius} фт</button>`);
   }
   L.auras.innerHTML = out.join('');
+  L.auraLabels.innerHTML = labels.join('');
 }
 
 // ——— Токены ———

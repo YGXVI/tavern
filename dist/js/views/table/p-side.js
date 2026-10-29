@@ -48,16 +48,14 @@ function setupChips(ctx, s) {
   </div>`;
 }
 
-function scenesHTML(ctx) {
+function sceneCard(ctx, s) {
   const c = ctx.c;
-  const active = sceneOf(c, c.activeSceneId);
-  const cards = c.scenes.map((s) => {
-    const heroes = s.tokens.filter((t) => t.kind === 'hero');
-    const foes = s.tokens.filter((t) => t.kind === 'foe');
-    const isActive = s.id === c.activeSceneId;
-    const split = c.members.filter((m) => m.sceneId === s.id && m.status === 'active').length;
-    const status = isActive ? '<span class="chip chip-solid">Игроки здесь</span>' : split ? `<span class="chip chip-accent">${split} ${plural(split, 'игрок', 'игрока', 'игроков')} здесь</span>` : s.status === 'draft' ? '<span class="chip">Черновик</span>' : '';
-    return `<div class="scene-card ${s.id === ctx.sceneId ? 'viewing' : ''} ${isActive ? 'active' : ''}">
+  const heroes = s.tokens.filter((t) => t.kind === 'hero');
+  const foes = s.tokens.filter((t) => t.kind === 'foe');
+  const isActive = s.id === c.activeSceneId;
+  const split = c.members.filter((m) => m.sceneId === s.id && m.status === 'active').length;
+  const status = isActive ? '<span class="chip chip-solid">Игроки здесь</span>' : split ? `<span class="chip chip-accent">${split} ${plural(split, 'игрок', 'игрока', 'игроков')} здесь</span>` : s.status === 'draft' ? '<span class="chip">Черновик</span>' : '';
+  return `<div class="scene-card ${s.id === ctx.sceneId ? 'viewing' : ''} ${isActive ? 'active' : ''}">
       <button class="scene-thumb" data-act="scene-view" data-id="${esc(s.id)}" aria-label="Открыть «${esc(s.name)}»">${mapImg(s.map.src)}${status ? `<span class="thumb-chip">${status}</span>` : ''}${s.id === ctx.sceneId ? `<span class="thumb-eye">${icon('view', 14)}вы здесь</span>` : ''}</button>
       <div class="scene-info">
         <div class="row"><b class="ellipsis grow">${esc(s.name)}</b><button class="icon-btn icon-btn-xs" data-act="scene-menu" data-id="${esc(s.id)}" aria-label="Действия со сценой">${icon('more-horizontal', 16)}</button></div>
@@ -66,9 +64,25 @@ function scenesHTML(ctx) {
         ${setupChips(ctx, s)}
       </div>
     </div>`;
-  }).join('');
+}
+
+function scenesList(ctx) {
+  const c = ctx.c;
+  const q = (ctx.ui.sceneQuery || '').trim().toLowerCase();
+  const match = (s) => !q || s.name.toLowerCase().includes(q) || (s.note || '').toLowerCase().includes(q);
+  const live = c.scenes.filter((s) => match(s) && (s.id === c.activeSceneId || c.members.some((m) => m.sceneId === s.id && m.status === 'active')));
+  const rest = c.scenes.filter((s) => match(s) && !live.includes(s));
+  if (!live.length && !rest.length) return q ? `<div class="empty"><p class="t-sm muted">Нет сцен с «${esc(ctx.ui.sceneQuery.trim())}»</p></div>` : '<div class="empty"><p class="t-sm muted">Сцен пока нет</p></div>';
+  return `${live.length ? `<div class="side-group">У игроков сейчас</div>${live.map((s) => sceneCard(ctx, s)).join('')}` : ''}
+    ${rest.length ? `<div class="side-group">Подготовлены · ${rest.length}</div>${rest.map((s) => sceneCard(ctx, s)).join('')}` : ''}`;
+}
+
+function scenesHTML(ctx) {
+  const c = ctx.c;
+  const active = sceneOf(c, c.activeSceneId);
   return `<div class="panel-header"><div class="titles"><div class="title lg">Сцены</div><div class="subtitle">${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')} · ${active ? `игроки в «${esc(active.name)}»` : 'игрокам ничего не показано'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
-    <div class="side-body scroll">${cards || '<div class="empty"><p class="t-sm muted">Сцен пока нет</p></div>'}</div>
+    ${c.scenes.length > 2 ? `<div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-ssearch value="${esc(ctx.ui.sceneQuery || '')}" placeholder="Найти сцену" aria-label="Найти сцену"></div></div>` : ''}
+    <div class="side-body scroll s-list">${scenesList(ctx)}</div>
     <div class="panel-footer"><button class="btn btn-primary btn-block" data-act="scene-new">${icon('plus-sign', 16)}Новая сцена</button></div>`;
 }
 
@@ -96,11 +110,17 @@ function bestiaryHTML(ctx) {
     <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
     ${m ? `<div class="panel-footer b-foot"><div class="col grow" style="gap:8px">
       <div class="row"><b class="grow ellipsis">${esc(m.name)}</b><div class="stepper"><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="-1" aria-label="Меньше">${icon('minus-sign', 14)}</button><span>${st.count}</span><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="1" aria-label="Больше">${icon('plus-sign', 14)}</button></div></div>
-      <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Хиты ${esc(m.hpDice)}</label></div>
-      <button class="btn btn-primary btn-block" data-act="b-place">${icon('plus-sign', 16)}Поставить ${st.count > 1 ? `${st.count} ` : ''}на карту</button></div></div>` : ''}`;
+      <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Бросить хиты (${esc(m.hpDice)})</label></div>
+      <label class="check t-sm"><input type="checkbox" data-act="b-combat" ${st.toCombat ? 'checked' : ''}>Сразу добавить в бой${ctx.c.combat.active ? '' : ' — начнём новый'}</label>
+      <button class="btn btn-primary btn-block" data-act="b-place">${icon('plus-sign', 16)}Поставить на карту${st.count > 1 ? ` · ${st.count}` : ''}</button></div></div>` : ''}`;
 }
 
 export function sideInput(ctx, e) {
+  if (e.target.matches('[data-ssearch]')) {
+    ctx.ui.sceneQuery = e.target.value;
+    const list = e.target.closest('.side-panel').querySelector('.s-list');
+    if (list) { list.innerHTML = scenesList(ctx); hydrateImages(list); }
+  }
   if (e.target.matches('[data-bsearch]')) {
     bState(ctx).q = e.target.value;
     const list = e.target.closest('.side-panel').querySelector('.b-list');
@@ -126,6 +146,7 @@ export function sideAction(ctx, act, b, e) {
     case 'b-count': st.count = Math.max(1, Math.min(12, st.count + Number(b.dataset.d))); ctx.panels.renderSide(true); return true;
     case 'b-hidden': st.hidden = b.checked; return true;
     case 'b-rollhp': st.rollHp = b.checked; return true;
+    case 'b-combat': st.toCombat = b.checked; return true;
     case 'b-place': placeCreatures(ctx, st.pick); return true;
     default: return false;
   }
@@ -137,6 +158,7 @@ function sceneMenu(ctx, sid, anchor) {
   if (!s) return;
   menu([
     sid !== c.activeSceneId ? { icon: 'view', label: 'Показать игрокам', onClick: () => activateScene(ctx, sid) } : null,
+    sid !== ctx.sceneId ? { icon: 'arrow-right-01', label: 'Перейти сюда', hint: 'игроки не увидят', onClick: () => { ctx.switchScene(sid); ctx.panels.renderSide(); } } : null,
     { icon: 'edit-02', label: 'Переименовать', onClick: () => renameScene(ctx, sid) },
     { icon: 'copy-01', label: 'Дублировать без героев', onClick: () => duplicateScene(ctx, sid) },
     { icon: 'grid', label: 'Подогнать сетку', onClick: () => { ctx.switchScene(sid); ctx.setTool('grid'); } },
@@ -323,6 +345,7 @@ export function placeCreatures(ctx, monsterId) {
     }
   }, { label: 'Существа', undo: (sc) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); }, redo: (sc) => { for (const t of made) sc.tokens.push(structuredClone(t)); } });
   ctx.select(made.map((t) => t.id));
+  if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({
     title: `На карте: ${made.length > 1 ? `${made.length} × ` : ''}${m.name}`, body: st.hidden ? 'Скрыто от игроков' : 'Игроки видят, если в обзоре героев', icon: 'monster',

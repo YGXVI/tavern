@@ -7,7 +7,7 @@ import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
-import { popover, closePopover, modal, panelHeader } from '../../ui/kit.js';
+import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll } from './dice.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
@@ -22,6 +22,9 @@ import { sizeById } from '../../data/rules.js';
 
 const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll']);
 
+/** Сколько длится пауза: «3:42». */
+export function pauseElapsed(p) { const sec = Math.max(0, Math.floor((Date.now() - (p?.at || Date.now())) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
+
 export class Panels {
   constructor(ctx) {
     this.ctx = ctx;
@@ -35,6 +38,7 @@ export class Panels {
     this.side.addEventListener('click', clickAct);
     this.floats.addEventListener('click', clickAct);
     this.side.addEventListener('input', (e) => S.sideInput(ctx, e));
+    this.pauseTick = setInterval(() => this.tickPause(), 1000);
     const chromeRoot = ctx.root.querySelector('.chrome');
     chromeRoot.addEventListener('contextmenu', (e) => {
       const d = e.target.closest('[data-act="die-add"]');
@@ -77,6 +81,7 @@ export class Panels {
   }
 
   destroy() {
+    clearInterval(this.pauseTick);
     for (const off of this.offs) off();
     closeSheet();
   }
@@ -189,10 +194,10 @@ export class Panels {
     if (force || this.side.__html !== html) {
       const body = this.side.querySelector('.side-body');
       const top = body?.scrollTop || 0;
-      const focusSearch = document.activeElement?.matches?.('[data-bsearch]');
+      const focusSearch = document.activeElement?.matches?.('[data-bsearch], [data-ssearch]') ? (document.activeElement.matches('[data-ssearch]') ? '[data-ssearch]' : '[data-bsearch]') : null;
       this.side.innerHTML = html; this.side.__html = html;
       const nb = this.side.querySelector('.side-body'); if (nb) nb.scrollTop = top;
-      if (focusSearch) { const i = this.side.querySelector('[data-bsearch]'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
+      if (focusSearch) { const i = this.side.querySelector(focusSearch); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
       S.hydrateImages(this.side);
     }
   }
@@ -234,7 +239,14 @@ export class Panels {
     if (this.pauseEl.__key === key) return;
     this.pauseEl.__key = key;
     const by = userById(p.by);
-    this.pauseEl.innerHTML = `<div class="pause-card"><span class="hourglass-big">${icon('hourglass', 40)}</span><h2>Пауза</h2><p>${esc(p.message || 'Мастер ненадолго остановил игру')}</p><small>${esc(by?.name || 'Мастер')} вернёт стол — продолжим с того же места</small></div>`;
+    this.pauseEl.innerHTML = `<div class="pause-card"><span class="hourglass-big">${icon('hourglass', 40)}</span><h2>Мастер поставил стол на паузу</h2>${p.message ? `<p>«${esc(p.message)}»</p>` : '<p>Мастер ненадолго остановил игру</p>'}<b class="pause-timer" data-pause-timer>${pauseElapsed(p)}</b><small>${esc(by?.name || 'Мастер')} вернёт стол — продолжим с того же места. Лист героя и кубы работают.</small></div>`;
+  }
+
+  /** Раз в секунду обновлять таймеры паузы на экране. */
+  tickPause() {
+    const p = this.ctx.c?.paused;
+    if (!p) return;
+    for (const n of this.ctx.root.querySelectorAll('[data-pause-timer]')) n.textContent = pauseElapsed(p);
   }
 
   // ——— Чтение вслух ———
@@ -369,6 +381,7 @@ export class Panels {
   hpEditor(tokenId, anchor, mode) { T.hpEditor(this.ctx, Array.isArray(tokenId) ? tokenId : [tokenId], anchor, mode); }
   commitHp(tokenId, text) { return T.commitHpInput(this.ctx, tokenId, text); }
   copyTokens(ids) { T.copyTokens(this.ctx, ids); }
+  auraPopover(id, anchor) { T.auraPopover(this.ctx, id, anchor); }
   pasteTokens(at) { T.pasteTokens(this.ctx, at); }
   applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
 
@@ -697,6 +710,7 @@ export class Panels {
       case 'token-delete': T.deleteTokens(ctx, sel); break;
       case 'deselect': ctx.select([]); break;
       case 'ping-token': if (one) ctx.ping(one.x, one.y); break;
+      case 'copy-code': copyText(ctx.c.invite?.code || '').then(() => ctx.toast({ title: 'Код скопирован', body: ctx.c.invite?.code, icon: 'copy-01' })); break;
       case 'target': if (one) T.toggleTarget(ctx, one.id); break;
       // Карточки сверху
       case 'save-roll': this.rollSave(b.dataset.id, b.dataset.token, b.dataset.adv || null); break;

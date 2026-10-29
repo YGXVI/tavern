@@ -264,8 +264,9 @@ export function tokenSettings(ctx, id, anchor) {
         <div class="field"><label>Имя для игроков</label><div class="chips-wrap"><button class="chip chip-md ${!t.nameHidden ? 'chip-accent' : ''}" data-namehide="0">Показывать</button><button class="chip chip-md ${t.nameHidden ? 'chip-accent' : ''}" data-namehide="1">Скрыть — «Неизвестное существо»</button></div></div>` : ''}
         <div class="field"><label for="tk-elev">Высота над полом</label><div class="row"><div class="input" style="width:110px"><input id="tk-elev" type="number" step="5" data-elev value="${t.elevation || 0}"><span class="suffix">фт</span></div>${[0, 10, 30].map((v) => `<button class="chip chip-md ${(t.elevation || 0) === v ? 'chip-accent' : ''}" data-elev-q="${v}">${v ? `${v} фт` : 'на полу'}</button>`).join('')}</div></div>
         <div class="field"><label>Размер</label><div class="chips-wrap">${SIZES.map((s) => `<button class="chip chip-md ${t.size === s.id ? 'chip-accent' : ''}" data-size="${s.id}">${s.name}${s.cells > 1 ? ` · ${s.cells}×${s.cells}` : ''}</button>`).join('')}</div></div>
-        <div class="field"><label>Свет от токена</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
-          ${t.light ? `<div class="row t-sm muted">Ярко ${t.light.bright} фт + тускло ${t.light.dim} фт</div>` : ''}</div>
+        <div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
+          ${t.light ? `<label class="aura-op"><span class="t-sm muted">Яркий свет</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.bright}" data-tl="bright" style="--fill:${(t.light.bright / 60) * 100}%" aria-label="Яркий свет"><b class="t-sm" data-tl-out="bright">${t.light.bright} фт</b></label>
+          <label class="aura-op"><span class="t-sm muted">Тусклый ещё</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.dim}" data-tl="dim" style="--fill:${(t.light.dim / 60) * 100}%" aria-label="Тусклый свет"><b class="t-sm" data-tl-out="dim">${t.light.dim} фт</b></label>` : ''}</div>
         <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
         <div class="field"><label>Аура</label>${t.aura ? auraEditor(t.aura) : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
       </div></div>`;
@@ -302,6 +303,14 @@ export function tokenSettings(ctx, id, anchor) {
   // Живой предпросмотр цвета и заметности — в памяти, запись по отпусканию.
   box.addEventListener('input', (e) => {
     const t = ctx.scene.tokens.find((x) => x.id === id);
+    if (e.target.matches('[data-tl]') && t?.light) {
+      const k = e.target.dataset.tl, v = Number(e.target.value);
+      t.light = { ...t.light, [k]: v };
+      e.target.style.setProperty('--fill', `${(v / 60) * 100}%`);
+      box.querySelector(`[data-tl-out="${k}"]`).textContent = `${v} фт`;
+      ctx.invalidateVision(); ctx.invalidate('fog', 'tokens');
+      return;
+    }
     if (!t?.aura) return;
     if (e.target.matches('[data-aura-op]')) {
       const v = Number(e.target.value);
@@ -313,6 +322,7 @@ export function tokenSettings(ctx, id, anchor) {
     if (e.target.matches('[data-aura-custom]')) { t.aura = { ...t.aura, color: e.target.value }; ctx.invalidate('areas'); }
   });
   box.addEventListener('change', (e) => {
+    if (e.target.matches('[data-tl]')) { const k = e.target.dataset.tl, v = Number(e.target.value); upd((t, c) => { if (!t.light) return; t.light = { ...t.light, [k]: v, preset: t.light.preset }; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = { ...t.light }; } }); }
     if (e.target.matches('[data-aura-op]')) { const v = Number(e.target.value); upd((t, c) => setAura(t, c, { ...t.aura, opacity: v })); }
     if (e.target.matches('[data-aura-custom]')) { const v = e.target.value; upd((t, c) => setAura(t, c, { ...t.aura, color: v })); }
     if (e.target.matches('[data-aura-name-edit]')) { const v = e.target.value.trim(); if (v) upd((t, c) => setAura(t, c, { ...t.aura, name: v })); }
@@ -399,6 +409,21 @@ export function clearTargets(ctx) {
   ctx.ui.targets = new Set();
   bus.send('target', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
   ctx.invalidate('tokens');
+}
+
+/** Подсказка ауры: что делает и кто сейчас внутри. */
+export function auraPopover(ctx, id, anchor) {
+  const t = ctx.scene.tokens.find((x) => x.id === id); if (!t?.aura) return;
+  const a = t.aura, st = tokenStats(ctx.c, t);
+  const s = gridSize(ctx.scene.grid), n = sizeById(t.size).cells;
+  const rad = (a.radius / (ctx.scene.grid.feet || 5)) * s + (n * s) / 2;
+  const inside = ctx.scene.tokens.filter((o) => o.id !== t.id && o.kind !== 'item' && ctx.tokenShown(o) && Math.hypot(o.x - t.x, o.y - t.y) <= rad).map((o) => ctx.nameOf(o));
+  const can = ctx.isMasterView || ctx.isMine(t);
+  popover(`<div class="aura-pop"><div class="panel-header"><div class="titles"><div class="title">${esc(a.name)}</div><div class="subtitle">${esc(ctx.nameOf(t, st))} · ${a.radius} фт${a.concentration ? ' · концентрация' : ''}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section">${a.text ? `<p class="t-para">${esc(a.text)}</p>` : '<p class="t-sm muted">Описание ауры не задано.</p>'}
+    <p class="t-sm"><span class="muted">Сейчас в ауре:</span> ${inside.length ? esc(inside.join(', ')) : 'никого'}</p>
+    ${can ? `<button class="btn btn-sm btn-secondary" data-aura-edit>${icon('settings-01', 14)}Настроить</button>` : ''}</div></div>`, anchor, { placement: 'top', className: 'aura-popover' })
+    .node.addEventListener('click', (e) => { if (e.target.closest('[data-aura-edit]')) { closePopover(); tokenSettings(ctx, id, anchor); } });
 }
 
 // ——— Контекстное меню ———

@@ -8,6 +8,7 @@ import { characterOf, ownerOfCharacter, myCharacter, sceneOf, membership } from 
 import { TEMPLATES, LIGHTS } from '../../data/rules.js';
 import { currentEntry } from './combat.js';
 import { movementLeft } from './input.js';
+import { pauseElapsed } from './panels.js';
 
 const ib = (act, name, tip, { active = false, kbd = '', extra = '', disabled = false, count = 0 } = {}) =>
   `<button class="icon-btn ${active ? 'active' : ''}" data-act="${act}" ${extra} ${disabled ? 'disabled' : ''} data-tip="${esc(tip)}" ${kbd ? `data-kbd="${esc(kbd)}"` : ''} aria-label="${esc(tip)}" aria-pressed="${active}">${icon(name, 22)}${count ? `<span class="count">${count}</span>` : ''}</button>`;
@@ -77,8 +78,8 @@ function topLeft(ctx) {
     ${c.combat.active ? `<span class="chip chip-accent combat-chip">${icon('sword-03', 12)}Бой · раунд ${c.combat.round}</span>` : ''}`;
 }
 
-function banner(ic, title, sub, action = '', cls = '') {
-  return `<div class="banner ${cls}">${icon(ic, 20)}<div class="titles"><div class="title">${esc(title)}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${action}</div>`;
+function banner(ic, title, sub, action = '', cls = '', after = '') {
+  return `<div class="banner ${cls}">${icon(ic, 20)}<div class="titles"><div class="title">${esc(title)}${after ? ` · ${after}` : ''}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${action}</div>`;
 }
 
 function topCenter(ctx) {
@@ -92,7 +93,7 @@ function topCenter(ctx) {
   }
   if (ctx.ui.previewPlayers) return banner('view', 'Как видят игроки', 'Слой мастера и скрытые токены спрятаны', `<button class="btn btn-sm btn-primary" data-act="exit-preview">${icon('cancel-01', 14)}Выйти</button>`);
   if (ctx.isMaster) {
-    if (c.paused) return banner('pause', 'Стол на паузе', c.paused.silent ? 'Игроки видят карту, но ходить не могут' : 'У игроков экран паузы — можно незаметно переставить токены', `<button class="btn btn-sm btn-primary" data-act="pause">${icon('play', 14)}Продолжить</button>`);
+    if (c.paused) return banner('pause', 'Стол на паузе', c.paused.silent ? 'Игроки видят карту, но ходить не могут' : 'У игроков экран паузы — можно незаметно переставить токены', `<button class="btn btn-sm btn-primary" data-act="pause">${icon('play', 14)}Продолжить</button>`, 'paused', `<b class="pause-timer sm" data-pause-timer>${pauseElapsed(c.paused)}</b>`);
     const modes = {
       walls: ['path', 'Стены и двери', 'Ставьте точки где угодно — концы прилипают друг к другу, Shift — по сетке. Enter или двойной клик — закончить'],
       lights: ['fire', 'Свет', sc.lighting === 'dark' ? 'Где темно — герои без тёмного зрения ничего не увидят' : 'Сцена освещена — включите темноту, чтобы свет имел значение'],

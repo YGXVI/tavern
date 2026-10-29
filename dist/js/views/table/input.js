@@ -32,7 +32,7 @@ export function attachInput(ctx) {
     const t = e.target;
     const tok = t.closest?.('[data-token]');
     if (tok) return { kind: 'token', id: tok.dataset.token };
-    for (const [attr, kind] of [['data-door', 'door'], ['data-light', 'light'], ['data-pin', 'pin'], ['data-portal', 'portal'], ['data-trap', 'trap'], ['data-handle', 'handle'], ['data-wall', 'wall'], ['data-calib', 'calib']]) {
+    for (const [attr, kind] of [['data-aura', 'aura'], ['data-door', 'door'], ['data-light', 'light'], ['data-pin', 'pin'], ['data-portal', 'portal'], ['data-trap', 'trap'], ['data-handle', 'handle'], ['data-wall', 'wall'], ['data-calib', 'calib']]) {
       const n = t.closest?.(`[${attr}]`);
       if (n) return { kind, id: n.getAttribute(attr), node: n };
     }
@@ -348,7 +348,7 @@ const tokenTool = {
       g.drag = { leader: t, items: group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })) };
       return;
     }
-    if (['door', 'light', 'pin', 'portal', 'trap'].includes(tg.kind)) return;
+    if (['door', 'light', 'pin', 'portal', 'trap', 'aura'].includes(tg.kind)) return;
     if (ctx.ui.tool === 'select' || (g.shift && ctx.isMasterView)) { ctx.ui.marquee = { x0: w.x, y0: w.y, x1: w.x, y1: w.y }; g.marquee = true; return; }
     g.panFallback = true;
   },
@@ -378,6 +378,7 @@ const tokenTool = {
       if (dbl) ctx.panels.openSheetFor(t);
       return;
     }
+    if (tg.kind === 'aura') { ctx.panels.auraPopover(tg.id, tg.node); return; }
     if (tg.kind === 'door') { ctx.panels.doorClick(tg.id, tg.node); return; }
     if (tg.kind === 'pin') { ctx.panels.pinPopover(tg.id, tg.node); return; }
     if (tg.kind === 'portal') { ctx.panels.portalPopover(tg.id, tg.node); return; }
