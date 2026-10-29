@@ -218,6 +218,91 @@ export function findPath(grid, start, target, opts = {}) {
   return { cells, cost: res.best.get(res.found) };
 }
 
+// ——— Свободный путь: прямые отрезки поверх клеточной сетки ———
+
+/** Точки вдоль ломаной с шагом не больше step (включая концы). */
+function samplePolyline(pts, step) {
+  const out = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const k = Math.max(1, Math.ceil(len / step));
+    for (let j = i === 1 ? 0 : 1; j <= k; j++) out.push({ x: a.x + ((b.x - a.x) * j) / k, y: a.y + ((b.y - a.y) * j) / k });
+  }
+  return out;
+}
+
+/** Можно ли пройти прямо от a до b: не сквозь стену и не через непроходимые клетки (с учётом размера n). */
+export function pathClear(grid, a, b, { walls = [], blocked = new Set(), n = 1 } = {}) {
+  if (moveBlocked(a, b, walls)) return false;
+  if (!blocked.size) return true;
+  const s = gridSize(grid);
+  for (const p of samplePolyline([a, b], s / 4)) {
+    const fp = footprintAt(grid, p.x, p.y, n);
+    for (const x of footprintCells(fp.c, fp.r, n)) if (blocked.has(key(x.c, x.r))) {
+      // Клетка, с которой токен стартует, не мешает ему уйти.
+      const f0 = footprintAt(grid, a.x, a.y, n);
+      if (x.c >= f0.c && x.c < f0.c + n && x.r >= f0.r && x.r < f0.r + n) continue;
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Натянуть путь: выкинуть промежуточные точки там, где можно идти напрямую. */
+export function smoothPath(pts, clear) {
+  if (pts.length <= 2) return pts.slice();
+  const out = [pts[0]];
+  let i = 0;
+  while (i < pts.length - 1) {
+    let j = pts.length - 1;
+    while (j > i + 1 && !clear(pts[i], pts[j])) j--;
+    out.push(pts[j]);
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * Стоимость свободного пути в клетках (дробная): длина по правилам 5e для каждого отрезка
+ * (правило '5' — по большей проекции, '5-10-5' — каждая вторая диагональ вдвое),
+ * участки по труднопроходимой местности — вдвое.
+ */
+export function pathCost(grid, pts, { difficult = new Set(), rule = '5', n = 1 } = {}) {
+  const s = gridSize(grid);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const dx = Math.abs(b.x - a.x) / s, dy = Math.abs(b.y - a.y) / s;
+    const big = Math.max(dx, dy), small = Math.min(dx, dy);
+    const dist = rule === '5-10-5' ? big + Math.floor(small / 2) : big;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (!len) continue;
+    if (!difficult.size) { total += dist; continue; }
+    const k = Math.max(1, Math.ceil(len / (s / 4)));
+    for (let j = 0; j < k; j++) {
+      const t = (j + 0.5) / k;
+      const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      const fp = footprintAt(grid, p.x, p.y, n);
+      const hard = footprintCells(fp.c, fp.r, n).some((x) => difficult.has(key(x.c, x.r)));
+      total += (dist / k) * (hard ? 2 : 1);
+    }
+  }
+  return total;
+}
+
+/** Клетки (верхний левый угол места токена n×n), через которые проходит путь, по порядку. */
+export function cellsAlong(grid, pts, n = 1) {
+  const out = [];
+  let last = '';
+  for (const p of samplePolyline(pts, gridSize(grid) / 4)) {
+    const fp = footprintAt(grid, p.x, p.y, n);
+    const k = key(fp.c, fp.r);
+    if (k !== last) { out.push(fp); last = k; }
+  }
+  return out;
+}
+
 /** Все клетки, куда можно дойти не дороже limit шагов. Map<key, стоимость>. */
 export function reachable(grid, start, limit, opts = {}) {
   return explore(grid, start, { ...opts, limit }).cellBest;

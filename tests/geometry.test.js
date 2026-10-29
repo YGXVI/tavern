@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cellOf, cellCenter, snapCenter, cellDistance, footprintGap, findPath, reachable, templateCells, freeSpots, moveBlocked, key, softSnap,
+  pathClear, smoothPath, pathCost, cellsAlong,
 } from '../dist/js/rules/geometry.js';
 
 const grid = { size: 50, offsetX: 10, offsetY: 20, feet: 5 };
@@ -101,4 +102,30 @@ test('полупривязка: свободно, но у центра клет�
   assert.deepEqual(softSnap(g, { x: 210, y: 190 }, 2), { x: 200, y: 200 });
   // Жёсткая привязка (Shift) — всегда в клетку.
   assert.deepEqual(softSnap(g, { x: 120, y: 160 }, 1, true), { x: 150, y: 150 });
+});
+
+test('свободный путь: прямо, если ничто не мешает, и в обход стены иначе', () => {
+  const g = { size: 10 };
+  const a = { x: 5, y: 5 }, corner = { x: 45, y: 5 }, b = { x: 45, y: 45 };
+  // Без стен — натягивается в один отрезок.
+  assert.deepEqual(smoothPath([a, corner, b], (p, q) => pathClear(g, p, q)), [a, b]);
+  // Стена поперёк диагонали — угол остаётся.
+  const walls = [wall(20, 20, 40, 0)];
+  const clear = (p, q) => pathClear(g, p, q, { walls });
+  assert.equal(clear(a, b), false);
+  assert.deepEqual(smoothPath([a, { x: 5, y: 45 }, b], clear), [a, { x: 5, y: 45 }, b]);
+  // Непроходимая клетка на прямой мешает, а клетка старта — нет.
+  assert.equal(pathClear(g, { x: 5, y: 5 }, { x: 35, y: 5 }, { blocked: new Set([key(2, 0)]) }), false);
+  assert.equal(pathClear(g, { x: 5, y: 5 }, { x: 35, y: 5 }, { blocked: new Set([key(0, 0)]) }), true);
+});
+
+test('стоимость свободного пути по правилам 5e и местности', () => {
+  const g = { size: 10 };
+  assert.equal(pathCost(g, [{ x: 5, y: 5 }, { x: 35, y: 5 }]), 3);
+  assert.equal(pathCost(g, [{ x: 5, y: 5 }, { x: 35, y: 35 }]), 3);
+  assert.equal(pathCost(g, [{ x: 5, y: 5 }, { x: 35, y: 35 }], { rule: '5-10-5' }), 4);
+  // Две из трёх клеток пути — труднопроходимые: 1 + 2 + 2 = 5 (половина первой и последней — по ½).
+  const mud = pathCost(g, [{ x: 5, y: 5 }, { x: 35, y: 5 }], { difficult: new Set([key(1, 0), key(2, 0)]) });
+  assert.ok(Math.abs(mud - 5) < 0.01, `mud ${mud}`);
+  assert.deepEqual(cellsAlong(g, [{ x: 5, y: 5 }, { x: 25, y: 5 }]).map((c) => key(c.c, c.r)), ['0,0', '1,0', '2,0']);
 });
