@@ -1,0 +1,38 @@
+{
+  "attunement_required": 554,
+  "catalogue_sha256": "51aeaa07048da5e20c5097246507648d76315f1c952929d24953078a8e7b4b1a",
+  "description_imported": false,
+  "duplicate_ids": 0,
+  "images_imported": false,
+  "item_count": 934,
+  "missing_names": 0,
+  "missing_publications": 0,
+  "permission_for_full_text": "not_established",
+  "publication_count": 52,
+  "rarities": {
+    "artifact": 45,
+    "common": 91,
+    "legendary": 133,
+    "no_rarity": 41,
+    "rare": 227,
+    "uncommon": 200,
+    "varies": 43,
+    "very_rare": 154
+  },
+  "retrieved_at": "2026-10-29T12:05:22.467Z",
+  "schema_version": 1,
+  "snapshot_sha256": "628f64b01882209bdb540bef8727a1a3e1db21932eeefff5818be7c5333ab8a1",
+  "source_url": "https://dnd.su/items/",
+  "types": {
+    "armor": 67,
+    "potion": 41,
+    "ring": 44,
+    "rod": 14,
+    "scroll": 5,
+    "staff": 36,
+    "wand": 27,
+    "weapon": 170,
+    "wondrous_item": 530
+  },
+  "verified_card_titles": 12
+}
