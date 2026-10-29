@@ -113,6 +113,7 @@ export function settingsModal(ctx) {
       const s = c.settings;
       body = `<div class="panel-section">
         <div class="field"><label>Диагонали</label><div class="chips-wrap"><button class="chip chip-md ${s.diagonal !== '5-10-5' ? 'chip-accent' : ''}" data-diag="5">Каждая 5 фт</button><button class="chip chip-md ${s.diagonal === '5-10-5' ? 'chip-accent' : ''}" data-diag="5-10-5">5 — 10 — 5 фт</button></div><span class="t-xs tertiary">Книга игрока — каждая клетка 5 фт; вариант из Руководства мастера — каждая вторая диагональ 10 фт.</span></div>
+        <div class="setting-row">${icon('cursor-hold-01', 20)}<span class="titles"><span class="label-main">Игроки двигают любые токены</span><span class="hint">Иначе — только своего героя. Хиты и листы чужих токенов всё равно меняет мастер</span></span><input type="checkbox" class="switch" data-openmove ${s.openMovement !== false ? 'checked' : ''} aria-label="Игроки двигают любые токены"></div>
         <div class="setting-row">${icon('user-group', 20)}<span class="titles"><span class="label-main">Общий обзор отряда</span><span class="hint">Игроки видят то, что видит любой герой</span></span><input type="checkbox" class="switch" data-shared ${s.sharedVision ? 'checked' : ''} aria-label="Общий обзор"></div>
         <div class="field"><label>Хиты врагов для игроков</label><div class="chips-wrap">${[['status', 'Только состояние'], ['exact', 'Точные числа']].map(([v, l]) => `<button class="chip chip-md ${s.playersSeeHp === v ? 'chip-accent' : ''}" data-hpview="${v}">${l}</button>`).join('')}</div><span class="t-xs tertiary">«Состояние» — «цел», «ранен», «тяжело ранен», «при смерти».</span></div>
       </div>`;
@@ -148,6 +149,7 @@ export function settingsModal(ctx) {
     const d = e.target.closest('[data-diag]'); if (d) { updateCampaign(ctx.cid, (c) => { c.settings.diagonal = d.dataset.diag; }); rerender(); return; }
     const hv = e.target.closest('[data-hpview]'); if (hv) { updateCampaign(ctx.cid, (c) => { c.settings.playersSeeHp = hv.dataset.hpview; }); rerender(); return; }
     if (e.target.closest('[data-shared]')) { const v = e.target.checked; updateCampaign(ctx.cid, (c) => { c.settings.sharedVision = v; }); }
+    if (e.target.closest('[data-openmove]')) { const v = e.target.checked; updateCampaign(ctx.cid, (c) => { c.settings.openMovement = v; }); }
   });
 }
 

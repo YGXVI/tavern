@@ -110,7 +110,7 @@ test('свободный путь: прямо, если ничто не меша
   // Без стен — натягивается в один отрезок.
   assert.deepEqual(smoothPath([a, corner, b], (p, q) => pathClear(g, p, q)), [a, b]);
   // Стена поперёк диагонали — угол остаётся.
-  const walls = [wall(20, 20, 40, 0)];
+  const walls = [wall(10, 30, 40, 0)];
   const clear = (p, q) => pathClear(g, p, q, { walls });
   assert.equal(clear(a, b), false);
   assert.deepEqual(smoothPath([a, { x: 5, y: 45 }, b], clear), [a, { x: 5, y: 45 }, b]);
@@ -128,4 +128,26 @@ test('стоимость свободного пути по правилам 5e 
   const mud = pathCost(g, [{ x: 5, y: 5 }, { x: 35, y: 5 }], { difficult: new Set([key(1, 0), key(2, 0)]) });
   assert.ok(Math.abs(mud - 5) < 0.01, `mud ${mud}`);
   assert.deepEqual(cellsAlong(g, [{ x: 5, y: 5 }, { x: 25, y: 5 }]).map((c) => key(c.c, c.r)), ['0,0', '1,0', '2,0']);
+});
+
+test('центр токена: узкие двери проходимы, стыки стен — нет', () => {
+  const g = { size: 10 };
+  // Горизонтальная стена по линии сетки с дверью в одну клетку посередине.
+  const line = (door) => [wall(0, 20, 20, 20), wall(20, 20, 30, 20, { kind: 'door', open: door }), wall(30, 20, 60, 20)];
+  // Большой токен 2×2 (центр в узлах) проходит открытую дверь в одну клетку через её край.
+  const big = findPath(g, { c: 1, r: 0 }, { c: 1, r: 2 }, { walls: line(true), cols: 6, rows: 5, n: 2 });
+  assert.ok(big, 'крупный токен проходит открытую дверь');
+  assert.equal(findPath(g, { c: 1, r: 0 }, { c: 1, r: 2 }, { walls: line(false), cols: 6, rows: 5, n: 2 }), null);
+  // Узкая дверь не по сетке: прямо через проём — можно, рядом через стену — нельзя.
+  const narrow = [wall(0, 20, 23, 20), wall(23, 20, 27, 20, { kind: 'door', open: true }), wall(27, 20, 60, 20)];
+  assert.equal(moveBlocked({ x: 25, y: 10 }, { x: 25, y: 30 }, narrow), false);
+  assert.equal(moveBlocked({ x: 15, y: 10 }, { x: 15, y: 30 }, narrow), true);
+  // Конец одиночной стены можно обойти вплотную, а стык двух стен (угол) — не проскочить.
+  assert.equal(moveBlocked({ x: 0, y: 0 }, { x: 20, y: 20 }, [wall(10, 10, 10, 0)]), false);
+  const corner = [wall(10, 0, 10, 10), wall(0, 10, 10, 10)];
+  assert.equal(moveBlocked({ x: 5, y: 5 }, { x: 10, y: 10 }, corner), true, 'нельзя встать в стык');
+  assert.equal(moveBlocked({ x: 0, y: 20 }, { x: 20, y: 0 }, corner), false, 'снаружи угла — можно');
+  // Остановиться на стене нельзя, уйти с неё — можно.
+  assert.equal(moveBlocked({ x: 5, y: 5 }, { x: 5, y: 20 }, [wall(0, 20, 30, 20)]), true);
+  assert.equal(moveBlocked({ x: 5, y: 20 }, { x: 5, y: 5 }, [wall(0, 20, 30, 20)]), false);
 });
