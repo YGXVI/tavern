@@ -13,6 +13,7 @@ import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { renderChrome } from './chrome.js';
+import { moveDrawing, deleteDrawing } from './drawings.js';
 
 const DRAG_THRESHOLD = 4;
 export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
@@ -32,7 +33,7 @@ export function attachInput(ctx) {
     const t = e.target;
     const tok = t.closest?.('[data-token]');
     if (tok) return { kind: 'token', id: tok.dataset.token };
-    for (const [attr, kind] of [['data-aura', 'aura'], ['data-door', 'door'], ['data-light', 'light'], ['data-pin', 'pin'], ['data-portal', 'portal'], ['data-trap', 'trap'], ['data-handle', 'handle'], ['data-wall', 'wall'], ['data-calib', 'calib']]) {
+    for (const [attr, kind] of [['data-aura', 'aura'], ['data-door', 'door'], ['data-light', 'light'], ['data-pin', 'pin'], ['data-portal', 'portal'], ['data-trap', 'trap'], ['data-handle', 'handle'], ['data-wall', 'wall'], ['data-calib', 'calib'], ['data-drawing', 'drawing']]) {
       const n = t.closest?.(`[${attr}]`);
       if (n) return { kind, id: n.getAttribute(attr), node: n };
     }
@@ -182,6 +183,7 @@ export function attachInput(ctx) {
       if (g) { cancelGesture(); ctx.invalidate('overlay', 'tokens'); return; }
       if (ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
       if (ctx.ui.template || ctx.ui.ruler) { ctx.clearMeasure(); return; }
+      if (ctx.ui.selDrawing) { ctx.selectDrawing(null); return; }
       if (ctx.ui.selection.size) { ctx.select([]); return; }
       if (ctx.ui.viewAs) { ctx.setViewAs(null); return; }
       if (toolId() !== 'move') { ctx.setTool('move'); return; }
@@ -190,6 +192,7 @@ export function attachInput(ctx) {
       return;
     }
     if (e.key === 'Enter' && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) { deleteDrawing(ctx, ctx.ui.selDrawing); ctx.invalidate('drawings'); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.isMasterView) {
       if (ctx.ui.selectedWall) { ctx.panels.deleteWall(ctx.ui.selectedWall); return; }
       if (ctx.ui.selectedLight) { ctx.panels.deleteLight(ctx.ui.selectedLight); return; }
@@ -236,9 +239,16 @@ export function attachInput(ctx) {
   ctx.select = (ids, { focus = false } = {}) => {
     ctx.ui.selection = new Set(ids);
     ctx.ui.selectedWall = null; ctx.ui.selectedLight = null;
+    if (ctx.ui.selDrawing) { ctx.ui.selDrawing = null; ctx.invalidate('drawings'); }
     updateReach(ctx);
     ctx.invalidate('tokens', 'areas', 'chrome', 'panels');
     if (focus && ids.length === 1) { const t = ctx.scene.tokens.find((x) => x.id === ids[0]); if (t) ctx.camera.centerOn(t.x, t.y); }
+  };
+  /** Выделить рисунок или надпись (TASK-031); выделение токенов при этом снимается. */
+  ctx.selectDrawing = (id) => {
+    if (ctx.ui.selection.size) ctx.select([]);
+    ctx.ui.selDrawing = id || null;
+    ctx.invalidate('drawings');
   };
   ctx.setTool = (tool, sub) => {
     if (!ctx.isMasterView && ['select', 'fog', 'walls', 'lights', 'terrain', 'gm', 'grid', 'text'].includes(tool)) return;
@@ -252,6 +262,7 @@ export function attachInput(ctx) {
       if (prev === 'grid' && ctx.ui.gridBefore && ctx.scene) { Object.assign(ctx.scene.grid, ctx.ui.gridBefore); }
       if (tool === 'grid') { ctx.ui.gridBefore = structuredClone(ctx.scene.grid); initCalib(ctx); } else { ctx.ui.calib = null; ctx.ui.gridBefore = null; }
       if (['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'].includes(tool)) ctx.ui.selection.clear();
+      if (!['move', 'select', 'text'].includes(tool)) ctx.ui.selDrawing = null;
       closePopover();
     }
     vp.dataset.tool = tool;
@@ -383,17 +394,28 @@ const tokenTool = {
       g.drag = { leader: t, items: group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })) };
       return;
     }
+    if (tg.kind === 'drawing') {
+      // Рисунок или надпись: выделить и тянуть (TASK-031).
+      ctx.selectDrawing(tg.id); g.drawDrag = { id: tg.id, w0: w }; return;
+    }
     if (['door', 'light', 'pin', 'portal', 'trap', 'aura'].includes(tg.kind)) return;
     if (ctx.ui.tool === 'select' || (g.shift && ctx.isMasterView)) { ctx.ui.marquee = { x0: w.x, y0: w.y, x1: w.x, y1: w.y }; g.marquee = true; return; }
     g.panFallback = true;
   },
   move(ctx, g, w, e) {
     if (g.marquee) { ctx.ui.marquee.x1 = w.x; ctx.ui.marquee.y1 = w.y; ctx.invalidate('overlay'); return; }
+    if (g.drawDrag) { ctx.ui.drawMove = { id: g.drawDrag.id, dx: w.x - g.drawDrag.w0.x, dy: w.y - g.drawDrag.w0.y }; ctx.invalidate('drawings'); return; }
     if (g.locked && !g.lockedTold) { g.lockedTold = true; ctx.toast({ title: 'Токен закреплён', body: ctx.isMasterView ? 'Снимите замок в рамке под токеном' : 'Его закрепил мастер', icon: 'square-lock-02' }); }
     if (!g.drag || g.noDrag) return;
     dragTokens(ctx, g, w, e);
   },
   up(ctx, g, w) {
+    if (g.drawDrag) {
+      const mv = ctx.ui.drawMove; ctx.ui.drawMove = null;
+      if (g.moved && mv) moveDrawing(ctx, mv.id, mv.dx, mv.dy);
+      ctx.invalidate('drawings');
+      return;
+    }
     if (g.marquee) {
       const m = ctx.ui.marquee; ctx.ui.marquee = null;
       const x0 = Math.min(m.x0, m.x1), x1 = Math.max(m.x0, m.x1), y0 = Math.min(m.y0, m.y1), y1 = Math.max(m.y0, m.y1);
@@ -406,6 +428,11 @@ const tokenTool = {
   },
   click(ctx, g, w, e, dbl) {
     const tg = g.target;
+    if (tg.kind === 'drawing') {
+      const d = ctx.scene.drawings.find((x) => x.id === tg.id);
+      if (dbl && d?.type === 'text') ctx.panels.textPrompt({ x: d.x, y: d.y }, { x: e.clientX, y: e.clientY }, d);
+      return;
+    }
     if (tg.kind === 'token') {
       const t = ctx.scene.tokens.find((x) => x.id === tg.id);
       if (!t) return;
@@ -689,7 +716,17 @@ function eraseAt(ctx, w) {
 }
 
 const textTool = {
-  click(ctx, g, w, e) { ctx.panels.textPrompt(w, { x: e.clientX, y: e.clientY }); },
+  down(ctx, g, w) { if (g.target.kind === 'drawing') { ctx.selectDrawing(g.target.id); g.drawDrag = { id: g.target.id, w0: w }; } },
+  move(ctx, g, w, e) { if (g.drawDrag) tokenTool.move(ctx, g, w, e); },
+  up(ctx, g, w) { if (g.drawDrag) tokenTool.up(ctx, g, w); },
+  click(ctx, g, w, e) {
+    // Клик по своей надписи — поправить её текст, по пустому месту — новая надпись.
+    const d = g.target.kind === 'drawing' ? ctx.scene.drawings.find((x) => x.id === g.target.id) : null;
+    if (d?.type === 'text') { ctx.panels.textPrompt({ x: d.x, y: d.y }, { x: e.clientX, y: e.clientY }, d); return; }
+    if (d) return;
+    ctx.selectDrawing(null);
+    ctx.panels.textPrompt(w, { x: e.clientX, y: e.clientY });
+  },
 };
 
 const fogTool = {

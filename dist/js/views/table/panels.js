@@ -519,7 +519,7 @@ export class Panels {
   trapTriggered(tr, t) { M.trapTriggered(this.ctx, tr, t); }
   templatePopover(a) { M.templatePopover(this.ctx, a); }
   opportunityWarning(t, foes, h) { M.opportunityWarning(this.ctx, t, foes, h); }
-  textPrompt(w, a) { M.textPrompt(this.ctx, w, a); }
+  textPrompt(w, a, d) { M.textPrompt(this.ctx, w, a, d); }
   help() { D.helpModal(this.ctx); }
 
   openSheetFor(t) {

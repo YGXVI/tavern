@@ -16,6 +16,7 @@ import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder } from './combat.js';
 import { attachInput } from './input.js';
 import { attachGizmo } from './gizmo.js';
+import { attachDrawBar } from './drawings.js';
 import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
@@ -170,7 +171,7 @@ export function mountTable(root, cid) {
     if (all || dirty.has('fog') || dirty.has('tokens')) ctx.invalidateVision();
     if (all || dirty.has('grid')) renderGrid(L, sc, true);
     if (all || dirty.has('terrain')) renderTerrain(L, sc, { showBlocked: ctx.isMasterView && ctx.ui.tool === 'terrain' });
-    if (all || dirty.has('drawings')) renderDrawings(L, sc);
+    if (all || dirty.has('drawings')) renderDrawings(L, sc, ctx);
     if (all || dirty.has('walls')) renderWalls(L, sc, { edit: ctx.isMasterView && ctx.ui.tool === 'walls', selectedWall: ctx.ui.selectedWall, hoverWall: ctx.ui.hoverWall });
     if (all || dirty.has('fog') || dirty.has('tokens')) {
       // При перетаскивании туман перерисовываем не чаще ~16 раз в секунду — остальное успевает за курсором.
@@ -346,6 +347,7 @@ export function mountTable(root, cid) {
   ctx.panels = new Panels(ctx);
   const detachInput = attachInput(ctx);
   attachGizmo(L, ctx);
+  attachDrawBar(L, ctx);
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
