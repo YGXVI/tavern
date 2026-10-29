@@ -213,7 +213,7 @@ export function mountTable(root, cid) {
     ctx.sceneId = sid;
     hideNoScene();
     if (changed) {
-      ctx.ui.selection.clear(); ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null;
+      ctx.ui.selection.clear(); ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null; ctx.ui.setup = null;
       ctx.dragging = null; ctx.remote.drags.clear();
       closePopover();
       L.map.dataset.ref = '';
