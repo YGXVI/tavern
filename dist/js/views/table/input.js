@@ -6,7 +6,7 @@ import { bus } from '../../core/store.js';
 import {
   cellOf, cellCenter, footprintAt, footprintCenter, findPath, reachable, gridDims, gridSize, key, unkey,
   cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap,
-  pathClear, smoothPath, pathCost, cellsAlong,
+  pathClear, smoothPath, pathCost, cellsAlong, routeLeg,
 } from '../../rules/geometry.js';
 import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
@@ -335,7 +335,7 @@ function nudge(ctx, k) {
     const t = ctx.scene.tokens.find((x) => x.id === id);
     if (!t || !ctx.canControl(t)) continue;
     const to = { x: t.x + d[0] * s, y: t.y + d[1] * s };
-    if (!ctx.isMaster && moveBlocked(t, to, ctx.scene.walls)) { ctx.toast({ title: 'Там стена', icon: 'path' }); continue; }
+    if (moveBlocked(t, to, ctx.scene.walls)) { ctx.toast({ title: 'Там стена', body: ctx.isMaster ? 'Сквозь стену — перетащить с Alt' : '', icon: 'path' }); continue; }
     moves.push({ id, from: { x: t.x, y: t.y }, to });
   }
   if (moves.length) commitMoves(ctx, moves, null);
@@ -432,19 +432,8 @@ const tokenTool = {
  * иначе по клеткам в обход стен с натягиванием. Возвращает {pts, target, blocked} или null (не пройти).
  */
 function legPath(ctx, grid, start, want, n, opts) {
-  const clear = (a, b) => pathClear(grid, a, b, { walls: opts.walls, blocked: opts.blocked, n });
-  if (clear(start, want)) return { pts: [start, want], target: want, blocked: false };
-  const { cols, rows } = dims(ctx);
-  const from = footprintAt(grid, start.x, start.y, n);
-  let to = footprintAt(grid, want.x, want.y, n);
-  to = { c: clamp(to.c, 0, cols - n), r: clamp(to.r, 0, rows - n) };
-  const found = findPath(grid, from, to, opts);
-  if (!found) return null;
-  const center = footprintCenter(grid, to.c, to.r, n);
-  const end = clear(center, want) ? want : center;
-  const pts = smoothPath([start, ...found.cells.slice(1).map((cc) => footprintCenter(grid, cc.c, cc.r, n)), end], clear);
-  if (pts.at(-1) !== end) pts.push(end);
-  return { pts, target: end, blocked: false };
+  // Обход строится из настоящего положения токена, каждый отрезок проверен на стены (TASK-026).
+  return routeLeg(grid, start, want, { ...opts, n });
 }
 
 function dragTokens(ctx, g, w, e) {
@@ -472,16 +461,26 @@ function dragTokens(ctx, g, w, e) {
     for (const wp of way) { const leg = legPath(ctx, grid, from, wp, n, opts); if (!leg) break; pts.push(...leg.pts.slice(1)); from = leg.target; }
     const last = legPath(ctx, grid, from, target, n, opts);
     if (last) { pts.push(...last.pts.slice(1)); target = last.target; }
-    else if (ctx.isMaster) { pts.push(target); blocked = true; }
     else {
-      // Игрок упёрся: оставляем последнюю достижимую точку.
+      // Упёрлись в стену: токен остаётся в последней достижимой точке — и у игрока, и у мастера (сквозь стену — только Alt).
       target = g.lastTarget || from;
       pts = g.lastPts || [start, target];
       blocked = true;
     }
     g.lastTarget = target; g.lastPts = pts;
     const dx = target.x - lead.x0, dy = target.y - lead.y0;
-    for (const it of g.drag.items) positions.set(it.id, it.id === lead.id ? target : clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n));
+    // Остальные токены группы идут за ведущим со своим смещением, но стену тоже не проходят:
+    // если их место за стеной, они ждут в последней достижимой точке.
+    g.lastF ||= new Map();
+    for (const it of g.drag.items) {
+      if (it.id === lead.id) { positions.set(it.id, target); continue; }
+      const want = clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n);
+      const tok = ctx.scene.tokens.find((t) => t.id === it.id);
+      const leg = tok ? legPath(ctx, grid, { x: it.x0, y: it.y0 }, want, it.n, moveOpts(ctx, tok)) : null;
+      const at = leg ? leg.target : g.lastF.get(it.id) || { x: it.x0, y: it.y0 };
+      g.lastF.set(it.id, at);
+      positions.set(it.id, at);
+    }
     const cells = Math.round(pathCost(grid, pts, { difficult: opts.difficult, rule: opts.rule, n }));
     const feet = cells * (grid.feet || 5);
     const left = movementLeft(ctx, leaderTok);
@@ -489,9 +488,9 @@ function dragTokens(ctx, g, w, e) {
     let over = false;
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
     else if (cells > 0) label = `${feet} фт · ${cells} кл.`;
-    if (blocked && ctx.isMaster && feet) label += moveBlocked(from, target, opts.walls) ? ' · сквозь стену' : ' · через препятствие';
+    if (blocked) label = ctx.isMaster ? 'Стена · Alt — пронести сквозь' : 'Дальше стена';
     if (way.length) label += ` · точек: ${way.length}`;
-    path = { pts, label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet, waypoints: way.length };
+    path = { pts, label: feet || blocked ? label : '', over, blocked, cost: feet, waypoints: way.length };
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };
   }
