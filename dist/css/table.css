@@ -57,7 +57,8 @@
 @keyframes threat { to { fill: rgb(229 88 79 / .32); } }
 .template-shape { fill: none; stroke: var(--brand-500); stroke-width: calc(2px * var(--iz)); stroke-dasharray: calc(8px * var(--iz)) calc(5px * var(--iz)); }
 .template-origin { fill: var(--brand-500); stroke: var(--neutral-100); stroke-width: calc(2px * var(--iz)); }
-.aura { fill: var(--aura-fill); stroke: var(--aura-stroke); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(6px * var(--iz)) calc(5px * var(--iz)); }
+.auras-layer { pointer-events: none; overflow: visible; }
+.aura { fill: var(--ac, var(--violet-500)); fill-opacity: var(--aa, .16); stroke: var(--ac, var(--aura-stroke)); stroke-opacity: var(--as, .6); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(6px * var(--iz)) calc(5px * var(--iz)); }
 .light-radius { fill: none; stroke: var(--brand-500); stroke-width: calc(1px * var(--iz)); }
 .light-radius.dim { fill: none; stroke-dasharray: calc(5px * var(--iz)) calc(5px * var(--iz)); stroke-opacity: .6; }
 .light-radius.bright { fill: rgb(233 176 82 / .05); stroke-opacity: .9; }
@@ -376,6 +377,17 @@ button.tray-die:hover { filter: brightness(1.1); }
 .tpl-list { max-height: 200px; padding: 0 8px; display: flex; flex-direction: column; }
 .tpl-list .list-row { min-height: 38px; }
 .aura-row { display: flex; align-items: center; gap: 8px; }
+.aura-edit { display: flex; flex-direction: column; gap: 10px; }
+.aura-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18); flex: none; cursor: pointer; display: grid; place-items: center; }
+.swatch:hover { transform: scale(1.08); }
+.swatch.on { box-shadow: 0 0 0 2px var(--neutral-100, #0d0f17), 0 0 0 4px var(--sw); }
+.swatch.custom { background: conic-gradient(from 0deg, #f0703c, #f4c34d, #4fc27a, #5fb8f0, #a78bfa, #e5484d, #f0703c); color: #fff; }
+.swatch.custom.on { background: var(--sw); }
+.swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.swatch.custom .ic { filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
+.aura-op { display: grid; grid-template-columns: auto 1fr 40px; align-items: center; gap: 10px; }
+.aura-op b { text-align: right; font-variant-numeric: tabular-nums; }
 .scene-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .scene-mini { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 10px; text-align: left; font: 500 11px/13px var(--font-text); color: var(--text-secondary); }
 .scene-mini span { display: block; aspect-ratio: 16 / 10; border-radius: 7px; background: var(--neutral-300) center / cover; }

@@ -25,6 +25,7 @@
 - `Scene = {id, name, note, status, map{src, width, height}, grid{size, offsetX, offsetY, feet, visible, calibrated?}, lighting: 'bright'|'dark', fog{mode: 'vision'|'manual'|'off', ops[], explored[]}, walls[], lights[], terrain{difficult[], blocked[]}, tokens[], drawings[], pins[], portals[], traps[]}`.
 - Мировые координаты — пиксели исходной картинки карты; клетка — `"c,r"` от смещения сетки.
 - `Token = {id, kind: 'hero'|'foe'|'item', characterId?, monsterId?, name, img, size, x, y, hidden, conditions[], hp?, hpMax?, ac?, light?, aura?, disengaged?}`. Хиты героя берутся из листа, существа — с токена.
+- `aura = {name, radius (фт), color: 'magic'|'holy'|'fire'|'nature'|'frost'|'blood'|'shadow'|'#rrggbb', opacity?: 5–100 (%; нет поля = 16), text?, concentration?}`; у героя копия хранится и в листе. Ауры рисуются отдельным слоем под токенами (TASK-020).
 - `Wall = {id, a{x,y}, b{x,y}, kind: 'wall'|'window'|'invisible'|'door'|'secret', open, locked, lockDc?, discovered?, name?}`.
 - `combat = {active, sceneId, round, turn, entries[{tokenId, init|null}], moved{tokenId: футы}}`; `init: null` — игрок бросит сам.
 - `log` — последние 120 записей `{id, at, userId, kind, label|text, total?, detail?, hidden?}`.

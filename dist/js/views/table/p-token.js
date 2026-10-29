@@ -3,7 +3,7 @@ import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName } from '../../core/campaign.js';
-import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel } from '../../data/rules.js';
+import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { movementLeft } from './input.js';
@@ -238,6 +238,16 @@ export function ruleCard(ctx, condId, anchor) {
 }
 
 // ——— Настройки токена ———
+function auraEditor(a) {
+  const hex = auraHex(a), op = Math.round(auraAlpha(a) * 100);
+  const custom = !AURA_COLORS.some((c) => c.hex === hex);
+  return `<div class="aura-edit">
+    <div class="row"><div class="input grow"><input data-aura-name-edit value="${esc(a.name)}" maxlength="40" aria-label="Название ауры"></div><div class="input" style="width:84px"><input type="number" data-aura-r-edit value="${a.radius}" min="5" step="5" aria-label="Радиус ауры"><span class="suffix">фт</span></div><button class="icon-btn icon-btn-sm" data-aura-off data-tip="Убрать ауру" aria-label="Убрать ауру">${icon('delete-02', 16)}</button></div>
+    <div class="aura-colors" role="radiogroup" aria-label="Цвет ауры">${AURA_COLORS.map((c) => `<button class="swatch ${!custom && c.hex === hex ? 'on' : ''}" data-aura-color="${c.id}" style="--sw:${c.hex}" role="radio" aria-checked="${!custom && c.hex === hex}" aria-label="${esc(c.name)}" data-tip="${esc(c.name)}"></button>`).join('')}<label class="swatch custom ${custom ? 'on' : ''}" style="--sw:${hex}" data-tip="Свой цвет">${icon('paint-brush-01', 12)}<input type="color" data-aura-custom value="${hex}" aria-label="Свой цвет ауры"></label></div>
+    <label class="aura-op"><span class="t-sm muted">Заметность</span><input class="slider" type="range" min="5" max="100" step="5" value="${op}" data-aura-op style="--fill:${((op - 5) / 95) * 100}%" aria-label="Заметность ауры"><b class="t-sm" data-aura-op-out>${op}%</b></label>
+  </div>`;
+}
+
 export function tokenSettings(ctx, id, anchor) {
   const t0 = ctx.scene.tokens.find((t) => t.id === id);
   if (!t0) return;
@@ -252,7 +262,7 @@ export function tokenSettings(ctx, id, anchor) {
         <div class="field"><label>Свет от токена</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
           ${t.light ? `<div class="row t-sm muted">Ярко ${t.light.bright} фт + тускло ${t.light.dim} фт</div>` : ''}</div>
         <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
-        <div class="field"><label>Аура</label>${t.aura ? `<div class="aura-row"><span class="chip chip-magic">${esc(t.aura.name)} · ${t.aura.radius} фт</span><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-aura-off>Убрать</button></div>` : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
+        <div class="field"><label>Аура</label>${t.aura ? auraEditor(t.aura) : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
       </div></div>`;
   };
   const pop = popover(render(), anchor, { placement: 'top', className: 'settings-pop' });
@@ -262,7 +272,8 @@ export function tokenSettings(ctx, id, anchor) {
       const t = s.tokens.find((x) => x.id === id); if (!t) return;
       fn(t, c);
     });
-    box.innerHTML = render();
+    // Перерисовка — после текущего события: смена разметки во время blur/change ломает DOM.
+    if (!box.__redraw) box.__redraw = requestAnimationFrame(() => { box.__redraw = 0; if (box.isConnected) box.innerHTML = render(); });
   };
   box.addEventListener('click', (e) => {
     const sz = e.target.closest('[data-size]');
@@ -271,14 +282,41 @@ export function tokenSettings(ctx, id, anchor) {
     if (li) upd((t, c) => { const p = LIGHTS.find((l) => l.id === li.dataset.light); const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null; t.light = val; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = val; } });
     const dv = e.target.closest('[data-dv]');
     if (dv) upd((t, c) => { const v = Number(dv.dataset.dv); if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.darkvision = v; } else t.darkvision = v; });
-    if (e.target.closest('[data-aura-off]')) upd((t, c) => { t.aura = null; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = null; } });
+    if (e.target.closest('[data-aura-off]')) upd((t, c) => setAura(t, c, null));
     if (e.target.closest('[data-aura-add]')) {
       const name = box.querySelector('[data-aura-name]').value.trim() || 'Аура';
       const radius = Math.max(5, Number(box.querySelector('[data-aura-r]').value) || 10);
-      upd((t, c) => { const a = { name, radius, color: 'magic', text: '' }; t.aura = a; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = a; } });
+      upd((t, c) => setAura(t, c, { name, radius, color: 'magic', opacity: AURA_OPACITY, text: '' }));
     }
+    const sw = e.target.closest('[data-aura-color]');
+    if (sw) upd((t, c) => setAura(t, c, { ...t.aura, color: sw.dataset.auraColor }));
+  });
+  // Живой предпросмотр цвета и заметности — в памяти, запись по отпусканию.
+  box.addEventListener('input', (e) => {
+    const t = ctx.scene.tokens.find((x) => x.id === id);
+    if (!t?.aura) return;
+    if (e.target.matches('[data-aura-op]')) {
+      const v = Number(e.target.value);
+      t.aura = { ...t.aura, opacity: v };
+      e.target.style.setProperty('--fill', `${((v - 5) / 95) * 100}%`);
+      box.querySelector('[data-aura-op-out]').textContent = `${v}%`;
+      ctx.invalidate('areas');
+    }
+    if (e.target.matches('[data-aura-custom]')) { t.aura = { ...t.aura, color: e.target.value }; ctx.invalidate('areas'); }
+  });
+  box.addEventListener('change', (e) => {
+    if (e.target.matches('[data-aura-op]')) { const v = Number(e.target.value); upd((t, c) => setAura(t, c, { ...t.aura, opacity: v })); }
+    if (e.target.matches('[data-aura-custom]')) { const v = e.target.value; upd((t, c) => setAura(t, c, { ...t.aura, color: v })); }
+    if (e.target.matches('[data-aura-name-edit]')) { const v = e.target.value.trim(); if (v) upd((t, c) => setAura(t, c, { ...t.aura, name: v })); }
+    if (e.target.matches('[data-aura-r-edit]')) { const v = Math.max(5, Number(e.target.value) || 5); upd((t, c) => setAura(t, c, { ...t.aura, radius: v })); }
   });
   box.addEventListener('change', (e) => { if (e.target.matches('[data-name]')) upd((t) => { t.name = e.target.value.trim() || t.name; }); });
+}
+
+/** Аура героя живёт и в листе, чтобы переходить с ним между сценами. */
+function setAura(t, c, a) {
+  t.aura = a;
+  if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = a ? { ...a } : null; }
 }
 
 export async function deleteTokens(ctx, ids) {
