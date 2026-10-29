@@ -193,6 +193,7 @@ export function distToSegment(p, a, b) {
 
 // ——— Поиск пути ———
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+const DIRS0 = [[0, 0], ...DIRS]; // из точки внутри клетки можно дойти и до центра своей клетки
 
 class Heap {
   constructor() { this.a = []; }
@@ -207,14 +208,16 @@ class Heap {
  * opts: {walls, difficult:Set<key>, blocked:Set<key>, cols, rows, n (размер токена), rule, limit, target}
  */
 function explore(grid, start, opts) {
-  const { walls = [], difficult = new Set(), blocked = new Set(), cols = 200, rows = 200, n = 1, rule = '5', limit = Infinity, target = null } = opts;
-  const startKey = `${start.c},${start.r},0`;
+  const { walls = [], difficult = new Set(), blocked = new Set(), cols = 200, rows = 200, n = 1, rule = '5', limit = Infinity, target = null, origin = null } = opts;
+  // origin — настоящее положение центра токена. Тогда обход начинается из этой точки, а не из центра
+  // её клетки: стена может резать клетку, и центр клетки окажется по ту сторону.
+  const startKey = origin ? 'o' : `${start.c},${start.r},0`;
   const best = new Map([[startKey, 0]]);
   const prev = new Map();
-  const cellBest = new Map([[key(start.c, start.r), 0]]);
+  const cellBest = new Map(origin ? [] : [[key(start.c, start.r), 0]]);
   const heap = new Heap();
   const h = (c, r) => (target ? Math.max(Math.abs(target.c - c), Math.abs(target.r - r)) : 0);
-  heap.push({ c: start.c, r: start.r, p: 0, g: 0, f: h(start.c, start.r) });
+  heap.push({ c: start.c, r: start.r, p: 0, g: 0, f: h(start.c, start.r), o: !!origin });
   const fpDifficult = (c, r) => { for (const x of footprintCells(c, r, n)) if (difficult.has(key(x.c, x.r))) return true; return false; };
   const fpBlocked = (c, r) => {
     if (c < 0 || r < 0 || c + n > cols || r + n > rows) return true;
@@ -224,11 +227,11 @@ function explore(grid, start, opts) {
   let found = null;
   while (heap.size) {
     const cur = heap.pop();
-    const ck = `${cur.c},${cur.r},${cur.p}`;
+    const ck = cur.o ? 'o' : `${cur.c},${cur.r},${cur.p}`;
     if (cur.g > (best.get(ck) ?? Infinity)) continue;
-    if (target && cur.c === target.c && cur.r === target.r) { found = ck; break; }
-    const from = footprintCenter(grid, cur.c, cur.r, n);
-    for (const [dc, dr] of DIRS) {
+    if (!cur.o && target && cur.c === target.c && cur.r === target.r) { found = ck; break; }
+    const from = cur.o ? origin : footprintCenter(grid, cur.c, cur.r, n);
+    for (const [dc, dr] of cur.o ? DIRS0 : DIRS) {
       const nc = cur.c + dc, nr = cur.r + dr;
       if (fpBlocked(nc, nr)) continue;
       const to = footprintCenter(grid, nc, nr, n);
@@ -239,7 +242,7 @@ function explore(grid, start, opts) {
         const side1 = footprintCenter(grid, cur.c + dc, cur.r, n), side2 = footprintCenter(grid, cur.c, cur.r + dr, n);
         if (moveBlocked(from, side1, walls) && moveBlocked(from, side2, walls)) continue;
       }
-      let step = 1, parity = cur.p;
+      let step = dc || dr ? 1 : 0, parity = cur.p;
       if (diagonal && rule === '5-10-5') { step = cur.p ? 2 : 1; parity = cur.p ? 0 : 1; }
       if (fpDifficult(nc, nr)) step *= 2;
       const g = cur.g + step;
@@ -257,15 +260,40 @@ function explore(grid, start, opts) {
   return { cellBest, prev, best, found, startKey };
 }
 
-/** Кратчайший путь клетка → клетка. null, если не дойти. */
+/** Кратчайший путь клетка → клетка. null, если не дойти. С opts.origin путь начинается из этой точки и в cells её клетки нет. */
 export function findPath(grid, start, target, opts = {}) {
-  if (start.c === target.c && start.r === target.r) return { cells: [{ ...start }], cost: 0 };
+  if (!opts.origin && start.c === target.c && start.r === target.r) return { cells: [{ ...start }], cost: 0 };
   const res = explore(grid, start, { ...opts, target });
   if (!res.found) return null;
   const cells = [];
   let k = res.found;
-  while (k) { const [c, r] = k.split(',').map(Number); cells.unshift({ c, r }); k = res.prev.get(k); }
+  while (k && k !== 'o') { const [c, r] = k.split(',').map(Number); cells.unshift({ c, r }); k = res.prev.get(k); }
   return { cells, cost: res.best.get(res.found) };
+}
+
+/**
+ * Путь центра токена из точки start к точке want: прямо, если можно, иначе обход по клеткам из настоящего
+ * положения токена. Каждый отрезок итогового пути проверяется на стены и непроходимую местность —
+ * через стену путь не пройдёт ни при каком положении токена. opts: {walls, blocked, difficult, cols, rows, n, rule}.
+ * Возвращает {pts, target} или null, если дойти нельзя.
+ */
+export function routeLeg(grid, start, want, opts = {}) {
+  const n = opts.n || 1;
+  const clear = (a, b) => pathClear(grid, a, b, { walls: opts.walls, blocked: opts.blocked, n });
+  if (clear(start, want)) return { pts: [start, want], target: want };
+  const cols = opts.cols ?? 200, rows = opts.rows ?? 200;
+  const from = footprintAt(grid, start.x, start.y, n);
+  let to = footprintAt(grid, want.x, want.y, n);
+  to = { c: Math.max(0, Math.min(cols - n, to.c)), r: Math.max(0, Math.min(rows - n, to.r)) };
+  const found = findPath(grid, from, to, { ...opts, origin: start });
+  if (!found) return null;
+  const center = footprintCenter(grid, to.c, to.r, n);
+  const end = clear(center, want) ? want : center;
+  const raw = [start, ...found.cells.map((cc) => footprintCenter(grid, cc.c, cc.r, n))];
+  if (!samePt(raw.at(-1), end)) raw.push(end);
+  const pts = smoothPath(raw, clear);
+  for (let i = 1; i < pts.length; i++) if (!clear(pts[i - 1], pts[i])) return null;
+  return { pts, target: pts.at(-1) };
 }
 
 // ——— Свободный путь: прямые отрезки поверх клеточной сетки ———
