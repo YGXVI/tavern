@@ -5,7 +5,7 @@ import { uid, clamp } from '../../core/dom.js';
 import { bus } from '../../core/store.js';
 import {
   cellOf, cellCenter, footprintAt, footprintCenter, findPath, reachable, gridDims, gridSize, key, unkey,
-  cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap,
+  cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap, MAGNET, MAGNET_EXPLORE,
   pathClear, smoothPath, pathCost, cellsAlong, routeLeg,
 } from '../../rules/geometry.js';
 import { sizeById, TEMPLATES } from '../../data/rules.js';
@@ -453,7 +453,8 @@ function dragTokens(ctx, g, w, e) {
     const n = lead.n;
     // Полупривязка: токен идёт за курсором свободно и примагничивается к клетке только рядом с её центром.
     // С Shift — жёсткая привязка к клетке. Ctrl во время перетаскивания ставит точку маршрута.
-    let target = clampToMap(ctx, softSnap(grid, raw, n, e.shiftKey), n);
+    const fight = ctx.inCombat();
+    let target = clampToMap(ctx, softSnap(grid, raw, n, e.shiftKey, fight ? MAGNET : MAGNET_EXPLORE), n);
     const opts = moveOpts(ctx, leaderTok);
     const start = { x: lead.x0, y: lead.y0 };
     const way = g.waypoints || [];
@@ -488,9 +489,12 @@ function dragTokens(ctx, g, w, e) {
     let over = false;
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
     else if (cells > 0) label = `${feet} фт · ${cells} кл.`;
-    if (blocked) label = ctx.isMaster ? 'Стена · Alt — пронести сквозь' : 'Дальше стена';
     if (way.length) label += ` · точек: ${way.length}`;
-    path = { pts, label: feet || blocked ? label : '', over, blocked, cost: feet, waypoints: way.length };
+    // Вне боя — без футов и остатка скорости: только предупреждение о стене. Линия — только если путь гнётся.
+    if (!fight) { label = ''; over = false; }
+    if (blocked) label = ctx.isMaster ? 'Стена · Alt — пронести сквозь' : 'Дальше стена';
+    const quiet = !fight && !blocked && pts.length <= 2 && !way.length;
+    path = { pts, label: feet || blocked ? label : '', over, blocked, cost: feet, waypoints: way.length, quiet };
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };
   }
@@ -518,7 +522,7 @@ function finishDrag(ctx, g) {
     moves[0].to = p;
   }
   // Атака по возможности: игрок уходит из досягаемости врага.
-  const threats = !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
+  const threats = ctx.inCombat() && !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
   const commit = () => {
     commitMoves(ctx, moves, g.cost ?? null);
     done(true);

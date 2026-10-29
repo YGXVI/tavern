@@ -58,6 +58,8 @@ export function mountTable(root, cid) {
 
   // ——— Производные ———
   ctx.posOf = (t) => ctx.dragging?.get(t.id) || ctx.remote.drags.get(t.id) || t;
+  // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
+  ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;
   ctx.canControl = (t) => canControlToken(ctx.c, ctx.userId, t) && !(ctx.c.paused && !ctx.isMaster);
 
@@ -299,7 +301,7 @@ export function mountTable(root, cid) {
       for (const id of p.ids || []) ctx.remote.drags.delete(id);
       // Общее перемещение: если кто-то другой подвинул моего героя — скажем об этом.
       const mine = p.userId && p.userId !== ctx.userId && ctx.scene?.tokens.find((t) => (p.ids || []).includes(t.id) && ctx.isMine(t));
-      if (mine && p.moved) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
+      if (mine && p.moved && ctx.inCombat()) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
     }
     else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null });
     ctx.invalidate('tokens');

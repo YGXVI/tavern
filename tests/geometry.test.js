@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   cellOf, cellCenter, snapCenter, cellDistance, footprintGap, findPath, reachable, templateCells, freeSpots, moveBlocked, key, softSnap,
-  pathClear, smoothPath, pathCost, cellsAlong, routeLeg,
+  pathClear, smoothPath, pathCost, cellsAlong, routeLeg, MAGNET_EXPLORE,
 } from '../dist/js/rules/geometry.js';
 
 const grid = { size: 50, offsetX: 10, offsetY: 20, feet: 5 };
@@ -102,6 +102,10 @@ test('полупривязка: свободно, но у центра клет�
   assert.deepEqual(softSnap(g, { x: 210, y: 190 }, 2), { x: 200, y: 200 });
   // Жёсткая привязка (Shift) — всегда в клетку.
   assert.deepEqual(softSnap(g, { x: 120, y: 160 }, 1, true), { x: 150, y: 150 });
+  // Вне боя (TASK-028) магнит срабатывает только у самого центра: 14 px от центра — уже свободно, 5 px — в центр.
+  assert.deepEqual(softSnap(g, { x: 140, y: 160 }, 1, false, MAGNET_EXPLORE), { x: 140, y: 160 });
+  assert.deepEqual(softSnap(g, { x: 146, y: 153 }, 1, false, MAGNET_EXPLORE), { x: 150, y: 150 });
+  assert.deepEqual(softSnap(g, { x: 120, y: 160 }, 1, true, MAGNET_EXPLORE), { x: 150, y: 150 });
 });
 
 test('свободный путь: прямо, если ничто не мешает, и в обход стены иначе', () => {
