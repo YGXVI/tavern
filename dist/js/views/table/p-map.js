@@ -226,25 +226,29 @@ export function pinPopover(ctx, id, anchor, focus = false) {
   if (!ctx.isMasterView) { ctx.panels.readAloud(pin); return; }
   const render = () => {
     const x = ctx.scene.pins.find((q) => q.id === id) || pin;
-    return `<div class="pin-pop">${head(x.kind === 'secret' ? 'Заметка мастера' : 'Текст для чтения вслух', x.shown ? 'Игроки видят этот текст' : 'Игроки не видят')}
+    const shown = x.shown && x.kind !== 'secret';
+    return `<div class="pin-pop">${head(x.kind === 'secret' ? 'Заметка мастера' : 'Текст для чтения вслух', shown ? 'Игроки видят этот текст' : 'Игроки не видят')}
       <div class="panel-section">
         <div class="input"><input data-title value="${esc(x.title)}" maxlength="60" placeholder="Название"></div>
         <div class="input area"><textarea data-text rows="5" placeholder="Что видят и слышат герои">${esc(x.text)}</textarea></div>
         <div class="chips-wrap"><button class="chip chip-md ${x.kind === 'secret' ? 'chip-accent' : ''}" data-kind="secret">Только мастеру</button><button class="chip chip-md ${x.kind === 'read-aloud' ? 'chip-accent' : ''}" data-kind="read-aloud">Прочитаю вслух</button></div>
-        <div class="row"><button class="btn btn-ghost btn-sm" data-del style="color:var(--text-negative)">${icon('delete-02', 14)}Удалить</button><span class="spacer"></span>${x.kind === 'read-aloud' ? `<button class="btn btn-primary" data-show>${icon('view', 16)}${x.shown ? 'Показать ещё раз' : 'Показать игрокам'}</button>` : ''}</div>
+        <div class="row"><button class="btn btn-ghost btn-sm" data-del style="color:var(--text-negative)">${icon('delete-02', 14)}Удалить</button><span class="spacer"></span>${shown ? `<button class="btn btn-secondary" data-hide>${icon('view-off', 16)}Скрыть</button>` : ''}${x.kind === 'read-aloud' ? `<button class="btn btn-primary" data-show>${icon('view', 16)}${shown ? 'Ещё раз' : 'Показать игрокам'}</button>` : ''}</div>
       </div></div>`;
   };
   const pop = popover(render(), anchor, { placement: 'top' });
   const box = pop.node;
   if (focus) setTimeout(() => box.querySelector('[data-title]')?.select(), 40);
   const save = (patch) => ctx.mutateScene((s) => { const x = s.pins.find((q) => q.id === id); if (x) Object.assign(x, patch); });
+  const x0 = () => ctx.scene.pins.find((q) => q.id === id) || pin;
   box.addEventListener('change', (e) => {
     if (e.target.matches('[data-title]')) save({ title: e.target.value.trim() || 'Метка' });
     if (e.target.matches('[data-text]')) save({ text: e.target.value });
   });
   box.addEventListener('click', (e) => {
     const k = e.target.closest('[data-kind]');
-    if (k) { save({ kind: k.dataset.kind }); box.innerHTML = render(); }
+    // «Только мастеру» — выключить показ: метка и текст пропадают у игроков.
+    if (k) { save(k.dataset.kind === 'secret' ? { kind: 'secret', shown: false } : { kind: k.dataset.kind }); box.innerHTML = render(); }
+    if (e.target.closest('[data-hide]')) { save({ shown: false }); box.innerHTML = render(); ctx.toast({ title: 'Скрыто от игроков', body: x0().title, icon: 'view-off' }); }
     if (e.target.closest('[data-del]')) { const copy = structuredClone(ctx.scene.pins.find((q) => q.id === id)); ctx.mutateScene((s) => { s.pins = s.pins.filter((q) => q.id !== id); }, { label: 'Удалить метку', undo: (s) => s.pins.push(copy), redo: (s) => { s.pins = s.pins.filter((q) => q.id !== id); } }); closePopover(); }
     if (e.target.closest('[data-show]')) {
       const title = box.querySelector('[data-title]').value.trim(), text = box.querySelector('[data-text]').value;
