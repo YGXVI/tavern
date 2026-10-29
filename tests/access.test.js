@@ -1,0 +1,5 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {isMaster,canManageToken,validSession} from '../dist/access.js';
+const hero={id:'a',kind:'hero'},other={id:'b',kind:'hero'},enemy={id:'c',kind:'enemy'},player={role:'player',characterId:'a'};
+test('player controls only selected hero, never enemies or another hero',()=>{assert.equal(canManageToken(player,hero),true);assert.equal(canManageToken(player,other),false);assert.equal(canManageToken(player,enemy),false);assert.equal(isMaster(player),false)});
+test('master can manage all campaign tokens, guest none',()=>{for(const t of [hero,other,enemy]){assert.equal(canManageToken({role:'master'},t),true);assert.equal(canManageToken(null,t),false)}});
+test('restored player session must identify an existing hero',()=>{assert.ok(validSession(player,[hero]));assert.equal(validSession(player,[]),false);assert.equal(validSession({role:'player',characterId:'c'},[enemy]),false);assert.equal(validSession({role:'admin'},[hero]),false);assert.equal(validSession(null,[hero]),false)});
