@@ -44,7 +44,7 @@ export function mountTable(root, cid) {
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
       wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null,
     },
-    remote: { rulers: new Map(), drags: new Map(), templates: new Map() },
+    remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map() },
     dragging: null,
     history: new History(),
     get c() { return getCampaign(this.cid); },
@@ -102,6 +102,14 @@ export function mountTable(root, cid) {
     if (ctx.fogView() !== 'player') return true;
     if (t.kind === 'hero') return true;
     return isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
+  };
+  // Имя для игроков: мастер может скрыть имя существа («Неизвестное существо»).
+  ctx.nameOf = (t, st = tokenStats(ctx.c, t)) => (!ctx.isMasterView && t.nameHidden && t.kind !== 'hero' ? 'Неизвестное существо' : st.name);
+  // Отношение существа: враг, нейтрал, союзник; «скрытый враг» игрокам виден союзником.
+  ctx.dispositionOf = (t) => {
+    if (t.kind === 'hero' || t.kind === 'item') return t.kind;
+    const d = t.disposition || (t.kind === 'foe' ? 'hostile' : 'neutral');
+    return d === 'secret' ? (ctx.isMasterView ? 'secret' : 'friendly') : d;
   };
   ctx.isDim = (t) => ctx.isMasterView && ctx.fogView() === 'master' && t.kind !== 'hero' && !t.hidden && !isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
 
@@ -296,6 +304,18 @@ export function mountTable(root, cid) {
     if (!p.pts) ctx.remote.rulers.delete(p.userId); else ctx.remote.rulers.set(p.userId, p);
     ctx.invalidate('overlay');
   });
+  bus.on('target', (p) => {
+    if (p.cid !== ctx.cid) return;
+    if (!p.ids?.length) ctx.remote.targets.delete(p.userId); else ctx.remote.targets.set(p.userId, { sceneId: p.sceneId, ids: new Set(p.ids) });
+    ctx.invalidate('tokens');
+  });
+  // Кто кого отметил целью: [{userId, hue}] для токена.
+  ctx.targetersOf = (id) => {
+    const out = [];
+    if (ctx.ui.targets?.has(id)) out.push(ctx.user);
+    for (const [uid2, v] of ctx.remote.targets) if (v.sceneId === ctx.sceneId && v.ids.has(id)) { const u = userById(uid2); if (u) out.push(u); }
+    return out;
+  };
   bus.on('template', (p) => {
     if (p.cid !== ctx.cid) return;
     if (!p.tpl) ctx.remote.templates.delete(p.userId); else ctx.remote.templates.set(p.userId, { ...p.tpl, sceneId: p.sceneId });

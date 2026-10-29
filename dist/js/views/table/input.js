@@ -153,10 +153,17 @@ export function attachInput(ctx) {
     if (isTyping(e)) return;
     if (!document.body.contains(vp)) return;
     if (e.code === 'Space' && !e.repeat) { space = true; vp.classList.add('grab'); if (e.target === vp || e.target === document.body) e.preventDefault(); }
+    // Точки маршрута при перетаскивании токена: Ctrl (⌘) — поставить, Backspace — убрать последнюю.
+    if (g?.type === 'tool' && g.drag && g.moved && !g.noDrag && g.lastW) {
+      if ((e.key === 'Control' || e.key === 'Meta') && !e.repeat && g.lastTarget) { (g.waypoints ||= []).push({ ...g.lastTarget }); dragTokens(ctx, g, g.lastW, e); e.preventDefault(); return; }
+      if (e.key === 'Backspace' && g.waypoints?.length) { g.waypoints.pop(); dragTokens(ctx, g, g.lastW, e); e.preventDefault(); return; }
+    }
     if (hasModal()) { if (e.key === 'Escape') closeTopModal(); return; }
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? ctx.panels.redo() : ctx.panels.undo(); return; }
     if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); ctx.panels.redo(); return; }
+    if (mod && e.code === 'KeyC' && ctx.isMasterView && ctx.ui.selection.size) { e.preventDefault(); ctx.panels.copyTokens([...ctx.ui.selection]); return; }
+    if (mod && e.code === 'KeyV' && ctx.isMasterView && ctx.ui.clipboard?.items.length) { e.preventDefault(); ctx.panels.pasteTokens(ctx.hoverWorld || ctx.camera.toWorld(innerWidth / 2, innerHeight / 2)); return; }
     if (mod) return;
     if (e.key === 'Escape') {
       if (popoverOpen()) { closePopover(); return; }
@@ -385,8 +392,29 @@ const tokenTool = {
   },
 };
 
+/**
+ * Один отрезок пути токена от точки start к желаемой target: прямо, если ничто не мешает,
+ * иначе по клеткам в обход стен с натягиванием. Возвращает {pts, target, blocked} или null (не пройти).
+ */
+function legPath(ctx, grid, start, want, n, opts) {
+  const clear = (a, b) => pathClear(grid, a, b, { walls: opts.walls, blocked: opts.blocked, n });
+  if (clear(start, want)) return { pts: [start, want], target: want, blocked: false };
+  const { cols, rows } = dims(ctx);
+  const from = footprintAt(grid, start.x, start.y, n);
+  let to = footprintAt(grid, want.x, want.y, n);
+  to = { c: clamp(to.c, 0, cols - n), r: clamp(to.r, 0, rows - n) };
+  const found = findPath(grid, from, to, opts);
+  if (!found) return null;
+  const center = footprintCenter(grid, to.c, to.r, n);
+  const end = clear(center, want) ? want : center;
+  const pts = smoothPath([start, ...found.cells.slice(1).map((cc) => footprintCenter(grid, cc.c, cc.r, n)), end], clear);
+  if (pts.at(-1) !== end) pts.push(end);
+  return { pts, target: end, blocked: false };
+}
+
 function dragTokens(ctx, g, w, e) {
   const grid = sceneGrid(ctx);
+  g.lastW = w;
   const lead = g.drag.items[0].id === g.drag.leader.id ? g.drag.items[0] : g.drag.items.find((i) => i.id === g.drag.leader.id) || g.drag.items[0];
   const leaderTok = ctx.scene.tokens.find((t) => t.id === lead.id);
   const raw = { x: lead.x0 + (w.x - g.w0.x), y: lead.y0 + (w.y - g.w0.y) };
@@ -399,33 +427,22 @@ function dragTokens(ctx, g, w, e) {
     path = { pts: [{ x: lead.x0, y: lead.y0 }, raw], label: '' };
   } else {
     const n = lead.n;
-    const from = footprintAt(grid, lead.x0, lead.y0, n);
     // Полупривязка: токен идёт за курсором свободно и примагничивается к клетке только рядом с её центром.
-    // С Shift — жёсткая привязка к клетке.
+    // С Shift — жёсткая привязка к клетке. Ctrl во время перетаскивания ставит точку маршрута.
     let target = clampToMap(ctx, softSnap(grid, raw, n, e.shiftKey), n);
-    let to = footprintAt(grid, target.x, target.y, n);
-    const { cols, rows } = dims(ctx);
-    to = { c: clamp(to.c, 0, cols - n), r: clamp(to.r, 0, rows - n) };
     const opts = moveOpts(ctx, leaderTok);
     const start = { x: lead.x0, y: lead.y0 };
-    const clear = (a, b) => pathClear(grid, a, b, { walls: opts.walls, blocked: opts.blocked, n });
-    let pts = null, blocked = false;
-    if (clear(start, target)) pts = [start, target];
+    const way = g.waypoints || [];
+    let pts = [start], blocked = false, from = start;
+    for (const wp of way) { const leg = legPath(ctx, grid, from, wp, n, opts); if (!leg) break; pts.push(...leg.pts.slice(1)); from = leg.target; }
+    const last = legPath(ctx, grid, from, target, n, opts);
+    if (last) { pts.push(...last.pts.slice(1)); target = last.target; }
+    else if (ctx.isMaster) { pts.push(target); blocked = true; }
     else {
-      // Прямо нельзя: маршрут по клеткам в обход стен, затем натягиваем его в прямые отрезки.
-      const found = findPath(grid, from, to, opts);
-      if (found) {
-        const end = clear(footprintCenter(grid, to.c, to.r, n), target) ? target : footprintCenter(grid, to.c, to.r, n);
-        target = end;
-        pts = smoothPath([start, ...found.cells.slice(1).map((cc) => footprintCenter(grid, cc.c, cc.r, n)), end], clear);
-        if (pts.at(-1) !== end) pts.push(end);
-      } else if (ctx.isMaster) { pts = [start, target]; blocked = true; }
-      else {
-        // Игрок упёрся: оставляем последнюю достижимую точку.
-        target = g.lastTarget || start;
-        pts = g.lastPts || [start, target];
-        blocked = true;
-      }
+      // Игрок упёрся: оставляем последнюю достижимую точку.
+      target = g.lastTarget || from;
+      pts = g.lastPts || [start, target];
+      blocked = true;
     }
     g.lastTarget = target; g.lastPts = pts;
     const dx = target.x - lead.x0, dy = target.y - lead.y0;
@@ -437,14 +454,17 @@ function dragTokens(ctx, g, w, e) {
     let over = false;
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
     else if (cells > 0) label = `${feet} фт · ${cells} кл.`;
-    if (blocked && ctx.isMaster && feet) label += moveBlocked(start, target, opts.walls) ? ' · сквозь стену' : ' · через препятствие';
-    path = { pts, label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
+    if (blocked && ctx.isMaster && feet) label += moveBlocked(from, target, opts.walls) ? ' · сквозь стену' : ' · через препятствие';
+    if (way.length) label += ` · точек: ${way.length}`;
+    path = { pts, label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet, waypoints: way.length };
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };
   }
   ctx.dragging = positions;
   ctx.ui.drag = { path };
-  ctx.sendDrag({ positions: Object.fromEntries(positions), leader: lead.id, path, ids: [...positions.keys()] });
+  // Скрытый токен и тайный ход мастера (Alt) другим не показываем — ни фишку, ни линию пути.
+  const secret = ctx.isMaster && (free || g.drag.items.some((it) => ctx.scene.tokens.find((t) => t.id === it.id)?.hidden));
+  if (!secret) ctx.sendDrag({ positions: Object.fromEntries(positions), leader: lead.id, path, ids: [...positions.keys()] });
   ctx.invalidate('tokens', 'overlay');
 }
 

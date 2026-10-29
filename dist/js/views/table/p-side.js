@@ -7,6 +7,7 @@ import { BESTIARY, monsterById } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
 import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
+import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
 import { roll } from '../../../engine.js';
@@ -238,8 +239,8 @@ export function newSceneModal(ctx) {
       <div class="field"><label for="ns-name">Название</label><div class="input"><input id="ns-name" maxlength="60" placeholder="Например, Мост через ущелье" value="${esc(state.name || '')}" autofocus></div></div>
       <div class="field"><label>Карта</label><div class="map-pick">
         ${BUILTIN_MAP_LIST.map((mp) => `<button class="map-opt ${!state.upload && state.map.id === mp.id ? 'on' : ''}" data-map="${mp.id}">${mapImg(mp.id)}<span>${esc(mp.name)}</span></button>`).join('')}
-        <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp" hidden data-upload></label>
-      </div><div class="t-xs tertiary" data-up-msg>${state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG или WebP до 25 МБ. Загруженная карта хранится только в этом браузере.'}</div></div>
+        <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp,.dd2vtt,.uvtt,.df2vtt" hidden data-upload></label>
+      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана · хранится только в этом браузере` : state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом. Хранится только в этом браузере.'}</div></div>
       <div class="form-grid">
         <div class="field"><label>Одна клетка</label><div class="chips-wrap">${[5, 10].map((f) => `<button class="chip chip-md ${state.feet === f ? 'chip-accent' : ''}" data-feet="${f}">${f} фт</button>`).join('')}</div></div>
         <div class="field"><label>Освещение</label><div class="chips-wrap"><button class="chip chip-md ${state.lighting === 'bright' ? 'chip-accent' : ''}" data-light="bright">${icon('sun-01', 12)}Светло</button><button class="chip chip-md ${state.lighting === 'dark' ? 'chip-accent' : ''}" data-light="dark">${icon('moon-02', 12)}Темно</button></div></div>
@@ -252,7 +253,7 @@ export function newSceneModal(ctx) {
   hydrateImages(m.box);
   const rerender = () => { state.name = m.box.querySelector('#ns-name')?.value || state.name; const show = m.box.querySelector('[data-show]')?.checked; m.set(render()); m.box.querySelector('[data-show]').checked = show; hydrateImages(m.box); };
   m.box.addEventListener('click', (e) => {
-    const mp = e.target.closest('[data-map]'); if (mp) { state.map = BUILTIN_MAP_LIST.find((x) => x.id === mp.dataset.map); state.upload = null; rerender(); return; }
+    const mp = e.target.closest('[data-map]'); if (mp) { state.map = BUILTIN_MAP_LIST.find((x) => x.id === mp.dataset.map); state.upload = null; state.imported = null; rerender(); return; }
     const f = e.target.closest('[data-feet]'); if (f) { state.feet = Number(f.dataset.feet); rerender(); return; }
     const l = e.target.closest('[data-light]'); if (l) { state.lighting = l.dataset.light; rerender(); return; }
     const fg = e.target.closest('[data-fog]'); if (fg) { state.fog = fg.dataset.fog; rerender(); return; }
@@ -263,15 +264,29 @@ export function newSceneModal(ctx) {
     const file = e.target.files?.[0]; if (!file) return;
     const msg = m.box.querySelector('[data-up-msg]');
     msg.textContent = 'Загружаем…';
-    try { state.upload = await storeImage(file); state.name = state.name || m.box.querySelector('#ns-name').value || file.name.replace(/\.[^.]+$/, '').slice(0, 60); rerender(); }
-    catch (err) { msg.textContent = err.message; msg.classList.add('negative'); }
+    try {
+      state.imported = null;
+      if (/\.(dd2vtt|uvtt|df2vtt)$/i.test(file.name)) {
+        // Карта Dungeondraft / Universal VTT: картинка + стены, двери и свет.
+        const data = parseUniversalVTT(await file.text(), { feet: state.feet, uid: () => uid('') });
+        if (!data.image) throw new Error('В файле нет картинки карты.');
+        const bytes = Uint8Array.from(atob(data.image.base64), (ch) => ch.charCodeAt(0));
+        state.upload = await storeImage(new File([bytes], 'map', { type: data.image.mime }));
+        state.imported = scaleImport(data, state.upload.width / data.width);
+        if (data.lights.length) state.lighting = 'dark';
+        if (data.walls.length) state.fog = 'vision';
+      } else state.upload = await storeImage(file);
+      state.name = state.name || m.box.querySelector('#ns-name').value || file.name.replace(/\.[^.]+$/, '').slice(0, 60);
+      rerender();
+    } catch (err) { msg.textContent = err instanceof SyntaxError ? 'Файл повреждён: это не JSON карты Universal VTT.' : err.message; msg.classList.add('negative'); }
   });
   function create() {
     const nameInput = m.box.querySelector('#ns-name');
     const name = nameInput.value.trim() || (state.upload ? 'Новая сцена' : state.map.name);
     const src = state.upload ? { src: state.upload.ref, width: state.upload.width, height: state.upload.height } : { src: state.map.id, width: state.map.width, height: state.map.height };
-    const size = state.upload ? 70 : GRID_PRESET[state.map.id] || src.width / 20;
-    const s = makeScene({ name, map: src, grid: { size, feet: state.feet, calibrated: !state.upload }, lighting: state.lighting, fog: { mode: state.fog }, status: 'ready' });
+    const imp = state.upload && state.imported;
+    const size = imp ? imp.ppg : state.upload ? 70 : GRID_PRESET[state.map.id] || src.width / 20;
+    const s = makeScene({ name, map: src, grid: { size, feet: state.feet, calibrated: !state.upload || !!imp }, lighting: state.lighting, fog: { mode: state.fog }, status: 'ready', walls: imp ? structuredClone(imp.walls) : [], lights: imp ? structuredClone(imp.lights) : [] });
     const { cols, rows } = gridDims(s.grid, src.width, src.height);
     s.note = `${cols}×${rows} клеток`;
     const show = m.box.querySelector('[data-show]').checked;
@@ -280,8 +295,8 @@ export function newSceneModal(ctx) {
     ctx.ui.panel = 'scenes';
     ctx.switchScene(s.id);
     ctx.panels.renderSide();
-    if (state.upload) setTimeout(() => ctx.setTool('grid'), 60);
-    ctx.toast({ title: `Сцена «${name}» готова`, body: state.upload ? 'Подгоните сетку под клетки на карте' : show ? 'Игроки уже её видят' : 'Игроки её пока не видят', icon: 'maps' });
+    if (state.upload && !imp) setTimeout(() => ctx.setTool('grid'), 60);
+    ctx.toast({ title: `Сцена «${name}» готова`, body: imp ? `Стены, двери и свет перенесены из карты (${imp.counts.walls + imp.counts.doors} отрезков, ${imp.counts.lights} источников)` : state.upload ? 'Подгоните сетку под клетки на карте' : show ? 'Игроки уже её видят' : 'Игроки её пока не видят', icon: 'maps' });
   }
 }
 
