@@ -203,6 +203,7 @@ input[type="number"] { -moz-appearance: textfield; }
 .panel-footer { display: flex; align-items: center; gap: var(--s-8); padding: var(--s-12) var(--s-16) var(--s-16); }
 .section-label { font: 700 10px/12px var(--font-text); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); }
 
+.popover.over-modal { z-index: calc(var(--z-modal) + 5); }
 .popover { position: absolute; z-index: var(--z-popover); min-width: 220px; max-width: min(380px, calc(100vw - 32px)); }
 
 .menu { padding: var(--s-6); min-width: 220px; display: flex; flex-direction: column; }

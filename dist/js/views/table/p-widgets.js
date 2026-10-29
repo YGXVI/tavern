@@ -51,7 +51,8 @@ function visionMaster(ctx) {
         return `<button class="list-row ${on ? 'current' : ''}" data-act="viewas" data-id="${esc(t.characterId)}">${avatarImg(t.img, 'hero')}<span class="grow col-tight"><span class="primary">${esc(st.name)}</span><span class="secondary">${st.darkvision ? `тёмное зрение ${st.darkvision} фт` : 'без тёмного зрения'}${t.light ? ` · ${esc(lightName(t.light))}` : ''}</span></span>${on ? '<span class="chip chip-accent">сейчас</span>' : icon('view', 18)}</button>`;
       }).join('') || '<p class="t-sm muted">На сцене нет героев</p>'}</div>
       <button class="btn btn-secondary btn-block" data-act="preview-players">${icon('view-off', 16)}Как видят игроки</button>
-    </div></div>`;
+    </div>
+    ${sc.fog.mode !== 'off' ? `<div class="panel-footer"><button class="btn btn-sm btn-secondary grow" data-act="fog-reveal-all">${icon('view', 14)}Открыть всю карту</button><button class="btn btn-sm btn-ghost grow" data-act="fog-hide-all">${icon('refresh', 14)}Сбросить туман</button></div>` : ''}</div>`;
 }
 
 function visionPlayer(ctx) {
@@ -67,6 +68,7 @@ function visionPlayer(ctx) {
       <div class="setting-row">${icon('fire', 20)}<span class="titles"><span class="label-main">${light ? esc(lightName(light)) : 'Без источника света'}</span><span class="hint">${light ? 'Светит и вам, и отряду' : 'Зажгите факел, если в темноте ничего не видно'}</span></span><input type="checkbox" class="switch" data-act="my-light" ${light ? 'checked' : ''} ${tok ? '' : 'disabled'} aria-label="Факел"></div>
       <div class="setting-row">${icon(dark ? 'moon-02' : 'sun-01', 20)}<span class="titles"><span class="label-main">${dark ? 'Здесь темно' : 'Здесь светло'}</span><span class="hint">${c.settings.sharedVision ? 'Вы видите то же, что и весь отряд' : 'Вы видите только глазами своего героя'}</span></span></div>
     </div>
+    ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — без цвета, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}
     ${sc.fog.mode !== 'off' || dark ? `<hr class="panel-divider"><div class="panel-section"><p class="t-sm muted"><span class="legend fog-seen"></span>Серое — где вы уже были: карту помните, а кто там сейчас, не видно.</p><p class="t-sm muted"><span class="legend fog-dark"></span>Чёрное — ещё не исследовано.</p></div>` : ''}
   </div>`;
 }
@@ -92,7 +94,7 @@ function party(ctx) {
   }).join('');
   return `<div class="widget panel party-widget">${head('Отряд', `${chars.length} ${plural(chars.length, 'герой', 'героя', 'героев')} · ${onCount} в сети`)}
     <div class="w-list scroll">${rows || '<p class="t-sm muted" style="padding:0 16px 12px">Пока никого — пригласите игроков</p>'}</div>
-    ${ctx.isMaster ? `<div class="panel-footer"><button class="btn btn-secondary btn-block" data-act="invite">${icon('user-add-01', 16)}Пригласить${pending ? ` · заявки: ${pending}` : ''}</button></div>` : ''}
+    ${ctx.isMaster ? `<div class="panel-footer party-foot">${c.invite?.code ? `<span class="col-tight grow"><small class="t-xs tertiary">Код комнаты</small><b class="mono">${esc(c.invite.code)}</b></span><button class="icon-btn icon-btn-sm" data-act="copy-code" data-tip="Скопировать код" aria-label="Скопировать код">${icon('copy-01', 18)}</button>` : ''}<button class="btn btn-primary" data-act="invite">${icon('user-add-01', 16)}Пригласить${pending ? ` · ${pending}` : ''}</button></div>` : ''}
   </div>`;
 }
 

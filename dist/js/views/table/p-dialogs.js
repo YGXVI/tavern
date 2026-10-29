@@ -8,7 +8,7 @@ import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
-import { startCombat } from './combat.js';
+import { startCombat, rollInitiative } from './combat.js';
 import { closeSheet } from './sheet.js';
 
 // ——— Меню кампании (логотип) ———
@@ -40,6 +40,29 @@ async function leaveCampaign(ctx) {
     addLog(c, { kind: 'member', text: `${ctx.user.name} покинул кампанию` });
   });
   go('#/campaigns');
+}
+
+// ——— Участник: действия мастера ———
+function memberMenu(ctx, userId, anchorEl, rerender, modalRef) {
+  const c = ctx.c;
+  const mm = c.members.find((x) => x.userId === userId); if (!mm) return;
+  const u = userById(userId);
+  const ch = characterOf(c, mm.characterId);
+  const free = c.members.filter((x) => x.role === 'player' && x.status === 'active' && !x.characterId && x.userId !== userId);
+  const r = anchorEl.getBoundingClientRect();
+  const anchor = { x: r.left, y: r.bottom + 4 };
+  menu([
+    ch ? { icon: 'book-open-01', label: 'Открыть лист героя', onClick: () => { modalRef.close(); ctx.panels.openSheetFor({ characterId: ch.id }); } } : null,
+    ch && free.length ? { icon: 'arrow-data-transfer-horizontal', label: 'Передать героя…', onClick: () => menu(free.map((f) => ({ icon: 'user', label: userById(f.userId)?.name || 'Игрок', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId), b = cc.members.find((x) => x.userId === f.userId); if (a && b) { b.characterId = a.characterId; a.characterId = null; const h = cc.characters.find((x) => x.id === b.characterId); if (h) h.ownerId = f.userId; addLog(cc, { kind: 'member', text: `${h?.name || 'Герой'} теперь у ${userById(f.userId)?.name || 'игрока'}` }); } }); rerender(); } })), anchor, { placement: 'bottom', className: 'over-modal' }) } : null,
+    ch ? { icon: 'shuffle', label: 'Сменить героя', hint: 'игрок выберет заново', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = cc.characters.find((x) => x.id === a?.characterId); if (h) h.ownerId = null; if (a) a.characterId = null; addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} выбирает другого героя` }); }); rerender(); } } : null,
+    'divider',
+    { icon: 'user-remove-01', label: 'Исключить из кампании', danger: true, onClick: async () => {
+      const ok = await confirmDialog({ title: `Исключить ${u?.name || 'игрока'}?`, body: 'Он сразу потеряет доступ к кампании. Его герой останется у вас.', ok: 'Исключить', danger: true });
+      if (!ok) return;
+      updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = a?.characterId && cc.characters.find((x) => x.id === a.characterId); if (h) h.ownerId = null; cc.members = cc.members.filter((x) => x.userId !== userId); addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} исключён из кампании` }); });
+      rerender();
+    } },
+  ].filter(Boolean), anchor, { placement: 'bottom', className: 'over-modal' });
 }
 
 // ——— Приглашение ———
@@ -107,8 +130,8 @@ export function settingsModal(ctx) {
     } else if (settingsTab === 'members') {
       body = `<div class="panel-section">${c.members.map((m) => {
         const u = userById(m.userId); const ch = characterOf(c, m.characterId);
-        return `<div class="list-row">${userAvatar(u, 'sm')}<span class="grow col-tight"><span class="primary">${esc(u?.name || 'Игрок')}</span><span class="secondary">${m.role === 'master' ? 'Мастер' : m.status === 'pending' ? 'Ждёт одобрения' : ch ? `играет за ${esc(ch.name)}` : 'выбирает героя'}</span></span>${m.role === 'master' ? `<span class="chip chip-accent">${icon('crown', 12)}мастер</span>` : `<button class="btn btn-sm btn-ghost" data-kick="${esc(m.userId)}">${icon('user-remove-01', 14)}Убрать</button>`}</div>`;
-      }).join('')}</div>`;
+        return `<div class="list-row">${userAvatar(u, 'sm')}<span class="grow col-tight"><span class="primary">${esc(u?.name || 'Игрок')}</span><span class="secondary">${m.role === 'master' ? 'Мастер' : m.status === 'pending' ? 'Ждёт одобрения' : ch ? `играет за ${esc(ch.name)}` : 'выбирает героя'}</span></span>${m.role === 'master' ? `<span class="chip chip-accent">${icon('crown', 12)}мастер</span>` : `<button class="icon-btn icon-btn-sm" data-member="${esc(m.userId)}" aria-label="Действия с участником" data-tip="Действия">${icon('more-horizontal', 18)}</button>`}</div>`;
+      }).join('')}<p class="t-xs tertiary">Исключённый игрок сразу теряет доступ к кампании; его герой остаётся у мастера.</p></div>`;
     } else {
       const s = c.settings;
       body = `<div class="panel-section">
@@ -138,6 +161,8 @@ export function settingsModal(ctx) {
       go('#/campaigns');
       return;
     }
+    const mb = e.target.closest('[data-member]');
+    if (mb) { memberMenu(ctx, mb.dataset.member, mb, rerender, m); return; }
     const k = e.target.closest('[data-kick]');
     if (k) {
       const u = userById(k.dataset.kick);
@@ -213,23 +238,29 @@ export function combatSetup(ctx, preselect = []) {
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
   const checked = (t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden);
-  const m = modal(`${panelHeader('Начать бой', 'Отметьте участников — инициативу бросим сразу')}
+  // Инициатива бросается сразу и видна в списке; врагов можно перебросить, героев — бросают игроки или мы.
+  const rolls = Object.fromEntries(toks.map((t) => [t.id, rollInitiative(ctx.c, t).init]));
+  const hasPlayer = (t) => !!t.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player');
+  const state = { self: true };
+  const rowInit = (t) => (state.self && hasPlayer(t) ? '<span class="chip">бросает игрок</span>' : `<span class="init-num">${rolls[t.id]}</span>`);
+  const m = modal(`${panelHeader('Начать бой', 'Отметьте участников — инициатива уже брошена')}
     <div class="modal-body scroll"><div class="panel-section">${toks.map((t) => {
       const st = tokenStats(ctx.c, t);
-      return `<label class="list-row check-row"><input type="checkbox" class="check-input" data-id="${esc(t.id)}" ${checked(t) ? 'checked' : ''}><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow col-tight"><span class="primary">${esc(st.name)}${t.hidden ? ` <span class="chip">${icon('view-off', 12)}скрыт</span>` : ''}</span><span class="secondary">инициатива ${st.initBonus >= 0 ? '+' : '−'}${Math.abs(st.initBonus)}${t.kind === 'hero' ? ' · герой' : ''}</span></span></label>`;
+      return `<label class="list-row check-row"><input type="checkbox" class="check-input" data-id="${esc(t.id)}" ${checked(t) ? 'checked' : ''}><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow col-tight"><span class="primary">${esc(st.name)}${t.hidden ? ` <span class="chip">${icon('view-off', 12)}скрыт</span>` : ''}</span><span class="secondary">ИНЦ ${st.initBonus >= 0 ? '+' : '−'}${Math.abs(st.initBonus)}${t.kind === 'hero' ? ' · герой' : ''}</span></span><span data-init="${esc(t.id)}">${rowInit(t)}</span></label>`;
     }).join('')}</div>
-    <hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('dice-faces-06', 20)}<span class="titles"><span class="label-main">Игроки бросают сами</span><span class="hint">Иначе бросим за всех — быстрее</span></span><input type="checkbox" class="switch" data-self aria-label="Игроки бросают сами"></div></div></div>
-    <div class="panel-footer"><span class="t-sm muted grow" data-count></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icon('sword-03', 16)}В бой</button></div>`);
+    <hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('dice-faces-06', 20)}<span class="titles"><span class="label-main">Игроки бросают сами</span><span class="hint">Иначе берём числа из списка — быстрее</span></span><input type="checkbox" class="switch" data-self checked aria-label="Игроки бросают сами"></div></div></div>
+    <div class="panel-footer"><button class="btn btn-ghost" data-reroll>${icon('refresh', 16)}Перебросить врагов</button><span class="t-sm muted grow" data-count></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icon('sword-03', 16)}Начать бой</button></div>`);
   const count = () => { const n = m.box.querySelectorAll('[data-id]:checked').length; m.box.querySelector('[data-count]').textContent = `${n} ${plural(n, 'участник', 'участника', 'участников')}`; m.box.querySelector('[data-ok]').disabled = !n; };
+  const redraw = () => { for (const t of toks) { const n = m.box.querySelector(`[data-init="${CSS.escape(t.id)}"]`); if (n) n.innerHTML = rowInit(t); } };
   count();
-  m.box.addEventListener('change', count);
+  m.box.addEventListener('change', (e) => { if (e.target.matches('[data-self]')) { state.self = e.target.checked; redraw(); } count(); });
+  m.box.querySelector('[data-reroll]').addEventListener('click', () => { for (const t of toks) if (t.kind !== 'hero') rolls[t.id] = rollInitiative(ctx.c, t).init; redraw(); });
   m.box.querySelector('[data-ok]').addEventListener('click', () => {
     const ids = [...m.box.querySelectorAll('[data-id]:checked')].map((x) => x.dataset.id);
-    const self = m.box.querySelector('[data-self]').checked;
-    const rolls = {};
-    if (self) for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); if (t?.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player')) rolls[id] = null; }
+    const use = {};
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); use[id] = state.self && t && hasPlayer(t) ? null : rolls[id]; }
     const sid = ctx.sceneId;
-    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, rolls));
+    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
     m.close();
     ctx.panels.openWidget('initiative', true);
     ctx.select([]);
