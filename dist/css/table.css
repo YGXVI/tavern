@@ -186,8 +186,12 @@
   box-shadow: 0 0 0 calc(var(--bw) * .5) rgb(0 0 0 / .6); pointer-events: none;
 }
 .tok-badge .ic { width: calc(var(--fs) * 1.25); height: calc(var(--fs) * 1.25); }
-.tok-badge.init { top: -6%; left: -6%; background: var(--brand-500); color: var(--text-on-accent); }
-.tok-badge.hidden-b { top: -6%; right: -6%; display: none; }
+/* Хиты слева красным (временные — мелко после «+»), КД справа синим (TASK-029). */
+.tok-badge.hp-b { top: -6%; left: -8%; background: var(--red-600, #c53030); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 1px; }
+.tok-badge.hp-b i { font-style: normal; font-size: .78em; opacity: .9; color: #bfe3ff; }
+.tok-badge.ac-b { top: -6%; right: -8%; background: var(--blue-600, #2b6cb0); font-variant-numeric: tabular-nums; border-radius: calc(var(--fs) * .5) calc(var(--fs) * .5) var(--r-full) var(--r-full); }
+.tok-badge.hidden-b { bottom: -4%; right: -6%; display: none; }
+.tok.is-hidden.downed .tok-badge.hidden-b { right: 24%; bottom: -10%; }
 .tok.is-hidden .tok-badge.hidden-b { display: grid; }
 .tok-badge.down-b { bottom: -4%; right: -6%; display: none; background: var(--red-600); }
 .tok.downed .tok-badge.down-b { display: grid; }

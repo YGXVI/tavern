@@ -205,7 +205,8 @@ function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const face = src ? `<img alt="" draggable="false" src="${esc(src)}">` : `<span class="tok-initials" style="--h:${hueOf(name)}">${esc(initials(name))}</span>`;
   return `<div class="tok-ring">${face}</div>
     <svg class="tok-hp" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47.5" class="hp-track"/><circle cx="50" cy="50" r="47.5" class="hp-arc"/></svg>
-    <span class="tok-badge init"></span>
+    <span class="tok-badge hp-b"></span>
+    <span class="tok-badge ac-b"></span>
     <span class="tok-badge hidden-b">${icon('view-off', 12)}</span>
     <span class="tok-badge down-b">${icon(t.kind === 'foe' ? 'skull' : 'sleeping', 12)}</span>
     <span class="tok-conds">${conds}${more}</span>
@@ -228,7 +229,6 @@ export function renderTokens(L, ctx) {
   const seen = new Set();
   const layer = stackOrder(scene.tokens);
   const top = scene.tokens.length + 10;
-  const order = ctx.combatOrder();
   const currentId = ctx.currentTurnTokenId();
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
@@ -263,11 +263,18 @@ export function renderTokens(L, ctx) {
       if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
       node.dataset.tg = tgSig;
     }
-    const entry = order.find((e) => e.tokenId === t.id);
-    const ib = node.querySelector('.tok-badge.init');
-    if (entry && ctx.c.combat.active) { ib.textContent = entry.init; ib.style.display = ''; } else ib.style.display = 'none';
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
     const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
+    // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
+    const hb = node.querySelector('.tok-badge.hp-b'), ab = node.querySelector('.tok-badge.ac-b');
+    const tmp = st.tempHp > 0 ? `<i>+${st.tempHp}</i>` : '';
+    const hpHtml = showHp ? `${Math.max(0, st.hp)}${tmp}` : '';
+    if (hb.dataset.v !== hpHtml) { hb.innerHTML = hpHtml; hb.dataset.v = hpHtml; hb.title = st.tempHp > 0 ? `Хиты ${st.hp} из ${st.hpMax}, временные ${st.tempHp}` : `Хиты ${st.hp} из ${st.hpMax}`; }
+    hb.style.display = showHp ? '' : 'none';
+    const showAc = st.ac != null && (ctx.isMasterView || t.kind === 'hero');
+    const acTxt = showAc ? String(st.ac) : '';
+    if (ab.textContent !== acTxt) { ab.textContent = acTxt; ab.title = `Класс доспеха ${st.ac}`; }
+    ab.style.display = showAc ? '' : 'none';
     const arc = node.querySelector('.hp-arc');
     const frac = Math.max(0, Math.min(1, st.hp / Math.max(1, st.hpMax)));
     if (showHp && frac < 1) { arc.style.strokeDasharray = `${frac * 298.5} 400`; node.querySelector('.tok-hp').style.display = ''; } else node.querySelector('.tok-hp').style.display = 'none';
