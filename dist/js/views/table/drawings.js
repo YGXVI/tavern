@@ -1,6 +1,47 @@
 // Рисунки и надписи как объекты (TASK-031): выделить, сдвинуть, перекрасить, изменить текст, удалить.
 import { esc } from '../../core/dom.js';
 import { icon } from '../../icons.js';
+import { templatePolygon, gridSize, pointInPolygon, distToSegment } from '../../rules/geometry.js';
+
+/** Фигуры для рисования — те же, что у линейки, но остаются на карте (TASK-032). */
+export const DRAW_SHAPES = [
+  { id: 'seg', name: 'Прямая', icon: 'ruler' },
+  { id: 'cone', name: 'Конус', icon: 'cone-01' },
+  { id: 'line', name: 'Линия шириной в клетку', icon: 'straight-edge' },
+  { id: 'cube', name: 'Куб', icon: 'square' },
+  { id: 'sphere', name: 'Сфера', icon: 'circle' },
+];
+
+/** Точки фигуры в координатах карты: прямая — два конца, остальное — многоугольник шаблона. */
+export function shapePoints(grid, d) {
+  if (d.shape === 'seg') return [d.a, d.b];
+  return templatePolygon(grid, { type: d.shape, origin: d.origin, angle: d.angle || 0, size: d.size });
+}
+
+/** Разметка фигуры (без зоны клика). cls — дополнительные классы. */
+export function shapeMarkup(grid, d, cls = '', attr = '') {
+  const pts = shapePoints(grid, d).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  if (d.shape === 'seg') return `<polyline points="${pts}" class="draw-line${cls}" stroke="${esc(d.color)}"${attr}/>`;
+  return `<polygon points="${pts}" class="draw-shape${cls}" stroke="${esc(d.color)}" fill="${esc(d.color)}"${attr}/>`;
+}
+
+/** Попадает ли точка в фигуру (внутрь или на контур с допуском tol). */
+export function nearShape(grid, d, p, tol) {
+  const pts = shapePoints(grid, d);
+  if (d.shape !== 'seg' && pointInPolygon(p, pts)) return true;
+  const ring = d.shape === 'seg' ? pts : [...pts, pts[0]];
+  for (let i = 1; i < ring.length; i++) if (distToSegment(p, ring[i - 1], ring[i]) < tol) return true;
+  return false;
+}
+
+/** Фигура по жесту: от точки нажатия до курсора. Размер — по 5 фт (free — по 1 фт). */
+export function shapeFromDrag(grid, shape, from, to, color, free = false) {
+  if (shape === 'seg') return { type: 'shape', shape, a: { ...from }, b: { ...to }, color };
+  const s = gridSize(grid), feet = grid.feet || 5;
+  const ft = (Math.hypot(to.x - from.x, to.y - from.y) / s) * feet;
+  const size = free ? Math.max(1, Math.round(ft)) : Math.max(5, Math.round(ft / 5) * 5);
+  return { type: 'shape', shape, origin: { ...from }, angle: Math.atan2(to.y - from.y, to.x - from.x), size, color };
+}
 
 export const DRAW_COLORS = [
   { id: '#e9b052', name: 'Золото' },
@@ -22,6 +63,7 @@ export function shiftDrawing(d, dx, dy) {
   if (d.pts) out.pts = d.pts.map((p) => ({ x: r(p.x + dx), y: r(p.y + dy) }));
   if (d.x != null) { out.x = r(d.x + dx); out.y = r(d.y + dy); }
   if (d.a) out.a = { x: r(d.a.x + dx), y: r(d.a.y + dy) };
+  if (d.origin) out.origin = { x: r(d.origin.x + dx), y: r(d.origin.y + dy) };
   if (d.b) out.b = { x: r(d.b.x + dx), y: r(d.b.y + dy) };
   return out;
 }
@@ -37,7 +79,7 @@ export function moveDrawing(ctx, id, dx, dy) {
   const d = ctx.scene.drawings.find((x) => x.id === id); if (!d || (!dx && !dy)) return;
   const s = shiftDrawing(d, dx, dy);
   const after = {};
-  for (const k of ['pts', 'x', 'y', 'a', 'b']) if (d[k] != null) after[k] = s[k];
+  for (const k of ['pts', 'x', 'y', 'a', 'b', 'origin']) if (d[k] != null) after[k] = s[k];
   put(ctx, id, after, 'Сдвинуть рисунок');
 }
 
