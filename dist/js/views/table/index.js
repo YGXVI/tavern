@@ -15,6 +15,7 @@ import { computeVision, isVisible, visibleCells } from './fog.js';
 import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder } from './combat.js';
 import { attachInput } from './input.js';
+import { attachGizmo } from './gizmo.js';
 import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
@@ -344,6 +345,7 @@ export function mountTable(root, cid) {
 
   ctx.panels = new Panels(ctx);
   const detachInput = attachInput(ctx);
+  attachGizmo(L, ctx);
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;

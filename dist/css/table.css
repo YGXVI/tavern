@@ -48,6 +48,8 @@
 .grid-layer, .terrain-layer, .drawings-layer, .areas-layer, .overlay-layer, .labels-layer { pointer-events: none; overflow: visible; }
 .walls-layer { pointer-events: none; overflow: visible; }
 .markers-layer, .tokens-layer { pointer-events: none; }
+/* Порядок токенов (z-index, TASK-024) — только внутри своего слоя: туман, путь, подписи и рамка остаются выше. */
+.tokens-layer { isolation: isolate; }
 
 /* ——— Сетка, местность, рисунки ——— */
 .grid-lines { fill: none; stroke: var(--map-grid); stroke-opacity: .55; stroke-width: calc(1px * var(--iz)); shape-rendering: crispEdges; }
@@ -157,7 +159,8 @@
 .tok.disp-secret { --ring: var(--side-foe); }
 .tok.disp-secret .tok-ring { background: conic-gradient(var(--side-foe) 0 50%, var(--green-500) 0 100%); }
 .tok.mine { --ring: var(--brand-500); }
-.tok-ring { position: absolute; inset: 0; border-radius: 50%; padding: var(--bw); background: var(--ring); box-shadow: var(--shadow-token); transition: box-shadow .15s; }
+.tok-ring { position: absolute; inset: 0; border-radius: 50%; padding: var(--bw); background: var(--ring); box-shadow: var(--shadow-token); transition: box-shadow .15s; transform: rotate(var(--rot, 0deg)); }
+.tok.locked { cursor: default; }
 .tok-ring img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--neutral-300); pointer-events: none; }
 .tok.item .tok-ring { background: transparent; padding: 0; }
 .tok.selected .tok-ring { box-shadow: 0 0 0 calc(var(--bw) * .8) #fff, 0 0 0 calc(var(--bw) * 1.6) rgb(0 0 0 / .45), var(--shadow-token); }
@@ -691,3 +694,28 @@ button.tray-die:hover { filter: brightness(1.1); }
 /* ——— Издалека: подписи только у важных токенов ——— */
 .viewport[data-far] .tok:not(.selected, .mine, .turn, :hover) .tok-name { display: none; }
 .viewport[data-far] .aura-label { opacity: 0; pointer-events: none; }
+
+/* ——— Рамка выделенного токена: поворот, размер, быстрые действия (TASK-030) ——— */
+.gizmo-layer { pointer-events: none; }
+.gz { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gz-ring { position: absolute; left: calc(var(--d) / -2); top: calc(var(--d) / -2); width: var(--d); height: var(--d); border-radius: 50%;
+  outline: calc(1.5px * var(--iz)) dashed rgb(255 255 255 / .75); outline-offset: calc(5px * var(--iz)); pointer-events: none; }
+.gz-h { position: absolute; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; pointer-events: auto; touch-action: none;
+  transform-origin: 0 0; transform: scale(var(--iz)) translate(-50%, -50%); background: #313847; color: #fff;
+  box-shadow: 0 0 0 1.5px rgb(255 255 255 / .2), 0 4px 10px rgb(0 0 0 / .45); cursor: grab; }
+.gz-h:hover { background: #3d4659; }
+.gz-h:active { cursor: grabbing; }
+.gz-rot { left: 0; top: calc(var(--d) / -2 - 24px * var(--iz)); }
+.gz-l { left: calc(var(--d) / -2 - 12px * var(--iz)); top: 0; cursor: ew-resize; }
+.gz-r { left: calc(var(--d) / 2 + 12px * var(--iz)); top: 0; cursor: ew-resize; }
+.gz-val { position: absolute; left: 0; top: calc(var(--d) / -2 - 56px * var(--iz)); transform-origin: 0 0; transform: scale(var(--iz)) translateX(-50%);
+  padding: 3px 9px; border-radius: var(--r-full); background: rgb(0 0 0 / .78); color: #fff; font: 600 13px/1.2 var(--font-text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.gz-bar { position: absolute; left: 0; top: var(--bt); transform-origin: 0 0; transform: scale(var(--iz)) translateX(-50%); display: flex; gap: 2px; padding: 4px;
+  border-radius: var(--r-full); background: rgb(49 56 71 / .94); box-shadow: 0 6px 18px rgb(0 0 0 / .45); pointer-events: auto; }
+.gz-b { width: 40px; height: 36px; border-radius: var(--r-full); display: grid; place-items: center; color: #fff; }
+.gz-b:hover { background: rgb(255 255 255 / .1); }
+.gz-b.on { color: var(--brand-500); }
+.gz-b.danger:hover { color: var(--red-400, #f87171); }
+.gz.busy .gz-bar { opacity: 0; pointer-events: none; }
+.gz.up .gz-bar { top: calc(var(--d) / -2 - 46px * var(--iz)); transform: scale(var(--iz)) translate(-50%, -100%); }
+.gz.up .gz-val { top: calc(var(--d) / 2 + 30px * var(--iz)); }
