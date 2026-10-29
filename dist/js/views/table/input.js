@@ -251,28 +251,11 @@ function snapToVertex(ctx, w, step = 1) {
   return { x: ox + Math.round((w.x - ox) / s) * s, y: oy + Math.round((w.y - oy) / s) * s };
 }
 
-/** Клетки, где стоят враждебные существа (через них нельзя пройти). */
-function hostileCells(ctx, mover) {
-  const out = new Set();
-  const moverHostile = mover.kind === 'foe';
-  for (const t of ctx.scene.tokens) {
-    if (t.id === mover.id || t.hidden) continue;
-    const enemy = moverHostile ? t.kind === 'hero' : t.kind === 'foe';
-    if (!enemy) continue;
-    const st = tokenStats(ctx.c, t);
-    if (st.hpMax > 0 && st.hp <= 0) continue;
-    const n = cellsOfToken(t);
-    const fp = footprintAt(sceneGrid(ctx), t.x, t.y, n);
-    for (const x of footprintCells(fp.c, fp.r, n)) out.add(key(x.c, x.r));
-  }
-  return out;
-}
-
 function moveOpts(ctx, t, { ignoreWalls = false } = {}) {
   const s = ctx.scene;
   const { cols, rows } = dims(ctx);
+  // Токены не мешают друг другу: путь блокируют только стены и непроходимая местность.
   const blocked = new Set(s.terrain?.blocked || []);
-  if (!ctx.isMaster) for (const k of hostileCells(ctx, t)) blocked.add(k);
   return { walls: ignoreWalls ? [] : s.walls, difficult: new Set(s.terrain?.difficult || []), blocked, cols, rows, n: cellsOfToken(t), rule: ctx.c.settings.diagonal || '5' };
 }
 
@@ -447,7 +430,7 @@ function dragTokens(ctx, g, w, e) {
     let over = false;
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
     else if (cells > 0) label = `${feet} фт · ${cells} кл.`;
-    if (blocked && ctx.isMaster && feet) label += ' · сквозь стену';
+    if (blocked && ctx.isMaster && feet) label += moveBlocked(start, target, opts.walls) ? ' · сквозь стену' : ' · через препятствие';
     path = { pts, label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };

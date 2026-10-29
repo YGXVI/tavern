@@ -122,8 +122,58 @@ export function segmentsIntersect(p1, p2, p3, p4, eps = 1e-9) {
   return false;
 }
 
+// ——— Движение центра токена сквозь стены ———
+function side(a, b, c) {
+  const v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const scale = Math.hypot(b.x - a.x, b.y - a.y) * Math.hypot(c.x - a.x, c.y - a.y);
+  return Math.abs(v) <= 1e-9 * (scale || 1) ? 0 : Math.sign(v);
+}
+const samePt = (u, v) => Math.abs(u.x - v.x) < 1e-6 && Math.abs(u.y - v.y) < 1e-6;
+const onSeg = (a, b, c) => Math.min(a.x, b.x) - 1e-6 <= c.x && c.x <= Math.max(a.x, b.x) + 1e-6 && Math.min(a.y, b.y) - 1e-6 <= c.y && c.y <= Math.max(a.y, b.y) + 1e-6;
+
+/** Направления (углы) всех мешающих стен, у которых есть конец в точке v. */
+function jointDirs(v, walls) {
+  const out = [];
+  for (const w of walls) {
+    if (!wallBlocksMove(w)) continue;
+    if (samePt(w.a, v) && !samePt(w.b, v)) out.push(Math.atan2(w.b.y - v.y, w.b.x - v.x));
+    else if (samePt(w.b, v) && !samePt(w.a, v)) out.push(Math.atan2(w.a.y - v.y, w.a.x - v.x));
+  }
+  return out;
+}
+const TAU = Math.PI * 2;
+const norm = (x) => ((x % TAU) + TAU) % TAU;
+/** Есть ли угол строго внутри дуги от from до to против часовой стрелки. */
+const inArc = (angles, from, to) => { const span = norm(to - from); return angles.some((a) => { const d = norm(a - from); return d > 1e-7 && d < span - 1e-7; }); };
+
+/**
+ * Проходит ли центр токена от p до q. Центр не пересекает стену и не останавливается на ней;
+ * уйти со стены можно. Касание конца стены по пути не мешает, если сходящиеся в этой точке стены
+ * не отделяют одну сторону пути от другой — так крупный токен проходит в узкую открытую дверь,
+ * но не проскальзывает в стык угла.
+ */
 export function moveBlocked(p, q, walls = []) {
-  for (const w of walls) if (wallBlocksMove(w) && segmentsIntersect(p, q, w.a, w.b)) return true;
+  if (samePt(p, q)) return false;
+  const joints = [];
+  for (const w of walls) {
+    if (!wallBlocksMove(w)) continue;
+    const { a, b } = w;
+    const d1 = side(a, b, p), d2 = side(a, b, q), d3 = side(p, q, a), d4 = side(p, q, b);
+    if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+    if (d1 === 0 && d2 === 0) continue; // вдоль стены
+    if (d2 === 0 && onSeg(a, b, q)) {
+      if (samePt(q, a) || samePt(q, b)) { if (jointDirs(q, walls).length >= 2) return true; continue; }
+      return true; // остановиться на стене нельзя
+    }
+    if (d1 === 0 && onSeg(a, b, p)) continue; // уйти со стены можно
+    for (const [d, e] of [[d3, a], [d4, b]]) if (d === 0 && onSeg(p, q, e) && !samePt(e, p) && !samePt(e, q)) joints.push(e);
+  }
+  for (const v of joints) {
+    const dirs = jointDirs(v, walls);
+    const out = Math.atan2(q.y - v.y, q.x - v.x), back = Math.atan2(p.y - v.y, p.x - v.x);
+    const others = dirs.filter((a) => Math.abs(Math.sin(a - out)) > 1e-7); // стены вдоль пути не разделяют
+    if (inArc(others, back, out) && inArc(others, out, back)) return true;
+  }
   return false;
 }
 

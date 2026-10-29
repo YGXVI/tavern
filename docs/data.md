@@ -28,7 +28,7 @@
 - `Wall = {id, a{x,y}, b{x,y}, kind: 'wall'|'window'|'invisible'|'door'|'secret', open, locked, lockDc?, discovered?, name?}`.
 - `combat = {active, sceneId, round, turn, entries[{tokenId, init|null}], moved{tokenId: футы}}`; `init: null` — игрок бросит сам.
 - `log` — последние 120 записей `{id, at, userId, kind, label|text, total?, detail?, hidden?}`.
-- `settings = {diagonal: '5'|'5-10-5', sharedVision, playersSeeHp: 'status'|'exact'}`.
+- `settings = {diagonal: '5'|'5-10-5', sharedVision, playersSeeHp: 'status'|'exact', openMovement}`; `openMovement` (нет поля = `true`) — игроки двигают любые видимые токены (TASK-018).
 
 Права в демо проверяются только интерфейсом (`canControlToken`, роль в членстве). Любая вкладка может записать что угодно в `localStorage`; скрытые токены, заметки мастера и ловушки физически лежат у игрока в браузере. Перед настоящей игрой по сети нужен сервер (DEC-008).
 
