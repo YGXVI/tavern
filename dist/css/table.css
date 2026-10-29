@@ -683,3 +683,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .setup-widget .setup-row.off { opacity: .55; }
 .setup-widget .setup-row .init-num { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--bg-control); font: 600 13px/1 var(--font-text); }
 .setting-row.compact { padding: 6px 16px; }
+
+/* ——— Издалека: подписи только у важных токенов ——— */
+.viewport[data-far] .tok:not(.selected, .mine, .turn, :hover) .tok-name { display: none; }
+.viewport[data-far] .aura-label { opacity: 0; pointer-events: none; }

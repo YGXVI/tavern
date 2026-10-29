@@ -100,7 +100,7 @@ function topCenter(ctx) {
       fog: ['cloud', 'Туман войны', sc.fog.mode === 'vision' ? 'Затемнённое игроки не видят. Обзор героев открывает туман сам' : sc.fog.mode === 'manual' ? 'Игроки видят только открытое кистью' : 'Туман выключен — игроки видят всю карту'],
       terrain: ['mountain', 'Труднопроходимая местность', 'Каждый шаг по штриховке стоит вдвое. Красное — непроходимо'],
       gm: ['layers-01', 'Слой мастера', 'Ловушки, метки и переходы. Игроки этого слоя не видят'],
-      grid: ['grid', `Сетка · ${sc.name}`, 'Подгоните одну клетку под плитку на карте — остальные выровняются сами'],
+      grid: ['grid', `Сетка · ${sc.name}`, 'Подгоните одну клетку под плитку на карте. Стрелки — сдвиг на 1 px, [ и ] — размер'],
     };
     if (modes[tool]) return banner(...modes[tool]);
     if (c.activeSceneId !== sc.id) {
@@ -119,6 +119,7 @@ function topCenter(ctx) {
     return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${c.combat.round} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
   }
   const m = membership(c, ctx.userId);
+  if (m?.characterId && !sc.tokens.some((t) => ctx.isMine(t))) return banner('chess-pawn', 'Вашего героя нет на этой сцене', 'Мастер поставит его, когда отряд доберётся сюда. Карту уже можно смотреть');
   if (m?.sceneId && m.sceneId !== c.activeSceneId) {
     const main = sceneOf(c, c.activeSceneId);
     const others = c.members.filter((x) => x.role === 'player' && x.status === 'active' && x.userId !== ctx.userId && (x.sceneId || c.activeSceneId) !== m.sceneId).map((x) => characterOf(c, x.characterId)?.name).filter(Boolean);
@@ -204,10 +205,10 @@ function bottomCenter(ctx) {
   }
   if (ctx.isMasterView) {
     return `<div class="toolbar add-bar">${ib('add:search', 'search-01', 'Найти существо')}${div}${ib('add:hero', 'chess-pawn', 'Герой на сцену')}${ib('add:creature', 'monster', 'Существа', { active: ctx.ui.panel === 'bestiary' })}${ib('add:item', 'potion', 'Предмет')}${ib('add:environment', 'pine-tree', 'Окружение и свет')}${ib('add:note', 'note-edit', 'Заметка')}${ib('add:map', 'maps', 'Новая сцена')}</div>
-      <div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение', { active: tool === 'move', kbd: 'V' })}${ib('tool:select', 'cursor-rectangle-selection-01', 'Выделение рамкой', { active: tool === 'select', kbd: 'S' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:walls', 'path', 'Стены и двери', { kbd: 'W' })}${ib('tool:fog', 'cloud', 'Туман войны', { kbd: 'F' })}${ib('tool:gm', 'layers-01', 'Слой мастера', { kbd: 'G' })}${ib('tool:text', 'text-font', 'Текст', { active: tool === 'text' })}${div}${undoRedo(ctx, false)}</div>`;
+      <div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V' })}${ib('tool:select', 'cursor-rectangle-selection-01', 'Выделение рамкой', { active: tool === 'select', kbd: 'S' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:walls', 'path', 'Стены и двери', { kbd: 'W' })}${ib('tool:fog', 'cloud', 'Туман войны', { kbd: 'F' })}${ib('tool:gm', 'layers-01', 'Слой мастера', { kbd: 'G' })}${ib('tool:text', 'text-font', 'Текст', { active: tool === 'text' })}${div}${undoRedo(ctx, false)}</div>`;
   }
   const lock = ctx.c.paused;
-  return `<div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
+  return `<div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
 }
 
 /** Переключатель фокуса редактора: приглушать лишнее или показать всё. */

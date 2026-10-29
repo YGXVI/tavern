@@ -22,6 +22,16 @@ import { sizeById } from '../../data/rules.js';
 
 const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll']);
 
+/** Вкладка в фоне: «⚔ Ваш ход» в заголовке, пока игрок не вернётся. */
+let baseTitle = null;
+function flagTab(text) {
+  if (!text) return;
+  baseTitle ??= document.title;
+  document.title = text;
+  const back = () => { if (!document.hidden) { document.title = baseTitle; baseTitle = null; document.removeEventListener('visibilitychange', back); } };
+  document.addEventListener('visibilitychange', back);
+}
+
 /** Сколько длится пауза: «3:42». */
 export function pauseElapsed(p) { const sec = Math.max(0, Math.floor((Date.now() - (p?.at || Date.now())) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
 
@@ -121,6 +131,7 @@ export class Panels {
       const free = ['move', 'select'].includes(ctx.ui.tool) && !ctx.dragging?.size;
       if (t && !ctx.isMaster && ctx.isMine(t)) {
         ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${c.combat.round} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
+        flagTab(document.hidden ? `⚔ Ваш ход — ${tokenStats(c, t).name}` : null);
         if (free) { queueMicrotask(() => ctx.select([t.id])); this.centerIfAway(t); }
       } else if (t && ctx.isMasterView && t.kind === 'foe' && free) {
         queueMicrotask(() => ctx.select([t.id]));
@@ -161,6 +172,8 @@ export class Panels {
       const scroll = host.querySelector('.scroll')?.scrollTop || 0;
       host.innerHTML = html; host.__html = html;
       const sc = host.querySelector('.scroll'); if (sc) sc.scrollTop = scroll;
+      // Очередь боя: текущий ход всегда в поле зрения.
+      host.querySelector('.init-row.current')?.scrollIntoView({ block: 'nearest' });
       // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
       if (this.lastWidget !== this.ctx.ui.widget) {
         this.lastWidget = this.ctx.ui.widget;

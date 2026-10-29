@@ -295,7 +295,12 @@ export function mountTable(root, cid) {
   // ——— Перетаскивание и линейки других вкладок ———
   bus.on('drag', (p) => {
     if (p.cid !== ctx.cid) return;
-    if (p.end) { for (const id of p.ids || []) ctx.remote.drags.delete(id); }
+    if (p.end) {
+      for (const id of p.ids || []) ctx.remote.drags.delete(id);
+      // Общее перемещение: если кто-то другой подвинул моего героя — скажем об этом.
+      const mine = p.userId && p.userId !== ctx.userId && ctx.scene?.tokens.find((t) => (p.ids || []).includes(t.id) && ctx.isMine(t));
+      if (mine && p.moved) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
+    }
     else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null });
     ctx.invalidate('tokens');
   });
@@ -321,13 +326,16 @@ export function mountTable(root, cid) {
     if (!p.tpl) ctx.remote.templates.delete(p.userId); else ctx.remote.templates.set(p.userId, { ...p.tpl, sceneId: p.sceneId });
     ctx.invalidate('areas');
   });
-  ctx.sendDrag = throttle((payload) => bus.send('drag', { cid: ctx.cid, sceneId: ctx.sceneId, ...payload }), 40);
+  ctx.sendDrag = throttle((payload) => bus.send('drag', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...payload }), 40);
   ctx.sendRuler = throttle((r) => bus.send('ruler', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...(r || {}), pts: r?.pts || null }), 50);
   ctx.sendTemplate = throttle((tpl) => bus.send('template', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, tpl }), 60);
 
   // ——— Камера ———
   ctx.camera = new Camera(viewport, L.world, () => {
     ctx.root.querySelector('[data-zoom-value]')?.replaceChildren(`${Math.round(ctx.camera.z * 100)}%`);
+    // Издалека подписи токенов сливаются в кашу — прячем их, кроме выделенных, своих и того, чей ход.
+    const far = ctx.camera.z * gridSize(ctx.scene?.grid || {}) < 34;
+    if (far) viewport.dataset.far = '1'; else delete viewport.dataset.far;
     updateEdges();
     saveCam();
   });

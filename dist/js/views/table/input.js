@@ -66,6 +66,7 @@ export function attachInput(ctx) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { vp.setPointerCapture(e.pointerId); } catch { /* */ }
     if (pointers.size === 2) {
+      clearTimeout(g?.lp);
       cancelGesture();
       const [a, b] = [...pointers.values()];
       g = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), z0: ctx.camera.z, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
@@ -84,6 +85,16 @@ export function attachInput(ctx) {
     const tool = TOOLS[toolId()] || TOOLS.move;
     g = { type: 'tool', tool, start, last: start, w0: w, moved: false, target, shift: e.shiftKey, alt: e.altKey, pointerType: e.pointerType };
     tool.down?.(ctx, g, w, e);
+    // Касание: долгое нажатие без движения — то же меню, что правая кнопка мыши.
+    if (e.pointerType === 'touch') {
+      const gg = g;
+      gg.lp = setTimeout(() => {
+        if (g !== gg || gg.moved || pointers.size !== 1) return;
+        gg.tool.cancel?.(ctx, gg); g = null;
+        ctx.panels.contextMenu(target, w, start);
+        navigator.vibrate?.(12);
+      }, 520);
+    }
   });
 
   vp.addEventListener('pointermove', (e) => {
@@ -124,6 +135,7 @@ export function attachInput(ctx) {
     vp.classList.remove('panning');
     if (!g) return;
     const gg = g;
+    clearTimeout(gg.lp);
     if (gg.type === 'pinch') { if (pointers.size === 0) g = null; return; }
     g = null;
     if (cancelled) { gg.tool?.cancel?.(ctx, gg); return; }
@@ -173,6 +185,8 @@ export function attachInput(ctx) {
       if (ctx.ui.selection.size) { ctx.select([]); return; }
       if (ctx.ui.viewAs) { ctx.setViewAs(null); return; }
       if (toolId() !== 'move') { ctx.setTool('move'); return; }
+      if (ctx.ui.widget) { ctx.panels.action('w-close'); return; }
+      if (ctx.ui.panel) { ctx.panels.action('side-close'); return; }
       return;
     }
     if (e.key === 'Enter' && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
@@ -181,7 +195,25 @@ export function attachInput(ctx) {
       if (ctx.ui.selectedLight) { ctx.panels.deleteLight(ctx.ui.selectedLight); return; }
       if (ctx.ui.selection.size) { ctx.panels.deleteTokens([...ctx.ui.selection]); return; }
     }
+    // Подгонка сетки с клавиатуры: стрелки двигают квадрат (Shift — на 10 px), [ и ] меняют размер.
+    if (toolId() === 'grid' && ctx.ui.calib) {
+      const k = ctx.ui.calib, step = e.shiftKey ? 10 : 1;
+      const d = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
+      if (d) { e.preventDefault(); k.x += d[0]; k.y += d[1]; applyCalibPreview(ctx); return; }
+      if (e.key === '[' || e.key === ']' || e.key === 'х' || e.key === 'ъ') { e.preventDefault(); k.size = Math.max(10, Math.round((k.size + ((e.key === ']' || e.key === 'ъ') ? 1 : -1) * (e.shiftKey ? 1 : 0.25)) * 4) / 4); applyCalibPreview(ctx); return; }
+    }
     if (e.key.startsWith('Arrow') && ctx.ui.selection.size) { e.preventDefault(); nudge(ctx, e.key); return; }
+    // Tab — следующий токен (Shift+Tab — предыдущий): выделить и показать.
+    if (e.key === 'Tab' && ctx.scene && !hasModal()) {
+      const list = ctx.scene.tokens.filter((t) => ctx.tokenShown(t) && t.kind !== 'item' && (ctx.isMasterView || t.kind === 'hero' || ctx.canControl(t)));
+      if (list.length) {
+        e.preventDefault();
+        const cur = list.findIndex((t) => ctx.ui.selection.has(t.id));
+        const next = list[(cur + (e.shiftKey ? -1 : 1) + list.length) % list.length];
+        ctx.select([next.id], { focus: true });
+      }
+      return;
+    }
     const k = e.key.toLowerCase();
     const map = { v: 'move', м: 'move', r: 'measure', к: 'measure', d: 'draw', в: 'draw' };
     if (map[k]) { ctx.setTool(map[k]); return; }
@@ -474,7 +506,7 @@ function finishDrag(ctx, g) {
   const items = g.drag.items;
   const moves = items.map((it) => ({ id: it.id, from: { x: it.x0, y: it.y0 }, to: positions.get(it.id) || { x: it.x0, y: it.y0 } }))
     .filter((m) => m.from.x !== m.to.x || m.from.y !== m.to.y);
-  const done = () => { ctx.dragging = null; ctx.ui.drag = null; ctx.sendDrag({ end: true, ids: items.map((i) => i.id) }); ctx.invalidate('tokens', 'overlay'); };
+  const done = (moved = false) => { ctx.dragging = null; ctx.ui.drag = null; ctx.sendDrag({ end: true, moved, ids: items.map((i) => i.id) }); ctx.invalidate('tokens', 'overlay'); };
   if (!moves.length) { done(); return; }
   const leader = ctx.scene.tokens.find((t) => t.id === g.drag.leader.id);
   // Ловушка на пути: токен останавливается на ней.
@@ -488,7 +520,7 @@ function finishDrag(ctx, g) {
   const threats = !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
   const commit = () => {
     commitMoves(ctx, moves, g.cost ?? null);
-    done();
+    done(true);
     if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader);
     if (threats.length) bus.send('opportunity', { cid: ctx.cid, tokenId: leader.id, foes: threats.map((t) => t.id) });
     checkPortal(ctx, leader, moves[0].to);
