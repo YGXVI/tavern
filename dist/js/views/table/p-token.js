@@ -116,10 +116,12 @@ export function tokenBarHTML(ctx) {
   const ally = t.kind === 'hero';
   const exact = c.settings.playersSeeHp === 'exact';
   const status = st.hpMax ? woundLabel(st.hp, st.hpMax) : '';
-  return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${ally ? esc(st.subtitle) : 'Противник · видно отсюда'}</small></span>${div}
+  const disp = ctx.dispositionOf(t);
+  const who = ally ? esc(st.subtitle) : disp === 'friendly' ? 'Союзник' : disp === 'neutral' ? 'Нейтральное существо' : 'Противник';
+  return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(ctx.nameOf(t, st))}</b><small>${who}${t.elevation ? ` · высота ${t.elevation} фт` : ''}</small></span>${div}
     ${ally || exact ? hpCell(st, false) : status ? `<span class="chip chip-md ${st.hp / st.hpMax <= 0.5 ? 'chip-negative' : 'chip-accent'}">${esc(status[0].toUpperCase() + status.slice(1))}</span>` : ''}
     ${st.conditions.length ? `<span class="tb-conds">${st.conditions.map((id) => { const cc = conditionById(id); return cc ? `<span class="status-badge" data-tip="${esc(cc.name)}">${icon(cc.icon, 13)}</span>` : ''; }).join('')}</span>` : ''}${div}
-    ${ally && t.characterId ? ib('sheet', 'book-open-01', 'Лист героя (просмотр)') : ''}${ib('ping-token', 'location-01', 'Пинг: показать отряду')}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
+    ${ally && t.characterId ? ib('sheet', 'book-open-01', 'Лист героя (просмотр)') : ''}${ib('target', 'target-02', ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью — увидят все', ctx.ui.targets?.has(t.id) ? 'aria-pressed="true"' : '')}${ib('ping-token', 'location-01', 'Пинг: показать отряду')}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
 }
 
 // ——— Хиты ———
@@ -258,6 +260,9 @@ export function tokenSettings(ctx, id, anchor) {
     return `<div class="token-settings"><div class="panel-header"><div class="titles"><div class="title">Настройки токена</div><div class="subtitle">${esc(st.name)}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
       <div class="panel-section">
         ${t.characterId ? '' : `<div class="field"><label>Имя на карте</label><div class="input"><input data-name value="${esc(t.name)}" maxlength="40"></div></div>`}
+        ${t.kind === 'foe' || (t.kind !== 'hero' && t.kind !== 'item') ? `<div class="field"><label>Отношение</label><div class="chips-wrap">${[['hostile', 'Враг'], ['neutral', 'Нейтрал'], ['friendly', 'Союзник'], ['secret', 'Скрытый враг']].map(([v, l]) => `<button class="chip chip-md ${(t.disposition || 'hostile') === v ? 'chip-accent' : ''}" data-disp="${v}">${l}</button>`).join('')}</div><span class="t-xs tertiary">«Скрытый враг» игроки видят союзником — для предателей.</span></div>
+        <div class="field"><label>Имя для игроков</label><div class="chips-wrap"><button class="chip chip-md ${!t.nameHidden ? 'chip-accent' : ''}" data-namehide="0">Показывать</button><button class="chip chip-md ${t.nameHidden ? 'chip-accent' : ''}" data-namehide="1">Скрыть — «Неизвестное существо»</button></div></div>` : ''}
+        <div class="field"><label for="tk-elev">Высота над полом</label><div class="row"><div class="input" style="width:110px"><input id="tk-elev" type="number" step="5" data-elev value="${t.elevation || 0}"><span class="suffix">фт</span></div>${[0, 10, 30].map((v) => `<button class="chip chip-md ${(t.elevation || 0) === v ? 'chip-accent' : ''}" data-elev-q="${v}">${v ? `${v} фт` : 'на полу'}</button>`).join('')}</div></div>
         <div class="field"><label>Размер</label><div class="chips-wrap">${SIZES.map((s) => `<button class="chip chip-md ${t.size === s.id ? 'chip-accent' : ''}" data-size="${s.id}">${s.name}${s.cells > 1 ? ` · ${s.cells}×${s.cells}` : ''}</button>`).join('')}</div></div>
         <div class="field"><label>Свет от токена</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
           ${t.light ? `<div class="row t-sm muted">Ярко ${t.light.bright} фт + тускло ${t.light.dim} фт</div>` : ''}</div>
@@ -288,6 +293,9 @@ export function tokenSettings(ctx, id, anchor) {
       const radius = Math.max(5, Number(box.querySelector('[data-aura-r]').value) || 10);
       upd((t, c) => setAura(t, c, { name, radius, color: 'magic', opacity: AURA_OPACITY, text: '' }));
     }
+    const dp = e.target.closest('[data-disp]'); if (dp) upd((t) => { t.disposition = dp.dataset.disp; });
+    const nh = e.target.closest('[data-namehide]'); if (nh) upd((t) => { t.nameHidden = nh.dataset.namehide === '1'; });
+    const eq = e.target.closest('[data-elev-q]'); if (eq) upd((t) => { t.elevation = Number(eq.dataset.elevQ) || 0; });
     const sw = e.target.closest('[data-aura-color]');
     if (sw) upd((t, c) => setAura(t, c, { ...t.aura, color: sw.dataset.auraColor }));
   });
@@ -308,6 +316,7 @@ export function tokenSettings(ctx, id, anchor) {
     if (e.target.matches('[data-aura-op]')) { const v = Number(e.target.value); upd((t, c) => setAura(t, c, { ...t.aura, opacity: v })); }
     if (e.target.matches('[data-aura-custom]')) { const v = e.target.value; upd((t, c) => setAura(t, c, { ...t.aura, color: v })); }
     if (e.target.matches('[data-aura-name-edit]')) { const v = e.target.value.trim(); if (v) upd((t, c) => setAura(t, c, { ...t.aura, name: v })); }
+    if (e.target.matches('[data-elev]')) { const v = Math.round((Number(e.target.value) || 0) / 5) * 5; upd((t) => { t.elevation = v; }); }
     if (e.target.matches('[data-aura-r-edit]')) { const v = Math.max(5, Number(e.target.value) || 5); upd((t, c) => setAura(t, c, { ...t.aura, radius: v })); }
   });
   box.addEventListener('change', (e) => { if (e.target.matches('[data-name]')) upd((t) => { t.name = e.target.value.trim() || t.name; }); });
@@ -356,6 +365,42 @@ export function duplicateTokens(ctx, ids) {
   if (copies.length) ctx.select(copies);
 }
 
+/** Ctrl+C: запомнить выделенные существа и предметы (героев не копируем). */
+export function copyTokens(ctx, ids) {
+  const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter((t) => t && !t.characterId);
+  if (!toks.length) { ctx.toast({ title: 'Героев не копируем', body: 'Скопировать можно существ и предметы', icon: 'copy-01' }); return; }
+  const cx = toks.reduce((a, t) => a + t.x, 0) / toks.length, cy = toks.reduce((a, t) => a + t.y, 0) / toks.length;
+  ctx.ui.clipboard = { items: structuredClone(toks), cx, cy };
+  ctx.toast({ title: `Скопировано: ${toks.length}`, body: 'Ctrl+V — вставить под курсором', icon: 'copy-01' });
+}
+
+/** Ctrl+V: вставить скопированное вокруг точки (по умолчанию — под курсором). */
+export function pasteTokens(ctx, at) {
+  const cb = ctx.ui.clipboard; if (!cb?.items.length || !ctx.scene) return;
+  const m = ctx.scene.map, made = [];
+  ctx.mutateScene((s) => {
+    for (const t0 of cb.items) {
+      const base = t0.name.replace(/\s\d+$/, '');
+      const t = { ...structuredClone(t0), id: uid('t-'), name: nextTokenName(s, base), x: Math.max(0, Math.min(m.width, at.x + (t0.x - cb.cx))), y: Math.max(0, Math.min(m.height, at.y + (t0.y - cb.cy))) };
+      s.tokens.push(t); made.push(t);
+    }
+  }, { label: 'Вставка', undo: (s) => { const ids = new Set(made.map((t) => t.id)); s.tokens = s.tokens.filter((t) => !ids.has(t.id)); }, redo: (s) => { s.tokens.push(...structuredClone(made)); } });
+  ctx.select(made.map((t) => t.id));
+}
+
+/** Отметить токен целью (у всех над ним появится прицел цвета игрока). */
+export function toggleTarget(ctx, id) {
+  const set = ctx.ui.targets || (ctx.ui.targets = new Set());
+  set.has(id) ? set.delete(id) : set.add(id);
+  bus.send('target', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [...set] });
+  ctx.invalidate('tokens');
+}
+export function clearTargets(ctx) {
+  ctx.ui.targets = new Set();
+  bus.send('target', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
+  ctx.invalidate('tokens');
+}
+
 // ——— Контекстное меню ———
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
@@ -375,6 +420,8 @@ export function contextMenu(ctx, target, w, screen) {
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
         { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', onClick: () => ctx.panels.openSheetFor(t) },
         !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
+        !t.characterId ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
+        { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) },
         'divider',
         { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) },
       ].filter(Boolean);
@@ -383,6 +430,8 @@ export function contextMenu(ctx, target, w, screen) {
       const items = [
         ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
+        !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,
+        ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
         { icon: 'location-01', label: 'Пинг', onClick: () => ctx.ping(t.x, t.y) },
         { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); ctx.ui.ruler = { pts: [{ x: t.x, y: t.y }, { x: t.x, y: t.y }], label: '' }; } },
       ].filter(Boolean);
@@ -397,6 +446,8 @@ export function contextMenu(ctx, target, w, screen) {
     { icon: 'location-01', label: 'Пинг', hint: 'Alt клик', onClick: () => ctx.ping(w.x, w.y) },
     ctx.isMaster ? { icon: 'view', label: 'Смотрите сюда', hint: '⇧ Alt клик', onClick: () => ctx.ping(w.x, w.y, { look: true }) } : null,
     ctx.isMasterView ? { icon: 'scroll', label: 'Поставить метку', onClick: () => ctx.panels.addPin(w, 'read-aloud', anchor) } : null,
+    ctx.isMasterView && ctx.ui.clipboard?.items.length ? { icon: 'copy-link', label: `Вставить (${ctx.ui.clipboard.items.length})`, hint: 'Ctrl V', onClick: () => pasteTokens(ctx, w) } : null,
+    ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
     { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); const p = ctx.snapCenter(w); ctx.ui.ruler = { pts: [p, p], label: '' }; ctx.invalidate('overlay'); } },
     ctx.isMasterView ? { icon: 'monster', label: 'Поставить существо', onClick: () => { ctx.ui.placeAt = w; ctx.panels.openBestiary(); } } : null,
     ctx.isMasterView ? { icon: 'fire', label: 'Свет здесь', onClick: () => { ctx.setTool('lights'); ctx.panels.addLight(w, 'torch', anchor); } } : null,

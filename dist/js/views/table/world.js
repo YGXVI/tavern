@@ -193,18 +193,19 @@ export function renderAuras(L, ctx) {
 }
 
 // ——— Токены ———
-function tokenMarkup(ctx, t, st, n, d) {
+function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const conds = (st.conditions || []).slice(0, 3).map((id) => { const c = conditionById(id); return c ? `<span class="tok-cond" title="${esc(c.name)}">${icon(c.icon, 12)}</span>` : ''; }).join('');
   const more = (st.conditions || []).length > 3 ? `<span class="tok-cond more">+${st.conditions.length - 3}</span>` : '';
   const src = srcOf(t.img);
-  const face = src ? `<img alt="" draggable="false" src="${esc(src)}">` : `<span class="tok-initials" style="--h:${hueOf(st.name)}">${esc(initials(st.name))}</span>`;
+  const face = src ? `<img alt="" draggable="false" src="${esc(src)}">` : `<span class="tok-initials" style="--h:${hueOf(name)}">${esc(initials(name))}</span>`;
   return `<div class="tok-ring">${face}</div>
     <svg class="tok-hp" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47.5" class="hp-track"/><circle cx="50" cy="50" r="47.5" class="hp-arc"/></svg>
     <span class="tok-badge init"></span>
     <span class="tok-badge hidden-b">${icon('view-off', 12)}</span>
     <span class="tok-badge down-b">${icon(t.kind === 'foe' ? 'skull' : 'sleeping', 12)}</span>
     <span class="tok-conds">${conds}${more}</span>
-    <span class="tok-name">${esc(st.name)}</span>`;
+    ${t.elevation ? `<span class="tok-badge elev" title="Высота ${t.elevation} фт">${t.elevation > 0 ? '↑' : '↓'}${Math.abs(t.elevation)}</span>` : ''}
+    <span class="tok-name">${esc(name)}</span>`;
 }
 
 export function renderTokens(L, ctx) {
@@ -221,12 +222,13 @@ export function renderTokens(L, ctx) {
     const n = size.cells;
     const d = n * s * 0.9 * (size.scale || 1);
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
-    const sig = `${t.img}|${st.name}|${(st.conditions || []).join(',')}`;
+    const name = ctx.nameOf(t, st);
+    const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
     if (!node) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
     }
-    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d); node.dataset.sig = sig; }
+    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; }
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
@@ -234,7 +236,15 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
-    node.className = `tok ${t.kind} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) ? 'can' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) ? 'can' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    // Прицелы: кто отметил этот токен целью.
+    const tg = ctx.targetersOf?.(t.id) || [];
+    const tgSig = tg.map((u) => u.id).join(',');
+    if (node.dataset.tg !== tgSig) {
+      node.querySelector('.tok-tg')?.remove();
+      if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
+      node.dataset.tg = tgSig;
+    }
     const entry = order.find((e) => e.tokenId === t.id);
     const ib = node.querySelector('.tok-badge.init');
     if (entry && ctx.c.combat.active) { ib.textContent = entry.init; ib.style.display = ''; } else ib.style.display = 'none';
@@ -243,7 +253,7 @@ export function renderTokens(L, ctx) {
     const arc = node.querySelector('.hp-arc');
     const frac = Math.max(0, Math.min(1, st.hp / Math.max(1, st.hpMax)));
     if (showHp && frac < 1) { arc.style.strokeDasharray = `${frac * 298.5} 400`; node.querySelector('.tok-hp').style.display = ''; } else node.querySelector('.tok-hp').style.display = 'none';
-    node.title = `${st.name}${showHp ? ` · ${st.hp}/${st.hpMax}` : st.hpMax ? ` · ${woundLabel(st.hp, st.hpMax)}` : ''}`;
+    node.title = `${name}${t.elevation ? ` · высота ${t.elevation} фт` : ''}${showHp ? ` · ${st.hp}/${st.hpMax}` : st.hpMax ? ` · ${woundLabel(st.hp, st.hpMax)}` : ''}`;
   }
   for (const node of [...L.tokens.children]) if (!seen.has(node.dataset.token)) node.remove();
 }

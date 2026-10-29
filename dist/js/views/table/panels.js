@@ -20,7 +20,7 @@ import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 
-const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-clear', 'dice-reroll', 'dice-roll']);
+const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll']);
 
 export class Panels {
   constructor(ctx) {
@@ -368,6 +368,8 @@ export class Panels {
   // ——— Хиты и смерть ———
   hpEditor(tokenId, anchor, mode) { T.hpEditor(this.ctx, Array.isArray(tokenId) ? tokenId : [tokenId], anchor, mode); }
   commitHp(tokenId, text) { return T.commitHpInput(this.ctx, tokenId, text); }
+  copyTokens(ids) { T.copyTokens(this.ctx, ids); }
+  pasteTokens(at) { T.pasteTokens(this.ctx, at); }
   applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
 
   deathSave(chId) {
@@ -695,6 +697,7 @@ export class Panels {
       case 'token-delete': T.deleteTokens(ctx, sel); break;
       case 'deselect': ctx.select([]); break;
       case 'ping-token': if (one) ctx.ping(one.x, one.y); break;
+      case 'target': if (one) T.toggleTarget(ctx, one.id); break;
       // Карточки сверху
       case 'save-roll': this.rollSave(b.dataset.id, b.dataset.token, b.dataset.adv || null); break;
       case 'save-auto': this.rollSave(b.dataset.id, b.dataset.token, null, true); break;
