@@ -26,6 +26,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm ci
+      - name: Проверить OpenSpec
+        env:
+          OPENSPEC_TELEMETRY: '0'
+        run: |
+          npm run spec:validate
+          npm run spec:validate:archive
       - run: npm test
 
   deploy:

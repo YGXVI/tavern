@@ -19,3 +19,8 @@
 
 ## Совместная работа Codex и Claude
 Начните с [AGENTS.md](AGENTS.md). Общий контекст: [видение](docs/vision.md), [словарь](docs/glossary.md), [данные](docs/data.md), [решения](docs/decisions.md), [статус и заявки](docs/status.md), [спецификации функций](docs/features/README.md). `CLAUDE.md` подключает тот же файл правил.
+
+
+## OpenSpec и команда
+
+Новые изменения ведём через OpenSpec 1.15.0. После pull: `npm ci`, затем `npm run spec:validate` и `npm test`. Интеграции Codex и Claude Code сохранены в репозитории. Обязательный процесс: [docs/open-spec.md](docs/open-spec.md); требования: [openspec/specs](openspec/specs/); [сообщение коллегам](docs/open-spec-message.md). Старые TASK-006–009 сохраняют историю; новые заявки — GitHub Issues.

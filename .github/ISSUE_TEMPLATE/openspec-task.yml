@@ -1,0 +1,57 @@
+name: Задача OpenSpec
+description: План и координация одного изменения
+title: "[TASK-ID] Краткий результат"
+body:
+  - type: textarea
+    id: identity
+    attributes:
+      label: Задача и участники
+      description: TASK-ID и номер Issue различаются. Имена и роли подтверждаются участниками.
+      value: |
+        TASK-ID:
+        Change: task-ID-slug
+        Автор (человек + агент/сессия):
+        Проверяющий (другой человек):
+        Интегратор (владелец/назначенный им):
+        Статус: proposed
+        Обновлено (дата, время +05:00):
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Результат и границы
+      description: Что меняется, что вне объёма, критерии приёмки.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: База, файлы и зависимости
+      value: |
+        Ветка:
+        Полный SHA свежего main:
+        Файлы/контракты:
+        Зависимые Issues/PR:
+        Пересечения и согласованный порядок:
+        Ссылка на change/план/PR:
+    validations:
+      required: true
+  - type: textarea
+    id: review
+    attributes:
+      label: Подтверждение плана
+      description: Ссылка на комментарий другого участника с подтверждением конкретной ревизии плана. Пока его нет, код не начинать; план готовить можно.
+      value: Пока не подтверждено.
+    validations:
+      required: true
+  - type: textarea
+    id: handoff
+    attributes:
+      label: Передача и проверки
+      value: |
+        Проверки и непроверенные сценарии:
+        PR / commit:
+        В main (подтверждение):
+        Опубликовано (Actions URL):
+        Ограничения / следующий шаг:

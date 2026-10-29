@@ -5,6 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 4173 --directory dist",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "openspec": "openspec",
+    "spec:setup": "openspec init --tools codex,claude --profile core --no-animation",
+    "spec:validate": "openspec validate --all --strict --no-interactive",
+    "spec:validate:archive": "openspec validate --archived --strict --no-interactive"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.15.0"
   }
 }
