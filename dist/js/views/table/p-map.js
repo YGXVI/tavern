@@ -51,9 +51,15 @@ function masterDoor(ctx, w, anchor) {
   });
 }
 
-function heroNear(ctx, p, cells = 1.6) {
-  const g = gridSize(ctx.scene.grid);
-  return ctx.scene.tokens.find((t) => ctx.isMine(t) && Math.hypot(t.x - p.x, t.y - p.y) <= g * (cells + (sizeById(t.size).cells - 1) / 2));
+/** Ближайший к точке свой герой на сцене (расстояние не ограничено) — его характеристики идут в проверки у двери. */
+function heroNear(ctx, p) {
+  let best = null, bd = Infinity;
+  for (const t of ctx.scene.tokens) {
+    if (!ctx.isMine(t)) continue;
+    const d = Math.hypot(t.x - p.x, t.y - p.y);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
 }
 
 function playerDoor(ctx, w, anchor) {
@@ -64,18 +70,17 @@ function playerDoor(ctx, w, anchor) {
   const perc = ch ? mod(ch.stats.wis) + (ch.skills.includes('perception') ? pb : 0) : 0;
   const dex = ch ? mod(ch.stats.dex) + (ch.classId === 'rogue' ? pb : 0) : 0;
   const str = ch ? mod(ch.stats.str) + (ch.skills.includes('athletics') ? pb : 0) : 0;
-  const far = hero ? '' : '<p class="t-sm negative">Подойдите к двери вплотную — открыть можно только рядом.</p>';
   if (w.open) {
-    const pop = popover(`<div class="door-pop">${head(w.name || 'Дверь', 'Открыта')}<div class="panel-section">${far}<button class="btn btn-secondary btn-block" data-d="close" ${hero ? '' : 'disabled'}>${icon('door-01', 18)}Закрыть</button></div></div>`, anchor, { placement: 'top' });
+    const pop = popover(`<div class="door-pop">${head(w.name || 'Дверь', 'Открыта')}<div class="panel-section"><button class="btn btn-secondary btn-block" data-d="close">${icon('door-01', 18)}Закрыть</button></div></div>`, anchor, { placement: 'top' });
     pop.node.addEventListener('click', (e) => { if (e.target.closest('[data-d="close"]')) { setWall(ctx, w.id, { open: false }); closePopover(); } });
     return;
   }
   if (w.locked) {
     const hasKnock = ch?.spells?.includes('Открывание');
     const pop = popover(`<div class="door-pop">${head('Заперто', w.name || '')}
-      <div class="panel-section"><p class="t-sm muted">Тяжёлый засов с той стороны и старый замок. Как попробуете?</p>${far}
-      <button class="btn btn-secondary btn-block" data-d="pick" ${hero ? '' : 'disabled'}>${icon('key-01', 16)}Взломать · Ловкость ${fmtMod(dex)}</button>
-      <button class="btn btn-secondary btn-block" data-d="force" ${hero ? '' : 'disabled'}>${icon('hand-grip', 16)}Выбить · Сила ${fmtMod(str)}</button>
+      <div class="panel-section"><p class="t-sm muted">Тяжёлый засов с той стороны и старый замок. Как попробуете?</p>
+      <button class="btn btn-secondary btn-block" data-d="pick">${icon('key-01', 16)}Взломать · Ловкость ${fmtMod(dex)}</button>
+      <button class="btn btn-secondary btn-block" data-d="force">${icon('hand-grip', 16)}Выбить · Сила ${fmtMod(str)}</button>
       ${hasKnock ? `<button class="btn btn-secondary btn-block" data-d="knock">${icon('magic-wand-01', 16)}«Открывание» <span class="chip chip-magic">2 круг</span></button>` : ''}
       <button class="btn btn-ghost btn-block" data-d="ask">${icon('bubble-chat-question', 16)}Спросить мастера про ключ</button></div></div>`, anchor, { placement: 'top' });
     pop.node.addEventListener('click', (e) => {
@@ -94,7 +99,7 @@ function playerDoor(ctx, w, anchor) {
     return;
   }
   const pop = popover(`<div class="door-pop">${head(w.name || 'Дверь', 'Закрыта, но не заперта')}
-    <div class="panel-section">${far}<button class="btn btn-primary btn-block" data-d="open" ${hero ? '' : 'disabled'}>${icon('door-02', 18)}Открыть</button>
+    <div class="panel-section"><button class="btn btn-primary btn-block" data-d="open">${icon('door-02', 18)}Открыть</button>
     <button class="btn btn-secondary btn-block" data-d="listen">${icon('volume-off', 16)}Прислушаться · Восприятие ${fmtMod(perc)}</button>
     <p class="t-xs tertiary">Открыть дверь — бесплатное взаимодействие в ваш ход</p></div></div>`, anchor, { placement: 'top' });
   pop.node.addEventListener('click', (e) => {
