@@ -1,0 +1,53 @@
+# Тесты на каждый пуш и пул-реквест. Пуш в main с зелёными тестами
+# сам выкатывается на https://rasputye.vercel.app.
+# Нужен секрет репозитория VERCEL_TOKEN (Settings → Secrets and variables → Actions).
+name: Тесты и деплой
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_Qqev4iL1dRGzPyREzHXGYMR6
+  VERCEL_PROJECT_ID: prj_PbZ0W6JxfcA7gpEeErQwNIYZcILB
+
+jobs:
+  test:
+    name: Тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  deploy:
+    name: Деплой на Vercel
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Проверить токен
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Нет секрета VERCEL_TOKEN. Добавьте его в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+      - name: Выкатить dist на rasputye.vercel.app
+        working-directory: dist
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@64.1.0 deploy --prod --yes --token "$VERCEL_TOKEN"
