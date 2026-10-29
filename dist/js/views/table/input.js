@@ -6,6 +6,7 @@ import { bus } from '../../core/store.js';
 import {
   cellOf, cellCenter, footprintAt, footprintCenter, findPath, reachable, gridDims, gridSize, key, unkey,
   cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap,
+  pathClear, smoothPath, pathCost, cellsAlong,
 } from '../../rules/geometry.js';
 import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
@@ -416,32 +417,40 @@ function dragTokens(ctx, g, w, e) {
     const { cols, rows } = dims(ctx);
     to = { c: clamp(to.c, 0, cols - n), r: clamp(to.r, 0, rows - n) };
     const opts = moveOpts(ctx, leaderTok);
-    let found = findPath(grid, from, to, opts);
-    let blocked = false;
-    if (!found && ctx.isMaster) { found = findPath(grid, from, to, { ...opts, walls: [], blocked: new Set() }); blocked = true; }
-    // Последний отрезок до свободной точки внутри клетки тоже не должен проходить сквозь стену.
-    if (found && !ctx.isMaster && found.cells.length && moveBlocked(footprintCenter(grid, to.c, to.r, n), target, ctx.scene.walls)) target = footprintCenter(grid, to.c, to.r, n);
-    if (!found) {
-      // Игрок упёрся: оставляем последнюю достижимую точку.
-      target = g.lastTarget || { x: lead.x0, y: lead.y0 };
-      to = footprintAt(grid, target.x, target.y, n);
-      found = findPath(grid, from, to, opts) || { cells: [from], cost: 0 };
-      blocked = true;
+    const start = { x: lead.x0, y: lead.y0 };
+    const clear = (a, b) => pathClear(grid, a, b, { walls: opts.walls, blocked: opts.blocked, n });
+    let pts = null, blocked = false;
+    if (clear(start, target)) pts = [start, target];
+    else {
+      // Прямо нельзя: маршрут по клеткам в обход стен, затем натягиваем его в прямые отрезки.
+      const found = findPath(grid, from, to, opts);
+      if (found) {
+        const end = clear(footprintCenter(grid, to.c, to.r, n), target) ? target : footprintCenter(grid, to.c, to.r, n);
+        target = end;
+        pts = smoothPath([start, ...found.cells.slice(1).map((cc) => footprintCenter(grid, cc.c, cc.r, n)), end], clear);
+        if (pts.at(-1) !== end) pts.push(end);
+      } else if (ctx.isMaster) { pts = [start, target]; blocked = true; }
+      else {
+        // Игрок упёрся: оставляем последнюю достижимую точку.
+        target = g.lastTarget || start;
+        pts = g.lastPts || [start, target];
+        blocked = true;
+      }
     }
-    g.lastTarget = target;
+    g.lastTarget = target; g.lastPts = pts;
     const dx = target.x - lead.x0, dy = target.y - lead.y0;
     for (const it of g.drag.items) positions.set(it.id, it.id === lead.id ? target : clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n));
-    const feet = found.cost * (grid.feet || 5);
+    const cells = Math.round(pathCost(grid, pts, { difficult: opts.difficult, rule: opts.rule, n }));
+    const feet = cells * (grid.feet || 5);
     const left = movementLeft(ctx, leaderTok);
     let label = `${feet} фт`;
     let over = false;
     if (left !== null) { const rest = left - feet; over = rest < 0; label = over ? `${feet} фт · больше скорости на ${-rest} — рывок?` : `${feet} фт · осталось ${rest}`; }
-    else if (found.cells.length > 1) label = `${feet} фт · ${found.cells.length - 1} кл.`;
+    else if (cells > 0) label = `${feet} фт · ${cells} кл.`;
     if (blocked && ctx.isMaster && feet) label += ' · сквозь стену';
-    const mid = found.cells.slice(1, -1).map((cc) => footprintCenter(grid, cc.c, cc.r, n));
-    path = { pts: [{ x: lead.x0, y: lead.y0 }, ...mid, target], label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
+    path = { pts, label: feet ? label : '', over, blocked: blocked && !ctx.isMaster, cost: feet };
     g.cost = feet;
-    g.path = found;
+    g.path = { cells: cellsAlong(grid, pts, n) };
   }
   ctx.dragging = positions;
   ctx.ui.drag = { path };
