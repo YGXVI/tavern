@@ -1,0 +1,5464 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "id": "dndsu:spell:1",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "hellish-rebuke",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hellish-rebuke",
+      "evidenceHash": "768068d2234afa6420578f74ebdaa05d2aeee4d452a727d42f6eade65a70cd91",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d10",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:2",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "antipathy-sympathy",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/antipathy-sympathy",
+      "evidenceHash": "889657119cb3cbf97f22de36c42623d46db2588c70bbd99bb5b4bda7fde08944",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:3",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:5",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "holy-aura",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/holy-aura",
+      "evidenceHash": "a89bd4d9ae94d19f7a0dfbe6bf8a1d24fee36b14231e169ef7cceed8e296cb59",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:7",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "silent-image",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/silent-image",
+      "evidenceHash": "e1b376e059185a5b9a24b961398e3c8253cfb0f4c0d513ee3fd9e14763d3e54c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:8",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "pass-without-trace",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/pass-without-trace",
+      "evidenceHash": "e4d5b7826236818e691393f973c30953ba4156512182546384fe738bb589e44d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:9",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "bless",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/bless",
+      "evidenceHash": "d13c61e03b2f8710ffda0acab999056f4c33201fa45157fdf97e23823237f63a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:10",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "divine-favor",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/divine-favor",
+      "evidenceHash": "dbc3510b3c3c266820afd7c3190d39e6661f9e9851a2bdfc7bc9481f8063409a",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "extra damage on each weapon hit; weapon damage excluded"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:11",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "spiritual-weapon",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/spiritual-weapon",
+      "evidenceHash": "ade69d67717ed98ac728067e31bba8b3aa876328eb89a64b4a4290198b3c455d",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "force",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 2,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; creation or later bonus action",
+          "modifier": true
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:12",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "divine-word",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/divine-word",
+      "evidenceHash": "702519dfd7d151f3b8d3c37688ef8c25dd2c76a4ce52c6826914b5fb5e9b304d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:13",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "acid-splash",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/acid-splash",
+      "evidenceHash": "62279ad2c881c14b00353bb12400f132b69d78e36f6d891da4b78b4d501df304",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d6",
+          "type": "acid",
+          "scaling": "character",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:14",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:15",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:16",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:17",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "faithful-hound",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/faithful-hound",
+      "evidenceHash": "27cf840226db5329fdaa308c70fb5db49d9dc62c2c8df1e52dd45a0c4510d40f",
+      "status": "manual_review",
+      "reason": "conditional_target_detection_and_attack"
+    },
+    {
+      "id": "dndsu:spell:18",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "continual-flame",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/continual-flame",
+      "evidenceHash": "4e6599729fc235cabfb3690b894bd4c249fc49422653ab377fb4f96559bebfdf",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:19",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "dream",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dream",
+      "evidenceHash": "b41040d5aaad3d86b58201fd00fa88cdc7b4c4793f1da29585fdc030c6a0bb7d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:20",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "see-invisibility",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/see-invisibility",
+      "evidenceHash": "9f6baf16e43585f1767410efd037f98136605f627991e54a41cc28d47896cd06",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:21",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "control-water",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/control-water",
+      "evidenceHash": "26c3a15d399267430c9987a4f41fa740644498bf22fce5ded5a0888eea4844dd",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:22",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "control-weather",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/control-weather",
+      "evidenceHash": "5ba6bac1aa87d034beb72271bb3acbaec99791e9b786e2a03377621c80ced97c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:23",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "suggestion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/suggestion",
+      "evidenceHash": "fc9c16e8e2fab7992b1d03f7d791c99ccbcb84bf1cd8acc28aff978fbf0f70b0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:24",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "revivify",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/revivify",
+      "evidenceHash": "eefbbe6c49031bbc6c4b426a71f358dbb031ef69cc3ebf8a4da87679d2fdc998",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:25",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "thunderwave",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/thunderwave",
+      "evidenceHash": "57fe5dd88f578c7a40c78cce48afa3146c7c2da430abcce592a92aa34e8bc5b7",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d8",
+          "type": "thunder",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:26",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "mage-hand",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mage-hand",
+      "evidenceHash": "e5f5e1fb1e1fc814fb20b53ce1ba8658c6b11399bae421305156c8d09751ca8f",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:27",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "magic-missile",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/magic-missile",
+      "evidenceHash": "62fbbf4469f2a985d0f5ed09de943c645f33e5288be1e76813a25cbc2f1b1d79",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4+1",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one dart actually dealing damage; not an attack roll"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 3,
+        "perSlot": 1,
+        "kind": "dart"
+      },
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:28",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "magic-mouth",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/magic-mouth",
+      "evidenceHash": "3b2840e60157d476f7ed194ed951040de8bcad4bdc0a0e64adefb3713cb957c2",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:29",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "arcane-lock",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/arcane-lock",
+      "evidenceHash": "da5ea2249b4c317827d6a627cbeafa856711262d74a0070753bab64ece84e690",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:30",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "magic-jar",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/magic-jar",
+      "evidenceHash": "c8167b842a20baddddc9c55d8a0e707af0fce7572adaabd185679aa11ad634d8",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:31",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:32",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "phantasmal-killer",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/phantasmal-killer",
+      "evidenceHash": "16e5b8a4b7f853dd16dce2256472673696303a9747d86dd8bc29035674e66296",
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d10",
+          "type": "psychic",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "failed end-of-turn save while frightened"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:33",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "resurrection",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/resurrection",
+      "evidenceHash": "59bfb6e19ed06333cb9e88f39590e57d530630e0d9740e865dd23877b5bdf036",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:34",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "incendiary-cloud",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/incendiary-cloud",
+      "evidenceHash": "8d0dbc23de668c19e1ae29d46e4c37851488faac37069233e319582adb608bb4",
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d8",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "appearance, first entry on turn, or end turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:35",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "animate-dead",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/animate-dead",
+      "evidenceHash": "2b668e07e06d2a2e4bf1db8de1f78bad30174ca6b6247db5f8641b3f8c4a98f7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:36",
+      "baseLevel": 9,
+      "concentration": true,
+      "apiIndex": "gate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/gate",
+      "evidenceHash": "d25494f7e26c957996db5f2755f75c8ef161082b1ee49b15df17ebedc1e79bfa",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:37",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:38",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "greater-invisibility",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/greater-invisibility",
+      "evidenceHash": "67fbf367568fdba57ac199f68b7466434334138ac39dc36a4616572cf967965c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:39",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "greater-restoration",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/greater-restoration",
+      "evidenceHash": "6c1153748fe9a61631ed3f426575bfa7d61a9ef3a69927474ea189baafef4a2c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:40",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "augury",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/augury",
+      "evidenceHash": "c4c624ec35ff72650f94a5469705a9af988e5d1faffe001a93958680ef38d6f4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:41",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "gaseous-form",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/gaseous-form",
+      "evidenceHash": "5f3bd0b14dfe2a72ae3bace2ed0091c9ef231e4a5888d538c2d781e4aa98e511",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:42",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "heroism",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/heroism",
+      "evidenceHash": "cbfcc30290fcea22ff8915619877fdd81c856315a96672ce020078da8177d1b0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:43",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "giant-insect",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/giant-insect",
+      "evidenceHash": "fb0b8468a099906eee7be9c1fe8a4a429cebebca14ea59dbe27117524cb9e361",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:44",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "hypnotic-pattern",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hypnotic-pattern",
+      "evidenceHash": "00481665eed46fdd1d852b48416671bd0cb6312f290ee6e02f8944ce2dfef0a0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:45",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "blindness-deafness",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/blindness-deafness",
+      "evidenceHash": "2cf6305373ae3376fa80afd3aaab8b041380493d18b813d986d83ac980a1d3ee",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:46",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:47",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:48",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "flame-blade",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/flame-blade",
+      "evidenceHash": "ddb68f5552472a26d9b91872266785efae356d91af04cb2891e96c1a35cddfe0",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 2,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack using action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:49",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "ice-storm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/ice-storm",
+      "evidenceHash": "5e8846ea8dddebb02c98127ce98a0f2b50dca89f1890ee083b4ad6fd1d79a5ad",
+      "components": [
+        {
+          "key": "impact",
+          "base": "2d8",
+          "type": "bludgeoning",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        },
+        {
+          "key": "cold",
+          "base": "4d6",
+          "type": "cold",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:50",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:51",
+      "baseLevel": 9,
+      "concentration": true,
+      "apiIndex": "storm-of-vengeance",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/storm-of-vengeance",
+      "evidenceHash": "ef691f178a9b3506b7a6d09d1e7b1b0d2a09cde9b6febcb021beba7fd4962d02",
+      "status": "manual_review",
+      "reason": "round_specific_damage_types"
+    },
+    {
+      "id": "dndsu:spell:52",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:53",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "move-earth",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/move-earth",
+      "evidenceHash": "7c081f7bbdeae2000d59676f8c8ab65515530d8c6ad39cf2bbb397809fad39fb",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:54",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "clone",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/clone",
+      "evidenceHash": "4ea7c641299a495cd87065040f5975c17ecb02cecde227666280426476a4aafa",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:55",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "demiplane",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/demiplane",
+      "evidenceHash": "034bc2893961cc461e34184782b59546c2827d9aa9aaf3f9abff920e34ac0586",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:56",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:57",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "arcane-hand",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/arcane-hand",
+      "evidenceHash": "602a37f4e3a12d0d0980b28a7724eb0bf1339957c9f73485691a691ebad9f8ef",
+      "status": "manual_review",
+      "reason": "mode_specific_dice_and_modifier"
+    },
+    {
+      "id": "dndsu:spell:58",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "daylight",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/daylight",
+      "evidenceHash": "a6978b4dec89cbd0a4b4cd81599015eab449c3395091d6648d12d3c3085062db",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:59",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:60",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "mage-armor",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mage-armor",
+      "evidenceHash": "f4082b6002ffc4c38b2b2409e4504a7e9326c616207fd691e4600f74124d59e0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:61",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "tongues",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/tongues",
+      "evidenceHash": "a5b0c152522c07cd5a90652ba38c7da8af6aaa051ccace7dad34036a049542d4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:62",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "shatter",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shatter",
+      "evidenceHash": "782802a9b86547bbf0857aec0f3a8ffa7899f0d6b0c1492a29614d9312898c52",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d8",
+          "type": "thunder",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:63",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "poison-spray",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/poison-spray",
+      "evidenceHash": "c6cf97688d0fc2090527c78cc369a26e5f8795da8371facc02571457b1afc8e0",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d12",
+          "type": "poison",
+          "scaling": "character",
+          "increment": "1d12",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:64",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "etherealness",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/etherealness",
+      "evidenceHash": "8ee5086bfc3f27bc16f2e7533b461a1df1ba7d5ee7398afb739a0ab0dab7aff4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:65",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "tree-stride",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/tree-stride",
+      "evidenceHash": "be673308397b945a6a214f321a1695217452dc74d9b19509bb397711d60ad038",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:66",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "shocking-grasp",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shocking-grasp",
+      "evidenceHash": "53ad89f166f2b9e4000000acaacd79fd5736bf72d655a00f9e91aca972d1d340",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "lightning",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:67",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "black-tentacles",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/black-tentacles",
+      "evidenceHash": "cd1deee996fd1cd69abf7fa72f25a68bd73f144cb856c9430019fed76a576e58",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry/start turn failing save OR start turn already restrained (not both)"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:68",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:69",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "shield-of-faith",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shield-of-faith",
+      "evidenceHash": "12bb43190c966a8d357cf0edf0dfdcafbe2de7dc3154694c2a73073c2d22c33b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:70",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "shield",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shield",
+      "evidenceHash": "b41db5a7e392778a06f08978302b1e30b5899ea729a8baba2c80eb778b5d4d9c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:71",
+      "baseLevel": 0,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:72",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "animal-friendship",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/animal-friendship",
+      "evidenceHash": "cacec923510b3db97e8e9b6d1ab1ec3e19b7ba2bda4fe5338fac23ed5b2be5f0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:73",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "shillelagh",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shillelagh",
+      "evidenceHash": "ee0fa627b5886a7305f0f127b9dbcc155d22004fa882ce1788f065397d70efb0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:74",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "barkskin",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/barkskin",
+      "evidenceHash": "897b4a5f770bd1da1446f292254d2dbf6054119b9b7c0c7dab29e11f72df9707",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:75",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "spirit-guardians",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/spirit-guardians",
+      "evidenceHash": "2dfeafe6c4f9001c36c9a51b5bbc6c7c27ea3d8c6d7c104fa6a156c7b0c089a1",
+      "status": "manual_review",
+      "reason": "alignment_selected_damage_type"
+    },
+    {
+      "id": "dndsu:spell:76",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:77",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "spike-growth",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/spike-growth",
+      "evidenceHash": "021c2cdbf2705af1da21108cbb3c88e7bac7f44d6dbd20dae3c5b826b303f646",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d4",
+          "type": "piercing",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one 5-foot segment of movement into/within area; no slot scaling"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:78",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "goodberry",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/goodberry",
+      "evidenceHash": "372f24ea53f4a4a2ae6e548ce22816ccdb4443bfbae9945b452247081970a032",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:79",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:80",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "thaumaturgy",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/thaumaturgy",
+      "evidenceHash": "440b16ed3e0b6d7d609c7bf23beffd1fddd5e4a49e1b61aea3cf61ee21e35e62",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:81",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:82",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "programmed-illusion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/programmed-illusion",
+      "evidenceHash": "7e56ef40c233ef263d7699e556ea86dcce284472856855f188bb252d876462b6",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:83",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "slow",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/slow",
+      "evidenceHash": "c7de15aba0ff4e534fffec2388626755f0893e9c0662d41871c47673d2f1965e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:84",
+      "baseLevel": 8,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:85",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:86",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:87",
+      "baseLevel": 7,
+      "concentration": true,
+      "apiIndex": "delayed-blast-fireball",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/delayed-blast-fireball",
+      "evidenceHash": "a11817af7bf691af2fb4951efa9375dd8f1ea259aa64c06d6c6d70193c44c783",
+      "status": "manual_review",
+      "reason": "time_accumulation_and_early_detonation"
+    },
+    {
+      "id": "dndsu:spell:88",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "water-walk",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/water-walk",
+      "evidenceHash": "85dc936bc7ede8e0974b8235c9d7ee2d190aceb0afee956edd2fae7707184619",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:89",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "forbiddance",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/forbiddance",
+      "evidenceHash": "3d014534e9c4b1d5c653f40f66028ffdd1443ecd0d67e2725cc074f0c1b17931",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:90",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "wind-walk",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wind-walk",
+      "evidenceHash": "27b4c622f421f995dffc2591492ea8afc52b1451bfe12d8c701136eb2254eebe",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:91",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "prestidigitation",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/prestidigitation",
+      "evidenceHash": "6aea4908b57a3ac9065a74c9f17f7a1457dd96cf18e968f67d2b85ec997915b9",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:92",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "contagion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/contagion",
+      "evidenceHash": "ed78027185669d0ac18e2a7e30df8f9ba8e9a03bbf6b5fd77fe5c503ed931ddd",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:93",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "mislead",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mislead",
+      "evidenceHash": "9c67b76151b1cc11fb1743e887b1f5010b34d4c0088c163d49c163ab20051057",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:94",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "spare-the-dying",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/spare-the-dying",
+      "evidenceHash": "beb621d93cb7f313bdbb3b2f2c610c8b1970e5a22978eab36afe7c7b92f0e8d8",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:95",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "plane-shift",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/plane-shift",
+      "evidenceHash": "71b504ed0eb3af7205c42b7f588f311dff6dc77c6856f20302481a9433b7e0a4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:96",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "blight",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/blight",
+      "evidenceHash": "abae86a7e7d341eb7552301945ae122df882cc85b0d47c9d8d328f31d505e84a",
+      "status": "manual_review",
+      "reason": "plant_max_damage_and_target_immunity"
+    },
+    {
+      "id": "dndsu:spell:97",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "imprisonment",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/imprisonment",
+      "evidenceHash": "52d87386fd037c3a4a7f95325d7e636e3b3b1ce8477ec1f17d7c5a4e5036ad0b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:98",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "sleep",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sleep",
+      "evidenceHash": "f1f7378ee9d3791ea1b46454c1a30c76422dbf9fd506f2f45c6d02e2c26baeb7",
+      "status": "manual_review",
+      "reason": "HP_pool_not_damage"
+    },
+    {
+      "id": "dndsu:spell:99",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "protection-from-evil-and-good",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/protection-from-evil-and-good",
+      "evidenceHash": "bab3b851f6a8b5e6c81dc8bb886c65245da43adfdc4519f505302e2ed8798713",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:100",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "haste",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/haste",
+      "evidenceHash": "4334d716266c0dc00a735095cd9023efa50caaa28a7105baf828b66a1e318391",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:101",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:102",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "calm-emotions",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/calm-emotions",
+      "evidenceHash": "b2784f1ab04d86d12d0028b85ad99ff0dd0a2268f5d210db2ffe71a47863449e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:103",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "enhance-ability",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/enhance-ability",
+      "evidenceHash": "158be992fe813dd76d99710b66016bf5fa7b2e49530f0c7ee6d091178355bfb4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:104",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "death-ward",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/death-ward",
+      "evidenceHash": "b961ed6fe17584050cb2c9430e14f6df56dcf18b720a5b3642b43a11af66fdc8",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:105",
+      "baseLevel": 0,
+      "concentration": true,
+      "apiIndex": "guidance",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/guidance",
+      "evidenceHash": "9156af0d774f0ba238e25d5fb58901a1dac86230b1e609eaf05a470e2e1837c7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:106",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "protection-from-energy",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/protection-from-energy",
+      "evidenceHash": "a875b0c6c6ae90adb064f71b0b152bde3a3e466b4508e74a94bae10631c45cd0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:107",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "forcecage",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/forcecage",
+      "evidenceHash": "1c1e26bb955fab244ce29eb49e9d5bc34170ac7a5f05af876eff8e16d1cef4f7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:108",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "protection-from-poison",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/protection-from-poison",
+      "evidenceHash": "15a94dfc89396afa0be79fba042a481adecc5be56ba2d20872a5697ce98f695e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:109",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "fear",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fear",
+      "evidenceHash": "91a45f22199006efbdd67a79f32be5eebb152baa46b61eea961085f3432e9661",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:110",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "hold-monster",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hold-monster",
+      "evidenceHash": "c777f4789f9edc91158be5a259490eda74e87b8335663ddd46dc7b69ea59c5c2",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:111",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "earthquake",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/earthquake",
+      "evidenceHash": "2f7bb9355f2d58ae3b891806e58bde42d33e2110f656eeff512789dc44b471c6",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:112",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "vicious-mockery",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/vicious-mockery",
+      "evidenceHash": "56dc070a137118caf2b2bd102fa319ed9b7c51429fc4a98fbf64d4efa0a19da3",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d4",
+          "type": "psychic",
+          "scaling": "character",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:113",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "stinking-cloud",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/stinking-cloud",
+      "evidenceHash": "87ec5d910d726837bae219ddb83644b6136f2b320a11c4f7b551ff95a54df5e8",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:114",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "symbol",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/symbol",
+      "evidenceHash": "0abb0ab904b05663f4ec8fb78e538d1d900a237152389a473c9664c2cb373256",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:115",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "legend-lore",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/legend-lore",
+      "evidenceHash": "b5e966064d3855f3a74716a6a812f622e20690e3a8c483f04b519f75e648e3b0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:116",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "banishment",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/banishment",
+      "evidenceHash": "749adb8b2344412f9035b32fd1d431aa674c5eb12ea346c884e8acf3a21fbb83",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:117",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:118",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "fabricate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fabricate",
+      "evidenceHash": "34581852e9c45760ed3a053e49b6859ca389280449b3d5046b707492b46fc3a1",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:119",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "modify-memory",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/modify-memory",
+      "evidenceHash": "b203bf45bf6d8972f5464662eb2892de29fc579443d2c43a0ccfd7cfb90bbf66",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:120",
+      "baseLevel": 7,
+      "concentration": true,
+      "apiIndex": "reverse-gravity",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/reverse-gravity",
+      "evidenceHash": "1f077fd6df774a962e39f4d741ad2318ea1760a5e7d07efed3213941a6697336",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:121",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "stone-shape",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/stone-shape",
+      "evidenceHash": "8014ef700970f9188d15b839277f7ba3b0db0604ee8010e4781dca3cefdf8f9d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:122",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "sequester",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sequester",
+      "evidenceHash": "e11d7a18ea405508f6c52685e1ed472d0c788f6a7487864f8c08994637af9196",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:123",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "druidcraft",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/druidcraft",
+      "evidenceHash": "319eaa5a1fa62aa6a4039c82e301888a6649516548a6dca9cdff8d105f5e3f1a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:124",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "wish",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wish",
+      "evidenceHash": "a6a64ad7364e15ec5d6ae7d6c5fbaedb5b96b25257031ca604300ddbaea08f0d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:125",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "true-resurrection",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/true-resurrection",
+      "evidenceHash": "9a233d11c79ca1dc10ae263d8fc183fbf34b53d083b64270100e15ca6644ecb7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:126",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "true-seeing",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/true-seeing",
+      "evidenceHash": "7bab65096b4fb4efccbb5721d4bf71e29191103de6fee23ff0d9bb69c32ff922",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:127",
+      "baseLevel": 9,
+      "concentration": true,
+      "apiIndex": "true-polymorph",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/true-polymorph",
+      "evidenceHash": "904f8c10c7aa5a77d769c4eed45e9ce5b1705d54422359743a956a4cabe8e8f1",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:128",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:129",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "stoneskin",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/stoneskin",
+      "evidenceHash": "cdd791c0d10423eef8ff0176c347dae50365bd9f06ecfb65a7ca2d024335cabe",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:130",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "wall-of-stone",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wall-of-stone",
+      "evidenceHash": "62718cd72e8c3e97ceff6e82546c9a590587e5d648120b9f75aea9be390ed28e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:131",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "branding-smite",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/branding-smite",
+      "evidenceHash": "f031c40ab21b6b377cb0f7aaa4e35e471085bf6a2ca7615233b3ac4e2208979e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:132",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "counterspell",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/counterspell",
+      "evidenceHash": "5b6f3c83e675575d10b49051934eab102392956496796c038524e5f33589f63e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:133",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "cone-of-cold",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/cone-of-cold",
+      "evidenceHash": "19ac7d01d812901800345e12aeec3defdb7f50b4a58c8e4b07b27cd35aed80bc",
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d8",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:134",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:135",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:136",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "circle-of-death",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/circle-of-death",
+      "evidenceHash": "ed8bf354bc1099245991042161907b8c1b202c1c94474042ad29d2c1e589aaf8",
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "2d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:137",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "teleportation-circle",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/teleportation-circle",
+      "evidenceHash": "c28fc81c72696a359b9b264c950f18590fd47df08892d31f810924793840ab3b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:138",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "maze",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/maze",
+      "evidenceHash": "2de51de7f0552e414d5112694d80dddabdb7b370541503505c87de19357ee148",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:139",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "levitate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/levitate",
+      "evidenceHash": "62f2ef67b4cb5bba7543778384a8fa5b39190a842139cfa02f15a7e782a1c1a3",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:140",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "chill-touch",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/chill-touch",
+      "evidenceHash": "9988e916ec32af73e9bb5a7af06baa5ccdd644900577d355dbb364d6186b708f",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "necrotic",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:141",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "wall-of-ice",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wall-of-ice",
+      "evidenceHash": "a2d32d7091d322d0e2f98debd69c546ee1070ecc71689c983bda21a3f03b909b",
+      "components": [
+        {
+          "key": "appearance",
+          "base": "10d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "2d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, save"
+        },
+        {
+          "key": "air",
+          "base": "5d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first passage through destroyed section on turn, save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:142",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:143",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:144",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "healing-word",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/healing-word",
+      "evidenceHash": "0c23ec446fefdae9dbb0f3de2c3bb1ffa1a8031273cfc6ae88c4b98088c8df98",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:145",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "cure-wounds",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/cure-wounds",
+      "evidenceHash": "2f86eda434b060d697e048b016a42953fcdf4d06d2ed647782f04a80e562e29c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:146",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "moonbeam",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/moonbeam",
+      "evidenceHash": "05ea21c4f691f03a9abef99ba8a741323066fc440d3e0d3dbe4ecf29ce054a2d",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d10",
+          "type": "radiant",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:147",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:148",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "ray-of-enfeeblement",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/ray-of-enfeeblement",
+      "evidenceHash": "c3ff3ecd485b7cd0c8d5c24c0a2c2b202e1d6c06dc64572a2943a5bfa472a988",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:149",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "ray-of-frost",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/ray-of-frost",
+      "evidenceHash": "ee032f4ffc16cd9cb6b61f23dc8ab7f6e608748a5e416b39b0f8c97160cb7d0e",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "cold",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:150",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:151",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "arcane-eye",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/arcane-eye",
+      "evidenceHash": "99938a88f1d6eff43d7767617dac711b6dac1280eac0fb3bae83aa6aaec74007",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:152",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "magic-circle",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/magic-circle",
+      "evidenceHash": "2542f73d88d876dc0fdb9e7a26654c1169533419673607c924d6dcbc017ec510",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:153",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "magic-weapon",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/magic-weapon",
+      "evidenceHash": "6a29e9654b86036249188afa7a9b65d9dfd1d7140809b3e8d783f9a4f9da77cf",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:154",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "minor-illusion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/minor-illusion",
+      "evidenceHash": "588a18288f140be717c309facb486d5d3935b1fd5f5f6f5289d47bc9d054c6a1",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:155",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "lesser-restoration",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/lesser-restoration",
+      "evidenceHash": "842434814f0c6815028d4fb836cc35b6ba370b0051726c45a178c9dd5d588203",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:156",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:157",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "disguise-self",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/disguise-self",
+      "evidenceHash": "1524c42c7b37b30d9ee4b8a486637d0fcecbb5de46b56b4ebd6e8e0966f7dcd6",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:158",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "beacon-of-hope",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/beacon-of-hope",
+      "evidenceHash": "8bdba50d5572dda5a9800c3d770ddd400ff6f31d2f8aa96dcaaccd0649430b67",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:159",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "acid-arrow",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/acid-arrow",
+      "evidenceHash": "8058f1c62b68b9ae1ede332fe616ab17be57ee9f8484c621db1d7786adbcfa36",
+      "components": [
+        {
+          "key": "initial",
+          "base": "4d4",
+          "type": "acid",
+          "scaling": "slot",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "initial successful attack; miss deals half rolled initial damage instead"
+        },
+        {
+          "key": "later",
+          "base": "2d4",
+          "type": "acid",
+          "scaling": "slot",
+          "increment": "1d4",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "end of target next turn, only after initial hit"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:160",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:161",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "blink",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/blink",
+      "evidenceHash": "215bec3ca128a1b510f291a6e8522c79bfd10dc6aca4f5207dc050af72b28f8d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:162",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "sleet-storm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sleet-storm",
+      "evidenceHash": "9cb642802e4620110d85bd5b16a8b8ea86ec1fecd051e5cfc590ff91bcd7d852",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:163",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "meteor-swarm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/meteor-swarm",
+      "evidenceHash": "893190eb27f479d4d3fba48a05e36bcf5a99761f7e7446503402bca9b65331d9",
+      "components": [
+        {
+          "key": "fire",
+          "base": "20d6",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        },
+        {
+          "key": "impact",
+          "base": "20d6",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one damage event"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures.",
+        "A creature in overlapping bursts is affected only once, not once per meteor."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:164",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "hunters-mark",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hunters-mark",
+      "evidenceHash": "fc15904ab9a92648f4c8af2c84049e042a86f3f6c99736d229ccd9ebe7e2cc59",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:165",
+      "baseLevel": 0,
+      "concentration": true,
+      "apiIndex": "true-strike",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/true-strike",
+      "evidenceHash": "28b042695254851ec211a9b03e7da2758f73d1715c8d6be897bcae783fef3dfb",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:166",
+      "baseLevel": 7,
+      "concentration": true,
+      "apiIndex": "arcane-sword",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/arcane-sword",
+      "evidenceHash": "447cd060947530c033282a5fb6c3057627c3fc04789c11c68165d87fa060789a",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; later bonus action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:167",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "hallucinatory-terrain",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hallucinatory-terrain",
+      "evidenceHash": "994108a99b383afa8972d14d90ab9d8be24fa9816e5fd0181e759123725b7d2b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:168",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "eldritch-blast",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/eldritch-blast",
+      "evidenceHash": "0f1ca8f28b4cef911bce0393c40030c48729955e0335d34adbe798a18035a38f",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d10",
+          "type": "force",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one successful separate ranged spell attack; invocations excluded"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 1,
+        "perTier": 1,
+        "kind": "attack"
+      },
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:169",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "mass-suggestion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mass-suggestion",
+      "evidenceHash": "a672ba47e40c9a02da23cba7eaeb922799967f01e74887ad1c18895068ec378c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:170",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "mass-healing-word",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mass-healing-word",
+      "evidenceHash": "896017cfa759446a0f1766b5f2b72ba8641ee85bb78ef905e6747469a8bf39f4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:171",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "mass-cure-wounds",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mass-cure-wounds",
+      "evidenceHash": "08dd0c9aab6a8a311146b188077d7bc3ded4320db258571a30d07c934e47d928",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:172",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "mass-heal",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mass-heal",
+      "evidenceHash": "37908476dc591bd9bd9992578ec4f8e3b5a9d10c10e6b49e23042f25e3b09504",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:173",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "prayer-of-healing",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/prayer-of-healing",
+      "evidenceHash": "179a7da58a3c90988d57e6728398e86c315b08388b53d4ab55bae4b8e993d8ba",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:174",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:175",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "lightning-bolt",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/lightning-bolt",
+      "evidenceHash": "964bc36097deae37e3320115b471a7ff0331774d861406e02b61d9fb2ab663f1",
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "lightning",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:176",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "scrying",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/scrying",
+      "evidenceHash": "8e30612567f69ce85b3ca231676ac8760a51aebcf845bca4ba24999fa88d7f10",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:177",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "inflict-wounds",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/inflict-wounds",
+      "evidenceHash": "a1235bc692fb932a10a10cf9cd9be193ad7a87220b8cc97e425d70a544b73484",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:178",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "guiding-bolt",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/guiding-bolt",
+      "evidenceHash": "fc9628a87bb2902b0d50977bede2bd8c9194f4c7a72b11dae9732f6ca1abf5e4",
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d6",
+          "type": "radiant",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:179",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "glibness",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/glibness",
+      "evidenceHash": "5ce35ef3a8fcc3aca3a7030be8d5602fae5dfaee5d95c5f0516a1005869364a4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:180",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "insect-plague",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/insect-plague",
+      "evidenceHash": "2272155c6ac7e7b556fea4102929b8ce11ed9e43d1eef2a7fffd5f3f08dd1d96",
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d10",
+          "type": "piercing",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, first entry on turn, or end of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:181",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "flame-strike",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/flame-strike",
+      "evidenceHash": "3d325b5295575b61e558f14e85f91200bbac2d42b632e303456d47f9549b1966",
+      "status": "manual_review",
+      "reason": "choose_fire_or_radiant_upcast_increment"
+    },
+    {
+      "id": "dndsu:spell:182",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "illusory-script",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/illusory-script",
+      "evidenceHash": "9d48dd4c05f1708692d6d6585b6ab49198510d1a486c7b36ade12fbbd53fcde5",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:183",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "invisibility",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/invisibility",
+      "evidenceHash": "45fda3efa139eb311cf62b25be05a38816ac3767edbe633bcf1f9982b1bf4f0a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:184",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "unseen-servant",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/unseen-servant",
+      "evidenceHash": "9d4ca7ade0239d318a407369622d6472a42300ab71be3db886d95aca284e7497",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:185",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "nondetection",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/nondetection",
+      "evidenceHash": "4947b14a46d204fb3425a6168e3dcb2be864441f4dfbfb35ec3d7786943a1100",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:186",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "gentle-repose",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/gentle-repose",
+      "evidenceHash": "4be13d39dfffc98979b03add1b9842034b888daa0e02fa0ca684f79375f03647",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:187",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:188",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:189",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "geas",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/geas",
+      "evidenceHash": "96a6cabced1837273dfe7c79797fe0b536caefbc5f31434c474afb46c0128c26",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:190",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:191",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "cloudkill",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/cloudkill",
+      "evidenceHash": "a6ba3d4e72c1fbafdb11dc220d0c3e8c5347c135de7920b73eeeecbbaa1f4bf8",
+      "components": [
+        {
+          "key": "damage",
+          "base": "5d8",
+          "type": "poison",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start of turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:192",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "zone-of-truth",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/zone-of-truth",
+      "evidenceHash": "f2b915711bfe8ef379ca335e6a5a9690f17ac7f80bb8d34192ceb7728eeecdd7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:193",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "detect-poison-and-disease",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/detect-poison-and-disease",
+      "evidenceHash": "5111c1c4c142598e186b3b21ee54598c4cbd3cac59f0199a882432decb151914",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:194",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "detect-evil-and-good",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/detect-evil-and-good",
+      "evidenceHash": "8083f10f8c10bcef3b1b417d2c06a0bfde7488da7144486761560de2ad2fb3eb",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:195",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "detect-magic",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/detect-magic",
+      "evidenceHash": "b80c1bd44a8c1106cfa0616cca3baf762b3a24c5e1d2512a5bc13317623ce794",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:196",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "detect-thoughts",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/detect-thoughts",
+      "evidenceHash": "f8def15b96656842f6249db9afbdff7e74bfd32605de17610e4ccfd4ce6e6aa9",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:197",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "major-image",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/major-image",
+      "evidenceHash": "8ecd3c5b2e06f9bb85f880e48722a58c5525a55d5a56168c3ae0e2ed62d2ea86",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:198",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "commune",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/commune",
+      "evidenceHash": "98f9f27380fabcfa52696331b9f400967bb069a9c27cf403dd623937df80a8ca",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:199",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "commune-with-nature",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/commune-with-nature",
+      "evidenceHash": "4d2f121737627b17fb116617407fc7f864f511c382101697eb70a6fb5b747d83",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:200",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:201",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "fire-storm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fire-storm",
+      "evidenceHash": "efa55527e3d80964d108e818f3fe54b5880b1eab7505a37016110b76062f745e",
+      "components": [
+        {
+          "key": "damage",
+          "base": "7d10",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:202",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "wall-of-fire",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wall-of-fire",
+      "evidenceHash": "b75748454d7316af99d1fb829f05d063cb69d66e3ef2ceec9a61f74d1b4f8949",
+      "components": [
+        {
+          "key": "damage",
+          "base": "5d8",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "appearance save, OR first entry/end turn on damaging side within 10 feet (no save for later damage)"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:203",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "burning-hands",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/burning-hands",
+      "evidenceHash": "e3f6c2e3f7d73b99541264123b33a1b6a561c29195227dcdb4bad9f950c41ea0",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:204",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "fire-bolt",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fire-bolt",
+      "evidenceHash": "55bc41812adfbd447785702f66cd7c1cf667e484bdd7c2c8084da19a29d1a74a",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d10",
+          "type": "fire",
+          "scaling": "character",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:205",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "fireball",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fireball",
+      "evidenceHash": "77fd15bae3881d294460675346b1c8060419dbe0146baa72ade3e3135978c79c",
+      "components": [
+        {
+          "key": "damage",
+          "base": "8d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:206",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "fire-shield",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fire-shield",
+      "evidenceHash": "a6f0e9388eb93b0cf6b9a11ce2a14589b4f7bd212d0ab6bab1a7370d91656fce",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:207",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "faerie-fire",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/faerie-fire",
+      "evidenceHash": "8c2b9b7426ed62107ee2348799492685d8a6584d84e7d10e733c4bbbd5da5ff0",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:208",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "raise-dead",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/raise-dead",
+      "evidenceHash": "350a9242ecc7722853701ea1ed40678ad06f1de371e923392a0d9c66c4f22ff3",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:209",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "flesh-to-stone",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/flesh-to-stone",
+      "evidenceHash": "72f220671edde2f9f686a0fabfa0b7f5b75d4b38dbc8b9d535e6e6755308df17",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:210",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "identify",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/identify",
+      "evidenceHash": "f954413717c412c7817a312f8d5f334949d9e68ca39d9d918800a7fcbbc6cb34",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:211",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "entangle",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/entangle",
+      "evidenceHash": "79f1ca10108361f7a58369e417938d0b8f429f4be08dd443cca3aedabf7d3048",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:212",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:213",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:214",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "time-stop",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/time-stop",
+      "evidenceHash": "5b0b780c1be63893030e4c45675a7b34dad58b31cf79766ccb59be1e9e7382ef",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:215",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "freezing-sphere",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/freezing-sphere",
+      "evidenceHash": "85e3c8e5b387aaccd85146e289694cd57edc0e8d80a4e67b414d2970f838b705",
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d6",
+          "type": "cold",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed-save damage to one target; successful save follows spell description"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:216",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:217",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "knock",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/knock",
+      "evidenceHash": "ba9ea65993a6b1834b60c0fa7d2312854d0e1b453b48f9c5e8d042b4fe25a006",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:218",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "mirror-image",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mirror-image",
+      "evidenceHash": "7d29544c6f15d2b01a489441e3bf49f1fa05b8cc7860a9066e4f5707cab1727b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:219",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "glyph-of-warding",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/glyph-of-warding",
+      "evidenceHash": "acd79b3935b1c14642584d4625a88f67dc512adef1b795f45128bee870ceb6d7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:220",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "warding-bond",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/warding-bond",
+      "evidenceHash": "37757d6fc07bfde05cd1d96b98c6429bad1faf70b7961b279f0a7dfbe3bb23be",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:221",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "charm-person",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/charm-person",
+      "evidenceHash": "03d3991bac723dedf99b785f1312e8f10b1841cf1ff5334af8ca96dcf6a8bc08",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:222",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "purify-food-and-drink",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/purify-food-and-drink",
+      "evidenceHash": "4989fa4b0464d76383a236b8b8021aa425042d7cadfdeaf4f1e086518f20840b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:223",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "feather-fall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/feather-fall",
+      "evidenceHash": "deb91a1a3c72185c085bf2803b104ada6c368a54219cc3f4c5b2a0318f86ef2e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:224",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:225",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "scorching-ray",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/scorching-ray",
+      "evidenceHash": "7b5aa2ad747b6fd9b47dc1aee95acee82551c591a09bf66d45b1d2089c7486dc",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d6",
+          "type": "fire",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_unit",
+          "event": "one successful separate ranged spell attack"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "units": {
+        "base": 3,
+        "perSlot": 1,
+        "kind": "attack"
+      },
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:226",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "spider-climb",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/spider-climb",
+      "evidenceHash": "4c703f26f9a0425aa9301c53d932b4ac36df0f263ce6d5d1cc1e8f400da8d938",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:227",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "web",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/web",
+      "evidenceHash": "37bb1ee5a28507e42cb3f00c7a8a63e1e91aafc807a4a50446c3773b2fe03ac1",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:228",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "dimension-door",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dimension-door",
+      "evidenceHash": "415b4af87106cb5b8e2d63347dcba833131451423ee2ae762b313ee62b024313",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:229",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "finger-of-death",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/finger-of-death",
+      "evidenceHash": "4644df51463ce4598ea583068ae94b11b03fe8d6f7e0388edeea81f10df1ec71",
+      "components": [
+        {
+          "key": "damage",
+          "base": "7d8+30",
+          "type": "necrotic",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:230",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "heroes-feast",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/heroes-feast",
+      "evidenceHash": "7ed551b5827c7d2dece20272827f043b624bb4170d0346a616144641018f31c2",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:231",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "planar-binding",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/planar-binding",
+      "evidenceHash": "9b458c01144df96025ba186f95e050710c26144615ac901c2f285948fe736727",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:232",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "planar-ally",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/planar-ally",
+      "evidenceHash": "f1ec8a7348207a9535dd59732b228eb41a5a5f0d226cfe6352cf16e768ffdad3",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:233",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "chain-lightning",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/chain-lightning",
+      "evidenceHash": "a91da910d592dfe9663a04c4c703ede17ffb06c683d97a87919a322d113e224e",
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d8",
+          "type": "lightning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one distinct target, save; damage does not scale"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "targetLimit": {
+        "base": 4,
+        "perSlot": 1
+      },
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:234",
+      "baseLevel": 0,
+      "concentration": true,
+      "apiIndex": "dancing-lights",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dancing-lights",
+      "evidenceHash": "4dde226f9229f8a0173dcf4282e7e7ed3c35ea9fe1b83dc72f6af5d014cac6e8",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:235",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "water-breathing",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/water-breathing",
+      "evidenceHash": "3ef41690edf1144be4d0ff463820a6f9f8c0b817e0c806d91851f9fd1c7d4f3b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:236",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "aid",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/aid",
+      "evidenceHash": "c2bf9c9768f3b5a203b2afe4e9a5a074cdfbc515a49f704978ea7f62c120bc61",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:237",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "simulacrum",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/simulacrum",
+      "evidenceHash": "5b186165fbd90f9735ac36f4b8d94aa94424add27c4ac29d18351255fd685bff",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:238",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "clairvoyance",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/clairvoyance",
+      "evidenceHash": "f6ed44112e53bef44deeeca6ff6d329357c79248b0b11bc1f4b552dd9cff75de",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:239",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "dominate-beast",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dominate-beast",
+      "evidenceHash": "2b5a4bd2a3a7b6bd19cd891d8cbcd2aae33be36c6123413889c73c7297f121fb",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:240",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "dominate-person",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dominate-person",
+      "evidenceHash": "beb6842f09280083c53e66727e06479e788291547ed205701dd48614933f443a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:241",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "dominate-monster",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dominate-monster",
+      "evidenceHash": "71e16ed980d925fb6582c461498272f8d2925709d130a2716fcb23873a8af461",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:242",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "locate-animals-or-plants",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/locate-animals-or-plants",
+      "evidenceHash": "4e256b02e8aa68b4bd997eacf88b14022468f706ad41fc727d089c893fd36f60",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:243",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "find-traps",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/find-traps",
+      "evidenceHash": "aa0ec127c41c2645bfaa23251ccd3a50a854d22f5ec69b03a48a5894ae5540a7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:244",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "locate-object",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/locate-object",
+      "evidenceHash": "33622d312826ada78c13ab947e2bcd0275ffa7f16ea28192f4e363164a3ccf30",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:245",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "find-the-path",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/find-the-path",
+      "evidenceHash": "7ae99b59388927ad3ee820b68efb0cdf01941bc94fe6025248de216b822b60a1",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:246",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "find-steed",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/find-steed",
+      "evidenceHash": "633b4ed8478b6b5f7fcf36ba27c6dca4377f7d09e201490f1da1171fd7f32a2a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:247",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "locate-creature",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/locate-creature",
+      "evidenceHash": "2c6b3381563d8d98691e7dacc92208f5a1d89839fd26221738458f8068f77ceb",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:248",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "find-familiar",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/find-familiar",
+      "evidenceHash": "c78810014e46f05323ca8cd2c27b0e2d96f24ece6e32975fb2b74e1c288cfba9",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:249",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "fly",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fly",
+      "evidenceHash": "b2a9e870bd33cb5b6aab0ce55b2f6e37a91fb023a0e79dc6f6f6bd8d27ead0f5",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:250",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "heal",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/heal",
+      "evidenceHash": "cfb3c57a307cefda9c28c33efc1fbfe024150161c9ccbfc3683fe4974e8afeef",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:251",
+      "baseLevel": 9,
+      "concentration": true,
+      "apiIndex": "shapechange",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/shapechange",
+      "evidenceHash": "3f24e3dce663f9641f2ed0be809f5d0366a6b33d79cc907b4a546b2641a20850",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:252",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "comprehend-languages",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/comprehend-languages",
+      "evidenceHash": "f7eca4edd85b99057609a10bc23d9302bd9841128c3582921760804800dd36bd",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:253",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "harm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/harm",
+      "evidenceHash": "54a62fad87eba26f41e2961e1587e10404d2b29f9ac5fde52c19b01a3a79ccc8",
+      "status": "manual_review",
+      "reason": "cannot_reduce_target_below_1_HP"
+    },
+    {
+      "id": "dndsu:spell:254",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "bane",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/bane",
+      "evidenceHash": "e8270ff72e92d5dbf5638b90ee618280084be827950eaa8ab65b8ccd7d833dc4",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:255",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "gust-of-wind",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/gust-of-wind",
+      "evidenceHash": "45b4ea7d1e83802587d53ec41b342e442fc9a0b6c81b384dc0efeec051f91d11",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:256",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "sending",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sending",
+      "evidenceHash": "032e117c8695a20648d571773a7841fd3191b8efc21ee7d6f446cc6a90192f87",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:257",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "expeditious-retreat",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/expeditious-retreat",
+      "evidenceHash": "23d273ff73fa0a5a1b58cffda2674f02502be26688f4050d2631124342840cb5",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:258",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "mending",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mending",
+      "evidenceHash": "f3e52a4d952c0b746a693f83ddb346b27cc72e67a36cd5681f01cd0bcc21fb44",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:259",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "animal-messenger",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/animal-messenger",
+      "evidenceHash": "1a44af3c40e56ba6a902c48afeadf8ba3ed90e9c1366923cb08928c69dbf6448",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:260",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "polymorph",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/polymorph",
+      "evidenceHash": "10cbb5b1c1069c05dbc5ab98aedbf80147bd9570c1a3018e69349af5b999c89e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:261",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "animal-shapes",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/animal-shapes",
+      "evidenceHash": "978ca7ccaf9866c98c00d52318ede13a0e550b754b5e78f68d20e8c9ff72da96",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:262",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "antilife-shell",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/antilife-shell",
+      "evidenceHash": "9159a67efcdf7a565cdbdf0fc94aad50375d2fe11d99d55edf021da4b4c78efc",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:263",
+      "baseLevel": 8,
+      "concentration": true,
+      "apiIndex": "antimagic-field",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/antimagic-field",
+      "evidenceHash": "07a9c8ed4d081401a6bd9e2344a5a76a7119142188bfb4be221ef94518818c72",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:264",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "foresight",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/foresight",
+      "evidenceHash": "227a32b1daed913e17d9026b0eda617560f2671c5446c54a173c0d537e8976d6",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:265",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "contingency",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/contingency",
+      "evidenceHash": "77a29caa6d8720afc8659d6e51eef75d17d29aea07c08e248abc19c7609c57a3",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:266",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "divination",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/divination",
+      "evidenceHash": "95576983595e5d7a54c466ca4f51ac2517c59d3063da10f979a3c940ce3fef2b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:267",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "conjure-animals",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-animals",
+      "evidenceHash": "c5ccab2f2115ec2e8bc3e4d187d7354aa433d6d98f796eb43ead320d02d6a4de",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:268",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:269",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:270",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "conjure-woodland-beings",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-woodland-beings",
+      "evidenceHash": "ff2cc058208beb0ec4d3894b9c827e5b15b524a92d93c452638ffc81f395b5ea",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:271",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "conjure-minor-elementals",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-minor-elementals",
+      "evidenceHash": "89ec9c77fa3af975bc7b2531f219cc1a2f54297d94b24851e853a68798124129",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:272",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "call-lightning",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/call-lightning",
+      "evidenceHash": "480929c32ff12e278666ec7e1f6567ce851a64611d2de21a7bb9ccdcdababf3e",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d10",
+          "type": "lightning",
+          "scaling": "slot",
+          "increment": "1d10",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one bolt exposure, save; storm=true only outdoors in existing storm at casting",
+          "stormBonus": "1d10"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:273",
+      "baseLevel": 7,
+      "concentration": true,
+      "apiIndex": "conjure-celestial",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-celestial",
+      "evidenceHash": "3758573890b54a9ec9a3a9d4c6f3de997577cbf1779a3d788a109050b08cc587",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:274",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "conjure-fey",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-fey",
+      "evidenceHash": "32c0197feae3faee249a8eb3151848755f8a01e3bfef9af4b42b5092a81911bd",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:275",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "conjure-elemental",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/conjure-elemental",
+      "evidenceHash": "f00e32a4f8e10ad2c31066e4c17c32694e6b02c7f2e253999a38231fef19d972",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:276",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "command",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/command",
+      "evidenceHash": "a1b165185ed49115714bd9fcafaaee4e9c3278a699fdec90a488a1f85d59bf40",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:277",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "vampiric-touch",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/vampiric-touch",
+      "evidenceHash": "64843412197f02720ed19494b8354c4a6cf467d51832d9de517f9d9fbe43abf4",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d6",
+          "type": "necrotic",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one successful melee spell attack; repeat with action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:278",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "compulsion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/compulsion",
+      "evidenceHash": "34e2d058de234b994ced27b8053a5c44820c504b44776e4a31d0cbcba6e74386",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:279",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "phantom-steed",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/phantom-steed",
+      "evidenceHash": "5fd4ba005135a01dc68884b612cef1b86a0dc742ae49fb7010fa1e89c80a5c4f",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:280",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:281",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "seeming",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/seeming",
+      "evidenceHash": "fe1f57d79534f331ed0f3df3e433599ef55c0a68607925bca40ced6fc73ced01",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:282",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "awaken",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/awaken",
+      "evidenceHash": "12ab016c4a63f16b43f4ca44092c7264e3229b7a393c21893a11044595ffcd64",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:283",
+      "baseLevel": 7,
+      "concentration": true,
+      "apiIndex": "project-image",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/project-image",
+      "evidenceHash": "531fc0e6d19c96c1222bec70363786442dba27fde7cd22a39668453205d15546",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:284",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "astral-projection",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/astral-projection",
+      "evidenceHash": "281f519c2fd9e314b858f967f022917ec2f2cf82f47a0006c2b7ecb2b0a71bc9",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:285",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "bestow-curse",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/bestow-curse",
+      "evidenceHash": "bbc00efe65141b522f1fd61927b475c81a5c2ea4c05b84341e56ff6757a48b38",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:286",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "jump",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/jump",
+      "evidenceHash": "03f93e576b029bee451b376f53ba7f01d3a3a5255060652c5acd85d7bf616368",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:287",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "false-life",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/false-life",
+      "evidenceHash": "6bbcde26ce8578d2134d773d442c9771ab89a592e42cfba14880050c7c3d87bd",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:288",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "transport-via-plants",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/transport-via-plants",
+      "evidenceHash": "33156ef708c16e91ce04ceff472920547ce3d7c6898de5b51ec169fbedf1c3e7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:289",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "flaming-sphere",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/flaming-sphere",
+      "evidenceHash": "8b81731c7665a595e516832b545d2709759a08f7e3aaf99608f8ae4f86853ff3",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d6",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "ram OR end turn within 5 feet; save, count actual triggers"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:290",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "prismatic-wall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/prismatic-wall",
+      "evidenceHash": "9758ef8c80795e1bc02bef544b029989f4d08a3fefc7c68e7950eb4521d84466",
+      "status": "manual_review",
+      "reason": "multiple_layer_and_random_effects"
+    },
+    {
+      "id": "dndsu:spell:291",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "prismatic-spray",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/prismatic-spray",
+      "evidenceHash": "2d05c4a850840e8be42bc7956fa555eaba0ff54b464c4f1ac1b3f98763ae1e44",
+      "status": "manual_review",
+      "reason": "random_color_and_double_ray_branches"
+    },
+    {
+      "id": "dndsu:spell:292",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "speak-with-animals",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/speak-with-animals",
+      "evidenceHash": "e3c60fa89a595d5cd6e49989ae4b48e127a5d59c3d831c5ae8817acd329a7918",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:293",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "speak-with-dead",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/speak-with-dead",
+      "evidenceHash": "d9b33b20960d20fd09e841adcc8d400fb983a15c06a91c90bcf36d19436a0f88",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:294",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "speak-with-plants",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/speak-with-plants",
+      "evidenceHash": "1ab8c8a4e3914a2ab458f41dd815da96bb1105d96a5c74494b2bacae6bdc5ca3",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:295",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "blur",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/blur",
+      "evidenceHash": "19cbf8f9abbd9dc8af1ef428f554b2a654251addeaec1d58ed6ae9adfd878fb7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:296",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:297",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "eyebite",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/eyebite",
+      "evidenceHash": "d4ad6e60a7cd59df066043075eddb81ebf1f303243fe4148b7bdcef32bcf12db",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:298",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "heat-metal",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/heat-metal",
+      "evidenceHash": "6d609df4df63ff5de6527a475f94b8b27c5cc5b046d03703453da860a0603516",
+      "components": [
+        {
+          "key": "damage",
+          "base": "2d8",
+          "type": "fire",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "initial casting or later bonus action; creature in physical contact"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:299",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "disintegrate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/disintegrate",
+      "evidenceHash": "4d9fb6aba41788ace17405d6946f1502018bb56eaa6a4d83a3bb171b663fe04e",
+      "components": [
+        {
+          "key": "damage",
+          "base": "10d6+40",
+          "type": "force",
+          "scaling": "slot",
+          "increment": "3d6",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "creature fails Dexterity save; objects use separate disintegration rules"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:300",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "dispel-evil-and-good",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dispel-evil-and-good",
+      "evidenceHash": "097f7f58b86d383a8bc2acb15783655ab302a1c973719e2223ca617e93ae13fa",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:301",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "dispel-magic",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/dispel-magic",
+      "evidenceHash": "e6b49e845e1b310ec919e298e94121a056dd9814d807f14bbc1c0f1fd6ed1d66",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:302",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "regenerate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/regenerate",
+      "evidenceHash": "650b67c13c62851be78bbeb29041cb40bbfb61ad117c0fbe564a864ba7974aff",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:303",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "enthrall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/enthrall",
+      "evidenceHash": "2d27eaaa88917afd7b9cee80dc4c6cbe5f049e9c50d9b29ade41af3ec3f96bfc",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:304",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "plant-growth",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/plant-growth",
+      "evidenceHash": "91bc2f4daf5efce238eb9094e16cfc5234cab703b3c8d0315f6053733241a2fa",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:305",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:306",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "color-spray",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/color-spray",
+      "evidenceHash": "1f4a46fee8237ba301fb4c8451a8e2512ec97a28eb2ecf904dc06947e48ab676",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:307",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "light",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/light",
+      "evidenceHash": "6ac63bd89190f745d5eb0b811f7559b9e3fd3111c871cc809c5244037767e066",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:308",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "freedom-of-movement",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/freedom-of-movement",
+      "evidenceHash": "c4a3db1f293e52afd8f8390a1a1ea387620b3e31be2b13adeaa5741d616c253d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:309",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "contact-other-plane",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/contact-other-plane",
+      "evidenceHash": "0e4277301535a5be8bfec692ff86c97dac831c2ddd16b6456ebe3ee2bf46192e",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:310",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "hallow",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hallow",
+      "evidenceHash": "1f11f7bb859667822d2b89453c87a0381e80d3ad8da476d1f59968f0fbb6da9a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:311",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "sacred-flame",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sacred-flame",
+      "evidenceHash": "1d0b82f7add46ecdc47ab9d33dc8c358d1c21f16991a2f52a537cd37b596edfb",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "radiant",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:312",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:313",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "alarm",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/alarm",
+      "evidenceHash": "03ae40a49510a1aa9442e83e34aad1d2c51d12ef35cbc9c14ae6fe2c47ec7c1c",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:314",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "wall-of-force",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wall-of-force",
+      "evidenceHash": "554892dfdb68f836bd0bd6b68921135bbb1026d0b2288bf119949b325a7d4707",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:315",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "grease",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/grease",
+      "evidenceHash": "1345b2765736e5cdf827754a7636f9d4311e33bda0e2d20a4cef48fe53790493",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:316",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "longstrider",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/longstrider",
+      "evidenceHash": "15d651287e3267beb67bbc851b2ab5cda970580e2e2404d1dd2168767876005f",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:317",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "feeblemind",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/feeblemind",
+      "evidenceHash": "a8fc13855c1a19e152278047ee3cd6eff58d9b711d8209920e0cdcac15899835",
+      "components": [
+        {
+          "key": "damage",
+          "base": "4d6",
+          "type": "psychic",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:318",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "meld-into-stone",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/meld-into-stone",
+      "evidenceHash": "1a7900763e425c99c44ecee9055f00d3034ed431e8cfcbd26458068f1dfc1339",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:319",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "word-of-recall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/word-of-recall",
+      "evidenceHash": "6163fee345d1b463717ec771c84e15adf4f6cf0689607ac6ca427e944a9b95e5",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:320",
+      "baseLevel": 9,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:321",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "power-word-stun",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/power-word-stun",
+      "evidenceHash": "6fcdf0549838ccbf9f45630b29c827cf605c44b226452dbc6bd31ae2d9118ab2",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:322",
+      "baseLevel": 9,
+      "concentration": false,
+      "apiIndex": "power-word-kill",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/power-word-kill",
+      "evidenceHash": "62200b6c9c081c0be0ef8f322e215885be6e443c479887d717019fb22a52cdf7",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:323",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "alter-self",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/alter-self",
+      "evidenceHash": "612e40db8ed89bbf85e02a9d220e4fbaf278f21203180a9eb040fd20782a9390",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:324",
+      "baseLevel": 9,
+      "concentration": true,
+      "apiIndex": "weird",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/weird",
+      "evidenceHash": "a2f6e508f21bb5cdcea62b34e3279558058975230ad1b08c3a8f10db76863b00",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:325",
+      "baseLevel": 4,
+      "concentration": true,
+      "apiIndex": "confusion",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/confusion",
+      "evidenceHash": "c922a3769f079f4c963de38de6332aa618f9c0179e20115b9f87479b99437514",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:326",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "remove-curse",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/remove-curse",
+      "evidenceHash": "7ee7409fc0068cc974500cb41f3300d935d0d34b9c0ac6cd1b00d8322c2aef4a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:327",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "passwall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/passwall",
+      "evidenceHash": "599cd77eea459cee0bf44430efdc41726781722575474d4b46603f67cb9f7f7f",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:328",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "mind-blank",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mind-blank",
+      "evidenceHash": "efb9a77c56dcc699844ed3048d1e612dad6d6916ca1858d42aeaced363be93ca",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:329",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "sunbeam",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sunbeam",
+      "evidenceHash": "a2c48b93025a8451be4fcdfe2ef1b8251bf50c7812aedc51a0b94cfb921ff718",
+      "components": [
+        {
+          "key": "damage",
+          "base": "6d8",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one beam exposure; subsequent beams require action"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:330",
+      "baseLevel": 8,
+      "concentration": false,
+      "apiIndex": "sunburst",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sunburst",
+      "evidenceHash": "d1769e3f456a8390ae3a6bad34a36436daa793586de2d570955c8660dc7a3034",
+      "components": [
+        {
+          "key": "damage",
+          "base": "12d6",
+          "type": "radiant",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:331",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "message",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/message",
+      "evidenceHash": "05dd6d3bea33d7df9ebe90cac0c036cf2e95ec586cd86f3da12cc1fc266b0e23",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:332",
+      "baseLevel": 0,
+      "concentration": true,
+      "apiIndex": "resistance",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/resistance",
+      "evidenceHash": "34982960dc53a055166258aa8ace42256752687c8570b2c15a3716f1488a582d",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:333",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "create-or-destroy-water",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/create-or-destroy-water",
+      "evidenceHash": "ad2c2589530beec2324a21a55bfd3978e2b413025a9b1f23918540d079627589",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:334",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "create-undead",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/create-undead",
+      "evidenceHash": "190e5ea2874abf7d83fe0cd5de7dab2baa0d5078ca6f4224e6137b2e03b1a163",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:335",
+      "baseLevel": 3,
+      "concentration": false,
+      "apiIndex": "create-food-and-water",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/create-food-and-water",
+      "evidenceHash": "5baa1c525b3e81e91b8f5f2688217b08c30d94541e1a0b25b243c123ad69ff7b",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:336",
+      "baseLevel": 0,
+      "concentration": false,
+      "apiIndex": "produce-flame",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/produce-flame",
+      "evidenceHash": "3c37636a4a9b11ccfa9dbcaf50ac51c23ce55c0fe3f7dff24b3bee222e883da3",
+      "components": [
+        {
+          "key": "damage",
+          "base": "1d8",
+          "type": "fire",
+          "scaling": "character",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one hit or failed save; Acid Splash can affect two targets only within 5 feet of each other"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:337",
+      "baseLevel": 3,
+      "concentration": true,
+      "apiIndex": "wind-wall",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wind-wall",
+      "evidenceHash": "8c316f06779097d61461178240e7aadec8f629a204375865c39c06b1b88a0f11",
+      "components": [
+        {
+          "key": "damage",
+          "base": "3d8",
+          "type": "bludgeoning",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "one target damage event under spell conditions"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:338",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "blade-barrier",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/blade-barrier",
+      "evidenceHash": "bc382a5cc2fbd6c32ad03af94874d3469807ce8d9ba981915e5ef5bfdbcf041c",
+      "components": [
+        {
+          "key": "damage",
+          "base": "6d10",
+          "type": "slashing",
+          "scaling": "none",
+          "increment": null,
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on a turn or start turn; save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:339",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:340",
+      "baseLevel": 4,
+      "concentration": false,
+      "apiIndex": "guardian-of-faith",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/guardian-of-faith",
+      "evidenceHash": "ecdd407771984da0f8d8a1762ca352309a46508c204f82e49b4fcf6d5aec8d5b",
+      "status": "manual_review",
+      "reason": "fixed_damage_and_60_HP_budget"
+    },
+    {
+      "id": "dndsu:spell:341",
+      "baseLevel": 6,
+      "concentration": false,
+      "apiIndex": "guards-and-wards",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/guards-and-wards",
+      "evidenceHash": "f37a7de11bd4825ac34819378742877e350897bea780a1f876a2d17b1adddc87",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:342",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "globe-of-invulnerability",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/globe-of-invulnerability",
+      "evidenceHash": "8819c2604a439365117deb46cfda860c975a10a7cd90750767b55aa03659e5fc",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:343",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "mirage-arcane",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/mirage-arcane",
+      "evidenceHash": "2c8da03d01f32bc0162a7a304e7c23cead86eb256d04520ad77d587d4794c718",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:344",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "telekinesis",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/telekinesis",
+      "evidenceHash": "c7b92dc3b8d6e3504576ea386aef40d2d223b53a6941a5aba1d7e39dfd1b6aab",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:345",
+      "baseLevel": 8,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:346",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:347",
+      "baseLevel": 6,
+      "concentration": true,
+      "apiIndex": "wall-of-thorns",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/wall-of-thorns",
+      "evidenceHash": "387799dbc81f35010d229a26ae69387d86bbf6ba75be88e48d2096e6186a169e",
+      "components": [
+        {
+          "key": "appearance",
+          "base": "7d8",
+          "type": "piercing",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "on appearance, save"
+        },
+        {
+          "key": "later",
+          "base": "7d8",
+          "type": "slashing",
+          "scaling": "slot",
+          "increment": "1d8",
+          "every": 1,
+          "scope": "per_target_event",
+          "event": "first entry on turn or end turn, save"
+        }
+      ],
+      "constraints": [
+        "Damage formulas only; resolve stated hit/save and trigger conditions before counting occurrences.",
+        "No automatic multiplication by concentration duration or number of creatures."
+      ],
+      "status": "supported"
+    },
+    {
+      "id": "dndsu:spell:348",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:349",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "silence",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/silence",
+      "evidenceHash": "931131b3507c1b2d498d514a2aef241558c3f66be73098a3858093f0fb95a615",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:350",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "rope-trick",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/rope-trick",
+      "evidenceHash": "72bcbc7e80d3b60f8500e115ecd27ff79f30bd74c5af502ee8482b88f02a412a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:351",
+      "baseLevel": 1,
+      "concentration": true,
+      "apiIndex": "fog-cloud",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/fog-cloud",
+      "evidenceHash": "d61100b797e54104b63e43aaf846c44ca3b1d3e071812576f45db49ad128db91",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:352",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "misty-step",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/misty-step",
+      "evidenceHash": "3060270db4fa3da3068f1fe5ef7a66c452b2505d20868d6bac23ead154b59ac6",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:353",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "darkness",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/darkness",
+      "evidenceHash": "c0a483d33e76eae57579edc1c2d1de59c5183a5b156968fa7189877214333563",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:354",
+      "baseLevel": 1,
+      "concentration": false,
+      "apiIndex": "sanctuary",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/sanctuary",
+      "evidenceHash": "0224c6e733d2bc8eb9be2bd652ff5cd42d91656522b62e936c2fa1cb6b9de642",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:355",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "enlarge-reduce",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/enlarge-reduce",
+      "evidenceHash": "d7176e80e32495ea25dd327557d0d9eeda9a4bf21535dc27471cd60cc3382595",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:356",
+      "baseLevel": 2,
+      "concentration": true,
+      "apiIndex": "hold-person",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/hold-person",
+      "evidenceHash": "9abaebd8870e9132a8df86b8764e8e7486c0f6c4c59d9a54482dcff44bdb2bab",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:364",
+      "baseLevel": 5,
+      "concentration": true,
+      "apiIndex": "animate-objects",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/animate-objects",
+      "evidenceHash": "8815d4e27ff31d8edc4f8531f213516f442dc48ece078760de271049d0c0061a",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:365",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "reincarnate",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/reincarnate",
+      "evidenceHash": "dcda4e3593a4fc7cd233b36f19cdbe4bfc75a94203da61a475ef6277bf20a8a5",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:366",
+      "baseLevel": 5,
+      "concentration": false,
+      "apiIndex": "creation",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/creation",
+      "evidenceHash": "697891d75161ac3dd903d4011e09bb19d2074e31bd1c87d6470f0c27c620effc",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:367",
+      "baseLevel": 7,
+      "concentration": false,
+      "apiIndex": "teleport",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/teleport",
+      "evidenceHash": "3421c2a988757919a2bd22319baa983eb9d63cc3a0adab5f3c9dcc425a59211f",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:368",
+      "baseLevel": 2,
+      "concentration": false,
+      "apiIndex": "darkvision",
+      "sourceUrl": "https://www.dnd5eapi.co/api/2014/spells/darkvision",
+      "evidenceHash": "e59b91f3c02cfa290d66f2b520b355208dec08169e83399a213d9807f821d776",
+      "status": "manual_review",
+      "reason": "damage_semantics_not_reviewed"
+    },
+    {
+      "id": "dndsu:spell:373",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:374",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:375",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:376",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:377",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:378",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:379",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:380",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:381",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:382",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:383",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:384",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:385",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:386",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:387",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:388",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:389",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:390",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:391",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:392",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:393",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:394",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:395",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:396",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:397",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:398",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:399",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:400",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:401",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:402",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:403",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:404",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:405",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:406",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:407",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:408",
+      "baseLevel": 7,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:409",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:410",
+      "baseLevel": 0,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:411",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:412",
+      "baseLevel": 8,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:413",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:414",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:415",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:454",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:455",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:456",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:457",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:458",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:459",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:460",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:461",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:462",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:463",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:464",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:465",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:466",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:467",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:468",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:469",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:470",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:471",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:472",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:473",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:474",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:475",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:477",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:478",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:479",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:480",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:481",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:482",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:483",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:484",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:485",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:486",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:487",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:488",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:489",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:490",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:491",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:492",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:493",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:494",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:495",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:496",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:497",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:498",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:499",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:500",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:501",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:502",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:503",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:504",
+      "baseLevel": 8,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:505",
+      "baseLevel": 8,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:506",
+      "baseLevel": 8,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:507",
+      "baseLevel": 9,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:508",
+      "baseLevel": 9,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:509",
+      "baseLevel": 9,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:741",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1921",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1922",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:1923",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2018",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2202",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2340",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2341",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2344",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2441",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2442",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2444",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2445",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2446",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2447",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2448",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2449",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2450",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2451",
+      "baseLevel": 6,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2452",
+      "baseLevel": 7,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2453",
+      "baseLevel": 8,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2454",
+      "baseLevel": 8,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2455",
+      "baseLevel": 9,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:2456",
+      "baseLevel": 9,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3022",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3023",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3047",
+      "baseLevel": 1,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3048",
+      "baseLevel": 9,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3049",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3050",
+      "baseLevel": 0,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3051",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3052",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3053",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3054",
+      "baseLevel": 7,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3062",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3063",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3064",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3065",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3066",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3067",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3068",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3069",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3070",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3813",
+      "baseLevel": 3,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3814",
+      "baseLevel": 7,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3815",
+      "baseLevel": 6,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3816",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3817",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3818",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3819",
+      "baseLevel": 5,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3847",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3848",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3849",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3938",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3939",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3946",
+      "baseLevel": 1,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3947",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:3948",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4660",
+      "baseLevel": 3,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4663",
+      "baseLevel": 4,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4664",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4760",
+      "baseLevel": 2,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:4761",
+      "baseLevel": 5,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6578",
+      "baseLevel": 4,
+      "concentration": false,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    },
+    {
+      "id": "dndsu:spell:6579",
+      "baseLevel": 2,
+      "concentration": true,
+      "status": "manual_review",
+      "reason": "not_in_srd_or_name_unverified"
+    }
+  ]
+}
