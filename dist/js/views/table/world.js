@@ -8,6 +8,7 @@ import { tokenStats } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
+import { shiftDrawing, canEditDrawing, renderDrawBar } from './drawings.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -31,9 +32,10 @@ export function buildWorld(viewport) {
     overlay: svg('overlay-layer'),
     labels: el('<div class="layer labels-layer"></div>'),
     gizmo: el('<div class="layer gizmo-layer"></div>'),
+    drawUi: el('<div class="layer gizmo-layer draw-ui"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo, L.drawUi);
   viewport.append(world);
   return L;
 }
@@ -44,7 +46,7 @@ export function sizeLayers(L, scene) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
-  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels', 'auraLabels', 'gizmo']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
+  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels', 'auraLabels', 'gizmo', 'drawUi']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
   L.map.style.width = `${W}px`; L.map.style.height = `${H}px`;
   L.world.style.width = `${W}px`; L.world.style.height = `${H}px`;
 }
@@ -79,12 +81,28 @@ export function renderTerrain(L, scene, { showBlocked = false } = {}) {
   L.terrain.querySelector('g.t').innerHTML = out;
 }
 
-export function renderDrawings(L, scene, users) {
-  L.drawings.innerHTML = (scene.drawings || []).map((d) => {
-    if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text" fill="${esc(d.color)}" style="font-size:${d.size || 28}px">${esc(d.text)}</text>`;
-    const pts = d.pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    return `<polyline points="${pts}" class="draw-line" stroke="${esc(d.color)}" data-id="${d.id}"/>`;
+export function renderDrawings(L, scene, ctx = null) {
+  // Рисунки — объекты (TASK-031): свои (мастеру — все) можно выделить и тянуть в «Перемещении» и «Выделении».
+  const mv = ctx?.ui.drawMove;
+  const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
+  const selId = ctx?.ui.selDrawing;
+  L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
+    const d = mv?.id === d0.id ? shiftDrawing(d0, mv.dx, mv.dy) : d0;
+    const ed = live && canEditDrawing(ctx, d);
+    const attr = ed ? ` data-drawing="${d.id}"` : '';
+    const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;
+    if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
+    const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" class="draw-line${cls}" stroke="${esc(d.color)}" data-did="${d.id}"/>${ed ? `<polyline points="${pts}" class="draw-hit"${attr}/>` : ''}`;
   }).join('');
+  let bbox = null;
+  const selNode = selId && L.drawings.querySelector(`[data-did="${CSS.escape(selId)}"]`);
+  if (selNode) {
+    const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
+    bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
+    L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  }
+  if (ctx) renderDrawBar(L, ctx, bbox);
 }
 
 /** Стены: мастеру — в режиме редактирования стен; остальным — ничего (двери идут маркерами). */

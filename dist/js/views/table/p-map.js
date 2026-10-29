@@ -486,12 +486,19 @@ export function opportunityForMaster(ctx, p) {
 }
 
 // ——— Текст на карте ———
-export function textPrompt(ctx, w, anchor) {
-  const pop = popover(`<div class="pin-pop">${head('Надпись на карте')}<div class="panel-section"><div class="input"><input data-t maxlength="60" placeholder="Например, «Обвал»" autofocus></div><button class="btn btn-primary" data-ok>Поставить</button></div></div>`, anchor, { placement: 'top' });
+export function textPrompt(ctx, w, anchor, existing = null) {
+  // existing — правка уже стоящей надписи (TASK-031).
+  const pop = popover(`<div class="pin-pop">${head(existing ? 'Изменить надпись' : 'Надпись на карте')}<div class="panel-section"><div class="input"><input data-t maxlength="60" placeholder="Например, «Обвал»" value="${esc(existing?.text || '')}" autofocus></div><button class="btn btn-primary" data-ok>${existing ? 'Сохранить' : 'Поставить'}</button></div></div>`, anchor, { placement: 'top' });
   const inp = pop.node.querySelector('[data-t]');
-  setTimeout(() => inp.focus(), 30);
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
   const ok = () => {
     const text = inp.value.trim(); if (!text) return;
+    if (existing) {
+      const id = existing.id, before = existing.text;
+      ctx.mutateScene((s) => { const x = s.drawings.find((q) => q.id === id); if (x) x.text = text; }, { label: 'Надпись', undo: (s) => { const x = s.drawings.find((q) => q.id === id); if (x) x.text = before; }, redo: (s) => { const x = s.drawings.find((q) => q.id === id); if (x) x.text = text; } });
+      closePopover();
+      return;
+    }
     const d = { id: uid('d-'), type: 'text', x: Math.round(w.x), y: Math.round(w.y), text, color: '#e9b052', size: Math.round(gridSize(ctx.scene.grid) * 0.4), author: ctx.userId };
     ctx.mutateScene((s) => { s.drawings.push(d); }, { label: 'Надпись', undo: (s) => { s.drawings = s.drawings.filter((x) => x.id !== d.id); }, redo: (s) => s.drawings.push(structuredClone(d)) });
     closePopover();

@@ -56,6 +56,11 @@
 .draw-line { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
 .draw-line.live { opacity: .9; }
 .draw-text { font-family: var(--font-display); font-weight: 600; paint-order: stroke; stroke: rgb(0 0 0 / .75); stroke-width: 5px; text-anchor: middle; dominant-baseline: middle; }
+/* Рисунки и надписи как объекты (TASK-031) */
+.draw-hit { fill: none; stroke: transparent; stroke-width: calc(16px * var(--iz)); stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: move; }
+.draw-text.ed { pointer-events: bounding-box; cursor: move; }
+.draw-line.sel { filter: drop-shadow(0 0 calc(3px * var(--iz)) rgb(255 255 255 / .9)); }
+.draw-sel { fill: none; stroke: rgb(255 255 255 / .8); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(5px * var(--iz)) calc(4px * var(--iz)); pointer-events: none; }
 
 /* ——— Стены (только мастер в режиме «Стены») ——— */
 .wall { stroke: var(--wall-stroke); stroke-width: calc(5px * var(--iz)); stroke-linecap: round; pointer-events: stroke; cursor: pointer; }
@@ -719,3 +724,10 @@ button.tray-die:hover { filter: brightness(1.1); }
 .gz.busy .gz-bar { opacity: 0; pointer-events: none; }
 .gz.up .gz-bar { top: calc(var(--d) / -2 - 46px * var(--iz)); transform: scale(var(--iz)) translate(-50%, -100%); }
 .gz.up .gz-val { top: calc(var(--d) / 2 + 30px * var(--iz)); }
+
+/* Панель выделенного рисунка (TASK-031) */
+.db { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.db .db-bar { top: calc(10px * var(--iz)); align-items: center; }
+.db-sw { width: 26px; height: 26px; margin: 0 3px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgb(0 0 0 / .25); }
+.db-sw.on { box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px rgb(0 0 0 / .25); }
+.db-div { width: 1px; align-self: stretch; margin: 4px 4px; background: rgb(255 255 255 / .15); }
