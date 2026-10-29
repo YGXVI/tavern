@@ -7,6 +7,7 @@ import { srcOf } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, myCharacter, sceneOf, membership } from '../../core/campaign.js';
 import { TEMPLATES, LIGHTS } from '../../data/rules.js';
 import { currentEntry } from './combat.js';
+import { DRAW_SHAPES } from './drawings.js';
 import { movementLeft } from './input.js';
 import { pauseElapsed } from './panels.js';
 
@@ -196,7 +197,7 @@ function bottomCenter(ctx) {
   }
   if (tool === 'draw') {
     const s = sub.draw || 'pen';
-    return `<div class="toolbar">${ib('sub:draw:pen', 'pencil-edit-02', 'Рисовать', { active: s === 'pen' })}${ib('sub:draw:erase', 'eraser', 'Стереть линию', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки' : 'Стереть мои рисунки')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
+    return `<div class="toolbar">${ib('sub:draw:pen', 'pencil-edit-02', 'Рисовать', { active: s === 'pen' })}${DRAW_SHAPES.map((x) => ib(`sub:draw:${x.id}`, x.icon, `${x.name} · тяните от точки, Shift — без шага 5 фт`, { active: s === x.id })).join('')}${ib('sub:draw:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки' : 'Стереть мои рисунки')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   // Выделение → токен-бар
   if (ctx.ui.selection.size && (tool === 'move' || tool === 'select' || tool === 'ping')) {

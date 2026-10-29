@@ -13,7 +13,7 @@ import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { renderChrome } from './chrome.js';
-import { moveDrawing, deleteDrawing } from './drawings.js';
+import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape } from './drawings.js';
 
 const DRAG_THRESHOLD = 4;
 export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
@@ -680,24 +680,39 @@ const drawTool = {
     const sub = ctx.ui.sub.draw || 'pen';
     if (sub === 'erase') { g.erase = true; eraseAt(ctx, w); return; }
     const hue = ctx.user.hue ?? 32;
-    ctx.ui.liveStroke = { color: ctx.isMaster ? '#e9b052' : `hsl(${hue} 80% 65%)`, pts: [w] };
+    const color = ctx.isMaster ? '#e9b052' : `hsl(${hue} 80% 65%)`;
+    // Фигуры линейки как рисунок (TASK-032): тянем от точки нажатия.
+    if (DRAW_SHAPES.some((x) => x.id === sub)) { g.shape = { sub, from: w, color }; ctx.ui.liveShape = null; return; }
+    ctx.ui.liveStroke = { color, pts: [w] };
     ctx.invalidate('overlay');
   },
-  move(ctx, g, w) {
+  move(ctx, g, w, e) {
     if (g.erase) { eraseAt(ctx, w); return; }
+    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, e.shiftKey); ctx.invalidate('overlay'); return; }
     const s = ctx.ui.liveStroke; if (!s) return;
     const last = s.pts.at(-1);
     if (Math.hypot(w.x - last.x, w.y - last.y) * ctx.camera.z < 3) return;
     s.pts.push(w);
     ctx.invalidate('overlay');
   },
-  up(ctx) {
+  up(ctx, g) {
+    if (g?.shape) {
+      const sh = ctx.ui.liveShape; ctx.ui.liveShape = null; ctx.invalidate('overlay');
+      if (!sh || !g.moved) return;
+      if (sh.shape === 'seg' && Math.hypot(sh.b.x - sh.a.x, sh.b.y - sh.a.y) * ctx.camera.z < 6) return;
+      const r = (p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 });
+      const d = { id: uid('d-'), ...sh, author: ctx.userId };
+      for (const k of ['a', 'b', 'origin']) if (d[k]) d[k] = r(d[k]);
+      if (d.angle != null) d.angle = Math.round(d.angle * 1000) / 1000;
+      ctx.mutateScene((sc) => { sc.drawings.push(structuredClone(d)); }, { label: 'Фигура', undo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, redo: (sc) => { sc.drawings.push(structuredClone(d)); } });
+      return;
+    }
     const s = ctx.ui.liveStroke; ctx.ui.liveStroke = null;
     if (!s || s.pts.length < 2) { ctx.invalidate('overlay'); return; }
     const d = { id: uid('d-'), type: 'line', color: s.color, pts: s.pts.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })), author: ctx.userId };
     ctx.mutateScene((sc) => { sc.drawings.push(d); }, { label: 'Рисунок', undo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, redo: (sc) => { sc.drawings.push(d); } });
   },
-  cancel(ctx) { ctx.ui.liveStroke = null; },
+  cancel(ctx) { ctx.ui.liveStroke = null; ctx.ui.liveShape = null; },
 };
 
 function eraseAt(ctx, w) {
@@ -706,6 +721,7 @@ function eraseAt(ctx, w) {
     if (!ctx.isMaster && d.author !== ctx.userId) continue;
     let near = false;
     if (d.type === 'text') near = Math.abs(d.x - w.x) < 80 && Math.abs(d.y - w.y) < 24;
+    else if (d.type === 'shape') near = nearShape(sceneGrid(ctx), d, w, tol);
     else for (let i = 1; i < d.pts.length && !near; i++) near = distToSegment(w, d.pts[i - 1], d.pts[i]) < tol;
     if (near) {
       const copy = structuredClone(d);

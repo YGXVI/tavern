@@ -8,7 +8,7 @@ import { tokenStats } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
-import { shiftDrawing, canEditDrawing, renderDrawBar } from './drawings.js';
+import { shiftDrawing, canEditDrawing, renderDrawBar, shapeMarkup } from './drawings.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -92,6 +92,7 @@ export function renderDrawings(L, scene, ctx = null) {
     const attr = ed ? ` data-drawing="${d.id}"` : '';
     const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;
     if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
+    if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
     const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
     return `<polyline points="${pts}" class="draw-line${cls}" stroke="${esc(d.color)}" data-did="${d.id}"/>${ed ? `<polyline points="${pts}" class="draw-hit"${attr}/>` : ''}`;
   }).join('');
@@ -342,6 +343,7 @@ export function renderOverlay(L, ctx) {
   if (ghost) out.push(`<line class="wall-ghost k-${ghost.kind}" x1="${ghost.a.x}" y1="${ghost.a.y}" x2="${ghost.b.x}" y2="${ghost.b.y}"/><circle class="wall-handle ghost" cx="${ghost.b.x}" cy="${ghost.b.y}"/>`);
   const brush = ctx.ui.brush;
   if (brush) out.push(`<circle class="brush ${brush.mode}" cx="${brush.x}" cy="${brush.y}" r="${brush.r}"/>`);
+  if (ctx.ui.liveShape) out.push(shapeMarkup(scene.grid, ctx.ui.liveShape, ' live'));
   if (ctx.ui.liveStroke) out.push(`<polyline class="draw-line live" stroke="${esc(ctx.ui.liveStroke.color)}" points="${ctx.ui.liveStroke.pts.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
   if (ctx.ui.calib) {
     const k = ctx.ui.calib;

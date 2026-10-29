@@ -57,6 +57,9 @@
 .draw-line.live { opacity: .9; }
 .draw-text { font-family: var(--font-display); font-weight: 600; paint-order: stroke; stroke: rgb(0 0 0 / .75); stroke-width: 5px; text-anchor: middle; dominant-baseline: middle; }
 /* Рисунки и надписи как объекты (TASK-031) */
+.draw-shape { fill-opacity: .18; stroke-width: 4; stroke-linejoin: round; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .5)); }
+.draw-shape.live, .draw-line.live { opacity: .85; }
+.draw-shape.sel { filter: drop-shadow(0 0 calc(3px * var(--iz)) rgb(255 255 255 / .9)); }
 .draw-hit { fill: none; stroke: transparent; stroke-width: calc(16px * var(--iz)); stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: move; }
 .draw-text.ed { pointer-events: bounding-box; cursor: move; }
 .draw-line.sel { filter: drop-shadow(0 0 calc(3px * var(--iz)) rgb(255 255 255 / .9)); }
