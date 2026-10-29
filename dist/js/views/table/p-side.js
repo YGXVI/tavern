@@ -104,7 +104,7 @@ function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', typ
 function bestiaryHTML(ctx) {
   const st = bState(ctx);
   const m = st.pick ? monsterById(st.pick) : null;
-  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
+  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
     <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, нежить…" aria-label="Поиск существ"></div>
       <div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div></div>
     <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
