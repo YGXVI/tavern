@@ -242,7 +242,7 @@ export function renderTokens(L, ctx) {
 export function renderFog(L, ctx) {
   const view = ctx.fogView();
   const vis = ctx.vision();
-  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog' });
+  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog', hi: !ctx.dragging?.size && !ctx.ui.liveFogOp });
   if (view === 'player' || (ctx.isMasterView && ctx.scene.lighting === 'dark')) drawLightGlow(L.glow, ctx.scene, vis);
   else drawLightGlow(L.glow, ctx.scene, { dark: false });
 }

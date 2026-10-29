@@ -566,6 +566,10 @@ button.tray-die:hover { filter: brightness(1.1); }
   .ch-bc .toolbar { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; padding: 4px; }
   .ch-bc .toolbar::-webkit-scrollbar { display: none; }
   .ch-bc .icon-btn { width: 40px; height: 40px; flex: none; }
+  /* Длинные панели редакторов прокручиваются, а «Готово» всегда остаётся у правого края. */
+  .ch-bc .toolbar > .btn-primary:last-child { position: sticky; right: 0; flex: none; box-shadow: -10px 0 12px 2px var(--bg-panel), 8px 0 0 0 var(--bg-panel); }
+  .ch-bc .tb-slider .tb-label:first-child { display: none; }
+  .ch-bc .tb-slider .slider { width: 72px; }
   .chrome > .ch-bl, .chrome > .ch-br { display: none; }
   .ch-tc { top: 128px; }
   .float-stack { top: 190px; }
