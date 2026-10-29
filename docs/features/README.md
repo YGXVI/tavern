@@ -1,18 +1,19 @@
-# Каталог функций
+# Спецификации функций
 
-| Спецификация | Область | Реализация |
-| --- | --- | --- |
-| [auth.md](auth.md) | Вход и выбор роли | Локальный вход; без аккаунтов. |
-| [campaigns.md](campaigns.md) | Кампании, приглашения и общая комната | Серверная часть не реализована. |
-| [characters.md](characters.md) | Персонажи и листы | Только боевые карточки токенов. |
-| [maps.md](maps.md) | Сцены, карты и токены | Локальный прототип. |
-| [combat.md](combat.md) | Инициатива и ведение боя | Локальный прототип. |
-| [dice.md](dice.md) | Кубы и журнал | Локальный прототип. |
-| [library.md](library.md) | Правила, бестиарий, предметы | 6 стартовых записей. |
-| [chronicle.md](chronicle.md) | Хроника и заметки | Один текст мастера. |
-| [recording-and-transcription.md](recording-and-transcription.md) | Запись, говорящие и черновик сводки | Не реализовано. |
-| [voice-changer.md](voice-changer.md) | Войсченджер NPC | Не реализовано. |
-| [themes.md](themes.md) | Оформление | 4 работающие темы. |
-| [_template.md](_template.md) | Шаблон новой функции | Копировать; не считать задачей. |
+Единый источник текущих требований — [openspec/specs](../../openspec/specs/). Здесь оставлены совместимые указатели для старых ссылок; новые полные спецификации сюда не добавлять.
 
-Ответственные и резервы — только в [../status.md](../status.md), а не в дублирующих списках здесь. «Критерии целевой версии» не означают, что она готова.
+| Область | Каноническая спецификация |
+| --- | --- |
+| auth | [auth](../../openspec/specs/auth/spec.md) |
+| campaigns | [campaigns](../../openspec/specs/campaigns/spec.md) |
+| characters | [characters](../../openspec/specs/characters/spec.md) |
+| maps | [maps](../../openspec/specs/maps/spec.md) |
+| combat | [combat](../../openspec/specs/combat/spec.md) |
+| dice | [dice](../../openspec/specs/dice/spec.md) |
+| library | [library](../../openspec/specs/library/spec.md) |
+| chronicle | [chronicle](../../openspec/specs/chronicle/spec.md) |
+| recording-and-transcription | [recording-and-transcription](../../openspec/specs/recording-and-transcription/spec.md) |
+| voice-changer | [voice-changer](../../openspec/specs/voice-changer/spec.md) |
+| themes | [themes](../../openspec/specs/themes/spec.md) |
+
+Требования будущего изменения хранятся в `openspec/changes/<change>/specs/`. Ответственный и статус новых задач — в GitHub Issues; исторические TASK-006–009 — в [status.md](../status.md). Старые PR могут добавлять документы сюда по прежней договорённости; при интеграции перенести их в OpenSpec, сохранив ссылку и не приписывая готовность UI.
