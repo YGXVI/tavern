@@ -299,6 +299,7 @@ export function renderOverlay(L, ctx) {
     lbl(last.x, last.y - s * 0.55, r.label, r.remote ? 'remote' : '');
   }
   for (const m of ctx.movePaths()) {
+    if (m.quiet) continue; // вне боя прямой путь не рисуем — токен и так идёт за курсором
     const pts = m.pts;
     out.push(`<polyline class="move-path ${m.over ? 'over' : ''} ${m.blocked ? 'blocked' : ''}" points="${pts.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
     for (const p of pts.slice(1, -1)) out.push(`<circle class="move-dot ${m.over ? 'over' : ''}" cx="${p.x}" cy="${p.y}" r="${s * 0.07}"/>`);
