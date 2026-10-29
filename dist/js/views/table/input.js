@@ -333,7 +333,7 @@ function nudge(ctx, k) {
   const moves = [];
   for (const id of ctx.ui.selection) {
     const t = ctx.scene.tokens.find((x) => x.id === id);
-    if (!t || !ctx.canControl(t)) continue;
+    if (!t || !ctx.canControl(t) || t.locked) continue;
     const to = { x: t.x + d[0] * s, y: t.y + d[1] * s };
     if (moveBlocked(t, to, ctx.scene.walls)) { ctx.toast({ title: 'Там стена', body: ctx.isMaster ? 'Сквозь стену — перетащить с Alt' : '', icon: 'path' }); continue; }
     moves.push({ id, from: { x: t.x, y: t.y }, to });
@@ -376,9 +376,10 @@ const tokenTool = {
       const t = ctx.scene.tokens.find((x) => x.id === tg.id);
       if (!t) return;
       if (!ctx.canControl(t)) { g.noDrag = true; return; }
+      if (t.locked && !g.shift) { ctx.select([t.id]); g.noDrag = true; g.locked = true; return; }
       if (g.shift) { const sel = new Set(ctx.ui.selection); sel.has(t.id) ? sel.delete(t.id) : sel.add(t.id); ctx.select([...sel]); g.noDrag = true; return; }
       if (!ctx.ui.selection.has(t.id)) ctx.select([t.id]);
-      const group = [...ctx.ui.selection].map((id) => ctx.scene.tokens.find((x) => x.id === id)).filter((x) => x && ctx.canControl(x));
+      const group = [...ctx.ui.selection].map((id) => ctx.scene.tokens.find((x) => x.id === id)).filter((x) => x && ctx.canControl(x) && !x.locked);
       g.drag = { leader: t, items: group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })) };
       return;
     }
@@ -388,6 +389,7 @@ const tokenTool = {
   },
   move(ctx, g, w, e) {
     if (g.marquee) { ctx.ui.marquee.x1 = w.x; ctx.ui.marquee.y1 = w.y; ctx.invalidate('overlay'); return; }
+    if (g.locked && !g.lockedTold) { g.lockedTold = true; ctx.toast({ title: 'Токен закреплён', body: ctx.isMasterView ? 'Снимите замок в рамке под токеном' : 'Его закрепил мастер', icon: 'square-lock-02' }); }
     if (!g.drag || g.noDrag) return;
     dragTokens(ctx, g, w, e);
   },

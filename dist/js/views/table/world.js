@@ -7,6 +7,7 @@ import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '
 import { tokenStats } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
+import { tokenLook, renderGizmo } from './gizmo.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -29,9 +30,10 @@ export function buildWorld(viewport) {
     fog: el('<canvas class="layer fog-canvas"></canvas>'),
     overlay: svg('overlay-layer'),
     labels: el('<div class="layer labels-layer"></div>'),
+    gizmo: el('<div class="layer gizmo-layer"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo);
   viewport.append(world);
   return L;
 }
@@ -42,7 +44,7 @@ export function sizeLayers(L, scene) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
-  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels', 'auraLabels']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
+  for (const k of ['fog', 'glow', 'markers', 'tokens', 'labels', 'auraLabels', 'gizmo']) { L[k].style.width = `${W}px`; L[k].style.height = `${H}px`; }
   L.map.style.width = `${W}px`; L.map.style.height = `${H}px`;
   L.world.style.width = `${W}px`; L.world.style.height = `${H}px`;
 }
@@ -236,7 +238,8 @@ export function renderTokens(L, ctx) {
     const st = tokenStats(c, t);
     const size = sizeById(t.size);
     const n = size.cells;
-    const d = n * s * 0.9 * (size.scale || 1);
+    const look = tokenLook(ctx, t); // поворот и свободный масштаб (TASK-030)
+    const d = n * s * 0.9 * (size.scale || 1) * look.scale;
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
     const name = ctx.nameOf(t, st);
     const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
@@ -248,13 +251,14 @@ export function renderTokens(L, ctx) {
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
+    node.style.setProperty('--rot', `${look.rot}deg`);
     node.style.zIndex = ctx.dragging?.has(t.id) || ctx.remote.drags.has(t.id) ? top : layer.get(t.id);
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
     node.style.setProperty('--fs', `${Math.max(7, s * 0.15)}px`);
     node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
-    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) ? 'can' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
     // Прицелы: кто отметил этот токен целью.
     const tg = ctx.targetersOf?.(t.id) || [];
     const tgSig = tg.map((u) => u.id).join(',');
@@ -281,6 +285,7 @@ export function renderTokens(L, ctx) {
     node.title = `${name}${t.elevation ? ` · высота ${t.elevation} фт` : ''}${showHp ? ` · ${st.hp}/${st.hpMax}` : st.hpMax ? ` · ${woundLabel(st.hp, st.hpMax)}` : ''}`;
   }
   for (const node of [...L.tokens.children]) if (!seen.has(node.dataset.token)) node.remove();
+  renderGizmo(L, ctx);
 }
 
 export function renderFog(L, ctx) {
