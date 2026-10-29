@@ -9,6 +9,7 @@ import { currentEntry } from './combat.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
+import { parseHpInput } from '../../rules/hp.js';
 
 const ib = (act, name, tip, extra = '') => `<button class="icon-btn" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(name, 22)}</button>`;
 const div = '<span class="divider"></span>';
@@ -17,9 +18,54 @@ export function selectedTokens(ctx) {
   return [...ctx.ui.selection].map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter(Boolean);
 }
 
-function hpCell(st, canEdit) {
+/** Хиты в токен-баре: число можно просто переписать (12 — стало 12, −5 — урон 5, +3 — лечение 3). */
+function hpCell(st, canEdit, id = '') {
   const frac = Math.max(0, Math.min(1, st.hp / Math.max(1, st.hpMax)));
-  return `${canEdit ? ib('hp-dmg', 'minus-sign', 'Урон') : ''}<button class="hp-cell" data-act="hp" ${canEdit ? '' : 'disabled'} data-tip="${canEdit ? 'Изменить хиты' : ''}"><span class="hp-num"><small>хп</small> <b class="${st.hp <= 0 ? 'negative' : ''}">${st.hp}/${st.hpMax}</b>${st.tempHp ? `<em>+${st.tempHp}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></button>${canEdit ? ib('hp-heal', 'plus-sign', 'Лечение') : ''}`;
+  const num = canEdit
+    ? `<input class="hp-input ${st.hp <= 0 ? 'negative' : ''}" data-hp-input="${esc(id)}" value="${st.hp}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Хиты сейчас: впишите число, −урон или +лечение" data-tip="Впишите, сколько осталось, или −урон / +лечение">`
+    : `<b class="${st.hp <= 0 ? 'negative' : ''}">${st.hp}</b>`;
+  return `<div class="hp-cell ${canEdit ? 'editable' : ''}"><span class="hp-num"><small>хп</small> ${num}<b class="hp-max">/${st.hpMax}</b>${st.tempHp ? `<em>+${st.tempHp}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></div>${canEdit ? ib('hp', 'first-aid-kit', 'Урон, лечение, временные хиты') : ''}`;
+}
+
+/** Записать ввод хитов токену. */
+export function commitHpInput(ctx, id, text) {
+  const v = parseHpInput(text);
+  if (!v) return false;
+  if (v.delta) applyHp(ctx, [id], v.delta);
+  else if (v.set != null) setHp(ctx, id, v.set);
+  return true;
+}
+
+/** Поставить точное число хитов (временные хиты не трогаются). */
+export function setHp(ctx, id, value) {
+  const t = ctx.scene.tokens.find((x) => x.id === id);
+  if (!t) return;
+  const st = tokenStats(ctx.c, t);
+  const hp = Math.max(0, Math.min(st.hpMax || value, Math.floor(value)));
+  if (hp === st.hp) return;
+  const delta = hp - st.hp;
+  let before = null, after = null, note = null;
+  const pick = (x) => ({ hp: x.hp, conditions: [...(x.conditions || [])], ...(x.deathSaves ? { deathSaves: { ...x.deathSaves } } : {}) });
+  ctx.mutateScene((s, c) => {
+    patchTokenStats(c, s, id, (x) => {
+      before = pick(x);
+      const conds = new Set(x.conditions || []);
+      if (delta < 0 && conds.has('concentration')) note = `${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`;
+      if (hp === 0 && t.kind === 'hero') { conds.add('unconscious'); conds.delete('concentration'); }
+      if (hp > 0 && x.hp === 0) { conds.delete('unconscious'); if (x.deathSaves) x.deathSaves = { s: 0, f: 0 }; }
+      const out = { hp, conditions: [...conds] };
+      after = { ...pick(x), ...out };
+      return out;
+    });
+    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${st.name}: хиты ${st.hp} → ${hp}` });
+  }, {
+    label: 'Хиты',
+    undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
+    redo: (s, c) => { if (after) patchTokenStats(c, s, id, () => structuredClone(after)); },
+  });
+  if (note) ctx.toast({ title: 'Концентрация', body: note, icon: 'brain-02' });
+  bus.send('hp-flash', { cid: ctx.cid, ids: [id], delta });
+  emitLocal('hp-flash', { cid: ctx.cid, ids: [id], delta });
 }
 
 export function tokenBarHTML(ctx) {
@@ -53,7 +99,7 @@ export function tokenBarHTML(ctx) {
   if (master || mine) {
     const sub = mine ? `${st.subtitle} · ваш герой` : st.subtitle + (t.hidden ? ' · скрыт' : '');
     const left = movementLeft(ctx, t);
-    let middle = hpCell(st, can);
+    let middle = hpCell(st, can, t.id);
     if (down && t.kind === 'hero') {
       const ds = st.deathSaves || { s: 0, f: 0 };
       middle += `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
@@ -84,9 +130,12 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   const st = one ? tokenStats(ctx.c, one) : null;
   const pop = popover(`<div class="hp-editor">
     <div class="panel-header">${one ? `<span class="avatar sm ${one.kind}"><img src="${esc(srcOf(one.img))}" alt=""></span>` : ''}<div class="titles"><div class="title">${esc(one ? st.name : `${toks.length} ${plural(toks.length, 'цель', 'цели', 'целей')}`)}</div><div class="subtitle">${one ? `${st.hp} из ${st.hpMax} хитов${st.tempHp ? ` · +${st.tempHp} временных` : ''}` : 'Урон по области: одно число для всех'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    ${one ? `<div class="panel-section"><label class="label" for="hpset">Осталось хитов</label>
+      <div class="row"><div class="input grow"><input id="hpset" type="number" min="0" max="${st.hpMax}" inputmode="numeric" value="${st.hp}" data-set><span class="suffix">из ${st.hpMax}</span></div><button class="btn btn-primary" data-set-ok>${icon('tick-02', 16)}Записать</button></div>
+      <span class="t-xs tertiary">Впишите число — без подсчётов. Или ниже: урон и лечение с учётом временных хитов.</span></div><hr class="panel-divider">` : ''}
     <div class="panel-section">
-      <label class="label" for="hpv">Сколько хитов</label>
-      <div class="input"><input id="hpv" type="number" min="0" inputmode="numeric" data-v autofocus></div>
+      <label class="label" for="hpv">${one ? 'Урон или лечение' : 'Сколько хитов'}</label>
+      <div class="input"><input id="hpv" type="number" min="0" inputmode="numeric" data-v></div>
       <div class="row">${['1', '5', '10'].map((n) => `<button class="chip chip-md" data-q="${n}">${n}</button>`).join('')}${one ? `<button class="chip chip-md" data-q="half">½</button><button class="chip chip-md" data-q="all">всё</button>` : ''}</div>
       <div class="row hp-actions"><button class="btn btn-danger grow" data-dmg>${icon('minus-sign', 16)}Урон</button><button class="btn btn-success grow" data-heal>${icon('plus-sign', 16)}Лечение</button></div>
     </div>
@@ -95,10 +144,14 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   </div>`, anchor, { placement: 'top', className: 'hp-pop' });
   const box = pop.node;
   const v = box.querySelector('[data-v]');
-  setTimeout(() => v.focus(), 20);
+  const setInput = box.querySelector('[data-set]');
+  setTimeout(() => { const f = mode || !setInput ? v : setInput; f.focus(); f.select?.(); }, 20);
+  const applySet = () => { const n = Math.floor(Number(setInput.value)); if (!Number.isFinite(n) || setInput.value === '') { setInput.closest('.input').classList.add('error'); return; } setHp(ctx, one.id, n); closePopover(); };
+  setInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') applySet(); });
   box.addEventListener('click', (e) => {
     const q = e.target.closest('[data-q]');
     if (q) { v.value = q.dataset.q === 'half' ? Math.floor(st.hp / 2) : q.dataset.q === 'all' ? st.hp : q.dataset.q; v.focus(); }
+    if (e.target.closest('[data-set-ok]')) applySet();
     if (e.target.closest('[data-dmg]')) apply(-1);
     if (e.target.closest('[data-heal]')) apply(1);
   });
