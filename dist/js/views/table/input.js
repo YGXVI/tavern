@@ -691,9 +691,9 @@ function applyLiveFog(ctx, op) {
 }
 
 const wallTool = {
-  hover(ctx, w) {
+  hover(ctx, w, e) {
     if (!ctx.ui.wallChain) return;
-    ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w), kind: ctx.ui.sub.walls || 'wall' };
+    ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w, e), kind: ctx.ui.sub.walls || 'wall' };
     ctx.invalidate('overlay');
   },
   down(ctx, g, w, e) {
@@ -714,14 +714,14 @@ const wallTool = {
       return;
     }
     if (sub === 'erase') return;
-    const p = wallSnap(ctx, w, e.altKey);
+    const p = wallSnap(ctx, w, e);
     if (!ctx.ui.wallChain) { ctx.ui.wallChain = { a: p }; ctx.ui.selectedWall = null; closePopover(); g.started = true; ctx.ui.wallGhost = { a: p, b: p, kind: sub }; ctx.invalidate('overlay', 'walls'); return; }
     addWall(ctx, ctx.ui.wallChain.a, p, sub);
     ctx.ui.wallChain = { a: p };
   },
   move(ctx, g, w, e) {
     if (g.handle) {
-      const p = wallSnap(ctx, w, e.altKey, g.handle);
+      const p = wallSnap(ctx, w, e, g.handle);
       const s = ctx.scene;
       for (const wl of s.walls) {
         if (wl.a.x === g.handle.x && wl.a.y === g.handle.y) wl.a = { ...p };
@@ -731,7 +731,7 @@ const wallTool = {
       ctx.invalidate('walls');
       return;
     }
-    if (ctx.ui.wallChain) { ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w, e.altKey), kind: ctx.ui.sub.walls || 'wall' }; ctx.invalidate('overlay'); }
+    if (ctx.ui.wallChain) { ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w, e), kind: ctx.ui.sub.walls || 'wall' }; ctx.invalidate('overlay'); }
   },
   up(ctx, g, w, e) {
     if (g.handle && g.moved) {
@@ -741,28 +741,53 @@ const wallTool = {
     }
     // Перетаскивание от точки — сразу отрезок.
     if (g.started && g.moved) {
-      const p = wallSnap(ctx, w, e.altKey);
+      const p = wallSnap(ctx, w, e);
       const a = ctx.ui.wallChain?.a;
       if (a && (a.x !== p.x || a.y !== p.y)) { addWall(ctx, a, p, ctx.ui.sub.walls || 'wall'); ctx.ui.wallChain = { a: p }; }
     }
   },
   click(ctx, g, w, e, dbl) {
-    if (dbl && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); }
+    if (dbl && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
+    // Клик по концу стены — продолжить стену от него.
+    if (g.handle && !ctx.ui.wallChain && (ctx.ui.sub.walls || 'wall') !== 'erase') {
+      const p = { ...g.handle };
+      ctx.ui.wallChain = { a: p }; ctx.ui.wallGhost = { a: p, b: p, kind: ctx.ui.sub.walls || 'wall' }; g.handle = null;
+      ctx.invalidate('overlay', 'walls');
+    }
   },
 };
 
-function wallSnap(ctx, w, free = false, exclude = null) {
-  if (free) return { x: Math.round(w.x), y: Math.round(w.y) };
-  const tol = 12 / ctx.camera.z;
-  let best = null, bd = tol;
+/**
+ * Точка стены на свободном холсте: прилипает к концам уже нарисованных стен (12 px экрана),
+ * затем к самим стенам (8 px — для Т-образных стыков), иначе остаётся где поставили.
+ * Shift — по сетке (узлы и середины клеток); Alt — без прилипания вовсе.
+ */
+function wallSnap(ctx, w, e = {}, exclude = null) {
+  if (e.altKey) return { x: Math.round(w.x), y: Math.round(w.y) };
+  if (e.shiftKey) { const v = snapToVertex(ctx, w, 0.5); return { x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100 }; }
+  const z = ctx.camera.z;
+  let best = null, bd = 12 / z;
   for (const wl of ctx.scene.walls) for (const p of [wl.a, wl.b]) {
     if (exclude && p.x === exclude.x && p.y === exclude.y) continue;
     const d = Math.hypot(p.x - w.x, p.y - w.y);
     if (d < bd) { bd = d; best = p; }
   }
   if (best) return { ...best };
-  const v = snapToVertex(ctx, w, 0.5);
-  return { x: Math.round(v.x * 100) / 100, y: Math.round(v.y * 100) / 100 };
+  bd = 8 / z;
+  for (const wl of ctx.scene.walls) {
+    if (exclude && ((wl.a.x === exclude.x && wl.a.y === exclude.y) || (wl.b.x === exclude.x && wl.b.y === exclude.y))) continue;
+    const q = projectOnSegment(w, wl.a, wl.b);
+    const d = Math.hypot(q.x - w.x, q.y - w.y);
+    if (d < bd) { bd = d; best = q; }
+  }
+  if (best) return { x: Math.round(best.x * 10) / 10, y: Math.round(best.y * 10) / 10 };
+  return { x: Math.round(w.x), y: Math.round(w.y) };
+}
+
+function projectOnSegment(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+  const t = len2 ? clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / len2, 0, 1) : 0;
+  return { x: a.x + t * dx, y: a.y + t * dy };
 }
 
 function addWall(ctx, a, b, kind) {
@@ -789,7 +814,7 @@ const lightTool = {
   move(ctx, g, w, e) {
     if (!g.light) return;
     const l = ctx.scene.lights.find((x) => x.id === g.light.id); if (!l) return;
-    const p = e.altKey ? w : snapToVertex(ctx, w, 0.5);
+    const p = e.shiftKey ? snapToVertex(ctx, w, 0.5) : w;
     l.x = Math.round(p.x); l.y = Math.round(p.y);
     ctx.invalidateVision();
     ctx.invalidate('markers', 'areas', 'fog');
@@ -802,7 +827,7 @@ const lightTool = {
       return;
     }
     if (g.light && !g.moved) { ctx.panels.lightPopover(g.light.id, { x: e.clientX, y: e.clientY }); return; }
-    if (g.create && !g.moved) ctx.panels.addLight(snapToVertex(ctx, w, 0.5), ctx.ui.sub.lights || 'torch', { x: e.clientX, y: e.clientY });
+    if (g.create && !g.moved) ctx.panels.addLight(e.shiftKey ? snapToVertex(ctx, w, 0.5) : { x: Math.round(w.x), y: Math.round(w.y) }, ctx.ui.sub.lights || 'torch', { x: e.clientX, y: e.clientY });
   },
 };
 
