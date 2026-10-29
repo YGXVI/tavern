@@ -17,6 +17,7 @@ import { initiativeOrder } from './combat.js';
 import { attachInput } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar } from './drawings.js';
+import { attachCreatureDrag } from './creature-drag.js';
 import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
@@ -348,6 +349,7 @@ export function mountTable(root, cid) {
   const detachInput = attachInput(ctx);
   attachGizmo(L, ctx);
   attachDrawBar(L, ctx);
+  const detachCreatureDrag = attachCreatureDrag(ctx);
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
@@ -387,7 +389,7 @@ export function mountTable(root, cid) {
 
   return {
     unmount() {
-      unsub(); offPresence(); offErr(); detachInput(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },
