@@ -100,15 +100,20 @@ function drawOps(ctx, ops, type, color = '#000') {
 
 // Туман мягкий, поэтому считаем его в уменьшенном холсте и растягиваем CSS — так он дешевле при перетаскивании.
 const FOG_RES = 1100;
+const FOG_RES_HI = 2400;
 const GLOW_RES = 800;
 const off = { a: null, b: null, c: null };
-const eCache = { key: '', cv: null };
+// Кэш исследованного слоя — по одному на разрешение (покой и перетаскивание).
+const eCache = new Map();
 
 function exploredLayer(scene, explored, ops, w, h, k) {
   const hide = ops.filter((o) => o.type === 'hide');
   const g = scene.grid;
   const sig = `${scene.id}|${explored.size}|${hide.map((o) => o.id).join(',')}|${g.size}|${g.offsetX}|${g.offsetY}|${w}x${h}`;
-  if (eCache.key === sig && eCache.cv) return eCache.cv;
+  const slot = eCache.get(`${w}x${h}`) || { key: '', cv: null };
+  eCache.set(`${w}x${h}`, slot);
+  if (eCache.size > 2) eCache.delete(eCache.keys().next().value);
+  if (slot.key === sig && slot.cv) return slot.cv;
   const R = scratch('c', w, h);
   R.ctx.setTransform(k, 0, 0, k, 0, 0);
   R.ctx.fillStyle = '#000';
@@ -116,7 +121,7 @@ function exploredLayer(scene, explored, ops, w, h, k) {
   const s = gridSize(g), ox = g.offsetX || 0, oy = g.offsetY || 0;
   for (const kk of explored) { const [c, r] = kk.split(',').map(Number); R.ctx.rect(ox + c * s - 1, oy + r * s - 1, s + 2, s + 2); }
   R.ctx.fill();
-  const cv = eCache.cv || (eCache.cv = document.createElement('canvas'));
+  const cv = slot.cv || (slot.cv = document.createElement('canvas'));
   if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
   const ctx = cv.getContext('2d');
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -132,7 +137,7 @@ function exploredLayer(scene, explored, ops, w, h, k) {
     ctx.globalCompositeOperation = 'source-over';
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-  eCache.key = sig;
+  slot.key = sig;
   return cv;
 }
 function scratch(name, w, h) {
@@ -154,7 +159,8 @@ function scratch(name, w, h) {
  */
 export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
   const W = scene.map.width, H = scene.map.height;
-  const k = Math.min(1, FOG_RES / Math.max(W, H));
+  // В покое туман рисуется чётко (до FOG_RES_HI), во время перетаскивания — грубее и быстрее.
+  const k = Math.min(1, (opts.hi ? FOG_RES_HI : FOG_RES) / Math.max(W, H));
   const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
   const ctx = canvas.getContext('2d');
