@@ -597,6 +597,7 @@ export class Panels {
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
       case 'done': ctx.setTool('move'); break;
+      case 'focus-toggle': ctx.ui.focusOff = !ctx.ui.focusOff; ctx.applyFocus(); ctx.invalidate('chrome'); break;
       case 'toggle-dark': {
         const before = ctx.scene.lighting, after = before === 'dark' ? 'bright' : 'dark';
         ctx.mutateScene((s) => { s.lighting = after; }, { label: 'Освещение', undo: (s) => { s.lighting = before; }, redo: (s) => { s.lighting = after; } });
