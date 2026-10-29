@@ -18,6 +18,28 @@
 .viewport[data-tool="ping"] { cursor: cell; }
 .viewport[data-tool="select"] { cursor: crosshair; }
 
+/* ——— Фокус редакторов сцены: видно только то, что правишь ——— */
+.world > .layer { transition: opacity .18s ease; }
+.viewport[data-focus] .tokens-layer { opacity: .14; }
+.viewport[data-focus] .tokens-layer .tok { pointer-events: none !important; }
+.viewport[data-focus] :is(.auras-layer, .drawings-layer) { opacity: 0; }
+.viewport[data-focus] .markers-layer .marker { opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.viewport[data-focus] .markers-layer .marker.door { opacity: .35; }
+/* Стены: двери как часть стен, туман-подсказка почти убран */
+.viewport[data-focus="walls"] .markers-layer .marker.door { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="walls"] .fog-canvas, .viewport[data-focus="terrain"] .fog-canvas { opacity: .2; }
+/* Свет: источники и двери, туман показывает результат освещения */
+.viewport[data-focus="lights"] .markers-layer :is(.marker.light, .marker.door) { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="lights"] .tokens-layer { opacity: .3; }
+/* Туман: герои нужны, чтобы видеть их обзор */
+.viewport[data-focus="fog"] .tokens-layer { opacity: .45; }
+/* Слой мастера: ловушки, метки, переходы */
+.viewport[data-focus="gm"] .markers-layer :is(.marker.trap, .marker.pin, .marker.portal) { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="gm"] .fog-canvas { opacity: .5; }
+/* Сетка: только карта и клетки */
+.viewport[data-focus="grid"] :is(.tokens-layer, .fog-canvas, .glow-canvas, .terrain-layer) { opacity: 0; }
+
+
 .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .world > .layer, .world > svg, .world > canvas, .world > img { position: absolute; left: 0; top: 0; }
 .map-img { pointer-events: none; max-width: none; box-shadow: 0 0 0 1px rgb(0 0 0 / .5), 0 30px 90px rgb(0 0 0 / .55); background: #0b0d14; }

@@ -15,6 +15,7 @@ import { currentEntry } from './combat.js';
 import { renderChrome } from './chrome.js';
 
 const DRAG_THRESHOLD = 4;
+export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
 const isTyping = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName) || e.target?.isContentEditable;
 
 export function attachInput(ctx) {
@@ -215,7 +216,13 @@ export function attachInput(ctx) {
       closePopover();
     }
     vp.dataset.tool = tool;
+    ctx.applyFocus();
     ctx.invalidate('all');
+  };
+  // Фокус редактора: в стенах, свете, тумане, местности, слое мастера и сетке лишнее приглушается.
+  ctx.applyFocus = () => {
+    const f = FOCUS_TOOLS.includes(ctx.ui.tool) && ctx.isMasterView && (!ctx.ui.focusOff || ctx.ui.tool === 'grid') ? ctx.ui.tool : '';
+    if (f) vp.dataset.focus = f; else delete vp.dataset.focus;
   };
   ctx.clearMeasure = (render = true) => {
     if (ctx.ui.ruler) ctx.sendRuler(null);

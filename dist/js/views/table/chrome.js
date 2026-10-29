@@ -159,27 +159,27 @@ function bottomCenter(ctx) {
   if (ctx.isMasterView) {
     if (tool === 'walls') {
       const s = sub.walls || 'wall';
-      return `<div class="toolbar">${ib('sub:walls:wall', 'path', 'Стена', { active: s === 'wall' })}${ib('sub:walls:window', 'grid-02', 'Окно: не пускает, но видно', { active: s === 'window' })}${ib('sub:walls:invisible', 'view-off-slash', 'Невидимая: только для движения', { active: s === 'invisible' })}${ib('sub:walls:door', 'door-01', 'Дверь', { active: s === 'door' })}${ib('sub:walls:secret', 'mask', 'Потайная дверь', { active: s === 'secret' })}${ib('tool:terrain', 'mountain', 'Местность', {})}${div}${ib('sub:walls:erase', 'eraser', 'Стереть стену', { active: s === 'erase' })}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
+      return `<div class="toolbar">${ib('sub:walls:wall', 'path', 'Стена', { active: s === 'wall' })}${ib('sub:walls:window', 'grid-02', 'Окно: не пускает, но видно', { active: s === 'window' })}${ib('sub:walls:invisible', 'view-off-slash', 'Невидимая: только для движения', { active: s === 'invisible' })}${ib('sub:walls:door', 'door-01', 'Дверь', { active: s === 'door' })}${ib('sub:walls:secret', 'mask', 'Потайная дверь', { active: s === 'secret' })}${ib('tool:terrain', 'mountain', 'Местность', {})}${div}${ib('sub:walls:erase', 'eraser', 'Стереть стену', { active: s === 'erase' })}${focusBtn(ctx)}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
     }
     if (tool === 'terrain') {
       const s = sub.terrain || 'difficult';
       const size = sub.terrainSize || 1;
-      return `<div class="toolbar">${ib('sub:terrain:difficult', 'mountain', 'Труднопроходимая', { active: s === 'difficult' })}${ib('sub:terrain:blocked', 'stop-circle', 'Непроходимая', { active: s === 'blocked' })}${ib('sub:terrain:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${div}<label class="tb-slider"><span class="tb-label">Кисть</span><input class="slider" type="range" min="1" max="5" step="2" value="${size}" data-range="terrainSize" style="--fill:${((size - 1) / 4) * 100}%"><span class="tb-label" data-out="terrainSize">${size}×${size}</span></label>${undoRedo(ctx)}${div}${ib('tool:walls', 'path', 'К стенам')}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
+      return `<div class="toolbar">${ib('sub:terrain:difficult', 'mountain', 'Труднопроходимая', { active: s === 'difficult' })}${ib('sub:terrain:blocked', 'stop-circle', 'Непроходимая', { active: s === 'blocked' })}${ib('sub:terrain:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${div}<label class="tb-slider"><span class="tb-label">Кисть</span><input class="slider" type="range" min="1" max="5" step="2" value="${size}" data-range="terrainSize" style="--fill:${((size - 1) / 4) * 100}%"><span class="tb-label" data-out="terrainSize">${size}×${size}</span></label>${focusBtn(ctx)}${undoRedo(ctx)}${div}${ib('tool:walls', 'path', 'К стенам')}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
     }
     if (tool === 'lights') {
       const s = sub.lights || 'torch';
       const dark = ctx.scene.lighting === 'dark';
-      return `<div class="toolbar">${LIGHTS.filter((l) => l.id !== 'candle').map((l) => ib(`sub:lights:${l.id}`, l.icon, `${l.name}: ${l.bright}+${l.dim} фт`, { active: s === l.id })).join('')}${div}<button class="btn btn-sm ${dark ? 'btn-primary' : 'btn-secondary'}" data-act="toggle-dark">${icon(dark ? 'moon-02' : 'sun-01', 16)}${dark ? 'Темно' : 'Светло'}</button>${div}${ib('sub:lights:erase', 'eraser', 'Убрать источник', { active: s === 'erase' })}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
+      return `<div class="toolbar">${LIGHTS.filter((l) => l.id !== 'candle').map((l) => ib(`sub:lights:${l.id}`, l.icon, `${l.name}: ${l.bright}+${l.dim} фт`, { active: s === l.id })).join('')}${div}<button class="btn btn-sm ${dark ? 'btn-primary' : 'btn-secondary'}" data-act="toggle-dark">${icon(dark ? 'moon-02' : 'sun-01', 16)}${dark ? 'Темно' : 'Светло'}</button>${div}${ib('sub:lights:erase', 'eraser', 'Убрать источник', { active: s === 'erase' })}${focusBtn(ctx)}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
     }
     if (tool === 'fog') {
       const s = sub.fog || 'reveal';
       const size = sub.fogSize || 2;
       const mode = ctx.scene.fog.mode;
-      return `<div class="toolbar">${ib('sub:fog:reveal', 'paint-brush-01', 'Открыть кистью', { active: s === 'reveal' })}${ib('sub:fog:hide', 'paint-brush-02', 'Скрыть кистью', { active: s === 'hide' })}${ib('sub:fog:rect', 'cursor-rectangle-selection-01', 'Открыть область', { active: s === 'rect' })}${div}<label class="tb-slider"><span class="tb-label">Кисть</span><input class="slider" type="range" min="1" max="8" value="${size}" data-range="fogSize" style="--fill:${((size - 1) / 7) * 100}%"><span class="tb-label" data-out="fogSize">${size} кл.</span></label>${div}<label class="tb-select" data-tip="Как работает туман"><select data-select="fogMode"><option value="vision" ${mode === 'vision' ? 'selected' : ''}>Обзор героев</option><option value="manual" ${mode === 'manual' ? 'selected' : ''}>Вручную</option><option value="off" ${mode === 'off' ? 'selected' : ''}>Без тумана</option></select></label>${ib('fog-reveal-all', 'view', 'Открыть всё')}${ib('fog-hide-all', 'view-off', 'Скрыть всё и забыть исследованное')}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
+      return `<div class="toolbar">${ib('sub:fog:reveal', 'paint-brush-01', 'Открыть кистью', { active: s === 'reveal' })}${ib('sub:fog:hide', 'paint-brush-02', 'Скрыть кистью', { active: s === 'hide' })}${ib('sub:fog:rect', 'cursor-rectangle-selection-01', 'Открыть область', { active: s === 'rect' })}${div}<label class="tb-slider"><span class="tb-label">Кисть</span><input class="slider" type="range" min="1" max="8" value="${size}" data-range="fogSize" style="--fill:${((size - 1) / 7) * 100}%"><span class="tb-label" data-out="fogSize">${size} кл.</span></label>${div}<label class="tb-select" data-tip="Как работает туман"><select data-select="fogMode"><option value="vision" ${mode === 'vision' ? 'selected' : ''}>Обзор героев</option><option value="manual" ${mode === 'manual' ? 'selected' : ''}>Вручную</option><option value="off" ${mode === 'off' ? 'selected' : ''}>Без тумана</option></select></label>${ib('fog-reveal-all', 'view', 'Открыть всё')}${ib('fog-hide-all', 'view-off', 'Скрыть всё и забыть исследованное')}${focusBtn(ctx)}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
     }
     if (tool === 'gm') {
       const s = sub.gm || 'trap';
-      return `<div class="toolbar">${ib('sub:gm:trap', 'danger', 'Ловушка: обвести клетки', { active: s === 'trap' })}${ib('sub:gm:pin', 'scroll', 'Метка с текстом для чтения вслух', { active: s === 'pin' })}${ib('sub:gm:portal', 'stairs-01', 'Переход на другую сцену', { active: s === 'portal' })}${ib('sub:gm:note', 'sticky-note-01', 'Заметка только для мастера', { active: s === 'note' })}${div}${ib('preview-players', 'view-off', 'Как видят игроки')}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
+      return `<div class="toolbar">${ib('sub:gm:trap', 'danger', 'Ловушка: обвести клетки', { active: s === 'trap' })}${ib('sub:gm:pin', 'scroll', 'Метка с текстом для чтения вслух', { active: s === 'pin' })}${ib('sub:gm:portal', 'stairs-01', 'Переход на другую сцену', { active: s === 'portal' })}${ib('sub:gm:note', 'sticky-note-01', 'Заметка только для мастера', { active: s === 'note' })}${div}${ib('preview-players', 'view-off', 'Как видят игроки')}${focusBtn(ctx)}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="done">${icon('tick-02', 18)}Готово</button></div>`;
     }
     if (tool === 'grid') {
       const g = ctx.scene.grid;
@@ -207,6 +207,12 @@ function bottomCenter(ctx) {
   }
   const lock = ctx.c.paused;
   return `<div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
+}
+
+/** Переключатель фокуса редактора: приглушать лишнее или показать всё. */
+function focusBtn(ctx) {
+  const off = !!ctx.ui.focusOff;
+  return ib('focus-toggle', off ? 'view' : 'view-off', off ? 'Показано всё — приглушить лишнее' : 'Лишнее приглушено — показать всё', { active: !off });
 }
 
 function undoRedo(ctx, withDiv = true) {
