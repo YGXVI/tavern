@@ -149,7 +149,7 @@
 /* ——— Токены ——— */
 .tok { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: auto; touch-action: none; will-change: transform; --ring: var(--side-neutral); }
 .tok.can { cursor: grab; }
-.tok.dragging { cursor: grabbing; z-index: 5; }
+.tok.dragging { cursor: grabbing; }
 .tok.hero { --ring: var(--side-hero); }
 .tok.foe { --ring: var(--side-foe); }
 .tok.disp-neutral { --ring: var(--yellow-500, #e9b052); }

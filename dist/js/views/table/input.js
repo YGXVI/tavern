@@ -344,8 +344,10 @@ function nudge(ctx, k) {
 /** Записать перемещение (с отменой) и расход движения в бою. */
 function commitMoves(ctx, moves, leaderCost) {
   const leader = moves[0];
+  // Кого двигали последним — тот рисуется поверх остальных (порядок одинаковый у всех участников).
+  const at = Date.now();
   ctx.mutateScene((s, c) => {
-    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; } }
+    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; } }
     if (leaderCost != null && c.combat.active) {
       const cur = currentEntry(c, s);
       if (cur?.tokenId === leader.id) c.combat.moved[leader.id] = (c.combat.moved[leader.id] || 0) + leaderCost;
@@ -353,7 +355,7 @@ function commitMoves(ctx, moves, leaderCost) {
   }, {
     label: 'Перемещение',
     undo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.from.x; t.y = m.from.y; } } },
-    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; } } },
+    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); } } },
   });
 }
 export { commitMoves };

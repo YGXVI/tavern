@@ -211,10 +211,21 @@ function tokenMarkup(ctx, t, st, n, d, name = st.name) {
     <span class="tok-name">${esc(name)}</span>`;
 }
 
+/**
+ * Порядок наложения токенов: кого двигали последним — выше; кого не двигали — по порядку на сцене.
+ * Возвращает Map<id, z> (1…N).
+ */
+export function stackOrder(tokens) {
+  const order = tokens.map((t, i) => ({ id: t.id, at: Number(t.movedAt) || 0, i })).sort((a, b) => a.at - b.at || a.i - b.i);
+  return new Map(order.map((o, k) => [o.id, k + 1]));
+}
+
 export function renderTokens(L, ctx) {
   const { scene, c } = ctx;
   const s = gridSize(scene.grid);
   const seen = new Set();
+  const layer = stackOrder(scene.tokens);
+  const top = scene.tokens.length + 10;
   const order = ctx.combatOrder();
   const currentId = ctx.currentTurnTokenId();
   for (const t of scene.tokens) {
@@ -234,6 +245,8 @@ export function renderTokens(L, ctx) {
     if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; }
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
+    // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
+    node.style.zIndex = ctx.dragging?.has(t.id) || ctx.remote.drags.has(t.id) ? top : layer.get(t.id);
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
     node.style.setProperty('--fs', `${Math.max(7, s * 0.15)}px`);
     node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
