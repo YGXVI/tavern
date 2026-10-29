@@ -118,9 +118,11 @@ export function renderMarkers(L, ctx) {
     for (const l of scene.lights) out.push(`<button class="marker light ${ctx.ui.selectedLight === l.id ? 'sel' : ''}" data-light="${l.id}" style="left:${l.x}px;top:${l.y}px" aria-label="Свет">${icon(l.preset === 'campfire' ? 'campfire' : l.preset === 'lantern' || l.preset === 'candle' ? 'bulb' : l.preset === 'light' ? 'sun-03' : 'fire', 16)}</button>`);
   }
   for (const p of scene.pins || []) {
-    if (!isMasterView && !p.shown) continue;
+    // Заметка «Только мастеру» игрокам не видна никогда, даже если раньше её показывали (TASK-027).
+    const shown = p.shown && p.kind !== 'secret';
+    if (!isMasterView && !shown) continue;
     if (!visible(p)) continue;
-    out.push(`<button class="marker pin k-${p.kind} ${p.shown ? 'shown' : ''}" data-pin="${p.id}" style="left:${p.x}px;top:${p.y}px">${icon(p.kind === 'secret' ? 'view-off' : 'scroll', 16)}<span class="marker-label">${esc(p.title)}</span></button>`);
+    out.push(`<button class="marker pin k-${p.kind} ${shown ? 'shown' : ''}" data-pin="${p.id}" style="left:${p.x}px;top:${p.y}px">${icon(p.kind === 'secret' ? 'view-off' : 'scroll', 16)}<span class="marker-label">${esc(p.title)}</span></button>`);
   }
   for (const g of scene.portals || []) {
     if (!visible(g)) continue;
