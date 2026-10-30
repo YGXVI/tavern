@@ -154,10 +154,45 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
+/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адрес #/characters обрабатывает этот же экран. */
+const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : 'campaigns');
+function homeTabs(active) {
+  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a></nav>`;
+}
+
+/** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
+function charactersPage(user) {
+  const mine = [], led = [];
+  for (const c of campaignsFor(user.id)) {
+    const m = membership(c, user.id);
+    for (const ch of c.characters) {
+      if (ch.ownerId === user.id || (m?.role === 'player' && m.characterId === ch.id)) mine.push({ c, ch });
+      else if (m?.role === 'master') led.push({ c, ch });
+    }
+  }
+  const card = ({ c, ch }) => {
+    const owner = ch.ownerId && ch.ownerId !== user.id ? userById(ch.ownerId)?.name : null;
+    const sub = [ch.className || classById(ch.classId)?.name, ch.level ? `${ch.level} ур.` : '', ch.raceName || raceById(ch.raceId)?.name].filter(Boolean).join(' · ');
+    return html`<a class="char-card" href="#/c/${c.id}/sheet/${encodeURIComponent(ch.id)}">${portrait(ch.portrait, 'lg hero', ch.name)}
+      <span class="cc-text"><b>${ch.name}</b><small>${sub}</small><small class="cc-camp">${c.name}${owner ? ` · играет ${owner}` : ''}</small></span></a>`;
+  };
+  const section = (title, items) => (items.length ? html`<section class="char-section"><h3>${title}</h3><div class="char-cards">${items.map(card)}</div></section>` : '');
+  if (!mine.length && !led.length) {
+    return html`<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
+  }
+  return html`${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
+}
+
 export function mountCampaigns(root) {
   let filter = 'all';
   const render = () => {
     const user = currentUser();
+    if (homeTab() === 'characters') {
+      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+        <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
+      bindHeader(root, user);
+      return;
+    }
     const list = campaignsFor(user.id);
     const mine = list.filter((c) => roleIn(c, user.id) === 'master').length;
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
@@ -166,7 +201,7 @@ export function mountCampaigns(root) {
       <main class="page">
         ${list.length ? html`
           <div class="title-row">
-            <h2>Кампании</h2>
+            ${homeTabs('campaigns')}
             <button class="chip chip-md" data-f="all" aria-pressed="${filter === 'all'}">Все · ${list.length}</button>
             <button class="chip chip-md" data-f="master" aria-pressed="${filter === 'master'}">Веду · ${mine}</button>
             <button class="chip chip-md" data-f="player" aria-pressed="${filter === 'player'}">Играю · ${play}</button>
@@ -175,14 +210,13 @@ export function mountCampaigns(root) {
             <button class="btn btn-primary" data-new>${raw(icon('plus-sign', 18))}Новая кампания</button>
           </div>
           <div class="cards">${shown.map((c) => campaignCard(c, user))}${filter !== 'player' ? html`<button class="new-card" data-new>${raw(icon('plus-sign', 24))}<span>Новая кампания</span></button>` : ''}</div>`
-        : html`<div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
+        : html`<div class="title-row">${homeTabs('campaigns')}</div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
             <div class="row"><button class="btn btn-primary btn-lg" data-new>${raw(icon('plus-sign', 18))}Создать кампанию</button><button class="btn btn-secondary btn-lg" data-paste>${raw(icon('link-01', 18))}У меня есть ссылка</button></div></div>`}
       </main></div>`);
     bindHeader(root, user);
     root.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { filter = b.dataset.f; render(); }));
     root.querySelectorAll('[data-new]').forEach((b) => b.addEventListener('click', () => newCampaignModal(user)));
     root.querySelectorAll('[data-paste]').forEach((b) => b.addEventListener('click', pasteInvite));
-    root.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => go(`#/c/${b.dataset.open}`)));
   };
   render();
   return { update: render };
@@ -200,11 +234,12 @@ function campaignCard(c, user) {
   const meta = isMaster
     ? `${c.characters.length} ${plural(c.characters.length, 'герой', 'героя', 'героев')} · ${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')}${c.status === 'draft' ? ' · черновик' : ''}`
     : m?.status === 'pending' ? `Ведёт ${master?.name || '—'} · ждёт одобрения` : `Ведёт ${master?.name || '—'}${myChar ? ` · вы играете ${myChar.name}` : ''}`;
-  return html`<button class="camp-card ${live ? 'live' : ''}" data-open="${c.id}">
+  // Ссылка, а не кнопка: карточку можно открыть в новой вкладке (TASK-094).
+  return html`<a class="camp-card ${live ? 'live' : ''}" href="#/c/${c.id}">
     <div class="cover" style="background-image:url(${srcOf(c.cover)})"><div class="chips"><span class="chip">${isMaster ? 'Мастер' : 'Игрок'}</span>${live ? html`<span class="chip live"><i class="dot"></i>Сессия идёт</span>` : ''}</div></div>
     <div class="body"><div class="name">${c.name}</div><div class="meta">${meta}</div></div>
     <div class="footer"><span class="avatar-stack">${heroes.map((h) => portrait(h.portrait, 'sm hero', h.name))}</span><span class="btn btn-sm ${live && !isMaster ? 'btn-primary' : 'btn-secondary'}">${isMaster ? 'Открыть' : 'Войти'}</span></div>
-  </button>`;
+  </a>`;
 }
 
 function pasteInvite() {
