@@ -7,7 +7,9 @@ import { srcOf } from '../core/assets.js';
 export function userAvatar(u, cls = '', status = null) {
   const hue = u?.hue ?? 210;
   const st = status === null ? '' : `<span class="status ${status ? 'online' : ''}"></span>`;
-  return raw(`<span class="avatar ${cls}" style="background:hsl(${hue} 42% 38%)" title="${esc(u?.name || '')}">${esc(initials(u?.name))}${st}</span>`);
+  // Аватар из Discord (серверный режим) — картинкой поверх инициалов: не загрузится — останутся инициалы.
+  const img = u?.avatar && /^https:\/\/cdn\.discordapp\.com\//.test(u.avatar) ? `<img class="av-img" src="${esc(u.avatar)}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
+  return raw(`<span class="avatar ${cls}" style="background:hsl(${hue} 42% 38%)" title="${esc(u?.name || '')}">${esc(initials(u?.name))}${img}${st}</span>`);
 }
 
 export function portrait(ref, cls = '', title = '', status = null) {

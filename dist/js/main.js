@@ -3,17 +3,18 @@
 //   #/campaigns        — мои кампании
 //   #/join/RSP-XXXX    — приглашение по ссылке
 //   #/c/<id>           — стол кампании (или ожидание одобрения / выбор героя)
-import { initStore, subscribe, bus, onlineUsers } from './core/store.js';
+import { initStore, subscribe, bus, onlineUsers, useServerBackend, setDB, deliver, emitLocal, commit, getDB, isServerMode } from './core/store.js';
 import { seedDB } from './data/demo.js';
 import { currentUser, restoreFromLast } from './core/auth.js';
 import { initTooltips, closePopover } from './ui/kit.js';
-import { mountLogin, mountCampaigns, mountJoin, mountHeroPick, go } from './views/screens.js';
+import { mountLogin, mountCampaigns, mountJoin, mountHeroPick, mountWaiting, mountServerDown, go } from './views/screens.js';
 import { mountTable } from './views/table/index.js';
 import { getCampaign, membership } from './core/campaign.js';
 import { debounce } from './core/dom.js';
+import { getMode } from './server/config.js';
 
-initStore(seedDB);
-initTooltips();
+let sync = null;          // server/sync.js — только в серверном режиме
+let loginMessage = null;  // «Вход через Discord отменён» и т. п.
 
 const root = document.getElementById('app');
 let current = null;
@@ -40,15 +41,22 @@ function route() {
     show(`join:${code}:${user?.id || ''}`, () => mountJoin(root, code, { onSignedIn: () => route() }));
     return;
   }
-  if (!user) { show('login', () => mountLogin(root, { onSignedIn: () => go('#/campaigns') })); return; }
+  if (!user) { show('login', () => mountLogin(root, { onSignedIn: () => go('#/campaigns'), message: loginMessage })); loginMessage = null; return; }
   if (page === 'login' || !page) { go('#/campaigns'); return; }
 
   if (page === 'c' && arg) {
     const c = getCampaign(arg);
-    if (!c) { go('#/campaigns'); return; }
+    if (!c) {
+      // Серверный режим: кампания могла появиться только что (вступили по ссылке) — догружаем один раз.
+      if (sync && !route.tried?.has(arg)) { (route.tried ||= new Set()).add(arg); sync.loadCampaign(arg).catch(() => go('#/campaigns')); return; }
+      go('#/campaigns'); return;
+    }
     const m = membership(c, user.id);
-    if (!m) { go(`#/join/${c.invite.code}`); return; }
-    if (m.status === 'pending') { show(`join:${c.invite.code}:${user.id}`, () => mountJoin(root, c.invite.code, { onSignedIn: () => route() })); return; }
+    if (!m) { go(c.invite?.code ? `#/join/${c.invite.code}` : '#/campaigns'); return; }
+    if (m.status === 'pending') {
+      if (isServerMode()) { show(`wait:${c.id}:${user.id}`, () => mountWaiting(root, c, user)); return; }
+      show(`join:${c.invite.code}:${user.id}`, () => mountJoin(root, c.invite.code, { onSignedIn: () => route() })); return;
+    }
     if (m.role === 'player' && !m.characterId) { show(`pick:${c.id}:${user.id}`, () => mountHeroPick(root, c)); return; }
     show(`table:${c.id}:${user.id}`, () => mountTable(root, c.id));
     return;
@@ -56,7 +64,27 @@ function route() {
   show(`campaigns:${user.id}`, () => mountCampaigns(root));
 }
 
-addEventListener('hashchange', route);
+async function boot() {
+  initTooltips();
+  if (getMode() === 'server') {
+    root.innerHTML = '<div class="screen boot-screen"><div class="center-stage"><div class="boot-spinner" aria-label="Загрузка"></div></div></div>';
+    try {
+      sync = await import('./server/sync.js');
+      useServerBackend(sync.backend);
+      const res = await sync.startServer({ getDB, setDB, deliver, emitLocal, commit });
+      loginMessage = res.error;
+      if (res.user) { const back = sync.takeReturnHash(); if (back && back !== location.hash) { location.hash = back; } }
+    } catch (err) {
+      console.error(err);
+      mountServerDown(root, err);
+      return;
+    }
+  } else {
+    initStore(seedDB);
+  }
+  addEventListener('hashchange', route);
+  route();
+}
 
 // Данные поменялись (в этой или соседней вкладке): стол обновляется сам, остальные экраны — через маршрут.
 subscribe(() => {
@@ -80,4 +108,4 @@ bus.on('presence-change', debounce(() => {
   current?.update?.();
 }, 400));
 
-route();
+boot();

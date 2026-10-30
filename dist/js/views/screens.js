@@ -1,7 +1,8 @@
 // Экраны вне стола: вход (имитация Discord), кампании, приглашение, ожидание, выбор героя.
 import { html, raw, esc, el, plural, $ } from '../core/dom.js';
 import { icon } from '../icons.js';
-import { getDB, commit, onlineUsers } from '../core/store.js';
+import { getDB, commit, onlineUsers, isServerMode } from '../core/store.js';
+import { serverAllowed, setMode } from '../server/config.js';
 import { currentUser, signIn, signOut } from '../core/auth.js';
 import { srcOf, BUILTIN_MAP_LIST, storeImage } from '../core/assets.js';
 import { campaignsFor, membership, roleIn, userById, characterOf } from '../core/campaign.js';
@@ -10,6 +11,11 @@ import { newCampaign, makeCharacter, DEMO_USERS, seedDB } from '../data/demo.js'
 import { CLASSES, RACES, classById, raceById } from '../data/rules.js';
 import { replaceDB } from '../core/store.js';
 import { freeSpots } from '../rules/geometry.js';
+
+/** Модуль синхронизации — уже загружен в серверном режиме, import вернёт его из кэша. */
+const server = () => import('../server/sync.js');
+const toSandbox = () => { setMode('sandbox'); location.hash = '#/login'; location.reload(); };
+const toServer = () => { setMode('server'); location.reload(); };
 
 export const go = (path) => {
   if (location.hash === path) dispatchEvent(new HashChangeEvent('hashchange'));
@@ -25,7 +31,8 @@ function partyStrip(ids = ['elian', 'mira', 'lira', 'torin', 'garr'], names = ['
 }
 
 // ——— Вход ———
-export function mountLogin(root, { onSignedIn }) {
+export function mountLogin(root, { onSignedIn, message = null }) {
+  const real = isServerMode();
   root.innerHTML = String(html`<div class="screen login-screen">
     <div class="backdrop" style="background-image:url(${srcOf('map:crypt')})"></div>
     <div class="center-stage">
@@ -35,14 +42,37 @@ export function mountLogin(root, { onSignedIn }) {
           ${logoButton()}
           <h1>Распутье</h1>
           <p class="sub">Стол для D&amp;D 5e (2014): карта, листы героев и кубы в одной вкладке</p>
+          ${message ? html`<p class="t-sm negative" role="alert">${message}</p>` : ''}
           <button class="btn btn-lg btn-discord btn-block" data-login>${raw(icon('discord', 20))}Войти через Discord</button>
-          <p class="fineprint">Возьмём только ник и аватар. Пароли не нужны.</p>
+          ${real
+            ? html`<button class="btn btn-ghost btn-block" data-sandbox>Попробовать без входа</button><p class="fineprint">Возьмём только ник и аватар. Пароли не нужны. Без входа — песочница: всё живёт только в этом браузере.</p>`
+            : html`<p class="fineprint">Возьмём только ник и аватар. Пароли не нужны.</p>${serverAllowed() ? html`<button class="btn btn-ghost btn-sm" data-real style="align-self:center">Это песочница · войти по-настоящему</button>` : ''}`}
         </div>
       </div>
     </div>
     <span class="chip corner-chip">D&amp;D 5e · 2014</span>
   </div>`);
-  root.querySelector('[data-login]').addEventListener('click', () => openOAuth(onSignedIn));
+  root.querySelector('[data-login]').addEventListener('click', async (e) => {
+    if (!real) { openOAuth(onSignedIn); return; }
+    e.currentTarget.disabled = true;
+    try { await (await server()).signInWithDiscord(location.hash.startsWith('#/join/') ? location.hash : '#/campaigns'); }
+    catch (err) { e.currentTarget.disabled = false; toast({ title: 'Не получилось открыть Discord', body: err.message, icon: 'alert-circle' }); }
+  });
+  root.querySelector('[data-sandbox]')?.addEventListener('click', toSandbox);
+  root.querySelector('[data-real]')?.addEventListener('click', toServer);
+  return {};
+}
+
+/** Сервер недоступен (спит, нет сети, CDN не загрузился): повторить или уйти в песочницу. */
+export function mountServerDown(root, err) {
+  root.innerHTML = String(html`<div class="screen"><div class="backdrop" style="background-image:url(${srcOf('map:crypt')})"></div><div class="center-stage"><div class="panel wait-card">
+    <div class="hourglass">${raw(icon('cloud', 28))}</div><h3>Сервер не отвечает</h3>
+    <p class="muted t-para">Бесплатный сервер засыпает после недели без игр, или пропала связь. Подождите минуту и попробуйте снова — либо играйте в песочнице этого браузера.</p>
+    <p class="t-xs tertiary">${String(err?.message || err || '').slice(0, 140)}</p>
+    <div class="row"><button class="btn btn-primary" data-retry>${raw(icon('reload', 16))}Попробовать снова</button><button class="btn btn-ghost" data-sandbox>Песочница</button></div>
+  </div></div></div>`);
+  root.querySelector('[data-retry]').addEventListener('click', () => location.reload());
+  root.querySelector('[data-sandbox]').addEventListener('click', toSandbox);
   return {};
 }
 
@@ -90,19 +120,28 @@ function appHeader(user) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
     <span class="spacer"></span>
-    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>через Discord · демо</small></span>${raw(icon('logout-01', 18))}</button>
+    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? 'через Discord' : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
   </header>`;
 }
 
 function bindHeader(root, user) {
   root.querySelector('[data-user]')?.addEventListener('click', (e) => {
+    if (isServerMode()) {
+      menu([
+        { icon: 'user', label: `${user.name} · @${user.handle || user.name}`, disabled: true },
+        'divider',
+        { icon: 'logout-01', label: 'Выйти', danger: true, onClick: async () => { await (await server()).signOutServer(); location.hash = '#/login'; location.reload(); } },
+      ], e.currentTarget, { placement: 'bottom' });
+      return;
+    }
     menu([
+      serverAllowed() ? { icon: 'discord', label: 'Войти через Discord по-настоящему', onClick: toServer } : null,
       { icon: 'user', label: `${user.name} · @${user.handle || user.name}`, disabled: true },
       { icon: 'reload', label: 'Сменить аккаунт', onClick: () => openOAuth(() => { location.hash = '#/campaigns'; dispatchEvent(new HashChangeEvent('hashchange')); }) },
       { icon: 'delete-02', label: 'Сбросить демо-данные', onClick: resetDemo },
       'divider',
       { icon: 'logout-01', label: 'Выйти', danger: true, onClick: () => { signOut(); go('#/login'); } },
-    ], e.currentTarget, { placement: 'bottom' });
+    ].filter(Boolean), e.currentTarget, { placement: 'bottom' });
   });
 }
 
@@ -170,7 +209,7 @@ function campaignCard(c, user) {
 
 function pasteInvite() {
   const m = modal(html`${panelHeader('Вставить приглашение', 'Ссылка или код от мастера')}
-    <div class="panel-section"><div class="input">${raw(icon('link-01', 18))}<input data-v placeholder="rasputye.vercel.app/#/join/RSP-7Q2K или RSP-7Q2K" autofocus></div><p class="t-sm tertiary">Для проверки: код демо-кампании — RSP-7Q2K</p></div>
+    <div class="panel-section"><div class="input">${raw(icon('link-01', 18))}<input data-v placeholder="rasputye.vercel.app/#/join/RSP-7Q2K или RSP-7Q2K" autofocus></div>${isServerMode() ? '' : html`<p class="t-sm tertiary">Для проверки: код демо-кампании — RSP-7Q2K</p>`}</div>
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);
   const submit = () => {
     const v = m.box.querySelector('[data-v]').value.trim();
@@ -202,9 +241,16 @@ export function newCampaignModal(user) {
     cover = b.dataset.cover;
     box.querySelectorAll('[data-cover]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.cover === cover)));
   });
+  let coverFile = null; // серверный режим: файл обложки загрузим, когда кампания появится на сервере
   box.querySelector('[data-upload]').addEventListener('change', async (e) => {
     try {
-      const { ref } = await storeImage(e.target.files[0]);
+      let ref;
+      if (isServerMode()) {
+        const f = e.target.files[0];
+        if (!f || !/^image\//.test(f.type)) throw new Error('Нужна картинка: JPG, PNG или WebP.');
+        if (f.size > 25 * 1024 * 1024) throw new Error('Файл больше 25 МБ.');
+        coverFile = f; ref = URL.createObjectURL(f);
+      } else ({ ref } = await storeImage(e.target.files[0]));
       cover = ref;
       const opt = el(`<button class="cover-opt" data-cover="${ref}" aria-pressed="true" style="background-image:url(${srcOf(ref)})"></button>`);
       box.querySelectorAll('[data-cover]').forEach((x) => x.setAttribute('aria-pressed', 'false'));
@@ -220,9 +266,17 @@ export function newCampaignModal(user) {
       seats: Math.min(12, Math.max(1, Number(box.querySelector('[data-seats]').value) || 5)),
       ownerId: user.id,
     });
+    if (coverFile) c.cover = 'map:crypt';
     commit((db) => { db.campaigns[c.id] = c; });
     m.close();
     go(`#/c/${c.id}`);
+    if (coverFile) {
+      server().then(async (sv) => {
+        await sv.whenSynced(c.id);
+        const ref = await sv.uploadImage(c.id, coverFile);
+        commit((db) => { if (db.campaigns[c.id]) db.campaigns[c.id].cover = ref; });
+      }).catch((err) => toast({ title: 'Обложка не загрузилась', body: err.message, icon: 'alert-circle' }));
+    }
   });
 }
 
@@ -232,6 +286,7 @@ export function findByCode(code) {
 }
 
 export function mountJoin(root, code, { onSignedIn }) {
+  if (isServerMode()) return mountJoinServer(root, code);
   const render = () => {
     const c = findByCode(code);
     const user = currentUser();
@@ -284,7 +339,60 @@ export function mountJoin(root, code, { onSignedIn }) {
   return { update: render };
 }
 
-function mountWaiting(root, c, user) {
+/** Приглашение в серверную кампанию: карточку отдаёт функция invite_preview, вступление — join_campaign. */
+function mountJoinServer(root, code) {
+  let alive = true;
+  const invalid = () => {
+    root.innerHTML = String(html`<div class="screen"><div class="backdrop" style="background-image:url(${srcOf('map:crypt')})"></div><div class="center-stage"><div class="panel wait-card">
+      <div class="hourglass">${raw(icon('link-04', 28))}</div><h3>Приглашение недействительно</h3><p class="muted t-para">Ссылка устарела или мастер её заменил. Попросите новую.</p>
+      <button class="btn btn-secondary" data-home>К кампаниям</button></div></div></div>`);
+    root.querySelector('[data-home]').addEventListener('click', () => go(currentUser() ? '#/campaigns' : '#/login'));
+  };
+  root.innerHTML = '<div class="screen boot-screen"><div class="center-stage"><div class="boot-spinner" aria-label="Загрузка"></div></div></div>';
+  (async () => {
+    const sv = await server();
+    let p;
+    try { p = await sv.rpc('invite_preview', { p_code: code }); } catch { p = null; }
+    if (!alive) return;
+    if (!p?.ok) { invalid(); return; }
+    const user = currentUser();
+    if (user && p.myStatus) { go(`#/c/${p.campaignId}`); return; }
+    const cover = String(p.cover || '').startsWith('sb:') ? 'map:crypt' : p.cover || 'map:crypt';
+    root.innerHTML = String(html`<div class="screen"><div class="backdrop" style="background-image:url(${srcOf(cover)})"></div><div class="center-stage">
+      <div class="invite-card">
+        <div class="cover" style="background-image:url(${srcOf(cover)})"></div>
+        <div class="body">
+          <span class="chip chip-accent" style="align-self:flex-start">Вас зовут в кампанию</span>
+          <h3>${p.name}</h3>
+          ${p.description ? html`<p class="muted t-para">${p.description}</p>` : ''}
+          <div class="meta"><span class="avatar-stack">${(p.heroes || []).map((h) => portrait(h.portrait, 'sm hero', h.name))}</span><span>Ведёт ${p.master || '—'} · D&amp;D 5e 2014 · ${p.taken} из ${p.seats} мест</span></div>
+          ${user
+            ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button>`
+            : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
+          <p class="fineprint" style="text-align:center">Возьмём только ник и аватар.${p.manual ? ' Мастер увидит заявку и пустит за стол.' : ''}</p>
+        </div>
+      </div></div></div>`);
+    root.querySelector('[data-join]').addEventListener('click', async (e) => {
+      const b = e.currentTarget; b.disabled = true;
+      try {
+        if (!currentUser()) { await sv.signInWithDiscord(`#/join/${code}`); return; }
+        const r = await sv.rpc('join_campaign', { p_code: code });
+        if (!r?.ok) {
+          b.disabled = false;
+          if (r?.error === 'full') toast({ title: 'Мест за столом нет', body: 'Попросите мастера освободить место', icon: 'user-group' });
+          else invalid();
+          return;
+        }
+        await sv.loadCampaign(r.campaignId);
+        if (r.status === 'pending') toast({ title: 'Заявка отправлена', body: 'Мастер увидит её и пустит за стол', icon: 'hourglass' });
+        go(`#/c/${r.campaignId}`);
+      } catch (err) { b.disabled = false; toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); }
+    });
+  })();
+  return { unmount() { alive = false; } };
+}
+
+export function mountWaiting(root, c, user) {
   const master = userById(c.members.find((x) => x.role === 'master')?.userId);
   root.innerHTML = String(html`<div class="screen"><div class="backdrop" style="background-image:url(${srcOf(c.cover)})"></div><div class="center-stage">
     <div class="panel wait-card">
@@ -292,13 +400,19 @@ function mountWaiting(root, c, user) {
       <h3>Заявка отправлена</h3>
       <p class="muted t-para">${master?.name || 'Мастер'} увидит её в уведомлениях и пустит вас в «${c.name}». Эту вкладку можно не закрывать — всё откроется само.</p>
       <div class="row">${userAvatar(user, '')}<span class="chip chip-accent">заявка отправлена</span></div>
-      <p class="fineprint">Демо: откройте в соседней вкладке кампанию под мастером (sol0139) и нажмите «Принять».</p>
+      ${isServerMode() ? '' : html`<p class="fineprint">Демо: откройте в соседней вкладке кампанию под мастером (sol0139) и нажмите «Принять».</p>`}
       <button class="btn btn-secondary" data-cancel>Отменить заявку</button>
     </div></div></div>`);
-  root.querySelector('[data-cancel]').addEventListener('click', () => {
+  root.querySelector('[data-cancel]').addEventListener('click', async () => {
+    if (isServerMode()) {
+      try { await (await server()).deleteMembership(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
+      commit((db) => { delete db.campaigns[c.id]; });
+      go('#/campaigns'); return;
+    }
     commit((db) => { const cc = db.campaigns[c.id]; cc.members = cc.members.filter((m) => m.userId !== user.id); });
     go('#/campaigns');
   });
+  return {};
 }
 
 // ——— Выбор героя ———
@@ -347,7 +461,30 @@ export function mountHeroPick(root, c0) {
   return { update: render };
 }
 
+async function claimServer(cid, userId, chId) {
+  const sv = await server();
+  try {
+    const r = await sv.rpc('claim_character', { p_campaign: cid, p_character: chId });
+    if (!r?.ok) { toast({ title: 'Этого героя уже взяли', body: 'Выберите другого', icon: 'user-group' }); await sv.loadCampaign(cid); return; }
+    await sv.loadCampaign(cid);
+  } catch (err) { toast({ title: 'Не получилось сесть за стол', body: err.message, icon: 'alert-circle' }); return; }
+  // Герой встаёт на сцену, которую видят игроки; членство и владелец уже записаны функцией сервера.
+  commit((db) => {
+    const c = db.campaigns[cid]; if (!c) return;
+    const ch = c.characters.find((x) => x.id === chId); if (!ch) return;
+    const sc = c.scenes.find((s) => s.id === c.activeSceneId);
+    if (sc && !c.scenes.some((s) => s.tokens.some((t) => t.characterId === chId))) {
+      const friend = sc.tokens.find((t) => t.kind === 'hero');
+      const [p] = freeSpots(sc, friend || { x: sc.map.width / 2, y: sc.map.height / 2 }, 1, 1);
+      sc.tokens.push({ id: `t-${crypto.randomUUID().slice(0, 8)}`, kind: 'hero', characterId: chId, name: ch.name, img: ch.portrait, size: 'medium', x: p.x, y: p.y, hidden: false, conditions: [], light: ch.light || null, aura: ch.aura || null });
+    }
+    c.log.unshift({ id: crypto.randomUUID(), at: Date.now(), userId, kind: 'join', text: `${db.users[userId]?.name || 'Игрок'} за столом — ${ch.name}` });
+  });
+  go(`#/c/${cid}`);
+}
+
 function claim(cid, userId, chId) {
+  if (isServerMode()) { claimServer(cid, userId, chId); return; }
   commit((db) => {
     const c = db.campaigns[cid];
     if (c.members.some((x) => x.characterId === chId && x.status === 'active' && x.userId !== userId)) return;
@@ -385,8 +522,10 @@ function ownHeroModal(c, user) {
     const conMod = 1;
     const hpMax = cl.hd + conMod + Math.max(0, level - 1) * (Math.floor(cl.hd / 2) + 1 + conMod);
     const ch = makeCharacter({ name, portrait: `ini:${name}`, classId: cl.id, className: cl.name, raceId: race.id, raceName: race.name, level, hd: cl.hd, saves: cl.saves, hpMax, hp: hpMax, ac: 12, speed: race.speed, darkvision: race.darkvision, stats: { str: 12, dex: 14, con: 13, int: 10, wis: 12, cha: 10 } });
+    if (isServerMode()) ch.ownerId = user.id;
     commit((db) => { db.campaigns[c.id].characters.push(ch); });
     m.close();
+    if (isServerMode()) { server().then((sv) => sv.whenSynced(c.id)).then(() => claim(c.id, user.id, ch.id)); return; }
     claim(c.id, user.id, ch.id);
   });
 }
