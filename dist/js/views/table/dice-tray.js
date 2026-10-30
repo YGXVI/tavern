@@ -82,7 +82,8 @@ function createTray(ctx) {
 
   node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-dt]');
-    if (!b) return;
+    // Кубы ждут броска: бросок — клик в любом месте лотка, не только по кнопке (крестик — свой).
+    if (!b) { if (mode === 'ready' && e.target.closest('.dt-felt')) ctx.panels.action('dice-roll', node, e); return; }
     const a = b.dataset.dt;
     if (a === 'clear') ctx.panels.action('dice-clear', b, e);
     if (a === 'roll') ctx.panels.action('dice-roll', b, e);
