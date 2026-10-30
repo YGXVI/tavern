@@ -10,7 +10,7 @@ import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll } from './dice.js';
-import { diceTray } from './dice-tray.js';
+import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
 import * as C from './chrome.js';
@@ -22,7 +22,7 @@ import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 
-const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll']);
+const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv-menu']);
 
 /** Вкладка в фоне: «⚔ Ваш ход» в заголовке, пока игрок не вернётся. */
 let baseTitle = null;
@@ -61,8 +61,8 @@ export class Panels {
       bus.on('roll', (p) => {
         if (!mine(p)) return;
         showRollToast(ctx, p.entry);
-        // Открытый бросок другого участника катится и в нашем лотке (TASK-092).
-        if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceTray(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped });
+        // Открытый бросок другого участника падает на наш стол — его кубы в его наборе (TASK-092/093).
+        if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceFloor(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped, skin: p.skin });
         if (ctx.ui.widget === 'dice') this.refreshWidget(true);
       }),
       bus.on('read-aloud', (p) => { if (mine(p) && p.sceneId === ctx.sceneId && !ctx.isMaster) this.readAloud({ title: p.title, text: p.text }); }),
@@ -108,6 +108,7 @@ export class Panels {
     for (const off of this.offs) off();
     closeSheet();
     diceTray(this.ctx)?.destroy();
+    diceFloor(this.ctx)?.destroy();
   }
 
   snapshot() {
