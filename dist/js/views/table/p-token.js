@@ -3,12 +3,13 @@ import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName } from '../../core/campaign.js';
-import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel } from '../../data/rules.js';
+import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
+import { parseHpInput } from '../../rules/hp.js';
 
 const ib = (act, name, tip, extra = '') => `<button class="icon-btn" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(name, 22)}</button>`;
 const div = '<span class="divider"></span>';
@@ -17,9 +18,54 @@ export function selectedTokens(ctx) {
   return [...ctx.ui.selection].map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter(Boolean);
 }
 
-function hpCell(st, canEdit) {
+/** Хиты в токен-баре: число можно просто переписать (12 — стало 12, −5 — урон 5, +3 — лечение 3). */
+function hpCell(st, canEdit, id = '') {
   const frac = Math.max(0, Math.min(1, st.hp / Math.max(1, st.hpMax)));
-  return `${canEdit ? ib('hp-dmg', 'minus-sign', 'Урон') : ''}<button class="hp-cell" data-act="hp" ${canEdit ? '' : 'disabled'} data-tip="${canEdit ? 'Изменить хиты' : ''}"><span class="hp-num"><small>хп</small> <b class="${st.hp <= 0 ? 'negative' : ''}">${st.hp}/${st.hpMax}</b>${st.tempHp ? `<em>+${st.tempHp}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></button>${canEdit ? ib('hp-heal', 'plus-sign', 'Лечение') : ''}`;
+  const num = canEdit
+    ? `<input class="hp-input ${st.hp <= 0 ? 'negative' : ''}" data-hp-input="${esc(id)}" value="${st.hp}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Хиты сейчас: впишите число, −урон или +лечение" data-tip="Впишите, сколько осталось, или −урон / +лечение">`
+    : `<b class="${st.hp <= 0 ? 'negative' : ''}">${st.hp}</b>`;
+  return `<div class="hp-cell ${canEdit ? 'editable' : ''}"><span class="hp-num"><small>хп</small> ${num}<b class="hp-max">/${st.hpMax}</b>${st.tempHp ? `<em>+${st.tempHp}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></div>${canEdit ? ib('hp', 'first-aid-kit', 'Урон, лечение, временные хиты') : ''}`;
+}
+
+/** Записать ввод хитов токену. */
+export function commitHpInput(ctx, id, text) {
+  const v = parseHpInput(text);
+  if (!v) return false;
+  if (v.delta) applyHp(ctx, [id], v.delta);
+  else if (v.set != null) setHp(ctx, id, v.set);
+  return true;
+}
+
+/** Поставить точное число хитов (временные хиты не трогаются). */
+export function setHp(ctx, id, value) {
+  const t = ctx.scene.tokens.find((x) => x.id === id);
+  if (!t) return;
+  const st = tokenStats(ctx.c, t);
+  const hp = Math.max(0, Math.min(st.hpMax || value, Math.floor(value)));
+  if (hp === st.hp) return;
+  const delta = hp - st.hp;
+  let before = null, after = null, note = null;
+  const pick = (x) => ({ hp: x.hp, conditions: [...(x.conditions || [])], ...(x.deathSaves ? { deathSaves: { ...x.deathSaves } } : {}) });
+  ctx.mutateScene((s, c) => {
+    patchTokenStats(c, s, id, (x) => {
+      before = pick(x);
+      const conds = new Set(x.conditions || []);
+      if (delta < 0 && conds.has('concentration')) note = `${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`;
+      if (hp === 0 && t.kind === 'hero') { conds.add('unconscious'); conds.delete('concentration'); }
+      if (hp > 0 && x.hp === 0) { conds.delete('unconscious'); if (x.deathSaves) x.deathSaves = { s: 0, f: 0 }; }
+      const out = { hp, conditions: [...conds] };
+      after = { ...pick(x), ...out };
+      return out;
+    });
+    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${st.name}: хиты ${st.hp} → ${hp}` });
+  }, {
+    label: 'Хиты',
+    undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
+    redo: (s, c) => { if (after) patchTokenStats(c, s, id, () => structuredClone(after)); },
+  });
+  if (note) ctx.toast({ title: 'Концентрация', body: note, icon: 'brain-02' });
+  bus.send('hp-flash', { cid: ctx.cid, ids: [id], delta });
+  emitLocal('hp-flash', { cid: ctx.cid, ids: [id], delta });
 }
 
 export function tokenBarHTML(ctx) {
@@ -53,7 +99,7 @@ export function tokenBarHTML(ctx) {
   if (master || mine) {
     const sub = mine ? `${st.subtitle} · ваш герой` : st.subtitle + (t.hidden ? ' · скрыт' : '');
     const left = movementLeft(ctx, t);
-    let middle = hpCell(st, can);
+    let middle = hpCell(st, can, t.id);
     if (down && t.kind === 'hero') {
       const ds = st.deathSaves || { s: 0, f: 0 };
       middle += `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
@@ -70,10 +116,12 @@ export function tokenBarHTML(ctx) {
   const ally = t.kind === 'hero';
   const exact = c.settings.playersSeeHp === 'exact';
   const status = st.hpMax ? woundLabel(st.hp, st.hpMax) : '';
-  return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${ally ? esc(st.subtitle) : 'Противник · видно отсюда'}</small></span>${div}
+  const disp = ctx.dispositionOf(t);
+  const who = ally ? esc(st.subtitle) : disp === 'friendly' ? 'Союзник' : disp === 'neutral' ? 'Нейтральное существо' : 'Противник';
+  return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(ctx.nameOf(t, st))}</b><small>${who}${t.elevation ? ` · высота ${t.elevation} фт` : ''}</small></span>${div}
     ${ally || exact ? hpCell(st, false) : status ? `<span class="chip chip-md ${st.hp / st.hpMax <= 0.5 ? 'chip-negative' : 'chip-accent'}">${esc(status[0].toUpperCase() + status.slice(1))}</span>` : ''}
     ${st.conditions.length ? `<span class="tb-conds">${st.conditions.map((id) => { const cc = conditionById(id); return cc ? `<span class="status-badge" data-tip="${esc(cc.name)}">${icon(cc.icon, 13)}</span>` : ''; }).join('')}</span>` : ''}${div}
-    ${ally && t.characterId ? ib('sheet', 'book-open-01', 'Лист героя (просмотр)') : ''}${ib('ping-token', 'location-01', 'Пинг: показать отряду')}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
+    ${ally && t.characterId ? ib('sheet', 'book-open-01', 'Лист героя (просмотр)') : ''}${ib('target', 'target-02', ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью — увидят все', ctx.ui.targets?.has(t.id) ? 'aria-pressed="true"' : '')}${ib('ping-token', 'location-01', 'Пинг: показать отряду')}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
 }
 
 // ——— Хиты ———
@@ -84,9 +132,12 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   const st = one ? tokenStats(ctx.c, one) : null;
   const pop = popover(`<div class="hp-editor">
     <div class="panel-header">${one ? `<span class="avatar sm ${one.kind}"><img src="${esc(srcOf(one.img))}" alt=""></span>` : ''}<div class="titles"><div class="title">${esc(one ? st.name : `${toks.length} ${plural(toks.length, 'цель', 'цели', 'целей')}`)}</div><div class="subtitle">${one ? `${st.hp} из ${st.hpMax} хитов${st.tempHp ? ` · +${st.tempHp} временных` : ''}` : 'Урон по области: одно число для всех'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    ${one ? `<div class="panel-section"><label class="label" for="hpset">Осталось хитов</label>
+      <div class="row"><div class="input grow"><input id="hpset" type="number" min="0" max="${st.hpMax}" inputmode="numeric" value="${st.hp}" data-set><span class="suffix">из ${st.hpMax}</span></div><button class="btn btn-primary" data-set-ok>${icon('tick-02', 16)}Записать</button></div>
+      <span class="t-xs tertiary">Впишите число — без подсчётов. Или ниже: урон и лечение с учётом временных хитов.</span></div><hr class="panel-divider">` : ''}
     <div class="panel-section">
-      <label class="label" for="hpv">Сколько хитов</label>
-      <div class="input"><input id="hpv" type="number" min="0" inputmode="numeric" data-v autofocus></div>
+      <label class="label" for="hpv">${one ? 'Урон или лечение' : 'Сколько хитов'}</label>
+      <div class="input"><input id="hpv" type="number" min="0" inputmode="numeric" data-v></div>
       <div class="row">${['1', '5', '10'].map((n) => `<button class="chip chip-md" data-q="${n}">${n}</button>`).join('')}${one ? `<button class="chip chip-md" data-q="half">½</button><button class="chip chip-md" data-q="all">всё</button>` : ''}</div>
       <div class="row hp-actions"><button class="btn btn-danger grow" data-dmg>${icon('minus-sign', 16)}Урон</button><button class="btn btn-success grow" data-heal>${icon('plus-sign', 16)}Лечение</button></div>
     </div>
@@ -95,10 +146,14 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   </div>`, anchor, { placement: 'top', className: 'hp-pop' });
   const box = pop.node;
   const v = box.querySelector('[data-v]');
-  setTimeout(() => v.focus(), 20);
+  const setInput = box.querySelector('[data-set]');
+  setTimeout(() => { const f = mode || !setInput ? v : setInput; f.focus(); f.select?.(); }, 20);
+  const applySet = () => { const n = Math.floor(Number(setInput.value)); if (!Number.isFinite(n) || setInput.value === '') { setInput.closest('.input').classList.add('error'); return; } setHp(ctx, one.id, n); closePopover(); };
+  setInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') applySet(); });
   box.addEventListener('click', (e) => {
     const q = e.target.closest('[data-q]');
     if (q) { v.value = q.dataset.q === 'half' ? Math.floor(st.hp / 2) : q.dataset.q === 'all' ? st.hp : q.dataset.q; v.focus(); }
+    if (e.target.closest('[data-set-ok]')) applySet();
     if (e.target.closest('[data-dmg]')) apply(-1);
     if (e.target.closest('[data-heal]')) apply(1);
   });
@@ -185,6 +240,45 @@ export function ruleCard(ctx, condId, anchor) {
 }
 
 // ——— Настройки токена ———
+function auraEditor(a) {
+  const hex = auraHex(a), op = Math.round(auraAlpha(a) * 100);
+  const custom = !AURA_COLORS.some((c) => c.hex === hex);
+  return `<div class="aura-edit">
+    <div class="row"><div class="input grow"><input data-aura-name-edit value="${esc(a.name)}" maxlength="40" aria-label="Название ауры"></div><div class="input" style="width:84px"><input type="number" data-aura-r-edit value="${a.radius}" min="5" step="5" aria-label="Радиус ауры"><span class="suffix">фт</span></div><button class="icon-btn icon-btn-sm" data-aura-off data-tip="Убрать ауру" aria-label="Убрать ауру">${icon('delete-02', 16)}</button></div>
+    <div class="aura-colors" role="radiogroup" aria-label="Цвет ауры">${AURA_COLORS.map((c) => `<button class="swatch ${!custom && c.hex === hex ? 'on' : ''}" data-aura-color="${c.id}" style="--sw:${c.hex}" role="radio" aria-checked="${!custom && c.hex === hex}" aria-label="${esc(c.name)}" data-tip="${esc(c.name)}"></button>`).join('')}<label class="swatch custom ${custom ? 'on' : ''}" style="--sw:${hex}" data-tip="Свой цвет">${icon('paint-brush-01', 12)}<input type="color" data-aura-custom value="${hex}" aria-label="Свой цвет ауры"></label></div>
+    <label class="aura-op"><span class="t-sm muted">Заметность</span><input class="slider" type="range" min="5" max="100" step="5" value="${op}" data-aura-op style="--fill:${((op - 5) / 95) * 100}%" aria-label="Заметность ауры"><b class="t-sm" data-aura-op-out>${op}%</b></label>
+  </div>`;
+}
+
+/** Свет на токене (и в листе героя) по пресету; 'none' — погасить. С отменой. Общий для настроек токена и виджета «Зрение». */
+export function setTokenLight(ctx, id, presetId) {
+  const p = LIGHTS.find((l) => l.id === presetId);
+  const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null;
+  let before;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; t.light = v ? { ...v } : null; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = v ? { ...v } : null; } };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); before = t?.light ? { ...t.light } : null; put(val)(s, c); },
+    { label: 'Свет', undo: (s, c) => put(before)(s, c), redo: put(val) });
+}
+
+/** Тёмное зрение героя (в листе) или существа (на токене), футы. С отменой. */
+export function setDarkvision(ctx, id, ft) {
+  let before = 0;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; const ch = t.characterId && c.characters.find((x) => x.id === t.characterId); if (ch) ch.darkvision = v; else t.darkvision = v; };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); if (t) before = tokenStats(c, t).darkvision || 0; put(ft)(s, c); },
+    { label: 'Тёмное зрение', undo: (s, c) => put(before)(s, c), redo: put(ft) });
+}
+
+/** Блок «Несёт свет» и «Тёмное зрение» (виджет «Зрение», TASK-046). act — префикс data-act для кликов. */
+export function visionFields(ctx, t, act = 'v') {
+  const st = tokenStats(ctx.c, t);
+  const lightId = t.light?.preset || (t.light ? 'custom' : 'none');
+  const chip = (on, a, v, label) => `<button class="chip chip-md ${on ? 'chip-accent' : ''}" data-act="${act}-${a}" data-id="${esc(t.id)}" data-v="${v}">${esc(label)}</button>`;
+  return `<div class="vision-edit">
+    <div class="field"><label>Несёт свет</label><div class="chips-wrap">${chip(lightId === 'none', 'light', 'none', 'Нет')}${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => chip(lightId === l.id, 'light', l.id, l.name)).join('')}</div></div>
+    <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => chip((st.darkvision || 0) === d, 'dv', d, d ? `${d} фт` : 'нет')).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
+  </div>`;
+}
+
 export function tokenSettings(ctx, id, anchor) {
   const t0 = ctx.scene.tokens.find((t) => t.id === id);
   if (!t0) return;
@@ -195,11 +289,15 @@ export function tokenSettings(ctx, id, anchor) {
     return `<div class="token-settings"><div class="panel-header"><div class="titles"><div class="title">Настройки токена</div><div class="subtitle">${esc(st.name)}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
       <div class="panel-section">
         ${t.characterId ? '' : `<div class="field"><label>Имя на карте</label><div class="input"><input data-name value="${esc(t.name)}" maxlength="40"></div></div>`}
+        ${t.kind === 'foe' || (t.kind !== 'hero' && t.kind !== 'item') ? `<div class="field"><label>Отношение</label><div class="chips-wrap">${[['hostile', 'Враг'], ['neutral', 'Нейтрал'], ['friendly', 'Союзник'], ['secret', 'Скрытый враг']].map(([v, l]) => `<button class="chip chip-md ${(t.disposition || 'hostile') === v ? 'chip-accent' : ''}" data-disp="${v}">${l}</button>`).join('')}</div><span class="t-xs tertiary">«Скрытый враг» игроки видят союзником — для предателей.</span></div>
+        <div class="field"><label>Имя для игроков</label><div class="chips-wrap"><button class="chip chip-md ${!t.nameHidden ? 'chip-accent' : ''}" data-namehide="0">Показывать</button><button class="chip chip-md ${t.nameHidden ? 'chip-accent' : ''}" data-namehide="1">Скрыть — «Неизвестное существо»</button></div></div>` : ''}
+        <div class="field"><label for="tk-elev">Высота над полом</label><div class="row"><div class="input" style="width:110px"><input id="tk-elev" type="number" step="5" data-elev value="${t.elevation || 0}"><span class="suffix">фт</span></div>${[0, 10, 30].map((v) => `<button class="chip chip-md ${(t.elevation || 0) === v ? 'chip-accent' : ''}" data-elev-q="${v}">${v ? `${v} фт` : 'на полу'}</button>`).join('')}</div></div>
         <div class="field"><label>Размер</label><div class="chips-wrap">${SIZES.map((s) => `<button class="chip chip-md ${t.size === s.id ? 'chip-accent' : ''}" data-size="${s.id}">${s.name}${s.cells > 1 ? ` · ${s.cells}×${s.cells}` : ''}</button>`).join('')}</div></div>
-        <div class="field"><label>Свет от токена</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
-          ${t.light ? `<div class="row t-sm muted">Ярко ${t.light.bright} фт + тускло ${t.light.dim} фт</div>` : ''}</div>
-        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
-        <div class="field"><label>Аура</label>${t.aura ? `<div class="aura-row"><span class="chip chip-magic">${esc(t.aura.name)} · ${t.aura.radius} фт</span><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-aura-off>Убрать</button></div>` : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
+        ${t.characterId ? `<div class="field"><label>Свет и тёмное зрение</label><button class="btn btn-sm btn-secondary" data-vision-open>${icon('view', 14)}Настроить в «Зрении»</button><span class="t-xs tertiary">${st.darkvision ? `Тёмное зрение ${st.darkvision} фт` : 'Без тёмного зрения'}${t.light ? ` · несёт свет` : ''}</span></div>` : `<div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
+          ${t.light ? `<label class="aura-op"><span class="t-sm muted">Яркий свет</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.bright}" data-tl="bright" style="--fill:${(t.light.bright / 60) * 100}%" aria-label="Яркий свет"><b class="t-sm" data-tl-out="bright">${t.light.bright} фт</b></label>
+          <label class="aura-op"><span class="t-sm muted">Тусклый ещё</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.dim}" data-tl="dim" style="--fill:${(t.light.dim / 60) * 100}%" aria-label="Тусклый свет"><b class="t-sm" data-tl-out="dim">${t.light.dim} фт</b></label>` : ''}</div>
+        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>`}
+        <div class="field"><label>Аура</label>${t.aura ? auraEditor(t.aura) : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
       </div></div>`;
   };
   const pop = popover(render(), anchor, { placement: 'top', className: 'settings-pop' });
@@ -209,23 +307,65 @@ export function tokenSettings(ctx, id, anchor) {
       const t = s.tokens.find((x) => x.id === id); if (!t) return;
       fn(t, c);
     });
-    box.innerHTML = render();
+    // Перерисовка — после текущего события: смена разметки во время blur/change ломает DOM.
+    if (!box.__redraw) box.__redraw = requestAnimationFrame(() => { box.__redraw = 0; if (box.isConnected) box.innerHTML = render(); });
   };
   box.addEventListener('click', (e) => {
     const sz = e.target.closest('[data-size]');
     if (sz) upd((t, c, s) => { const n1 = sizeById(sz.dataset.size).cells; const p = snapCenter(ctx.scene.grid, t.x, t.y, n1); t.x = p.x; t.y = p.y; t.size = sz.dataset.size; });
+    if (e.target.closest('[data-vision-open]')) { closePopover(); ctx.panels.openVisionFor(id); return; }
     const li = e.target.closest('[data-light]');
     if (li) upd((t, c) => { const p = LIGHTS.find((l) => l.id === li.dataset.light); const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null; t.light = val; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = val; } });
     const dv = e.target.closest('[data-dv]');
     if (dv) upd((t, c) => { const v = Number(dv.dataset.dv); if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.darkvision = v; } else t.darkvision = v; });
-    if (e.target.closest('[data-aura-off]')) upd((t, c) => { t.aura = null; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = null; } });
+    if (e.target.closest('[data-aura-off]')) upd((t, c) => setAura(t, c, null));
     if (e.target.closest('[data-aura-add]')) {
       const name = box.querySelector('[data-aura-name]').value.trim() || 'Аура';
       const radius = Math.max(5, Number(box.querySelector('[data-aura-r]').value) || 10);
-      upd((t, c) => { const a = { name, radius, color: 'magic', text: '' }; t.aura = a; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = a; } });
+      upd((t, c) => setAura(t, c, { name, radius, color: 'magic', opacity: AURA_OPACITY, text: '' }));
     }
+    const dp = e.target.closest('[data-disp]'); if (dp) upd((t) => { t.disposition = dp.dataset.disp; });
+    const nh = e.target.closest('[data-namehide]'); if (nh) upd((t) => { t.nameHidden = nh.dataset.namehide === '1'; });
+    const eq = e.target.closest('[data-elev-q]'); if (eq) upd((t) => { t.elevation = Number(eq.dataset.elevQ) || 0; });
+    const sw = e.target.closest('[data-aura-color]');
+    if (sw) upd((t, c) => setAura(t, c, { ...t.aura, color: sw.dataset.auraColor }));
+  });
+  // Живой предпросмотр цвета и заметности — в памяти, запись по отпусканию.
+  box.addEventListener('input', (e) => {
+    const t = ctx.scene.tokens.find((x) => x.id === id);
+    if (e.target.matches('[data-tl]') && t?.light) {
+      const k = e.target.dataset.tl, v = Number(e.target.value);
+      t.light = { ...t.light, [k]: v };
+      e.target.style.setProperty('--fill', `${(v / 60) * 100}%`);
+      box.querySelector(`[data-tl-out="${k}"]`).textContent = `${v} фт`;
+      ctx.invalidateVision(); ctx.invalidate('fog', 'tokens');
+      return;
+    }
+    if (!t?.aura) return;
+    if (e.target.matches('[data-aura-op]')) {
+      const v = Number(e.target.value);
+      t.aura = { ...t.aura, opacity: v };
+      e.target.style.setProperty('--fill', `${((v - 5) / 95) * 100}%`);
+      box.querySelector('[data-aura-op-out]').textContent = `${v}%`;
+      ctx.invalidate('areas');
+    }
+    if (e.target.matches('[data-aura-custom]')) { t.aura = { ...t.aura, color: e.target.value }; ctx.invalidate('areas'); }
+  });
+  box.addEventListener('change', (e) => {
+    if (e.target.matches('[data-tl]')) { const k = e.target.dataset.tl, v = Number(e.target.value); upd((t, c) => { if (!t.light) return; t.light = { ...t.light, [k]: v, preset: t.light.preset }; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = { ...t.light }; } }); }
+    if (e.target.matches('[data-aura-op]')) { const v = Number(e.target.value); upd((t, c) => setAura(t, c, { ...t.aura, opacity: v })); }
+    if (e.target.matches('[data-aura-custom]')) { const v = e.target.value; upd((t, c) => setAura(t, c, { ...t.aura, color: v })); }
+    if (e.target.matches('[data-aura-name-edit]')) { const v = e.target.value.trim(); if (v) upd((t, c) => setAura(t, c, { ...t.aura, name: v })); }
+    if (e.target.matches('[data-elev]')) { const v = Math.round((Number(e.target.value) || 0) / 5) * 5; upd((t) => { t.elevation = v; }); }
+    if (e.target.matches('[data-aura-r-edit]')) { const v = Math.max(5, Number(e.target.value) || 5); upd((t, c) => setAura(t, c, { ...t.aura, radius: v })); }
   });
   box.addEventListener('change', (e) => { if (e.target.matches('[data-name]')) upd((t) => { t.name = e.target.value.trim() || t.name; }); });
+}
+
+/** Аура героя живёт и в листе, чтобы переходить с ним между сценами. */
+function setAura(t, c, a) {
+  t.aura = a;
+  if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = a ? { ...a } : null; }
 }
 
 export async function deleteTokens(ctx, ids) {
@@ -265,7 +405,131 @@ export function duplicateTokens(ctx, ids) {
   if (copies.length) ctx.select(copies);
 }
 
+/** Ctrl+C: запомнить выделенные существа и предметы (героев не копируем). */
+export function copyTokens(ctx, ids) {
+  const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter((t) => t && !t.characterId);
+  if (!toks.length) { ctx.toast({ title: 'Героев не копируем', body: 'Скопировать можно существ и предметы', icon: 'copy-01' }); return; }
+  const cx = toks.reduce((a, t) => a + t.x, 0) / toks.length, cy = toks.reduce((a, t) => a + t.y, 0) / toks.length;
+  ctx.ui.clipboard = { items: structuredClone(toks), cx, cy };
+  ctx.toast({ title: `Скопировано: ${toks.length}`, body: 'Ctrl+V — вставить под курсором', icon: 'copy-01' });
+}
+
+/** Ctrl+V: вставить скопированное вокруг точки (по умолчанию — под курсором). */
+export function pasteTokens(ctx, at) {
+  const cb = ctx.ui.clipboard; if (!cb?.items.length || !ctx.scene) return;
+  const m = ctx.scene.map, made = [];
+  ctx.mutateScene((s) => {
+    for (const t0 of cb.items) {
+      const base = t0.name.replace(/\s\d+$/, '');
+      const t = { ...structuredClone(t0), id: uid('t-'), name: nextTokenName(s, base), x: Math.max(0, Math.min(m.width, at.x + (t0.x - cb.cx))), y: Math.max(0, Math.min(m.height, at.y + (t0.y - cb.cy))) };
+      s.tokens.push(t); made.push(t);
+    }
+  }, { label: 'Вставка', undo: (s) => { const ids = new Set(made.map((t) => t.id)); s.tokens = s.tokens.filter((t) => !ids.has(t.id)); }, redo: (s) => { s.tokens.push(...structuredClone(made)); } });
+  ctx.select(made.map((t) => t.id));
+}
+
+/** Отметить токен целью (у всех над ним появится прицел цвета игрока). */
+export function toggleTarget(ctx, id) {
+  const set = ctx.ui.targets || (ctx.ui.targets = new Set());
+  set.has(id) ? set.delete(id) : set.add(id);
+  bus.send('target', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [...set] });
+  ctx.invalidate('tokens');
+}
+export function clearTargets(ctx) {
+  ctx.ui.targets = new Set();
+  bus.send('target', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
+  ctx.invalidate('tokens');
+}
+
+/** Подсказка ауры: что делает и кто сейчас внутри. */
+export function auraPopover(ctx, id, anchor) {
+  const t = ctx.scene.tokens.find((x) => x.id === id); if (!t?.aura) return;
+  const a = t.aura, st = tokenStats(ctx.c, t);
+  const s = gridSize(ctx.scene.grid), n = sizeById(t.size).cells;
+  const rad = (a.radius / (ctx.scene.grid.feet || 5)) * s + (n * s) / 2;
+  const inside = ctx.scene.tokens.filter((o) => o.id !== t.id && o.kind !== 'item' && ctx.tokenShown(o) && Math.hypot(o.x - t.x, o.y - t.y) <= rad).map((o) => ctx.nameOf(o));
+  const can = ctx.isMasterView || ctx.isMine(t);
+  popover(`<div class="aura-pop"><div class="panel-header"><div class="titles"><div class="title">${esc(a.name)}</div><div class="subtitle">${esc(ctx.nameOf(t, st))} · ${a.radius} фт${a.concentration ? ' · концентрация' : ''}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section">${a.text ? `<p class="t-para">${esc(a.text)}</p>` : '<p class="t-sm muted">Описание ауры не задано.</p>'}
+    <p class="t-sm"><span class="muted">Сейчас в ауре:</span> ${inside.length ? esc(inside.join(', ')) : 'никого'}</p>
+    ${can ? `<button class="btn btn-sm btn-secondary" data-aura-edit>${icon('settings-01', 14)}Настроить</button>` : ''}</div></div>`, anchor, { placement: 'top', className: 'aura-popover' })
+    .node.addEventListener('click', (e) => { if (e.target.closest('[data-aura-edit]')) { closePopover(); tokenSettings(ctx, id, anchor); } });
+}
+
 // ——— Контекстное меню ———
+// ——— Параметры в меню токена (TASK-039): хиты/максимум, временные, КД — правятся на месте ———
+/** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
+function canEditStats(ctx, t) {
+  if (!t || t.kind === 'item') return false;
+  return ctx.isMasterView || ctx.isMine(t);
+}
+
+function statsBlock(ctx, t) {
+  const st = tokenStats(ctx.c, t);
+  const num = (k, v, label, cls = '') => `<input class="ts-in ${cls}" data-st="${k}" value="${v}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="${label}">`;
+  return `<div class="tok-stats" data-stats="${esc(t.id)}">
+    <div class="ts-cell ts-hp"><span class="ts-cap">Хиты</span>
+      <div class="ts-hp-box" data-tip="Впишите, сколько осталось, или −урон / +лечение">${num('hp', st.hp, 'Хиты сейчас')}<i>/</i>${num('hpMax', st.hpMax, 'Максимум хитов')}</div>
+      <span class="ts-sub">сейчас · максимум</span></div>
+    <div class="ts-cell ts-temp"><span class="ts-cap">Временные</span>${num('tempHp', st.tempHp || 0, 'Временные хиты', 'ts-round')}</div>
+    <div class="ts-cell ts-ac"><span class="ts-cap">КД</span>${num('ac', st.ac ?? 10, 'Класс доспеха', 'ts-round ts-shield')}</div>
+  </div><hr>`;
+}
+
+/** Записать одно поле параметров (максимум, временные, КД) с отменой. */
+function setStat(ctx, id, field, value) {
+  const t = ctx.scene.tokens.find((x) => x.id === id); if (!t) return;
+  const st = tokenStats(ctx.c, t);
+  const cur = field === 'tempHp' ? st.tempHp || 0 : st[field];
+  if (cur === value) return;
+  const pick = (x) => ({ [field]: x[field], ...(field === 'hpMax' ? { hp: x.hp } : {}) });
+  let before = null, after = null;
+  ctx.mutateScene((s, c) => {
+    patchTokenStats(c, s, id, (x) => {
+      before = pick(x);
+      const out = { [field]: value, ...(field === 'hpMax' ? { hp: Math.min(x.hp ?? value, value) } : {}) };
+      after = { ...before, ...out };
+      return out;
+    });
+  }, {
+    label: { hpMax: 'Максимум хитов', tempHp: 'Временные хиты', ac: 'КД' }[field],
+    undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
+    redo: (s, c) => { if (after) patchTokenStats(c, s, id, () => structuredClone(after)); },
+  });
+}
+
+function bindStats(ctx, node) {
+  const box = node.querySelector('[data-stats]'); if (!box) return;
+  const id = box.dataset.stats;
+  // После записи поле показывает итог («−3» → новое число): повторного change при уходе с поля не будет.
+  const refresh = () => {
+    const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t) return;
+    const st = tokenStats(ctx.c, t);
+    const vals = { hp: st.hp, hpMax: st.hpMax, tempHp: st.tempHp || 0, ac: st.ac ?? 10 };
+    for (const inp of box.querySelectorAll('[data-st]')) { inp.value = vals[inp.dataset.st]; inp.closest('.ts-cell')?.classList.remove('error'); }
+  };
+  const commit = (inp) => {
+    const k = inp.dataset.st, raw = inp.value.trim();
+    const bad = () => inp.closest('.ts-cell').classList.add('error');
+    if (k === 'hp') { if (raw !== '' && !commitHpInput(ctx, id, raw)) { const t = ctx.scene?.tokens.find((x) => x.id === id); const now = t && tokenStats(ctx.c, t).hp; if (String(now) !== raw) return bad(); } }
+    else {
+      const n = Math.floor(Number(raw.replace(',', '.')));
+      if (!Number.isFinite(n) || raw === '') return bad();
+      const lim = { hpMax: [1, 999], tempHp: [0, 999], ac: [0, 40] }[k];
+      setStat(ctx, id, k, Math.max(lim[0], Math.min(lim[1], n)));
+    }
+    refresh();
+  };
+  box.addEventListener('focusin', (e) => { if (e.target.matches('[data-st]')) e.target.select(); });
+  box.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('[data-st]'); if (!inp) return;
+    e.stopPropagation(); // клавиши стола (Del, H, стрелки) не срабатывают, пока печатаем
+    if (e.key === 'Enter') { e.preventDefault(); commit(inp); inp.select(); }
+    if (e.key === 'Escape') closePopover();
+  });
+  box.addEventListener('change', (e) => { const inp = e.target.closest('[data-st]'); if (inp) commit(inp); });
+}
+
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
   if (target.kind === 'token') {
@@ -284,18 +548,24 @@ export function contextMenu(ctx, target, w, screen) {
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
         { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', onClick: () => ctx.panels.openSheetFor(t) },
         !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
+        !t.characterId ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
+        { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) },
         'divider',
         { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = ids.length === 1 && canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     } else {
       const items = [
         ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
+        !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,
+        ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
         { icon: 'location-01', label: 'Пинг', onClick: () => ctx.ping(t.x, t.y) },
         { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); ctx.ui.ruler = { pts: [{ x: t.x, y: t.y }, { x: t.x, y: t.y }], label: '' }; } },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     }
     return;
   }
@@ -306,6 +576,8 @@ export function contextMenu(ctx, target, w, screen) {
     { icon: 'location-01', label: 'Пинг', hint: 'Alt клик', onClick: () => ctx.ping(w.x, w.y) },
     ctx.isMaster ? { icon: 'view', label: 'Смотрите сюда', hint: '⇧ Alt клик', onClick: () => ctx.ping(w.x, w.y, { look: true }) } : null,
     ctx.isMasterView ? { icon: 'scroll', label: 'Поставить метку', onClick: () => ctx.panels.addPin(w, 'read-aloud', anchor) } : null,
+    ctx.isMasterView && ctx.ui.clipboard?.items.length ? { icon: 'copy-link', label: `Вставить (${ctx.ui.clipboard.items.length})`, hint: 'Ctrl V', onClick: () => pasteTokens(ctx, w) } : null,
+    ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
     { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); const p = ctx.snapCenter(w); ctx.ui.ruler = { pts: [p, p], label: '' }; ctx.invalidate('overlay'); } },
     ctx.isMasterView ? { icon: 'monster', label: 'Поставить существо', onClick: () => { ctx.ui.placeAt = w; ctx.panels.openBestiary(); } } : null,
     ctx.isMasterView ? { icon: 'fire', label: 'Свет здесь', onClick: () => { ctx.setTool('lights'); ctx.panels.addLight(w, 'torch', anchor); } } : null,

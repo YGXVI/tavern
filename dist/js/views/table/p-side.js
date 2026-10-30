@@ -7,6 +7,7 @@ import { BESTIARY, monsterById } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
 import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
+import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
 import { roll } from '../../../engine.js';
@@ -47,16 +48,14 @@ function setupChips(ctx, s) {
   </div>`;
 }
 
-function scenesHTML(ctx) {
+function sceneCard(ctx, s) {
   const c = ctx.c;
-  const active = sceneOf(c, c.activeSceneId);
-  const cards = c.scenes.map((s) => {
-    const heroes = s.tokens.filter((t) => t.kind === 'hero');
-    const foes = s.tokens.filter((t) => t.kind === 'foe');
-    const isActive = s.id === c.activeSceneId;
-    const split = c.members.filter((m) => m.sceneId === s.id && m.status === 'active').length;
-    const status = isActive ? '<span class="chip chip-solid">Игроки здесь</span>' : split ? `<span class="chip chip-accent">${split} ${plural(split, 'игрок', 'игрока', 'игроков')} здесь</span>` : s.status === 'draft' ? '<span class="chip">Черновик</span>' : '';
-    return `<div class="scene-card ${s.id === ctx.sceneId ? 'viewing' : ''} ${isActive ? 'active' : ''}">
+  const heroes = s.tokens.filter((t) => t.kind === 'hero');
+  const foes = s.tokens.filter((t) => t.kind === 'foe');
+  const isActive = s.id === c.activeSceneId;
+  const split = c.members.filter((m) => m.sceneId === s.id && m.status === 'active').length;
+  const status = isActive ? '<span class="chip chip-solid">Игроки здесь</span>' : split ? `<span class="chip chip-accent">${split} ${plural(split, 'игрок', 'игрока', 'игроков')} здесь</span>` : s.status === 'draft' ? '<span class="chip">Черновик</span>' : '';
+  return `<div class="scene-card ${s.id === ctx.sceneId ? 'viewing' : ''} ${isActive ? 'active' : ''}">
       <button class="scene-thumb" data-act="scene-view" data-id="${esc(s.id)}" aria-label="Открыть «${esc(s.name)}»">${mapImg(s.map.src)}${status ? `<span class="thumb-chip">${status}</span>` : ''}${s.id === ctx.sceneId ? `<span class="thumb-eye">${icon('view', 14)}вы здесь</span>` : ''}</button>
       <div class="scene-info">
         <div class="row"><b class="ellipsis grow">${esc(s.name)}</b><button class="icon-btn icon-btn-xs" data-act="scene-menu" data-id="${esc(s.id)}" aria-label="Действия со сценой">${icon('more-horizontal', 16)}</button></div>
@@ -65,9 +64,25 @@ function scenesHTML(ctx) {
         ${setupChips(ctx, s)}
       </div>
     </div>`;
-  }).join('');
+}
+
+function scenesList(ctx) {
+  const c = ctx.c;
+  const q = (ctx.ui.sceneQuery || '').trim().toLowerCase();
+  const match = (s) => !q || s.name.toLowerCase().includes(q) || (s.note || '').toLowerCase().includes(q);
+  const live = c.scenes.filter((s) => match(s) && (s.id === c.activeSceneId || c.members.some((m) => m.sceneId === s.id && m.status === 'active')));
+  const rest = c.scenes.filter((s) => match(s) && !live.includes(s));
+  if (!live.length && !rest.length) return q ? `<div class="empty"><p class="t-sm muted">Нет сцен с «${esc(ctx.ui.sceneQuery.trim())}»</p></div>` : '<div class="empty"><p class="t-sm muted">Сцен пока нет</p></div>';
+  return `${live.length ? `<div class="side-group">У игроков сейчас</div>${live.map((s) => sceneCard(ctx, s)).join('')}` : ''}
+    ${rest.length ? `<div class="side-group">Подготовлены · ${rest.length}</div>${rest.map((s) => sceneCard(ctx, s)).join('')}` : ''}`;
+}
+
+function scenesHTML(ctx) {
+  const c = ctx.c;
+  const active = sceneOf(c, c.activeSceneId);
   return `<div class="panel-header"><div class="titles"><div class="title lg">Сцены</div><div class="subtitle">${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')} · ${active ? `игроки в «${esc(active.name)}»` : 'игрокам ничего не показано'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
-    <div class="side-body scroll">${cards || '<div class="empty"><p class="t-sm muted">Сцен пока нет</p></div>'}</div>
+    ${c.scenes.length > 2 ? `<div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-ssearch value="${esc(ctx.ui.sceneQuery || '')}" placeholder="Найти сцену" aria-label="Найти сцену"></div></div>` : ''}
+    <div class="side-body scroll s-list">${scenesList(ctx)}</div>
     <div class="panel-footer"><button class="btn btn-primary btn-block" data-act="scene-new">${icon('plus-sign', 16)}Новая сцена</button></div>`;
 }
 
@@ -89,17 +104,23 @@ function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', typ
 function bestiaryHTML(ctx) {
   const st = bState(ctx);
   const m = st.pick ? monsterById(st.pick) : null;
-  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
+  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
     <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, нежить…" aria-label="Поиск существ"></div>
       <div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div></div>
     <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
     ${m ? `<div class="panel-footer b-foot"><div class="col grow" style="gap:8px">
       <div class="row"><b class="grow ellipsis">${esc(m.name)}</b><div class="stepper"><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="-1" aria-label="Меньше">${icon('minus-sign', 14)}</button><span>${st.count}</span><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="1" aria-label="Больше">${icon('plus-sign', 14)}</button></div></div>
-      <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Хиты ${esc(m.hpDice)}</label></div>
-      <button class="btn btn-primary btn-block" data-act="b-place">${icon('plus-sign', 16)}Поставить ${st.count > 1 ? `${st.count} ` : ''}на карту</button></div></div>` : ''}`;
+      <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Бросить хиты (${esc(m.hpDice)})</label></div>
+      <label class="check t-sm"><input type="checkbox" data-act="b-combat" ${st.toCombat ? 'checked' : ''}>Сразу добавить в бой${ctx.c.combat.active ? '' : ' — начнём новый'}</label>
+      <button class="btn btn-primary btn-block" data-act="b-place">${icon('plus-sign', 16)}Поставить на карту${st.count > 1 ? ` · ${st.count}` : ''}</button></div></div>` : ''}`;
 }
 
 export function sideInput(ctx, e) {
+  if (e.target.matches('[data-ssearch]')) {
+    ctx.ui.sceneQuery = e.target.value;
+    const list = e.target.closest('.side-panel').querySelector('.s-list');
+    if (list) { list.innerHTML = scenesList(ctx); hydrateImages(list); }
+  }
   if (e.target.matches('[data-bsearch]')) {
     bState(ctx).q = e.target.value;
     const list = e.target.closest('.side-panel').querySelector('.b-list');
@@ -125,6 +146,7 @@ export function sideAction(ctx, act, b, e) {
     case 'b-count': st.count = Math.max(1, Math.min(12, st.count + Number(b.dataset.d))); ctx.panels.renderSide(true); return true;
     case 'b-hidden': st.hidden = b.checked; return true;
     case 'b-rollhp': st.rollHp = b.checked; return true;
+    case 'b-combat': st.toCombat = b.checked; return true;
     case 'b-place': placeCreatures(ctx, st.pick); return true;
     default: return false;
   }
@@ -136,6 +158,7 @@ function sceneMenu(ctx, sid, anchor) {
   if (!s) return;
   menu([
     sid !== c.activeSceneId ? { icon: 'view', label: 'Показать игрокам', onClick: () => activateScene(ctx, sid) } : null,
+    sid !== ctx.sceneId ? { icon: 'arrow-right-01', label: 'Перейти сюда', hint: 'игроки не увидят', onClick: () => { ctx.switchScene(sid); ctx.panels.renderSide(); } } : null,
     { icon: 'edit-02', label: 'Переименовать', onClick: () => renameScene(ctx, sid) },
     { icon: 'copy-01', label: 'Дублировать без героев', onClick: () => duplicateScene(ctx, sid) },
     { icon: 'grid', label: 'Подогнать сетку', onClick: () => { ctx.switchScene(sid); ctx.setTool('grid'); } },
@@ -238,8 +261,8 @@ export function newSceneModal(ctx) {
       <div class="field"><label for="ns-name">Название</label><div class="input"><input id="ns-name" maxlength="60" placeholder="Например, Мост через ущелье" value="${esc(state.name || '')}" autofocus></div></div>
       <div class="field"><label>Карта</label><div class="map-pick">
         ${BUILTIN_MAP_LIST.map((mp) => `<button class="map-opt ${!state.upload && state.map.id === mp.id ? 'on' : ''}" data-map="${mp.id}">${mapImg(mp.id)}<span>${esc(mp.name)}</span></button>`).join('')}
-        <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp" hidden data-upload></label>
-      </div><div class="t-xs tertiary" data-up-msg>${state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG или WebP до 25 МБ. Загруженная карта хранится только в этом браузере.'}</div></div>
+        <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp,.dd2vtt,.uvtt,.df2vtt" hidden data-upload></label>
+      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана · хранится только в этом браузере` : state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом. Хранится только в этом браузере.'}</div></div>
       <div class="form-grid">
         <div class="field"><label>Одна клетка</label><div class="chips-wrap">${[5, 10].map((f) => `<button class="chip chip-md ${state.feet === f ? 'chip-accent' : ''}" data-feet="${f}">${f} фт</button>`).join('')}</div></div>
         <div class="field"><label>Освещение</label><div class="chips-wrap"><button class="chip chip-md ${state.lighting === 'bright' ? 'chip-accent' : ''}" data-light="bright">${icon('sun-01', 12)}Светло</button><button class="chip chip-md ${state.lighting === 'dark' ? 'chip-accent' : ''}" data-light="dark">${icon('moon-02', 12)}Темно</button></div></div>
@@ -252,7 +275,7 @@ export function newSceneModal(ctx) {
   hydrateImages(m.box);
   const rerender = () => { state.name = m.box.querySelector('#ns-name')?.value || state.name; const show = m.box.querySelector('[data-show]')?.checked; m.set(render()); m.box.querySelector('[data-show]').checked = show; hydrateImages(m.box); };
   m.box.addEventListener('click', (e) => {
-    const mp = e.target.closest('[data-map]'); if (mp) { state.map = BUILTIN_MAP_LIST.find((x) => x.id === mp.dataset.map); state.upload = null; rerender(); return; }
+    const mp = e.target.closest('[data-map]'); if (mp) { state.map = BUILTIN_MAP_LIST.find((x) => x.id === mp.dataset.map); state.upload = null; state.imported = null; rerender(); return; }
     const f = e.target.closest('[data-feet]'); if (f) { state.feet = Number(f.dataset.feet); rerender(); return; }
     const l = e.target.closest('[data-light]'); if (l) { state.lighting = l.dataset.light; rerender(); return; }
     const fg = e.target.closest('[data-fog]'); if (fg) { state.fog = fg.dataset.fog; rerender(); return; }
@@ -263,15 +286,29 @@ export function newSceneModal(ctx) {
     const file = e.target.files?.[0]; if (!file) return;
     const msg = m.box.querySelector('[data-up-msg]');
     msg.textContent = 'Загружаем…';
-    try { state.upload = await storeImage(file); state.name = state.name || m.box.querySelector('#ns-name').value || file.name.replace(/\.[^.]+$/, '').slice(0, 60); rerender(); }
-    catch (err) { msg.textContent = err.message; msg.classList.add('negative'); }
+    try {
+      state.imported = null;
+      if (/\.(dd2vtt|uvtt|df2vtt)$/i.test(file.name)) {
+        // Карта Dungeondraft / Universal VTT: картинка + стены, двери и свет.
+        const data = parseUniversalVTT(await file.text(), { feet: state.feet, uid: () => uid('') });
+        if (!data.image) throw new Error('В файле нет картинки карты.');
+        const bytes = Uint8Array.from(atob(data.image.base64), (ch) => ch.charCodeAt(0));
+        state.upload = await storeImage(new File([bytes], 'map', { type: data.image.mime }), { campaignId: ctx.cid });
+        state.imported = scaleImport(data, state.upload.width / data.width);
+        if (data.lights.length) state.lighting = 'dark';
+        if (data.walls.length) state.fog = 'vision';
+      } else state.upload = await storeImage(file, { campaignId: ctx.cid });
+      state.name = state.name || m.box.querySelector('#ns-name').value || file.name.replace(/\.[^.]+$/, '').slice(0, 60);
+      rerender();
+    } catch (err) { msg.textContent = err instanceof SyntaxError ? 'Файл повреждён: это не JSON карты Universal VTT.' : err.message; msg.classList.add('negative'); }
   });
   function create() {
     const nameInput = m.box.querySelector('#ns-name');
     const name = nameInput.value.trim() || (state.upload ? 'Новая сцена' : state.map.name);
     const src = state.upload ? { src: state.upload.ref, width: state.upload.width, height: state.upload.height } : { src: state.map.id, width: state.map.width, height: state.map.height };
-    const size = state.upload ? 70 : GRID_PRESET[state.map.id] || src.width / 20;
-    const s = makeScene({ name, map: src, grid: { size, feet: state.feet, calibrated: !state.upload }, lighting: state.lighting, fog: { mode: state.fog }, status: 'ready' });
+    const imp = state.upload && state.imported;
+    const size = imp ? imp.ppg : state.upload ? 70 : GRID_PRESET[state.map.id] || src.width / 20;
+    const s = makeScene({ name, map: src, grid: { size, feet: state.feet, calibrated: !state.upload || !!imp }, lighting: state.lighting, fog: { mode: state.fog }, status: 'ready', walls: imp ? structuredClone(imp.walls) : [], lights: imp ? structuredClone(imp.lights) : [] });
     const { cols, rows } = gridDims(s.grid, src.width, src.height);
     s.note = `${cols}×${rows} клеток`;
     const show = m.box.querySelector('[data-show]').checked;
@@ -280,8 +317,8 @@ export function newSceneModal(ctx) {
     ctx.ui.panel = 'scenes';
     ctx.switchScene(s.id);
     ctx.panels.renderSide();
-    if (state.upload) setTimeout(() => ctx.setTool('grid'), 60);
-    ctx.toast({ title: `Сцена «${name}» готова`, body: state.upload ? 'Подгоните сетку под клетки на карте' : show ? 'Игроки уже её видят' : 'Игроки её пока не видят', icon: 'maps' });
+    if (state.upload && !imp) setTimeout(() => ctx.setTool('grid'), 60);
+    ctx.toast({ title: `Сцена «${name}» готова`, body: imp ? `Стены, двери и свет перенесены из карты (${imp.counts.walls + imp.counts.doors} отрезков, ${imp.counts.lights} источников)` : state.upload ? 'Подгоните сетку под клетки на карте' : show ? 'Игроки уже её видят' : 'Игроки её пока не видят', icon: 'maps' });
   }
 }
 
@@ -308,6 +345,7 @@ export function placeCreatures(ctx, monsterId) {
     }
   }, { label: 'Существа', undo: (sc) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); }, redo: (sc) => { for (const t of made) sc.tokens.push(structuredClone(t)); } });
   ctx.select(made.map((t) => t.id));
+  if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({
     title: `На карте: ${made.length > 1 ? `${made.length} × ` : ''}${m.name}`, body: st.hidden ? 'Скрыто от игроков' : 'Игроки видят, если в обзоре героев', icon: 'monster',

@@ -18,7 +18,29 @@
 .viewport[data-tool="ping"] { cursor: cell; }
 .viewport[data-tool="select"] { cursor: crosshair; }
 
-.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+/* ——— Фокус редакторов сцены: видно только то, что правишь ——— */
+.world > .layer { transition: opacity .18s ease; }
+.viewport[data-focus] .tokens-layer { opacity: .14; }
+.viewport[data-focus] .tokens-layer .tok { pointer-events: none !important; }
+.viewport[data-focus] :is(.auras-layer, .drawings-layer) { opacity: 0; }
+.viewport[data-focus] .markers-layer .marker { opacity: 0; pointer-events: none; transition: opacity .18s ease; }
+.viewport[data-focus] .markers-layer .marker.door { opacity: .35; }
+/* Стены: двери как часть стен, туман-подсказка почти убран */
+.viewport[data-focus="walls"] .markers-layer .marker.door { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="walls"] .fog-canvas, .viewport[data-focus="terrain"] .fog-canvas { opacity: .2; }
+/* Свет: источники и двери, туман показывает результат освещения */
+.viewport[data-focus="lights"] .markers-layer :is(.marker.light, .marker.door) { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="lights"] .tokens-layer { opacity: .3; }
+/* Туман: герои нужны, чтобы видеть их обзор */
+.viewport[data-focus="fog"] .tokens-layer { opacity: .45; }
+/* Слой мастера: ловушки, метки, переходы */
+.viewport[data-focus="gm"] .markers-layer :is(.marker.trap, .marker.pin, .marker.portal) { opacity: 1; pointer-events: auto; }
+.viewport[data-focus="gm"] .fog-canvas { opacity: .5; }
+/* Сетка: только карта и клетки */
+.viewport[data-focus="grid"] :is(.tokens-layer, .fog-canvas, .glow-canvas, .terrain-layer) { opacity: 0; }
+
+
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .world > .layer, .world > svg, .world > canvas, .world > img { position: absolute; left: 0; top: 0; }
 .map-img { pointer-events: none; max-width: none; box-shadow: 0 0 0 1px rgb(0 0 0 / .5), 0 30px 90px rgb(0 0 0 / .55); background: #0b0d14; }
 .glow-canvas, .fog-canvas { pointer-events: none; }
@@ -26,12 +48,22 @@
 .grid-layer, .terrain-layer, .drawings-layer, .areas-layer, .overlay-layer, .labels-layer { pointer-events: none; overflow: visible; }
 .walls-layer { pointer-events: none; overflow: visible; }
 .markers-layer, .tokens-layer { pointer-events: none; }
+/* Порядок токенов (z-index, TASK-024) — только внутри своего слоя: туман, путь, подписи и рамка остаются выше. */
+.tokens-layer { isolation: isolate; }
 
 /* ——— Сетка, местность, рисунки ——— */
 .grid-lines { fill: none; stroke: var(--map-grid); stroke-opacity: .55; stroke-width: calc(1px * var(--iz)); shape-rendering: crispEdges; }
 .draw-line { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
 .draw-line.live { opacity: .9; }
 .draw-text { font-family: var(--font-display); font-weight: 600; paint-order: stroke; stroke: rgb(0 0 0 / .75); stroke-width: 5px; text-anchor: middle; dominant-baseline: middle; }
+/* Рисунки и надписи как объекты (TASK-031) */
+.draw-shape { fill-opacity: .18; stroke-width: 4; stroke-linejoin: round; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .5)); }
+.draw-shape.live, .draw-line.live { opacity: .85; }
+.draw-shape.sel { filter: drop-shadow(0 0 calc(3px * var(--iz)) rgb(255 255 255 / .9)); }
+.draw-hit { fill: none; stroke: transparent; stroke-width: calc(16px * var(--iz)); stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: move; }
+.draw-text.ed { pointer-events: bounding-box; cursor: move; }
+.draw-line.sel { filter: drop-shadow(0 0 calc(3px * var(--iz)) rgb(255 255 255 / .9)); }
+.draw-sel { fill: none; stroke: rgb(255 255 255 / .8); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(5px * var(--iz)) calc(4px * var(--iz)); pointer-events: none; }
 
 /* ——— Стены (только мастер в режиме «Стены») ——— */
 .wall { stroke: var(--wall-stroke); stroke-width: calc(5px * var(--iz)); stroke-linecap: round; pointer-events: stroke; cursor: pointer; }
@@ -57,7 +89,15 @@
 @keyframes threat { to { fill: rgb(229 88 79 / .32); } }
 .template-shape { fill: none; stroke: var(--brand-500); stroke-width: calc(2px * var(--iz)); stroke-dasharray: calc(8px * var(--iz)) calc(5px * var(--iz)); }
 .template-origin { fill: var(--brand-500); stroke: var(--neutral-100); stroke-width: calc(2px * var(--iz)); }
-.aura { fill: var(--aura-fill); stroke: var(--aura-stroke); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(6px * var(--iz)) calc(5px * var(--iz)); }
+.auras-layer { pointer-events: none; overflow: visible; }
+.aura-labels { pointer-events: none; }
+.aura-label { position: absolute; transform: translate(-50%, -50%) scale(var(--iz)); transform-origin: center; pointer-events: auto; white-space: nowrap;
+  padding: 3px 9px; border-radius: var(--r-full); background: rgb(12 14 22 / .82); color: #fff; font: 600 11px/14px var(--font-text);
+  box-shadow: inset 0 0 0 1px var(--ac); cursor: pointer; }
+.aura-label:hover { background: rgb(12 14 22 / .95); }
+.viewport[data-focus] .aura-labels { opacity: 0; pointer-events: none; }
+.aura-pop { width: 300px; }
+.aura { fill: var(--ac, var(--violet-500)); fill-opacity: var(--aa, .16); stroke: var(--ac, var(--aura-stroke)); stroke-opacity: var(--as, .6); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(6px * var(--iz)) calc(5px * var(--iz)); }
 .light-radius { fill: none; stroke: var(--brand-500); stroke-width: calc(1px * var(--iz)); }
 .light-radius.dim { fill: none; stroke-dasharray: calc(5px * var(--iz)) calc(5px * var(--iz)); stroke-opacity: .6; }
 .light-radius.bright { fill: rgb(233 176 82 / .05); stroke-opacity: .9; }
@@ -117,13 +157,20 @@
 }
 
 /* ——— Токены ——— */
-.tok { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: auto; touch-action: none; will-change: transform; --ring: var(--side-neutral); }
+.tok { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: auto; touch-action: none; --ring: var(--side-neutral); }
 .tok.can { cursor: grab; }
-.tok.dragging { cursor: grabbing; z-index: 5; }
+/* TASK-045: will-change только пока тянем. С ним Chrome «замораживает» растр слоя на масштабе, при котором
+   слой создан: открыли стол издалека, приблизили — картинка мутная. */
+.tok.dragging { cursor: grabbing; will-change: transform; }
 .tok.hero { --ring: var(--side-hero); }
 .tok.foe { --ring: var(--side-foe); }
+.tok.disp-neutral { --ring: var(--yellow-500, #e9b052); }
+.tok.disp-friendly { --ring: var(--green-500); }
+.tok.disp-secret { --ring: var(--side-foe); }
+.tok.disp-secret .tok-ring { background: conic-gradient(var(--side-foe) 0 50%, var(--green-500) 0 100%); }
 .tok.mine { --ring: var(--brand-500); }
-.tok-ring { position: absolute; inset: 0; border-radius: 50%; padding: var(--bw); background: var(--ring); box-shadow: var(--shadow-token); transition: box-shadow .15s; }
+.tok-ring { position: absolute; inset: 0; border-radius: 50%; padding: var(--bw); background: var(--ring); box-shadow: var(--shadow-token); transition: box-shadow .15s; transform: rotate(var(--rot, 0deg)); }
+.tok.locked { cursor: default; }
 .tok-ring img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: var(--neutral-300); pointer-events: none; }
 .tok.item .tok-ring { background: transparent; padding: 0; }
 .tok.selected .tok-ring { box-shadow: 0 0 0 calc(var(--bw) * .8) #fff, 0 0 0 calc(var(--bw) * 1.6) rgb(0 0 0 / .45), var(--shadow-token); }
@@ -152,11 +199,21 @@
   box-shadow: 0 0 0 calc(var(--bw) * .5) rgb(0 0 0 / .6); pointer-events: none;
 }
 .tok-badge .ic { width: calc(var(--fs) * 1.25); height: calc(var(--fs) * 1.25); }
-.tok-badge.init { top: -6%; left: -6%; background: var(--brand-500); color: var(--text-on-accent); }
-.tok-badge.hidden-b { top: -6%; right: -6%; display: none; }
+/* Хиты слева красным (временные — мелко после «+»), КД справа синим (TASK-029). */
+.tok-badge.hp-b { top: -6%; left: -8%; background: var(--red-600, #c53030); font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 1px; }
+/* TASK-043: число по центру круга (было по базовой линии — съезжало вверх); временные — мелко рядом. */
+.tok-badge.hp-b i { font-style: normal; font-size: .78em; line-height: 1; opacity: .9; color: #bfe3ff; transform: translateY(.08em); }
+.tok-badge.ac-b { top: -6%; right: -8%; background: var(--blue-600, #2b6cb0); font-variant-numeric: tabular-nums; border-radius: calc(var(--fs) * .5) calc(var(--fs) * .5) var(--r-full) var(--r-full); }
+.tok-badge.hidden-b { bottom: -4%; right: -6%; display: none; }
+.tok.is-hidden.downed .tok-badge.hidden-b { right: 24%; bottom: -10%; }
 .tok.is-hidden .tok-badge.hidden-b { display: grid; }
 .tok-badge.down-b { bottom: -4%; right: -6%; display: none; background: var(--red-600); }
 .tok.downed .tok-badge.down-b { display: grid; }
+.tok-tg { position: absolute; inset: -14%; pointer-events: none; display: flex; justify-content: center; align-items: flex-start; gap: 2px; border-radius: 50%; }
+.tok-tg i { display: grid; place-items: center; width: calc(var(--fs) * 2.1); height: calc(var(--fs) * 2.1); margin-top: calc(var(--fs) * -1.2); border-radius: 50%; background: rgb(0 0 0 / .7); color: var(--pc); box-shadow: 0 0 0 calc(var(--bw) * .5) var(--pc); }
+.tok-tg i .ic { width: calc(var(--fs) * 1.4); height: calc(var(--fs) * 1.4); }
+.tok:has(.tok-tg) .tok-ring { outline: calc(var(--bw) * .7) dashed hsl(0 0% 100% / .7); outline-offset: calc(var(--bw) * 1.2); }
+.tok-badge.elev { top: -6%; left: 50%; transform: translateX(-50%); background: var(--blue-600, #2b6cb0); font-variant-numeric: tabular-nums; }
 .tok-conds { position: absolute; bottom: -4%; left: -4%; display: flex; gap: calc(var(--fs) * .15); pointer-events: none; }
 .tok-cond { width: calc(var(--fs) * 1.9); height: calc(var(--fs) * 1.9); border-radius: 50%; display: grid; place-items: center; background: var(--bg-panel); color: #fff; box-shadow: 0 0 0 calc(var(--bw) * .4) var(--red-500); font: 700 calc(var(--fs) * .8)/1 var(--font-text); }
 .tok-cond .ic { width: calc(var(--fs) * 1.1); height: calc(var(--fs) * 1.1); }
@@ -201,15 +258,26 @@
 
 /* ——— Края стола ——— */
 .chrome { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-chrome); }
-.chrome > div { position: absolute; display: flex; gap: var(--s-8); pointer-events: none; }
+.table { --edge: 24px; }
+.chrome > div { position: absolute; display: flex; gap: 12px; pointer-events: none; }
 .chrome > div > * { pointer-events: auto; }
-.ch-tl { top: 16px; left: 16px; align-items: center; flex-wrap: wrap; max-width: calc(50vw - 40px); }
-.ch-tc { top: 16px; left: 50%; transform: translateX(-50%); justify-content: center; max-width: min(640px, calc(100vw - 600px)); }
-.ch-tr { top: 16px; right: 16px; flex-direction: column; align-items: flex-end; }
-.ch-widget { top: 92px; left: 16px; flex-direction: column; }
-.ch-bl { bottom: 16px; left: 16px; }
-.ch-bc { bottom: 16px; left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; max-width: calc(100vw - 200px); }
-.ch-br { bottom: 16px; right: 16px; }
+.ch-tl { top: var(--edge); left: var(--edge); align-items: center; flex-wrap: wrap; max-width: calc(50vw - 40px); }
+.ch-tc { top: var(--edge); left: 50%; transform: translateX(-50%); justify-content: center; max-width: min(640px, calc(100vw - 600px)); }
+.ch-tr { top: var(--edge); right: var(--edge); flex-direction: column; align-items: flex-end; }
+/* Виджеты — под своей кнопкой, как в макетах: зрение/отряд/инициатива — под их панелью, кубы — под кнопкой кубов. */
+.ch-widget { top: calc(var(--edge) + 72px); left: calc(var(--edge) + 72px); flex-direction: column; }
+.ch-widget:has(.dice-widget) { left: calc(var(--edge) + 244px); }
+.ch-bl { bottom: var(--edge); left: var(--edge); }
+.ch-bc { bottom: var(--edge); left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; max-width: calc(100vw - 200px); }
+/* Мастер: «добавить» и «инструменты» — в один ряд, как в макетах; на узком экране — друг над другом. */
+.ch-bc:has(> .add-bar) { flex-direction: row; gap: 24px; }
+/* Ряд «добавить + инструменты» шире 900 px: пока рядом с масштабом справа ему тесно, ставим панели друг над другом (TASK-040). */
+@media (max-width: 1520px) {
+  .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; }
+}
+/* Внизу два ряда — правая панель кончается над ними и ничего не накрывает (на телефоне панель во весь экран). */
+@media (min-width: 901px) and (max-width: 1520px) { .table:has(.ch-bc > .add-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); } }
+.ch-br { bottom: var(--edge); right: var(--edge); }
 .chrome-logo { width: 60px; height: 60px; box-shadow: var(--shadow-panel); }
 .chrome-logo:hover { filter: brightness(1.05); }
 .combat-chip { height: 28px; padding: 0 12px; font-size: 12px; background: var(--brand-500); color: var(--text-on-accent); box-shadow: var(--glow-turn); }
@@ -219,7 +287,7 @@
 .scene-pill-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; max-width: 200px; }
 .scene-pill-text small { font: 500 10px/12px var(--font-text); color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
 .scene-pill-text b { font: 600 14px/16px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.party-col { padding: 8px; gap: 8px; border-radius: 30px; }
+.party-col { padding: 8px; gap: 6px; border-radius: 30px; }
 .sheet-avatar { position: relative; width: 44px; height: 44px; border-radius: 50%; padding: 2.5px; background: var(--side-hero); flex: none; }
 .sheet-avatar.mine { width: 52px; height: 52px; padding: 3px; background: var(--brand-500); }
 .sheet-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
@@ -246,7 +314,7 @@
 /* Токен-бар */
 .token-bar { max-width: calc(100vw - 32px); overflow-x: auto; scrollbar-width: none; }
 .token-bar::-webkit-scrollbar { display: none; }
-.tb-avatar { width: 44px; height: 44px; border-radius: 50%; flex: none; background: var(--neutral-300) center / cover no-repeat; box-shadow: inset 0 0 0 3px var(--side-neutral); }
+.tb-avatar { width: 36px; height: 36px; margin-left: 4px; border-radius: 50%; flex: none; background: var(--neutral-300) center / cover no-repeat; box-shadow: inset 0 0 0 3px var(--side-neutral); }
 .tb-avatar.hero { box-shadow: inset 0 0 0 3px var(--side-hero); }
 .tb-avatar.foe { box-shadow: inset 0 0 0 3px var(--side-foe); }
 .tb-avatar.mine { box-shadow: inset 0 0 0 3px var(--brand-500); }
@@ -264,6 +332,15 @@
 .hp-num { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .hp-num small { font: 500 10px/12px var(--font-text); color: var(--text-tertiary); text-transform: uppercase; }
 .hp-num b { font: 600 14px/16px var(--font-text); }
+.hp-num b.hp-max { color: var(--text-secondary); font-weight: 500; }
+.hp-input {
+  width: 4ch; min-width: 0; height: 22px; padding: 0 4px; margin: -3px 0; border: 0; border-radius: 6px; text-align: right;
+  background: var(--bg-control); color: var(--text-primary); font: 600 14px/16px var(--font-text); font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 0 0 1px var(--stroke-divider); cursor: text;
+}
+.hp-input:hover { box-shadow: inset 0 0 0 1px var(--stroke-accent); }
+.hp-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--brand-500); width: 6ch; }
+.hp-input.negative, .hp-num b.negative { color: var(--red-400); }
 .hp-num em { font: 600 11px/12px var(--font-text); color: var(--blue-300); font-style: normal; }
 .hp-cell .hp-bar { width: 100%; }
 .death-mini { display: flex; flex-direction: column; gap: 4px; padding: 0 4px; white-space: nowrap; }
@@ -294,6 +371,10 @@ button.pip { width: 16px; height: 16px; }
 .legend { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; box-shadow: inset 0 0 0 1px var(--stroke-divider); }
 .legend.fog-seen { background: rgb(0 0 0 / .55); }
 .legend.fog-dark { background: #000; }
+.legend.lit { background: #e9c88a; }
+.legend.dv { background: #8a8f9c; }
+.party-foot { gap: 8px; align-items: center; }
+.party-foot b.mono { font: 600 14px/18px var(--font-mono); letter-spacing: .04em; }
 .init-list { gap: 4px; }
 .init-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--r-12); min-height: 48px; }
 .init-row.current { background: var(--bg-row-current); box-shadow: inset 0 0 0 1px var(--stroke-accent); }
@@ -335,6 +416,8 @@ button.tray-die:hover { filter: brightness(1.1); }
 .tray-hint { font: 400 12px/16px var(--font-text); color: var(--text-tertiary); text-align: center; max-width: 220px; }
 .tray-foot { display: flex; align-items: center; gap: 6px; padding-top: 10px; }
 .mod-ctl { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--r-full); background: var(--bg-control); }
+.roll-modes { display: flex; gap: 1px; padding: 2px; border-radius: var(--r-full); background: var(--bg-control); }
+.roll-modes .icon-btn.active { background: var(--brand-500); color: var(--text-on-accent); }
 .mod-val { min-width: 34px; text-align: center; font: 600 13px/1 var(--font-text); }
 .roll-btn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-500); color: var(--text-on-accent); box-shadow: 0 4px 14px rgb(233 176 82 / .35); }
 .roll-btn:disabled { background: var(--bg-control); color: var(--icon-disabled); box-shadow: none; }
@@ -367,6 +450,17 @@ button.tray-die:hover { filter: brightness(1.1); }
 .tpl-list { max-height: 200px; padding: 0 8px; display: flex; flex-direction: column; }
 .tpl-list .list-row { min-height: 38px; }
 .aura-row { display: flex; align-items: center; gap: 8px; }
+.aura-edit { display: flex; flex-direction: column; gap: 10px; }
+.aura-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { position: relative; width: 26px; height: 26px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18); flex: none; cursor: pointer; display: grid; place-items: center; }
+.swatch:hover { transform: scale(1.08); }
+.swatch.on { box-shadow: 0 0 0 2px var(--neutral-100, #0d0f17), 0 0 0 4px var(--sw); }
+.swatch.custom { background: conic-gradient(from 0deg, #f0703c, #f4c34d, #4fc27a, #5fb8f0, #a78bfa, #e5484d, #f0703c); color: #fff; }
+.swatch.custom.on { background: var(--sw); }
+.swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.swatch.custom .ic { filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
+.aura-op { display: grid; grid-template-columns: auto 1fr 40px; align-items: center; gap: 10px; }
+.aura-op b { text-align: right; font-variant-numeric: tabular-nums; }
 .scene-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .scene-mini { display: flex; flex-direction: column; gap: 4px; padding: 4px; border-radius: 10px; text-align: left; font: 500 11px/13px var(--font-text); color: var(--text-secondary); }
 .scene-mini span { display: block; aspect-ratio: 16 / 10; border-radius: 7px; background: var(--neutral-300) center / cover; }
@@ -384,7 +478,12 @@ button.tray-die:hover { filter: brightness(1.1); }
 
 /* ——— Боковая панель мастера ——— */
 .side-panel, .sheet-drawer { background: rgb(12 14 22 / .96); }
-.side-panel { position: absolute; top: 16px; right: 16px; bottom: 16px; width: 364px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; z-index: var(--z-panel); overflow: hidden; animation: slidein .18s ease-out; }
+/* Сцены — колонкой левее отряда, как в макете; правая колонка остаётся на месте. */
+.side-panel { position: absolute; top: var(--edge); right: calc(var(--edge) + 178px); bottom: calc(var(--edge) + 76px); width: 380px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; z-index: var(--z-panel); overflow: hidden; animation: slidein .18s ease-out; }
+/* Бестиарий — над панелью «добавить», как в макете. */
+.side-panel[data-panel="bestiary"] { top: auto; right: auto; left: max(var(--edge), calc(50% - 429px)); bottom: calc(var(--edge) + 72px); height: min(649px, calc(100vh - 2 * var(--edge) - 84px)); animation: rise .18s ease-out; }
+@media (max-width: 1180px) { .side-panel[data-panel="bestiary"] { left: 50%; transform: translateX(-50%); bottom: calc(var(--edge) + 140px); height: min(560px, calc(100vh - 2 * var(--edge) - 152px)); } }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .scene-pill-text { max-width: 90px; }
 @keyframes slidein { from { opacity: 0; transform: translateX(16px); } }
 .side-body { flex: 1; min-height: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
 .side-panel .panel-footer { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
@@ -408,7 +507,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .b-foot { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
 
 /* ——— Карточки сверху: спасброски, переходы, шаблоны игроков ——— */
-.float-stack { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: var(--z-panel); pointer-events: none; }
+.float-stack { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: var(--z-panel); pointer-events: none; }
 .float-card { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 18px; }
 .float-card.new { animation: rise .2s ease-out; }
 .float-card > .ic { color: var(--icon-accent); flex: none; }
@@ -416,6 +515,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .float-card .titles b { font: 600 14px/16px var(--font-text); }
 .float-card .titles small { font: 400 12px/14px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-prompt { box-shadow: inset 0 0 0 1.5px var(--stroke-accent), var(--glow-turn); }
+.save-prompt.friend { box-shadow: inset 0 0 0 1px var(--stroke-subtle), var(--shadow-panel); }
 .save-card { flex-direction: column; align-items: stretch; }
 .sv-head { display: flex; align-items: center; gap: 10px; }
 .sv-list { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow: auto; }
@@ -532,21 +632,30 @@ button.tray-die:hover { filter: brightness(1.1); }
 .empty-ic .ic { width: 32px; height: 32px; }
 .empty-ic.hourglass .ic { animation: flip 3s ease-in-out infinite; }
 
-/* Тосты стола — справа внизу, над масштабом, как результаты бросков. */
-.table-toasts { top: auto; bottom: 84px; left: auto; right: 16px; transform: none; flex-direction: column-reverse; width: min(360px, calc(100vw - 32px)); }
-.table:has(.side-panel:not(.hidden)) .table-toasts { right: 396px; }
-/* Открыта панель справа: всё, что было у правого края и по центру сверху, живёт в оставшейся части экрана. */
-.table:has(.side-panel:not(.hidden)) .ch-tr { right: 392px; }
+/* Тосты стола — сверху справа, левее колонки отряда, как в макетах. */
+.table-toasts { top: var(--edge); bottom: auto; left: auto; right: calc(var(--edge) + 182px); transform: none; flex-direction: column; width: min(380px, calc(100vw - 32px)); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .table-toasts { right: calc(var(--edge) + 570px); }
+/* На экранах поуже сверху тесно (баннер по центру) — тосты уходят вниз направо, над масштабом. */
+@media (max-width: 1500px) {
+  .table-toasts { top: auto; bottom: calc(var(--edge) + 72px); right: var(--edge); flex-direction: column-reverse; width: min(360px, calc(100vw - 32px)); }
+  .table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .table-toasts { right: calc(var(--edge) + 570px); }
+}
+/* Открыты сцены: баннер и карточки сверху — левее панели, чтобы не прятаться под ней. Нижние панели
+   остаются на месте: правая панель просто появляется поверх и до них не достаёт (TASK-040). */
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) :is(.ch-tc, .float-stack) { left: calc((100% - 582px) / 2); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-tc { max-width: max(300px, calc(100vw - 1180px)); }
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .float-stack { width: min(520px, calc(100vw - 640px)); }
+/* Лист героя — справа во всю высоту: правая колонка уходит левее. */
 .table:has(.sheet-drawer) .ch-tr { right: 428px; }
-.table:has(.side-panel:not(.hidden)) .chrome > .ch-br, .table:has(.sheet-drawer) .chrome > .ch-br { display: none; }
-.table:has(.side-panel:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 380px) / 2); }
+.table:has(.sheet-drawer) .chrome > .ch-br { display: none; }
 .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 416px) / 2); }
-.table:has(.side-panel:not(.hidden)) .ch-bc, .table:has(.sheet-drawer) .ch-bc { max-width: calc(100vw - 440px); }
-.table:has(.side-panel:not(.hidden)) .ch-tc, .table:has(.sheet-drawer) .ch-tc { max-width: max(300px, calc(100vw - 1040px)); }
-.table:has(.side-panel:not(.hidden)) .float-stack, .table:has(.sheet-drawer) .float-stack { width: min(520px, calc(100vw - 460px)); }
+.table:has(.sheet-drawer) .ch-bc { max-width: calc(100vw - 440px); }
+.table:has(.sheet-drawer) .ch-tc { max-width: max(300px, calc(100vw - 1040px)); }
+.table:has(.sheet-drawer) .float-stack { width: min(520px, calc(100vw - 460px)); }
 .table:has(.sheet-drawer) .table-toasts { right: 432px; }
 
 /* ——— Узкий экран ——— */
+@media (max-width: 1100px) { .table { --edge: 16px; } }
 @media (max-width: 900px) {
   .ch-tc { top: 84px; max-width: calc(100vw - 32px); width: max-content; }
   .float-stack { top: 148px; }
@@ -560,19 +669,23 @@ button.tray-die:hover { filter: brightness(1.1); }
   .ch-tl .icon-btn, .ch-tr .icon-btn { width: 40px; height: 40px; }
   .ch-tr .toolbar { padding: 4px; }
   .party-col { display: none; }
-  .ch-widget { top: 72px; left: 8px; right: 8px; }
+  .ch-widget, .ch-widget:has(.dice-widget) { top: 72px; left: 8px; right: 8px; }
   .widget, .dice-widget { width: calc(100vw - 16px); max-height: calc(100vh - 170px); }
   .ch-bc { bottom: 8px; max-width: calc(100vw - 16px); width: max-content; }
   .ch-bc .toolbar { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; padding: 4px; }
   .ch-bc .toolbar::-webkit-scrollbar { display: none; }
   .ch-bc .icon-btn { width: 40px; height: 40px; flex: none; }
+  /* Длинные панели редакторов прокручиваются, а «Готово» всегда остаётся у правого края. */
+  .ch-bc .toolbar > .btn-primary:last-child { position: sticky; right: 0; flex: none; box-shadow: -10px 0 12px 2px var(--bg-panel), 8px 0 0 0 var(--bg-panel); }
+  .ch-bc .tb-slider .tb-label:first-child { display: none; }
+  .ch-bc .tb-slider .slider { width: 72px; }
   .chrome > .ch-bl, .chrome > .ch-br { display: none; }
   .ch-tc { top: 128px; }
   .float-stack { top: 190px; }
-  .side-panel, .sheet-drawer { top: 8px; right: 8px; bottom: 8px; left: 8px; width: auto; }
-  .table:has(.side-panel:not(.hidden)) .ch-tr, .table:has(.sheet-drawer) .ch-tr { right: 8px; }
-  .table:has(.side-panel:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack), .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: 50%; max-width: calc(100vw - 16px); }
-  .table-toasts { bottom: 140px; right: 8px; left: 8px; width: auto; }
+  .side-panel, .side-panel[data-panel], .sheet-drawer { top: 8px; right: 8px; bottom: 8px; left: 8px; width: auto; height: auto; max-width: none; transform: none; }
+  .table:has(.sheet-drawer) .ch-tr { right: 8px; }
+  .table:has(.side-panel[data-panel]:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack), .table:has(.sheet-drawer) :is(.ch-tc, .ch-bc, .float-stack) { left: 50%; max-width: calc(100vw - 16px); }
+  .table-toasts { top: auto; bottom: 140px; right: 8px; left: 8px; width: auto; flex-direction: column-reverse; }
   .help-grid { grid-template-columns: 1fr; }
   .map-pick { grid-template-columns: repeat(3, 1fr); }
   .float-card { flex-wrap: wrap; }
@@ -580,3 +693,100 @@ button.tray-die:hover { filter: brightness(1.1); }
   .tok.selected .tok-name, .tok.mine .tok-name { display: block; }
 }
 .tok-initials { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; background: hsl(var(--h, 210) 38% 32%); color: #fff; font: 600 calc(var(--fs) * 2.2)/1 var(--font-display); }
+
+/* ——— Группы в боковой панели ——— */
+.side-group { padding: 12px 4px 6px; font: 600 11px/14px var(--font-text); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: .06em; }
+.side-group:first-child { padding-top: 2px; }
+.pause-timer { display: block; margin: 6px 0 2px; font: 600 28px/1 var(--font-display); font-variant-numeric: tabular-nums; color: var(--brand-500); }
+.pause-timer.sm { display: inline; margin: 0; font: inherit; color: inherit; }
+
+/* ——— Подготовка боя в виджете инициативы ——— */
+.setup-widget { width: 340px; }
+.setup-widget .setup-row { gap: 10px; padding: 6px 12px; cursor: pointer; }
+.setup-widget .setup-row.off { opacity: .55; }
+.setup-widget .setup-row .init-num { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--bg-control); font: 600 13px/1 var(--font-text); }
+.setup-widget .init-roll-hint { flex: none; padding: 4px 8px; border-radius: 8px; background: var(--bg-control); color: var(--text-secondary); font: 500 12px/16px var(--font-text); white-space: nowrap; }
+.setting-row.compact { padding: 6px 16px; }
+
+/* ——— Издалека: подписи только у важных токенов ——— */
+.viewport[data-far] .tok:not(.selected, .mine, .turn, :hover) .tok-name { display: none; }
+.viewport[data-far] .aura-label { opacity: 0; pointer-events: none; }
+
+/* ——— Рамка выделенного токена: поворот, размер, быстрые действия (TASK-030) ——— */
+.gizmo-layer { pointer-events: none; }
+.gz { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gz-ring { position: absolute; left: calc(var(--d) / -2); top: calc(var(--d) / -2); width: var(--d); height: var(--d); border-radius: 50%;
+  outline: calc(1.5px * var(--iz)) dashed rgb(255 255 255 / .75); outline-offset: calc(5px * var(--iz)); pointer-events: none; }
+.gz-h { position: absolute; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; pointer-events: auto; touch-action: none;
+  transform-origin: 0 0; transform: scale(var(--iz)) translate(-50%, -50%); background: #313847; color: #fff;
+  box-shadow: 0 0 0 1.5px rgb(255 255 255 / .2), 0 4px 10px rgb(0 0 0 / .45); cursor: grab; }
+.gz-h:hover { background: #3d4659; }
+.gz-h:active { cursor: grabbing; }
+.gz-rot { left: 0; top: calc(var(--d) / -2 - 24px * var(--iz)); }
+.gz-l { left: calc(var(--d) / -2 - 12px * var(--iz)); top: 0; cursor: ew-resize; }
+.gz-r { left: calc(var(--d) / 2 + 12px * var(--iz)); top: 0; cursor: ew-resize; }
+.gz-val { position: absolute; left: 0; top: calc(var(--d) / -2 - 56px * var(--iz)); transform-origin: 0 0; transform: scale(var(--iz)) translateX(-50%);
+  padding: 3px 9px; border-radius: var(--r-full); background: rgb(0 0 0 / .78); color: #fff; font: 600 13px/1.2 var(--font-text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.gz-bar { position: absolute; left: 0; top: var(--bt); transform-origin: 0 0; transform: scale(var(--iz)) translateX(-50%); display: flex; gap: 2px; padding: 4px;
+  border-radius: var(--r-full); background: rgb(49 56 71 / .94); box-shadow: 0 6px 18px rgb(0 0 0 / .45); pointer-events: auto; }
+.gz-b { width: 40px; height: 36px; border-radius: var(--r-full); display: grid; place-items: center; color: #fff; }
+.gz-b:hover { background: rgb(255 255 255 / .1); }
+.gz-b.on { color: var(--brand-500); }
+.gz-b.danger:hover { color: var(--red-400, #f87171); }
+.gz.busy .gz-bar { opacity: 0; pointer-events: none; }
+.gz.up .gz-bar { top: calc(var(--d) / -2 - 46px * var(--iz)); transform: scale(var(--iz)) translate(-50%, -100%); }
+.gz.up .gz-val { top: calc(var(--d) / 2 + 30px * var(--iz)); }
+
+/* Панель выделенного рисунка (TASK-031) */
+.db { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.db .db-bar { top: calc(10px * var(--iz)); align-items: center; }
+.db-sw { width: 26px; height: 26px; margin: 0 3px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgb(0 0 0 / .25); }
+.db-sw.on { box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px rgb(0 0 0 / .25); }
+.db-div { width: 1px; align-self: stretch; margin: 4px 4px; background: rgb(255 255 255 / .15); }
+/* Свободные фигуры (TASK-042): ручка «кончика», подпись размера и угла, кнопка «переместить» в панели. */
+.sh-h { z-index: 1; }
+.sh-val { position: absolute; transform-origin: 0 0; transform: scale(var(--iz)) translate(-50%, calc(-100% - 22px)); padding: 3px 9px; border-radius: var(--r-full);
+  background: rgb(0 0 0 / .78); color: #fff; font: 600 13px/1.2 var(--font-text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.db-move { cursor: grab; touch-action: none; }
+.db-move:active { cursor: grabbing; }
+
+/* Перетаскивание существа из панели на карту (TASK-033) */
+.b-row { touch-action: pan-y; }
+.creature-ghost { position: fixed; left: 0; top: 0; z-index: 200; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  margin: -28px 0 0 -28px; opacity: .55; transition: opacity .12s; }
+.creature-ghost .avatar { width: 56px; height: 56px; box-shadow: 0 8px 20px rgb(0 0 0 / .5); }
+.creature-ghost .cg-name { padding: 2px 8px; border-radius: var(--r-full); background: rgb(0 0 0 / .75); color: #fff; font: 600 12px/1.3 var(--font-text); white-space: nowrap; }
+.creature-ghost.ok { opacity: 1; }
+body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; user-select: none; }
+
+/* Сервер (TASK-002): нет связи — плашка сверху по центру, пока ходы ждут сети. */
+.net-pill { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: var(--r-full); background: var(--bg-panel); color: var(--text-primary); font: 500 13px/16px var(--font-text);
+  box-shadow: inset 0 0 0 1px var(--status-negative), var(--shadow-panel); max-width: calc(100vw - 32px); pointer-events: none; animation: fade 200ms ease; }
+.net-pill svg { color: var(--text-negative); flex: none; }
+.net-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Параметры токена в меню (TASK-039): хиты/максимум, временные хиты, КД — правка на месте. */
+.menu-stats .menu { min-width: 248px; }
+.tok-stats { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 6px 6px 8px; }
+.ts-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ts-cap, .ts-sub { font: 600 10px/12px var(--font-text); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); white-space: nowrap; }
+.ts-sub { font-weight: 500; letter-spacing: .02em; }
+.ts-in { width: 40px; height: 36px; border: 0; background: transparent; color: #fff; text-align: center; font: 700 17px/1 var(--font-text); font-variant-numeric: tabular-nums; outline: none; border-radius: 8px; padding: 0; }
+.ts-in:focus { background: rgb(255 255 255 / .14); }
+.ts-hp-box { display: flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 12px; background: color-mix(in srgb, var(--red-600, #c53030) 82%, black); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.ts-hp-box i { font-style: normal; color: rgb(255 255 255 / .55); font: 500 15px/1 var(--font-text); }
+.ts-round { width: 44px; height: 44px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); }
+.ts-temp .ts-round { background: color-mix(in srgb, var(--green-500) 58%, black); }
+.ts-ac .ts-round { background: var(--blue-600, #2b6cb0); border-radius: 12px 12px 50% 50%; }
+.ts-cell.error .ts-in, .ts-cell.error .ts-hp-box { box-shadow: inset 0 0 0 2px var(--status-negative); }
+
+/* Виджет «Зрение» (TASK-046): у героя — «смотреть глазами» и настройка света и тёмного зрения. */
+.vision-hero { display: flex; flex-direction: column; border-radius: 14px; }
+.vision-hero.open { background: rgb(255 255 255 / .04); }
+.vh-row { display: flex; align-items: center; gap: 4px; }
+.vh-row .list-row { min-width: 0; }
+.vision-edit { display: flex; flex-direction: column; gap: 10px; padding: 4px 10px 12px; }
+.vision-edit .field { gap: 6px; }
+.vision-edit .field > label { font: 500 12px/16px var(--font-text); color: var(--text-secondary); }
+.vision-widget .panel-section > .vision-edit { padding: 0; }

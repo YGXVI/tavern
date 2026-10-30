@@ -2,7 +2,8 @@
 import { esc, plural, timeAgo } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { replaceDB, getDB, commit } from '../../core/store.js';
+import { replaceDB, getDB, commit, isServerMode } from '../../core/store.js';
+import { joinUrl } from '../../server/config.js';
 import { characterOf, tokenStats, updateCampaign, userById, addLog } from '../../core/campaign.js';
 import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
@@ -42,13 +43,36 @@ async function leaveCampaign(ctx) {
   go('#/campaigns');
 }
 
+// ——— Участник: действия мастера ———
+function memberMenu(ctx, userId, anchorEl, rerender, modalRef) {
+  const c = ctx.c;
+  const mm = c.members.find((x) => x.userId === userId); if (!mm) return;
+  const u = userById(userId);
+  const ch = characterOf(c, mm.characterId);
+  const free = c.members.filter((x) => x.role === 'player' && x.status === 'active' && !x.characterId && x.userId !== userId);
+  const r = anchorEl.getBoundingClientRect();
+  const anchor = { x: r.left, y: r.bottom + 4 };
+  menu([
+    ch ? { icon: 'book-open-01', label: 'Открыть лист героя', onClick: () => { modalRef.close(); ctx.panels.openSheetFor({ characterId: ch.id }); } } : null,
+    ch && free.length ? { icon: 'arrow-data-transfer-horizontal', label: 'Передать героя…', onClick: () => menu(free.map((f) => ({ icon: 'user', label: userById(f.userId)?.name || 'Игрок', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId), b = cc.members.find((x) => x.userId === f.userId); if (a && b) { b.characterId = a.characterId; a.characterId = null; const h = cc.characters.find((x) => x.id === b.characterId); if (h) h.ownerId = f.userId; addLog(cc, { kind: 'member', text: `${h?.name || 'Герой'} теперь у ${userById(f.userId)?.name || 'игрока'}` }); } }); rerender(); } })), anchor, { placement: 'bottom', className: 'over-modal' }) } : null,
+    ch ? { icon: 'shuffle', label: 'Сменить героя', hint: 'игрок выберет заново', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = cc.characters.find((x) => x.id === a?.characterId); if (h) h.ownerId = null; if (a) a.characterId = null; addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} выбирает другого героя` }); }); rerender(); } } : null,
+    'divider',
+    { icon: 'user-remove-01', label: 'Исключить из кампании', danger: true, onClick: async () => {
+      const ok = await confirmDialog({ title: `Исключить ${u?.name || 'игрока'}?`, body: 'Он сразу потеряет доступ к кампании. Его герой останется у вас.', ok: 'Исключить', danger: true });
+      if (!ok) return;
+      updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = a?.characterId && cc.characters.find((x) => x.id === a.characterId); if (h) h.ownerId = null; cc.members = cc.members.filter((x) => x.userId !== userId); addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} исключён из кампании` }); });
+      rerender();
+    } },
+  ].filter(Boolean), anchor, { placement: 'bottom', className: 'over-modal' });
+}
+
 // ——— Приглашение ———
 let inviteRef = null;
 export function inviteModal(ctx) {
   const render = () => {
     const c = ctx.c;
     const inv = c.invite || {};
-    const link = `${location.origin}${location.pathname}#/join/${inv.code}`;
+    const link = joinUrl(inv.code, isServerMode());
     const players = c.members.filter((m) => m.role === 'player' && m.status === 'active').length;
     const pending = c.members.filter((m) => m.status === 'pending');
     const expired = inv.expiresAt && inv.expiresAt < Date.now();
@@ -107,12 +131,13 @@ export function settingsModal(ctx) {
     } else if (settingsTab === 'members') {
       body = `<div class="panel-section">${c.members.map((m) => {
         const u = userById(m.userId); const ch = characterOf(c, m.characterId);
-        return `<div class="list-row">${userAvatar(u, 'sm')}<span class="grow col-tight"><span class="primary">${esc(u?.name || 'Игрок')}</span><span class="secondary">${m.role === 'master' ? 'Мастер' : m.status === 'pending' ? 'Ждёт одобрения' : ch ? `играет за ${esc(ch.name)}` : 'выбирает героя'}</span></span>${m.role === 'master' ? `<span class="chip chip-accent">${icon('crown', 12)}мастер</span>` : `<button class="btn btn-sm btn-ghost" data-kick="${esc(m.userId)}">${icon('user-remove-01', 14)}Убрать</button>`}</div>`;
-      }).join('')}</div>`;
+        return `<div class="list-row">${userAvatar(u, 'sm')}<span class="grow col-tight"><span class="primary">${esc(u?.name || 'Игрок')}</span><span class="secondary">${m.role === 'master' ? 'Мастер' : m.status === 'pending' ? 'Ждёт одобрения' : ch ? `играет за ${esc(ch.name)}` : 'выбирает героя'}</span></span>${m.role === 'master' ? `<span class="chip chip-accent">${icon('crown', 12)}мастер</span>` : `<button class="icon-btn icon-btn-sm" data-member="${esc(m.userId)}" aria-label="Действия с участником" data-tip="Действия">${icon('more-horizontal', 18)}</button>`}</div>`;
+      }).join('')}<p class="t-xs tertiary">Исключённый игрок сразу теряет доступ к кампании; его герой остаётся у мастера.</p></div>`;
     } else {
       const s = c.settings;
       body = `<div class="panel-section">
         <div class="field"><label>Диагонали</label><div class="chips-wrap"><button class="chip chip-md ${s.diagonal !== '5-10-5' ? 'chip-accent' : ''}" data-diag="5">Каждая 5 фт</button><button class="chip chip-md ${s.diagonal === '5-10-5' ? 'chip-accent' : ''}" data-diag="5-10-5">5 — 10 — 5 фт</button></div><span class="t-xs tertiary">Книга игрока — каждая клетка 5 фт; вариант из Руководства мастера — каждая вторая диагональ 10 фт.</span></div>
+        <div class="setting-row">${icon('cursor-hold-01', 20)}<span class="titles"><span class="label-main">Игроки двигают любые токены</span><span class="hint">Иначе — только своего героя. Хиты и листы чужих токенов всё равно меняет мастер</span></span><input type="checkbox" class="switch" data-openmove ${s.openMovement !== false ? 'checked' : ''} aria-label="Игроки двигают любые токены"></div>
         <div class="setting-row">${icon('user-group', 20)}<span class="titles"><span class="label-main">Общий обзор отряда</span><span class="hint">Игроки видят то, что видит любой герой</span></span><input type="checkbox" class="switch" data-shared ${s.sharedVision ? 'checked' : ''} aria-label="Общий обзор"></div>
         <div class="field"><label>Хиты врагов для игроков</label><div class="chips-wrap">${[['status', 'Только состояние'], ['exact', 'Точные числа']].map(([v, l]) => `<button class="chip chip-md ${s.playersSeeHp === v ? 'chip-accent' : ''}" data-hpview="${v}">${l}</button>`).join('')}</div><span class="t-xs tertiary">«Состояние» — «цел», «ранен», «тяжело ранен», «при смерти».</span></div>
       </div>`;
@@ -137,6 +162,8 @@ export function settingsModal(ctx) {
       go('#/campaigns');
       return;
     }
+    const mb = e.target.closest('[data-member]');
+    if (mb) { memberMenu(ctx, mb.dataset.member, mb, rerender, m); return; }
     const k = e.target.closest('[data-kick]');
     if (k) {
       const u = userById(k.dataset.kick);
@@ -148,6 +175,7 @@ export function settingsModal(ctx) {
     const d = e.target.closest('[data-diag]'); if (d) { updateCampaign(ctx.cid, (c) => { c.settings.diagonal = d.dataset.diag; }); rerender(); return; }
     const hv = e.target.closest('[data-hpview]'); if (hv) { updateCampaign(ctx.cid, (c) => { c.settings.playersSeeHp = hv.dataset.hpview; }); rerender(); return; }
     if (e.target.closest('[data-shared]')) { const v = e.target.checked; updateCampaign(ctx.cid, (c) => { c.settings.sharedVision = v; }); }
+    if (e.target.closest('[data-openmove]')) { const v = e.target.checked; updateCampaign(ctx.cid, (c) => { c.settings.openMovement = v; }); }
   });
 }
 
@@ -158,7 +186,8 @@ export function helpModal(ctx) {
   const m = modal(`${panelHeader('Как управлять столом', master ? 'Вы мастер: видите всё и ведёте сцену' : 'Вы игрок: ведёте своего героя')}
     <div class="modal-body scroll"><div class="help-grid">
       <div class="panel-section"><div class="label">Карта</div>
-        ${k(['Колесо'], 'Приблизить к курсору')}
+        ${k(['Колесо'], 'Прокрутить вверх-вниз, с Shift — вбок')}
+        ${k(['Ctrl', 'колесо'], 'Приблизить к курсору (на Mac — ⌘)')}
         ${k(['Два пальца'], 'Тачпад: двигать карту, щипок — масштаб')}
         ${k(['Пробел', 'тянуть'], 'Двигать карту')}
         ${k(['Правая кнопка'], 'Тянуть — двигать, клик — меню')}
@@ -168,7 +197,8 @@ export function helpModal(ctx) {
         ${k(['+', '−'], 'Масштаб')}
       </div>
       <div class="panel-section"><div class="label">Токены</div>
-        ${k(['Тянуть'], 'Путь в обход стен, считает футы')}
+        ${k(['Тянуть'], 'Свободно, у центра клетки — магнит; путь в обход стен')}
+        ${k(['⇧', 'тянуть'], 'Ровно по клеткам')}
         ${master ? k(['Alt', 'тянуть'], 'Переставить свободно, сквозь стены') : ''}
         ${k(['⇧', 'клик'], 'Выделить несколько')}
         ${k(['Стрелки'], 'Сдвинуть на клетку')}
@@ -179,7 +209,7 @@ export function helpModal(ctx) {
       </div>
       <div class="panel-section"><div class="label">Инструменты</div>
         ${k(['V'], 'Перемещение')}${k(['R'], 'Линейка и шаблоны')}${k(['D'], 'Рисование')}${master ? '' : k(['P'], 'Пинг')}
-        ${master ? `${k(['S'], 'Выделение рамкой')}${k(['W'], 'Стены и двери')}${k(['L'], 'Свет')}${k(['F'], 'Туман войны')}${k(['T'], 'Местность')}${k(['G'], 'Слой мастера')}` : ''}
+        ${master ? `${k(['S'], 'Выделение рамкой')}${k(['W'], 'Стены и двери')}${k(['L'], 'Свет')}${k(['F'], 'Туман войны')}${k(['T'], 'Местность')}${k(['G'], 'Слой мастера')}${k(['⇧'], 'Стены и свет — по сетке')}` : ''}
         ${k(['Ctrl', 'Z'], 'Отменить')}${k(['Ctrl', '⇧', 'Z'], 'Повторить')}
       </div>
     </div>
@@ -205,32 +235,42 @@ export function pausePopover(ctx, anchor) {
 }
 
 // ——— Начать бой ———
+/**
+ * Подготовка боя — в виджете инициативы, как в макете: список участников с уже брошенной
+ * инициативой, «Перебросить врагов», «Начать бой». Состояние — в ctx.ui.setup.
+ */
 export function combatSetup(ctx, preselect = []) {
   const sc = ctx.scene;
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
-  const checked = (t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden);
-  const m = modal(`${panelHeader('Начать бой', 'Отметьте участников — инициативу бросим сразу')}
-    <div class="modal-body scroll"><div class="panel-section">${toks.map((t) => {
-      const st = tokenStats(ctx.c, t);
-      return `<label class="list-row check-row"><input type="checkbox" class="check-input" data-id="${esc(t.id)}" ${checked(t) ? 'checked' : ''}><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow col-tight"><span class="primary">${esc(st.name)}${t.hidden ? ` <span class="chip">${icon('view-off', 12)}скрыт</span>` : ''}</span><span class="secondary">инициатива ${st.initBonus >= 0 ? '+' : '−'}${Math.abs(st.initBonus)}${t.kind === 'hero' ? ' · герой' : ''}</span></span></label>`;
-    }).join('')}</div>
-    <hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('dice-faces-06', 20)}<span class="titles"><span class="label-main">Игроки бросают сами</span><span class="hint">Иначе бросим за всех — быстрее</span></span><input type="checkbox" class="switch" data-self aria-label="Игроки бросают сами"></div></div></div>
-    <div class="panel-footer"><span class="t-sm muted grow" data-count></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icon('sword-03', 16)}В бой</button></div>`);
-  const count = () => { const n = m.box.querySelectorAll('[data-id]:checked').length; m.box.querySelector('[data-count]').textContent = `${n} ${plural(n, 'участник', 'участника', 'участников')}`; m.box.querySelector('[data-ok]').disabled = !n; };
-  count();
-  m.box.addEventListener('change', count);
-  m.box.querySelector('[data-ok]').addEventListener('click', () => {
-    const ids = [...m.box.querySelectorAll('[data-id]:checked')].map((x) => x.dataset.id);
-    const self = m.box.querySelector('[data-self]').checked;
-    const rolls = {};
-    if (self) for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); if (t?.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player')) rolls[id] = null; }
+  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
+  // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует.
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: true };
+  ctx.panels.openWidget('initiative', true);
+  ctx.panels.refreshWidget(true);
+}
+
+export const hasPlayerHero = (ctx, t) => !!t.characterId && ctx.c.members.some((mm) => mm.characterId === t.characterId && mm.status === 'active' && mm.role === 'player');
+
+/** Действия подготовки боя из виджета. */
+export function setupAction(ctx, act, b) {
+  const st = ctx.ui.setup; if (!st) return;
+  const sc = ctx.scene;
+  if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-self') st.self = !st.self;
+  else if (act === 'setup-cancel') ctx.ui.setup = null;
+  else if (act === 'setup-start') {
+    const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
+    if (!ids.length) return;
+    const use = {};
+    // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); if (st.self && hasPlayerHero(ctx, t)) use[id] = null; }
     const sid = ctx.sceneId;
-    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, rolls));
-    m.close();
-    ctx.panels.openWidget('initiative', true);
+    ctx.ui.setup = null;
+    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
     ctx.select([]);
-  });
+  }
+  ctx.panels.refreshWidget(true);
 }
 
 // ——— Запрос спасброска ———
