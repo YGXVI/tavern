@@ -91,8 +91,15 @@ export function mountTable(root, cid) {
   };
 
   let visCache = null;
+  // Обзор и свет идут за токеном в том же кадре (TASK-133): и за своим перетаскиванием, и за чужим (drag по шине).
+  const movingNow = () => {
+    const pos = {};
+    for (const [id, d] of ctx.remote.drags) if (d.sceneId === ctx.sceneId) pos[id] = d;
+    for (const [id, p] of ctx.dragging || []) pos[id] = p;
+    return pos;
+  };
   ctx.vision = () => {
-    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), Object.fromEntries(ctx.dragging || []));
+    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), movingNow());
     return visCache;
   };
   ctx.invalidateVision = () => { visCache = null; };
@@ -169,7 +176,6 @@ export function mountTable(root, cid) {
   // ——— Отрисовка по кадрам ———
   const dirty = new Set();
   let raf = 0;
-  let lastFog = 0, fogTimer = 0;
   ctx.invalidate = (...what) => {
     for (const w of what.length ? what : ['all']) dirty.add(w);
     if (!raf) raf = requestAnimationFrame(flush);
@@ -185,14 +191,9 @@ export function mountTable(root, cid) {
     if (all || dirty.has('terrain')) renderTerrain(L, sc, { showBlocked: ctx.isMasterView && ctx.ui.tool === 'terrain' });
     if (all || dirty.has('drawings')) renderDrawings(L, sc, ctx);
     if (all || dirty.has('walls')) renderWalls(L, sc, { edit: ctx.isMasterView && ctx.ui.tool === 'walls', selectedWall: ctx.ui.selectedWall, hoverWall: ctx.ui.hoverWall });
-    if (all || dirty.has('fog') || dirty.has('tokens')) {
-      // При перетаскивании туман перерисовываем не чаще ~16 раз в секунду — остальное успевает за курсором.
-      const now = performance.now();
-      if (ctx.dragging?.size && !all && !dirty.has('fog') && now - lastFog < 60) {
-        clearTimeout(fogTimer);
-        fogTimer = setTimeout(() => { lastFog = performance.now(); ctx.invalidateVision(); if (ctx.scene) { renderFog(L, ctx); renderTokens(L, ctx); renderMarkers(L, ctx); } }, 60 - (now - lastFog));
-      } else { lastFog = now; renderFog(L, ctx); trackExplored(); }
-    }
+    // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
+    // каждый кадр пересчитываются только те, что сейчас тащат.
+    if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
     if (all || dirty.has('tokens')) renderTokens(L, ctx);
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
@@ -214,6 +215,8 @@ export function mountTable(root, cid) {
   function trackExplored() {
     const sc = ctx.scene;
     if (ctx.dragging?.size) return;
+    // Чужое перетаскивание ещё не ход: исследованное пополняется, когда токен отпустят.
+    for (const d of ctx.remote.drags.values()) if (d.sceneId === ctx.sceneId) return;
     if (sc.fog.mode === 'off' && sc.lighting !== 'dark') return;
     if (ctx.ui.viewAs) return;
     const known = new Set(sc.fog.explored || []);

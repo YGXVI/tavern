@@ -313,7 +313,10 @@ export function renderTokens(L, ctx) {
 export function renderFog(L, ctx) {
   const view = ctx.fogView();
   const vis = ctx.vision();
-  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog', hi: !ctx.dragging?.size && !ctx.ui.liveFogOp });
+  // Пока токен тащат (сам или кто-то другой) — туман грубее и быстрее, чтобы успевать каждый кадр.
+  let moving = !!ctx.dragging?.size;
+  for (const d of ctx.remote.drags.values()) if (d.sceneId === ctx.sceneId) moving = true;
+  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog', hi: !moving && !ctx.ui.liveFogOp });
   if (view === 'player' || (ctx.isMasterView && ctx.scene.lighting === 'dark')) drawLightGlow(L.glow, ctx.scene, vis);
   else drawLightGlow(L.glow, ctx.scene, { dark: false });
 }
