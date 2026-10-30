@@ -94,8 +94,9 @@ function hullFaces(verts) {
   return faces;
 }
 
-// Размер (радиус описанной сферы) в единицах лотка — на глаз, чтобы кубы были соразмерны.
-const SIZE = { 4: 1.2, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
+// Размер (радиус описанной сферы) в единицах лотка. TASK-139: к4, к6 и к12 подогнаны к к10 по объёму —
+// радиус равного шара у к4/к6/к12/к10 ≈ 0,63–0,66 (раньше к4 и к12 были крупнее, к6 мельче).
+const SIZE = { 4: 1.08, 6: 0.88, 8: 0.86, 10: 0.84, 12: 0.76, 20: 0.9 };
 const GEO = {};
 function geometry(kind) {
   if (GEO[kind]) return GEO[kind];
@@ -119,7 +120,14 @@ function geometry(kind) {
   const R = Math.max(...v.map(len));
   // Грани с числами по порядку меток: у к4 — только длинные (острия без чисел), у остальных — все.
   const numbered = kind === 4 ? faces.map((f, i) => (Math.abs(f.n[1]) < 1e-6 ? i : -1)).filter((i) => i >= 0) : faces.map((_, i) => i);
-  GEO[kind] = { verts: v, faces, numbered, R, inertia: 0.4 * R * R };
+  // Точки касания соседей: вершины и середины рёбер (TASK-139). Только вершины пропускали скрещённые рёбра —
+  // кубы в куче проходили друг сквозь друга, особенно длинный к4 и к10.
+  const seen = new Set(), probes = v.slice();
+  for (const f of faces) f.idx.forEach((a, i) => {
+    const b = f.idx[(i + 1) % f.idx.length], k = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (!seen.has(k)) { seen.add(k); probes.push(mul(add(v[a], v[b]), 0.5)); }
+  });
+  GEO[kind] = { verts: v, faces, numbered, probes, R, inertia: 0.4 * R * R };
   return GEO[kind];
 }
 
@@ -219,13 +227,58 @@ function contactPlane(b, n, off, mat, verts) {
 }
 
 function worldVerts(b) { return b.g.verts.map((p) => add(b.x, qrot(b.q, p))); }
+function worldProbes(b) { return b.g.probes.map((p) => add(b.x, qrot(b.q, p))); }
+/** Насколько глубоко a вошёл в b: {pen, n} (n — наружу из b, мир) или null. */
+function overlap(a, b) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R) ** 2) return null;
+  let best = null;
+  for (const [A, B, sgn] of [[a, b, 1], [b, a, -1]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      let pen = Infinity, nf = null;
+      for (const f of B.g.faces) { const k = f.d - dot(f.n, lp); if (k < 0) { pen = -1; break; } if (k < pen) { pen = k; nf = f.n; } }
+      if (pen > 0 && nf && (!best || pen > best.pen)) best = { pen, n: mul(qrot(B.q, nf), sgn) };
+    }
+  }
+  return best;
+}
+/** Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота, не ниже дна. */
+function separate(list, iters = 24) {
+  for (let it = 0; it < iters; it++) {
+    let any = false;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const o = overlap(list[i], list[j]);
+      if (!o || o.pen < 0.01) continue;
+      any = true;
+      const k = Math.min(o.pen, 0.25) * 0.55;
+      list[i].x = add(list[i].x, mul(o.n, k)); list[j].x = sub(list[j].x, mul(o.n, k));
+    }
+    for (const b of list) { const low = lowest(b); if (low < 0) b.x = [b.x[0], b.x[1] - low, b.x[2]]; }
+    if (!any) break;
+  }
+}
+/** Касается ли куб соседа (в пределах eps): точка одного внутри другого или у самой его поверхности. */
+function touching(a, b, eps = 0.05) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R + eps) ** 2) return false;
+  for (const [A, B] of [[a, b], [b, a]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      if (B.g.faces.every((f) => dot(f.n, lp) - f.d < eps)) return true;
+    }
+  }
+  return false;
+}
 
 function collidePair(a, b) {
   const d = sub(b.x, a.x);
   if (dot(d, d) > (a.g.R + b.g.R) ** 2) return;
   for (const [A, B] of [[a, b], [b, a]]) {
     const qi = qinv(B.q);
-    for (const p of worldVerts(A)) {
+    for (const p of worldProbes(A)) {
       const lp = qrot(qi, sub(p, B.x));
       let minPen = Infinity, nf = null;
       for (const f of B.g.faces) {
@@ -844,25 +897,28 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     });
     // Кубы лотка, не вошедшие в бросок, уходят (стол хранит прежние броски до угасания).
     if (!opts.keep) { dispose(bodies.filter((b) => !used.includes(b))); bodies = used.slice(); }
-    // Просчёт без экрана: все кубы сцены (спящие — опоры). Куб не остаётся лежать на соседе:
-    // такой исход просчитывается заново с другим замахом (до пяти попыток).
-    let sim, map, rec, finalQ;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt) for (const b of used) launch(b, opts.speed);
-      sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
-      map = new Map(sim.map((s, i) => [s, bodies[i]]));
-      rec = [];
-      for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
-        stepWorld(sim, bounds);
-        rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
-      }
-      finalQ = sim.map((s) => alignedQuat(s));
-      if (!sim.some((s, i) => lowest(s, finalQ[i]) > 0.12)) break;
+    // Просчёт без экрана: все кубы сцены (спящие — опоры). Кубы, как настоящие, могут лечь кучей друг на друга
+    // и чуть наискось (TASK-139); число читается с грани, которая смотрит вверх сильнее остальных.
+    const sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
+    const map = new Map(sim.map((s, i) => [s, bodies[i]]));
+    const rec = [];
+    for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
+      stepWorld(sim, bounds);
+      rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
     }
-    // Доводка: лечь ровно на грань и коснуться дна.
+    // Доводка — только у кубов, что лежат на дне сами по себе: ровно на грань и до дна. Куб на соседе или
+    // впритык к нему остаётся как лёг: выравнивание вдавило бы его в соседа.
+    const free = sim.map((s) => lowest(s) < 0.06 && !sim.some((o) => o !== s && touching(s, o, 0.12)));
+    const finalQ = sim.map((s, i) => (free[i] ? alignedQuat(s) : s.q));
     const last = rec[rec.length - 1] || sim.map((s) => [map.get(s), [...s.x], [...s.q], [0, 0, 0], [0, 0, 0]]);
-    const drop = sim.map((s, i) => { const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
-    for (let k = 1; k <= 8; k++) rec.push(last.map(([b, x, q], i) => [b, [x[0], x[1] - drop[i] * (k / 8), x[2]], qslerp(q, finalQ[i], k / 8), [0, 0, 0], [0, 0, 0]]));
+    const drop = sim.map((s, i) => { if (!free[i]) return 0; const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
+    // Итоговые места: после выравнивания кубы, вошедшие друг в друга, разводятся — сквозь соседа не лежит никто.
+    const fin = sim.map((s, i) => ({ g: s.g, x: [s.x[0], s.x[1] - drop[i], s.x[2]], q: finalQ[i] }));
+    separate(fin);
+    for (let k = 1; k <= 8; k++) {
+      const t = k / 8;
+      rec.push(last.map(([b, x, q], i) => [b, [x[0] + (fin[i].x[0] - x[0]) * t, x[1] + (fin[i].x[1] - x[1]) * t, x[2] + (fin[i].x[2] - x[2]) * t], qslerp(q, finalQ[i], t), [0, 0, 0], [0, 0, 0]]));
+    }
     // Метки: сверху — нужное число у каждого брошенного куба (и у задетых прежних).
     sim.forEach((s, i) => {
       const b = map.get(s);
