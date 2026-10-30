@@ -625,6 +625,8 @@ export class Panels {
     const after = { ...structuredClone(ctx.scene.grid), calibrated: true };
     const moved = {};
     ctx.ui.gridBefore = null;
+    // Подгонка показывалась вживую в самой сцене. Вернуть «до», иначе запись не увидит разницы (TASK-166).
+    Object.assign(ctx.scene.grid, structuredClone(before));
     ctx.mutateScene((s) => {
       Object.assign(s.grid, after);
       // Токены встают в центры новых клеток; исследованное по старой сетке сбрасываем.
