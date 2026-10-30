@@ -215,36 +215,55 @@ function audio() {
   } catch { return null; }
 }
 /**
- * Один удар: «щелчок» куба о куб — короткий и звонкий; о дно лотка (сукно на дереве) — глухой стук;
- * о борт — деревянный. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
+ * Один удар (TASK-155: глухо, без жестяного звона): куб о куб — короткий тупой «тук» кости, о борт — деревянный
+ * стук, о дно — мягкий стук по сукну. Шум через широкую полосу и срез верхов, тон — низкий синус с быстрым спадом,
+ * мягкая атака без щелчка. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
  */
 function playHit(kind, v, vol = 1, die = 20) {
   const ac = audio(); if (!ac) return;
+  hitVoice(ac, ac.destination, ac.currentTime + 0.005, kind, v, vol, die);
+}
+/** Синтез удара в любом аудиоконтексте (живой или офлайн — для проверки). */
+function hitVoice(ac, dest, t, kind, v, vol = 1, die = 20, rnd = Math.random) {
   const g0 = Math.min(1, Math.max(0, (v - 1.3) / 11)) ** 0.8 * vol;
   if (g0 < 0.02) return;
-  const t = ac.currentTime + 0.005, r = () => 0.85 + Math.random() * 0.3;
-  const small = die === 4 || die === 6 ? 1.12 : die === 20 || die === 12 ? 0.92 : 1;
-  const out = ac.createGain(); out.connect(ac.destination);
-  // Шум через полосовой фильтр — «тело» удара.
-  const src = ac.createBufferSource(); src.buffer = noiseBuf;
-  const bp = ac.createBiquadFilter(); bp.type = 'bandpass';
-  const ng = ac.createGain();
-  let f, q, dec, peak;
-  if (kind === 'dice') { f = 3200 * r() * small; q = 7; dec = 0.045; peak = 0.5; }
-  else if (kind === 'wall') { f = 1300 * r(); q = 4; dec = 0.07; peak = 0.45; }
-  else { f = 750 * r() * small; q = 2.2; dec = 0.09; peak = 0.6; }
-  bp.frequency.value = f; bp.Q.value = q;
-  ng.gain.setValueAtTime(peak * g0, t); ng.gain.exponentialRampToValueAtTime(0.0008, t + dec);
-  src.connect(bp); bp.connect(ng); ng.connect(out);
-  src.start(t, Math.random() * 0.15, dec + 0.02);
-  // Короткий тон — «щёлк» кости или «тук» дерева.
-  const osc = ac.createOscillator(); osc.type = 'triangle';
-  const og = ac.createGain();
-  const tone = kind === 'dice' ? 2400 * r() * small : kind === 'wall' ? 520 * r() : 210 * r() * small;
-  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.7, t + dec);
-  og.gain.setValueAtTime((kind === 'dice' ? 0.18 : 0.35) * g0, t); og.gain.exponentialRampToValueAtTime(0.0008, t + dec * 0.8);
-  osc.connect(og); og.connect(out);
-  osc.start(t); osc.stop(t + dec + 0.02);
+  const r = () => 0.88 + rnd() * 0.24;
+  const small = die === 4 || die === 6 ? 1.1 : die === 20 || die === 12 ? 0.92 : 1;
+  const P = kind === 'dice'
+    ? { f: 720 * small, q: 0.9, dec: 0.028, peak: 0.55, tone: 360 * small, tg: 0.12, lp: 1200 }
+    : kind === 'wall'
+      ? { f: 380, q: 0.8, dec: 0.045, peak: 0.55, tone: 160, tg: 0.32, lp: 850 }
+      : { f: 260 * small, q: 0.7, dec: 0.055, peak: 0.75, tone: 125 * small, tg: 0.38, lp: 700 };
+  // Срез верхов на выходе — «глухо», как через сукно и дерево.
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = P.lp; lp.Q.value = 0.5;
+  lp.connect(dest);
+  const env = (g, peak, dec) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0008, t + dec); };
+  // Шум через широкую полосу — «тело» удара.
+  const src = ac.createBufferSource(); src.buffer = noiseFor(ac);
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = P.f * r(); bp.Q.value = P.q;
+  const ng = ac.createGain(); env(ng, P.peak * g0, P.dec);
+  src.connect(bp); bp.connect(ng); ng.connect(lp);
+  src.start(t, rnd() * 0.15, P.dec + 0.02);
+  // Низкий тон с быстрым спадом — «тук», а не «дзынь».
+  const osc = ac.createOscillator(); osc.type = 'sine';
+  const tone = P.tone * r();
+  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.55, t + P.dec);
+  const og = ac.createGain(); env(og, P.tg * g0, P.dec * 0.75);
+  osc.connect(og); og.connect(lp);
+  osc.start(t); osc.stop(t + P.dec + 0.02);
+}
+/** Буфер белого шума на контекст (живой — один на вкладку). */
+const noiseBufs = new WeakMap();
+function noiseFor(ac) {
+  if (ac === actx && noiseBuf) return noiseBuf;
+  let nb = noiseBufs.get(ac);
+  if (!nb) {
+    nb = ac.createBuffer(1, Math.round(ac.sampleRate * 0.25), ac.sampleRate);
+    const d = nb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noiseBufs.set(ac, nb);
+  }
+  return nb;
 }
 
 function applyImpulse(b, r, J) {
@@ -1372,4 +1391,4 @@ export function splitD100(value) {
 }
 
 // Для проверок в Node: чистые функции геометрии.
-export const _test = { geometry, hullFaces, topIndex, forceTop, makeBody, alignedQuat, defaultLabels, stepWorld, flatness, lowest };
+export const _test = { geometry, hullFaces, topIndex, forceTop, makeBody, alignedQuat, defaultLabels, stepWorld, flatness, lowest, hitVoice };
