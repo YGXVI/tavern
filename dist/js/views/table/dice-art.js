@@ -13,7 +13,8 @@ const RAIL = {
 
 /**
  * Наборы кубов. light/base/dark — грани иконки и основа камня объёмного куба, ink — цифры,
- * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость.
+ * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость;
+ * art — лист нарисованных граней (вместо камня и шрифта), пока не загрузился — рисуется камнем в цветах набора.
  */
 export const SKINS = [
   { id: 'bone', name: 'Кость', light: '#f3e8d2', base: '#d9c49c', dark: '#9a7f55', ink: '#2b1e15', engrave: true, spec: 0.35, metal: 0.05, lum: 0.78 },
@@ -22,6 +23,9 @@ export const SKINS = [
   { id: 'ruby', name: 'Рубин', light: '#ff8f86', base: '#b8263a', dark: '#5c0f1f', ink: '#fff0d6', spec: 0.75, metal: 0.22, lum: 0.95 },
   { id: 'jade', name: 'Нефрит', light: '#a9e9c8', base: '#2f8a68', dark: '#134634', ink: '#f2fff8', spec: 0.55, metal: 0.12, lum: 0.92 },
   { id: 'sapphire', name: 'Сапфир', light: '#a6c6ff', base: '#2f5fc4', dark: '#142a66', ink: '#f2f6ff', spec: 0.75, metal: 0.22, lum: 0.95 },
+  // Пилот (TASK-127): грани нарисованы — лист картинок из макета sol0139, порядок ячеек — ART_LAYOUT в dice3d.js.
+  { id: 'cobalt', name: 'Кобальт', light: '#ffffff', base: '#dfe5f1', dark: '#1e3c96', ink: '#1e3c96', spec: 0.85, metal: 0.03, lum: 0.9,
+    art: new URL('./dice-cobalt.webp', import.meta.url).href },
 ];
 export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 
@@ -46,11 +50,16 @@ function readPrefs(userId) {
   } catch { return {}; }
 }
 export function mySkin(userId) {
-  if (!chosen.has(userId)) chosen.set(userId, skinById(readPrefs(userId).diceSkin).id); // неизвестное → «Кость»
+  if (!chosen.has(userId)) {
+    const s = skinById(readPrefs(userId).diceSkin); // неизвестное → «Кость»
+    chosen.set(userId, s.id);
+    if (s.art) new Image().src = s.art;
+  }
   return chosen.get(userId);
 }
 export function setMySkin(userId, id) {
-  const skin = skinById(id).id;
-  chosen.set(userId, skin);
-  try { localStorage.setItem(PREFS(userId), JSON.stringify({ ...readPrefs(userId), diceSkin: skin })); } catch { /* приватный режим — до перезагрузки */ }
+  const s = skinById(id);
+  chosen.set(userId, s.id);
+  if (s.art) new Image().src = s.art; // лист граней заранее — к первому броску он уже в кэше
+  try { localStorage.setItem(PREFS(userId), JSON.stringify({ ...readPrefs(userId), diceSkin: s.id })); } catch { /* приватный режим — до перезагрузки */ }
 }

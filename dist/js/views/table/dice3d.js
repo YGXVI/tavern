@@ -315,6 +315,70 @@ function rgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+// ——— Нарисованные грани (набор с полем art, TASK-127) ———
+// Лист: 10 ячеек 128 px в ряд, грань в ячейке — ровно та же фигура, что строит to2() ниже (к4/к8/к20 — треугольник
+// вершиной вверх, к6 — квадрат, к10 — дельтоид, к12 — пятиугольник вершиной вверх). Порядок ячеек:
+const ART_LAYOUT = { frame4: 0, glyph: 1, d6: 11, d8: 17, d10: 25, d10t: 35, d12: 45, d20: 57, frame: { 6: 77, 8: 78, 10: 79, 12: 80, 20: 81 } };
+const ART_COLS = 10;
+const artImgs = new Map(); // адрес → Image
+const artWaiters = new Set(); // сцены, которые перерисуют кубы, когда лист догрузится
+function artImage(src) {
+  let im = artImgs.get(src);
+  if (!im) {
+    im = new Image(); im.decoding = 'async';
+    im.onload = () => { for (const f of artWaiters) f(); };
+    im.src = src; artImgs.set(src, im);
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
+/** Ячейка листа для подписи грани; null — нарисованной грани нет (например, «?»). */
+function artCell(kind, v) {
+  if (v === '?') return null;
+  const n = Number(v);
+  if (kind === 'd10t') return ART_LAYOUT.d10t + n / 10;
+  if (kind === 'd10u' || kind === 10) return ART_LAYOUT.d10 + (n % 10); // к10: «10» нарисовано как «0», как на настоящем кубе
+  const base = ART_LAYOUT[`d${kind}`];
+  return base === undefined ? null : base + n - 1;
+}
+function drawArtAtlas(b, cv, x, img) {
+  const faces = b.g.faces, cols = cv.width / CELL;
+  const cell = (i, ox, oy, w = CELL) => x.drawImage(img, (i % ART_COLS) * CELL, Math.floor(i / ART_COLS) * CELL, CELL, CELL, ox, oy, w, w);
+  x.fillStyle = b.skin.dark; x.fillRect(0, 0, cv.width, cv.height);
+  b.uv = [];
+  faces.forEach((f, fi) => {
+    const ox = (fi % cols) * CELL, oy = Math.floor(fi / cols) * CELL;
+    const sc = (CELL * 0.44) / f.R;
+    const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
+    const P = f.idx.map((i) => to2(b.g.verts[i]));
+    b.uv.push(P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const fs = Math.max(18, f.r * sc * (b.shape === 4 || b.shape === 10 ? 0.95 : 1.12));
+    const text = (txt, cx, cy, ang) => {
+      x.save(); x.translate(cx, cy); x.rotate(ang); x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `600 ${fs}px Unbounded, Inter, system-ui, sans-serif`; x.fillStyle = b.skin.ink; x.fillText(txt, 0, 0); x.restore();
+    };
+    if (b.shape === 4) {
+      // к4: чистая рамка и у каждой вершины — цифра из листа (глифы 0–9), повёрнутая к вершине.
+      // Ближе к центру, чем у камня: углы заняты росписью.
+      cell(ART_LAYOUT.frame4, ox, oy);
+      f.idx.forEach((vi, k) => {
+        const [px, py] = P[k];
+        const cx = ox + CELL / 2, cy = oy + CELL / 2;
+        const tx = cx + (px - cx) * 0.36, ty = cy + (py - cy) * 0.36, ang = Math.atan2(px - cx, -(py - cy));
+        const v = b.labels[vi];
+        if (v === '?') { text('?', tx, ty, ang); return; }
+        const w = CELL * (fs * 0.8) / 96; // в ячейке глифа цифра высотой 96 px
+        x.save(); x.translate(tx, ty); x.rotate(ang); cell(ART_LAYOUT.glyph + Number(v), -w / 2, -w / 2, w); x.restore();
+      });
+      return;
+    }
+    const v = b.labels[fi];
+    const i = artCell(b.kind, v);
+    if (i !== null) { cell(i, ox, oy); return; }
+    cell(ART_LAYOUT.frame[b.shape], ox, oy);
+    text(labelText(b.kind, v), ox + CELL / 2, oy + CELL / 2, 0);
+  });
+}
+
 function drawAtlas(b) {
   const faces = b.g.faces;
   const cols = Math.ceil(Math.sqrt(faces.length));
@@ -324,6 +388,10 @@ function drawAtlas(b) {
   const x = cv.getContext('2d');
   const rnd = seeded(b.id * 7919);
   const sk = b.skin;
+  // Набор с нарисованными гранями: лист готов — рисуем им; нет — камнем в цветах набора, перерисуем по загрузке.
+  const art = sk.art ? artImage(sk.art) : null;
+  b.artPending = !!sk.art && !art;
+  if (art) { drawArtAtlas(b, cv, x, art); b.atlas = cv; b.texDirty = true; return; }
   // Камень набора: основа, мягкие пятна светлого и тёмного тона, тонкие прожилки.
   x.fillStyle = sk.base;
   x.fillRect(0, 0, cv.width, cv.height);
@@ -474,6 +542,8 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   let bodies = [], frames = null, frameAt = 0, raf = 0, bounds = { w: 9, d: 14 }, camH = 20, pv = null, dpr = 1;
   let destroyed = false, pending = [], playStart = 0, liveAt = 0;
+  const onArt = () => { let any = false; for (const b of bodies) if (b.artPending) { b.labelsDirty = true; any = true; } if (any) { render(); kick(); } };
+  artWaiters.add(onArt);
 
   function resize() {
     dpr = Math.min(maxDpr, devicePixelRatio || 1);
@@ -840,7 +910,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     kinds: () => bodies.filter((b) => b.target == null).map((b) => b.kind),
     get count() { return bodies.length; },
     get playing() { return !!frames; },
-    destroy() { destroyed = true; cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
+    destroy() { destroyed = true; artWaiters.delete(onArt); cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
   };
 }
 
