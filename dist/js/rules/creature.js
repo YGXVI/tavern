@@ -27,6 +27,10 @@ export function normalizeCreature(input = {}) {
 
 /** Validate the normalized persisted shape; errors are stable {path,code,message}. */
 export function validateCreature(input) {
+  return checkCreature(input, true);
+}
+
+function checkCreature(input, requireOwner) {
   const errors = [];
   const error = (path, code, message) => errors.push({ path, code, message });
   const seen = new Set();
@@ -59,8 +63,8 @@ export function validateCreature(input) {
     if (!Array.isArray(v)) error(path, 'array', 'Нужен список.');
     else v.forEach((item, i) => check(item, `${path}.${i}`));
   };
-  for (const key of ['id', 'ownerId', 'name']) text(c[key], key, true);
-  for (const key of ['id', 'ownerId']) if (typeof c[key] === 'string' && (!/^[\w:-]+$/.test(c[key]) || c[key].length > 128)) error(key, 'id', 'Недопустимый идентификатор.');
+  for (const key of ['id', 'ownerId', 'name']) text(c[key], key, key !== 'ownerId' || requireOwner);
+  for (const key of ['id', 'ownerId']) if (!(key === 'ownerId' && !requireOwner && c[key] === '') && typeof c[key] === 'string' && (!/^[\w:-]+$/.test(c[key]) || c[key].length > 128)) error(key, 'id', 'Недопустимый идентификатор.');
   if (typeof c.name === 'string' && c.name.length > 200) error('name', 'length', 'Не больше 200 символов.');
   if (!['manual', 'image'].includes(c.source)) error('source', 'source', 'Источник: manual или image.');
   for (const key of ['img', 'type', 'alignment', 'acNote', 'hpFormula', 'senses', 'languages']) text(c[key], key);
@@ -188,7 +192,9 @@ function monsterAbility(a) {
 
 /** Display projection only; does not register lib: IDs or grant access to a library. */
 export function toMonster(creature) {
-  const validation = validateCreature(creature);
+  // Campaign snapshots may have owner_id=null (GM-only). Display needs an ID,
+  // not an invented owner; persistence always uses validateCreature with ownership required.
+  const validation = checkCreature(creature, false);
   if (!validation.valid) {
     const error = new TypeError('Некорректное существо.'); error.errors = validation.errors; throw error;
   }
