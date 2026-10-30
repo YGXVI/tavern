@@ -1,57 +1,67 @@
-name: Задача OpenSpec
-description: План и координация одного изменения
-title: "[TASK-ID] Краткий результат"
+name: Задача команды
+description: Заявка L0/L1/L2; правила в AGENTS.md
+title: "[TASK-NNN] После создания подставить номер Issue"
 body:
   - type: textarea
     id: identity
     attributes:
       label: Задача и участники
-      description: TASK-ID и номер Issue различаются. Имена и роли подтверждаются участниками.
+      description: Новая TASK равна номеру созданной Issue; существующие исторические соответствия сохраняются. Для L0 change необязателен.
       value: |
-        TASK-ID:
-        Change: task-ID-slug
+        TASK-ID (после создания Issue):
+        Уровень L0/L1/L2 и основание:
+        Change (L1/L2):
         Автор (человек + агент/сессия):
-        Проверяющий (другой человек):
-        Интегратор (владелец/назначенный им):
+        Хозяин направления (если назначен):
+        Проверяющий (L0/L1 — другой человек или его агент; L2 — человек):
+        Интегратор (по уровню и условиям AGENTS.md):
         Статус: proposed
-        Обновлено (дата, время +05:00):
+        Обновлено (дата, время и часовой пояс):
     validations:
       required: true
   - type: textarea
     id: result
     attributes:
       label: Результат и границы
-      description: Что меняется, что вне объёма, критерии приёмки.
+      description: Что меняется, вне объёма, критерии приёмки; классификация по AGENTS.md.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
-      label: База, файлы и зависимости
+      label: База и зависимости
       value: |
-        Ветка:
+        Направление / постоянная ветка:
+        Активный исполнитель / передача:
+        Снимок PR:
         Полный SHA свежего main:
         Файлы/контракты:
-        Зависимые Issues/PR:
-        Пересечения и согласованный порядок:
-        Ссылка на change/план/PR:
+        Зависимости / пересечения:
+        Change / PR:
     validations:
       required: true
   - type: textarea
     id: review
     attributes:
-      label: Подтверждение плана
-      description: Ссылка на комментарий другого участника с подтверждением конкретной ревизии плана. Пока его нет, код не начинать; план готовить можно.
-      value: Пока не подтверждено.
+      label: Согласование и review
+      description: Применять AGENTS.md. L2 требует человеческого подтверждения плана до кода; L1 не требует. Таймаут L1 не является аппрувом.
+      value: |
+        L2 — человек, ссылка и SHA подтверждённого плана (иначе неприменимо):
+        Уведомления о пересечениях: адресат, область, время:
+        Запрос review: адресат, SHA, ссылка, время:
+        Результат review / открытые замечания:
+        L1 по таймауту: запрос, истечение 24 часов, CI, отсутствие блокеров, кто проведёт последующий review:
     validations:
       required: true
   - type: textarea
     id: handoff
     attributes:
       label: Передача и проверки
+      description: Статусы по AGENTS.md — proposed/reserved/in_progress/review/merged/published, дополнительно blocked/paused. Историческое done не переносить в новые задачи.
       value: |
         Проверки и непроверенные сценарии:
         PR / commit:
-        В main (подтверждение):
-        Опубликовано (Actions URL):
+        Merge SHA (для merged):
+        Actions / deploy (для published, если применимо):
+        Незавершённое последующее review L1:
         Ограничения / следующий шаг:
