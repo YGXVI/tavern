@@ -230,14 +230,14 @@ function hitVoice(ac, dest, t, kind, v, vol = 1, die = 20, rnd = Math.random) {
   const r = () => 0.88 + rnd() * 0.24;
   const small = die === 4 || die === 6 ? 1.1 : die === 20 || die === 12 ? 0.92 : 1;
   const P = kind === 'dice'
-    ? { f: 1100 * small, q: 1.1, dec: 0.032, peak: 0.5, tone: 520 * small, tg: 0.12, lp: 2100 }
+    ? { f: 720 * small, q: 0.9, dec: 0.028, peak: 0.55, tone: 360 * small, tg: 0.12, lp: 1200 }
     : kind === 'wall'
-      ? { f: 520, q: 0.9, dec: 0.05, peak: 0.5, tone: 200, tg: 0.3, lp: 1400 }
-      : { f: 330 * small, q: 0.8, dec: 0.06, peak: 0.7, tone: 145 * small, tg: 0.36, lp: 1100 };
+      ? { f: 380, q: 0.8, dec: 0.045, peak: 0.55, tone: 160, tg: 0.32, lp: 850 }
+      : { f: 260 * small, q: 0.7, dec: 0.055, peak: 0.75, tone: 125 * small, tg: 0.38, lp: 700 };
   // Срез верхов на выходе — «глухо», как через сукно и дерево.
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = P.lp; lp.Q.value = 0.5;
   lp.connect(dest);
-  const env = (g, peak, dec) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.0015); g.gain.exponentialRampToValueAtTime(0.0008, t + dec); };
+  const env = (g, peak, dec) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0008, t + dec); };
   // Шум через широкую полосу — «тело» удара.
   const src = ac.createBufferSource(); src.buffer = noiseFor(ac);
   const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = P.f * r(); bp.Q.value = P.q;
