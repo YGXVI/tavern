@@ -320,7 +320,8 @@ export function mountTable(root, cid) {
       const mine = p.userId && p.userId !== ctx.userId && ctx.scene?.tokens.find((t) => (p.ids || []).includes(t.id) && ctx.isMine(t));
       if (mine && p.moved && ctx.inCombat()) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
     }
-    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null });
+    // by — кто тащит (TASK-162): у остальных токен в его цвете и с его именем; lead — ведущий токен группы.
+    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null, by: p.userId, lead: id === p.leader || Object.keys(p.positions).length === 1 });
     ctx.invalidate('tokens');
   });
   bus.on('ruler', (p) => {
