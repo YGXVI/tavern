@@ -9,7 +9,8 @@ import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
-import { startCombat } from './combat.js';
+import { startCombat, rollInitiative } from './combat.js';
+import { initiativeDice } from './dice.js';
 import { closeSheet } from './sheet.js';
 
 // ——— Меню кампании (логотип) ———
@@ -271,12 +272,19 @@ export function setupAction(ctx, act, b) {
   else if (act === 'setup-start') {
     const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
     if (!ids.length) return;
-    const use = {};
+    const use = {}, rolled = [];
     // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
-    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); if (st.self && hasPlayerHero(ctx, t)) use[id] = null; }
+    // Бросаем до записи: те же к20 падают на стол (TASK-106).
+    for (const id of ids) {
+      const t = sc.tokens.find((x) => x.id === id);
+      if (st.self && hasPlayerHero(ctx, t)) { use[id] = null; continue; }
+      const r = rollInitiative(ctx.c, t);
+      use[id] = r.init; rolled.push({ tokenId: id, ...r });
+    }
     const sid = ctx.sceneId;
     ctx.ui.setup = null;
     updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
+    initiativeDice(ctx, rolled);
     ctx.select([]);
   }
   ctx.panels.refreshWidget(true);

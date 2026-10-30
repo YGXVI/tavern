@@ -859,6 +859,11 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .df-text { display: flex; flex-direction: column; min-width: 0; }
 .df-rolls { display: flex; gap: 2px 8px; flex-wrap: wrap; font: 400 11px/13px var(--font-text); color: var(--text-tertiary); }
 .df-label.out { opacity: 0; }
+/* Подпись у каждого куба группового броска (инициатива): имя и итог. */
+.df-tag { position: absolute; transform: translate(-50%, 0); max-width: 132px; display: flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--r-full); background: rgb(0 0 0 / .62); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); font: 500 11px/14px var(--font-text); color: var(--text-primary); white-space: nowrap; animation: rise .2s ease-out; transition: opacity .6s; }
+.df-tag > b { font: 600 12px/14px var(--font-text); color: var(--brand-500); }
+.df-tag.is-hidden { color: var(--text-secondary); }
+.df-tag.out { opacity: 0; }
 @media (max-width: 720px) {
   .ch-widget:has(.dice-widget) { right: auto; }
   .dice-widget .dice-rail { flex-direction: row; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }

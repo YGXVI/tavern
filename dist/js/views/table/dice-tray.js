@@ -3,7 +3,7 @@
 // До броска кубы висят в воздухе и трясутся, по центру — большая кнопка «Бросить». Крестик лотка очищает его
 // (и до броска, и после). Свои броски из рейки катятся в лотке; броски из листа и атак, а также открытые броски
 // других участников падают прямо на игровой стол (как в Foundry) и через несколько секунд тают.
-import { el, esc, fmtMod, timeAgo } from '../../core/dom.js';
+import { el, esc, fmtMod, timeAgo, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { userById } from '../../core/campaign.js';
 import { userAvatar } from '../../ui/kit.js';
@@ -210,6 +210,35 @@ function createFloor(ctx) {
         stage.fade(entry.id, FLOOR_HOLD);
         setTimeout(() => chip.classList.add('out'), FLOOR_HOLD);
         setTimeout(() => chip.remove(), FLOOR_HOLD + 700);
+      });
+    },
+    /**
+     * Групповой бросок (инициатива): по к20 на участника, у каждого куба — имя и итог, сверху — кто бросал.
+     * items: [{name, natural, total, hidden?}]; hidden — участник скрыт от игроков (виден только у мастера).
+     */
+    rollGroup({ id, userId, title, items, skin, mine = false }) {
+      if (!items?.length) return;
+      ensure();
+      const targets = items.map((x) => ({ kind: 20, value: x.natural }));
+      const opts = { skin: skinById(skin), keep: true, group: id, lane: 0, speed: 1.08 };
+      const done = reducedMotion() ? stage.place(targets, opts) : stage.throw(targets, opts);
+      done.then(({ top, dice }) => {
+        const u = userById(userId);
+        const hold = Math.min(7000, FLOOR_HOLD + items.length * 250);
+        const head = el(`<div class="df-label">${userAvatar(u, 'xs')}<span class="df-text"><span class="ellipsis">${esc(mine ? 'Вы' : u?.name || 'Кто-то')} · ${esc(title)}</span><small class="df-rolls">${items.length} ${plural(items.length, 'участник', 'участника', 'участников')}</small></span></div>`);
+        head.style.left = `${top[0]}px`;
+        head.style.top = `${Math.max(96, top[1] - 8)}px`;
+        const tags = items.map((x, i) => {
+          const p = dice?.[i]; if (!p) return null;
+          const tag = el(`<div class="df-tag ${x.hidden ? 'is-hidden' : ''}">${x.hidden ? icon('view-off', 12) : ''}<span class="ellipsis">${esc(x.name)}</span><b>${esc(x.total)}</b></div>`);
+          tag.style.left = `${p[0]}px`;
+          tag.style.top = `${p[1] + 30}px`;
+          return tag;
+        }).filter(Boolean);
+        node.append(head, ...tags);
+        stage.fade(id, hold);
+        setTimeout(() => [head, ...tags].forEach((n) => n.classList.add('out')), hold);
+        setTimeout(() => [head, ...tags].forEach((n) => n.remove()), hold + 700);
       });
     },
     destroy() { removeEventListener('resize', onResize); stage?.destroy(); node.remove(); floors.delete(ctx); },
