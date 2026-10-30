@@ -6,7 +6,7 @@ import { onlineUsers } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, myCharacter, sceneOf, membership } from '../../core/campaign.js';
 import { TEMPLATES, LIGHTS } from '../../data/rules.js';
-import { currentEntry } from './combat.js';
+import { currentEntry, combatRound } from './combat.js';
 import { DRAW_SHAPES } from './drawings.js';
 import { movementLeft, FOCUS_TOOLS } from './input.js';
 import { pauseElapsed } from './panels.js';
@@ -76,7 +76,7 @@ function topLeft(ctx) {
     <div class="toolbar">${ib('w-vision', 'view', 'Зрение', { active: w === 'vision' })}${ib('w-party', 'user-group', 'Отряд', { active: w === 'party' })}${ib('w-initiative', 'sword-03', 'Инициатива', { active: w === 'initiative' || (c.combat.active && w !== 'initiative' && false) })}</div>
     <div class="toolbar">${ib('w-dice', 'dice-faces-06', 'Кубы', { active: w === 'dice' })}</div>
     ${ctx.isMaster ? `<div class="toolbar">${ib('pause', c.paused ? 'play' : 'pause', c.paused ? 'Снять паузу' : 'Пауза', { active: !!c.paused })}</div>` : ''}
-    ${c.combat.active ? `<span class="chip chip-accent combat-chip">${icon('sword-03', 12)}Бой · раунд ${c.combat.round}</span>` : ''}`;
+    ${c.combat.active ? `<span class="chip chip-accent combat-chip">${icon('sword-03', 12)}Бой · раунд ${combatRound(c, ctx.scene)}</span>` : ''}`;
 }
 
 function banner(ic, title, sub, action = '', cls = '', after = '') {
@@ -125,7 +125,7 @@ function topCenter(ctx) {
   const mine = cur && ctx.scene.tokens.find((t) => t.id === cur.tokenId && ctx.isMine(t));
   if (mine) {
     const left = movementLeft(ctx, mine);
-    return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${c.combat.round} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
+    return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${combatRound(c, sc)} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
   }
   const m = membership(c, ctx.userId);
   if (m?.characterId && !sc.tokens.some((t) => ctx.isMine(t))) return banner('chess-pawn', 'Вашего героя нет на этой сцене', 'Мастер поставит его, когда отряд доберётся сюда. Карту уже можно смотреть');
