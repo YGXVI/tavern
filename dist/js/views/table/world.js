@@ -24,6 +24,8 @@ export function buildWorld(viewport) {
     drawings: svg('drawings-layer'),
     areas: svg('areas-layer'),
     auras: svg('auras-layer'),
+    // Досягаемость и угроза — «поле» под токенами (TASK-130): клетки не ложатся на токены, подписи и рамку.
+    ground: svg('ground-layer'),
     walls: svg('walls-layer'),
     markers: el('<div class="layer markers-layer"></div>'),
     tokens: el('<div class="layer tokens-layer"></div>'),
@@ -35,14 +37,14 @@ export function buildWorld(viewport) {
     drawUi: el('<div class="layer gizmo-layer draw-ui"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo, L.drawUi);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.ground, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo, L.drawUi);
   viewport.append(world);
   return L;
 }
 
 export function sizeLayers(L, scene) {
   const { width: W, height: H } = scene.map;
-  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'auras', 'walls', 'overlay']) {
+  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'auras', 'ground', 'walls', 'overlay']) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
@@ -168,14 +170,14 @@ export function renderMarkers(L, ctx) {
   L.markers.innerHTML = out.join('');
 }
 
-/** Области: ауры, радиусы света, досягаемость, шаблоны, выделение. */
+/** Области: радиусы света, шаблоны, клетки ловушки — над токенами; досягаемость и угроза — под ними (слой ground). */
 export function renderAreas(L, ctx) {
   const { scene } = ctx;
   const s = gridSize(scene.grid), ox = scene.grid.offsetX || 0, oy = scene.grid.offsetY || 0;
-  const out = [];
-  // Досягаемость движения
+  const out = [], ground = [];
+  // Досягаемость движения — под токенами (слой ground)
   if (ctx.ui.reach?.size) {
-    for (const [k] of ctx.ui.reach) { const { c, r } = unkey(k); out.push(`<rect class="cell reach" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
+    for (const [k] of ctx.ui.reach) { const { c, r } = unkey(k); ground.push(`<rect class="cell reach" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   }
   // Радиусы света в режиме «Свет»
   if (ctx.isMasterView && ctx.ui.tool === 'lights') {
@@ -194,10 +196,11 @@ export function renderAreas(L, ctx) {
     out.push(`<circle class="template-origin" cx="${tpl.origin.x}" cy="${tpl.origin.y}" r="${s * 0.12}"/>`);
   }
   // Угроза (атака по возможности)
-  for (const k of ctx.ui.threat || []) { const { c, r } = unkey(k); out.push(`<rect class="cell threat" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
+  for (const k of ctx.ui.threat || []) { const { c, r } = unkey(k); ground.push(`<rect class="cell threat" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   // Выделенные клетки ловушки
   if (ctx.ui.trapCells?.length) for (const k of ctx.ui.trapCells) { const { c, r } = unkey(k); out.push(`<rect class="cell template" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   L.areas.innerHTML = out.join('');
+  L.ground.innerHTML = ground.join('');
 }
 
 /** Ауры — отдельным слоем под всеми токенами, со своим цветом и прозрачностью. */
