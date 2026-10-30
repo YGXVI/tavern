@@ -185,6 +185,68 @@ function alignedQuat(b) {
 const G = -38, DT = 1 / 240, SUBSTEPS = 4;
 const FLOOR = { e: 0.32, mu: 0.42 }, WALL = { e: 0.45, mu: 0.25 };
 
+// ——— Звук ударов (TASK-145) ———
+// Удары записываются при просчёте броска (кадр, вид, скорость) и звучат при проигрывании в тот же кадр.
+// Звук синтезируется Web Audio — без файлов и чужих записей.
+let hitLog = null; // { frame, byKey: Map } — во время просчёта
+function noteHit(b, kind, v) {
+  if (!hitLog || v < 1.3) return;
+  const k = `${hitLog.frame}|${b.id}|${kind}`;
+  const was = hitLog.byKey.get(k);
+  if (!was || was.v < v) hitLog.byKey.set(k, { f: hitLog.frame, kind, v, die: b.shape });
+}
+let actx = null, noiseBuf = null, soundOn = true;
+/** Звук кубов вкл/выкл (на эту вкладку). */
+export function setDiceSound(on) { soundOn = !!on; }
+export function diceSoundOn() { return soundOn; }
+function audio() {
+  if (!soundOn) return null;
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      noiseBuf = actx.createBuffer(1, Math.round(actx.sampleRate * 0.25), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx.state === 'running' ? actx : null;
+  } catch { return null; }
+}
+/**
+ * Один удар: «щелчок» куба о куб — короткий и звонкий; о дно лотка (сукно на дереве) — глухой стук;
+ * о борт — деревянный. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
+ */
+function playHit(kind, v, vol = 1, die = 20) {
+  const ac = audio(); if (!ac) return;
+  const g0 = Math.min(1, Math.max(0, (v - 1.3) / 11)) ** 0.8 * vol;
+  if (g0 < 0.02) return;
+  const t = ac.currentTime + 0.005, r = () => 0.85 + Math.random() * 0.3;
+  const small = die === 4 || die === 6 ? 1.12 : die === 20 || die === 12 ? 0.92 : 1;
+  const out = ac.createGain(); out.connect(ac.destination);
+  // Шум через полосовой фильтр — «тело» удара.
+  const src = ac.createBufferSource(); src.buffer = noiseBuf;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass';
+  const ng = ac.createGain();
+  let f, q, dec, peak;
+  if (kind === 'dice') { f = 3200 * r() * small; q = 7; dec = 0.045; peak = 0.5; }
+  else if (kind === 'wall') { f = 1300 * r(); q = 4; dec = 0.07; peak = 0.45; }
+  else { f = 750 * r() * small; q = 2.2; dec = 0.09; peak = 0.6; }
+  bp.frequency.value = f; bp.Q.value = q;
+  ng.gain.setValueAtTime(peak * g0, t); ng.gain.exponentialRampToValueAtTime(0.0008, t + dec);
+  src.connect(bp); bp.connect(ng); ng.connect(out);
+  src.start(t, Math.random() * 0.15, dec + 0.02);
+  // Короткий тон — «щёлк» кости или «тук» дерева.
+  const osc = ac.createOscillator(); osc.type = 'triangle';
+  const og = ac.createGain();
+  const tone = kind === 'dice' ? 2400 * r() * small : kind === 'wall' ? 520 * r() : 210 * r() * small;
+  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.7, t + dec);
+  og.gain.setValueAtTime((kind === 'dice' ? 0.18 : 0.35) * g0, t); og.gain.exponentialRampToValueAtTime(0.0008, t + dec * 0.8);
+  osc.connect(og); og.connect(out);
+  osc.start(t); osc.stop(t + dec + 0.02);
+}
+
 function applyImpulse(b, r, J) {
   b.v = add(b.v, J);
   b.w = add(b.w, mul(cross(r, J), 1 / b.g.inertia));
@@ -192,7 +254,7 @@ function applyImpulse(b, r, J) {
 
 function contactPlane(b, n, off, mat, verts) {
   // Плоскость n·p >= off: последовательные импульсы с накоплением (как в PGS), трение по Кулону.
-  let deepest = 0;
+  let deepest = 0, hit = 0;
   const cs = [];
   for (const p of verts) {
     const pen = off - dot(n, p);
@@ -201,9 +263,11 @@ function contactPlane(b, n, off, mat, verts) {
     const r = sub(p, b.x);
     const rn = cross(r, n);
     const vn0 = dot(add(b.v, cross(b.w, r)), n);
+    if (-vn0 > hit) hit = -vn0;
     cs.push({ r, k: 1 + dot(rn, rn) / b.g.inertia, target: vn0 < -2 ? -mat.e * vn0 : 0, acc: 0, tacc: [0, 0, 0] });
   }
   if (!cs.length) return false;
+  noteHit(b, mat === FLOOR ? 'floor' : 'wall', hit);
   for (let it = 0; it < 6; it++) for (const c of cs) {
     const vel = add(b.v, cross(b.w, c.r));
     const vn = dot(vel, n);
@@ -296,6 +360,7 @@ function collidePair(a, b) {
       const vrel = sub(add(A.v, cross(A.w, ra)), add(B.v, cross(B.w, rb)));
       const vn = dot(vrel, n);
       if (vn < 0) {
+        noteHit(A, 'dice', -vn);
         const ran = cross(ra, n), rbn = cross(rb, n);
         const k = wa * (1 + dot(ran, ran) / A.g.inertia) + wb * (1 + dot(rbn, rbn) / B.g.inertia);
         const j = (-(1 + 0.3) * vn) / k;
@@ -585,7 +650,7 @@ const FADE_MS = 650;
  *      place(targets, opts) — без анимации; fade(group, delay); setInsets({top, bottom, left, right}); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
-export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false } = {}) {
+export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false, sound = 1 } = {}) {
   const inset = { top: insetTop, bottom: insetBottom, left: insetLeft, right: insetRight };
   const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
   if (!gl) return null;
@@ -600,6 +665,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
 
   let bodies = [], frames = null, frameAt = 0, raf = 0, bounds = { w: 9, d: 14 }, camH = 20, pv = null, dpr = 1;
   let destroyed = false, pending = [], playStart = 0, liveAt = 0;
+  let sounds = null, soundAt = -1; // удары просчитанного броска по кадрам
   const onArt = () => { let any = false; for (const b of bodies) if (b.artPending) { b.labelsDirty = true; any = true; } if (any) { render(); kick(); } };
   artWaiters.add(onArt);
 
@@ -742,8 +808,15 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
       if (!playStart) playStart = now;
       frameAt = Math.floor((now - playStart) / (1000 / 60));
       applyFrame(frames[Math.min(frameAt, frames.length - 1)]);
+      // Удары — в те же кадры; если кадры пропущены, за раз звучит не больше шести самых громких.
+      if (sounds && frameAt > soundAt) {
+        const due = [];
+        for (let f = soundAt + 1; f <= Math.min(frameAt, frames.length - 1); f++) for (const h of sounds.get(f) || []) due.push(h);
+        soundAt = frameAt;
+        due.sort((a, b) => b.v - a.v).slice(0, 6).forEach((h) => playHit(h.kind, h.v, sound, h.die));
+      }
       if (frameAt >= frames.length - 1) {
-        frames = null; playStart = 0;
+        frames = null; playStart = 0; sounds = null;
         for (const b of bodies) { b.asleep = true; b.v = [0, 0, 0]; b.w = [0, 0, 0]; }
         for (const b of bodies) if (b.settled) { b.settled(b); b.settled = null; }
         render();
@@ -902,10 +975,19 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     const sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
     const map = new Map(sim.map((s, i) => [s, bodies[i]]));
     const rec = [];
-    for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
-      stepWorld(sim, bounds);
-      rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
-    }
+    hitLog = { frame: 0, byKey: new Map() };
+    let hits;
+    try {
+      for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
+        hitLog.frame = f;
+        stepWorld(sim, bounds);
+        rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
+      }
+    } finally { hits = hitLog ? [...hitLog.byKey.values()] : []; hitLog = null; }
+    // Звук по кадрам: в одном кадре — не больше пяти самых сильных ударов.
+    const byFrame = new Map();
+    for (const h of hits) { const l = byFrame.get(h.f) || []; l.push(h); byFrame.set(h.f, l); }
+    for (const [f, l] of byFrame) byFrame.set(f, l.sort((a, b) => b.v - a.v).slice(0, 5));
     // Доводка — только у кубов, что лежат на дне сами по себе: ровно на грань и до дна. Куб на соседе или
     // впритык к нему остаётся как лёг: выравнивание вдавило бы его в соседа.
     const free = sim.map((s) => lowest(s) < 0.06 && !sim.some((o) => o !== s && touching(s, o, 0.12)));
@@ -933,7 +1015,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     // Текстуры с новыми метками готовим до старта: тяжёлый первый кадр не съедает начало полёта.
     for (const b of bodies) prepare(b);
     for (const b of used) b.settled = (x) => { x.done = true; if (x.target.dropped) x.alpha = 0.4; if (x.target.glow) x.glow = x.target.glow; };
-    frames = rec; frameAt = 0; playStart = 0;
+    frames = rec; frameAt = 0; playStart = 0; sounds = sound > 0 ? byFrame : null; soundAt = -1;
     return new Promise((resolve) => {
       pending.push(() => {
         const cx = used.reduce((a, b) => a + b.x[0], 0) / (used.length || 1), cz = used.reduce((a, b) => a + b.x[2], 0) / (used.length || 1);
