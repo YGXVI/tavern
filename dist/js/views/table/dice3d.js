@@ -308,18 +308,36 @@ function overlap(a, b) {
   }
   return best;
 }
-/** Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота, не ниже дна. */
-function separate(list, iters = 24) {
+/** Вернуть куб внутрь стенок площадки и не ниже дна (по настоящим вершинам, без поворота). */
+function keepInside(b, bounds) {
+  const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
+  const vs = worldVerts(b);
+  const lo = (k) => Math.min(...vs.map((p) => p[k])), hi = (k) => Math.max(...vs.map((p) => p[k]));
+  const x0 = -hw + (bounds.left || 0), x1 = hw - (bounds.right || 0), z0 = -hd + (bounds.top || 0), z1 = hd - (bounds.bottom || 0);
+  let dx = 0, dz = 0;
+  if (lo(0) < x0) dx = x0 - lo(0); else if (hi(0) > x1) dx = x1 - hi(0);
+  if (lo(2) < z0) dz = z0 - lo(2); else if (hi(2) > z1) dz = z1 - hi(2);
+  const dy = Math.max(0, -lo(1));
+  if (dx || dy || dz) b.x = [b.x[0] + dx, b.x[1] + dy, b.x[2] + dz];
+}
+/**
+ * Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота,
+ * не ниже дна и не за стенки. Если места внизу нет, куб поднимается на соседей (TASK-146).
+ */
+function separate(list, bounds, iters = 120) {
   for (let it = 0; it < iters; it++) {
     let any = false;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const o = overlap(list[i], list[j]);
       if (!o || o.pen < 0.01) continue;
       any = true;
-      const k = Math.min(o.pen, 0.25) * 0.55;
+      // Под конец — чуть вверх тому, кто выше: кучу легче развести, подняв её, чем раздвинув по тесному дну.
+      const k = Math.min(o.pen, 0.25) * 0.55, up = it > iters / 2 ? 0.25 : 0;
+      const hiB = list[i].x[1] >= list[j].x[1] ? list[i] : list[j];
       list[i].x = add(list[i].x, mul(o.n, k)); list[j].x = sub(list[j].x, mul(o.n, k));
+      if (up) hiB.x = [hiB.x[0], hiB.x[1] + k * up, hiB.x[2]];
     }
-    for (const b of list) { const low = lowest(b); if (low < 0) b.x = [b.x[0], b.x[1] - low, b.x[2]]; }
+    for (const b of list) keepInside(b, bounds);
     if (!any) break;
   }
 }
@@ -852,17 +870,23 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
   function hoverSlot() {
     const taken = bodies.filter((b) => b.hover).map((b) => b.hover.base);
     // Висящий куб ближе к камере — на экране он крупнее и дальше от центра: поля с запасом на перспективу.
-    const k = camH / (camH - 3.1), r = 0.95;
-    const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
-    const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+    // Много кубов в одном слое не помещается — следующие висят слоем выше, не внутри соседей (TASK-146).
+    const r = 0.95, gap = 2;
+    const k0 = camH / (camH - 3.1);
+    const cap = Math.max(2, Math.floor((2 * ((bounds.w / 2 - 0.25) / k0 - r)) / gap) * Math.floor(((bounds.d - bounds.top - bounds.bottom) / k0 - 2 * r) / gap) - 2);
+    const extra = gap * Math.floor(taken.length / cap);
     let best = null, bestD = -1;
-    for (let i = 0; i < 40; i++) {
-      const p = [(Math.random() * 2 - 1) * xr, 2.5 + Math.random() * 0.5, z0 + Math.random() * Math.max(0, z1 - z0)];
-      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6) continue; // кнопка «Бросить»
-      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[2] - p[2]))) : 9;
+    for (let i = 0; i < 60; i++) {
+      const y = 2.5 + Math.random() * (0.5 + extra);
+      const k = camH / (camH - y - 0.6);
+      const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
+      const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+      const p = [(Math.random() * 2 - 1) * xr, y, z0 + Math.random() * Math.max(0, z1 - z0)];
+      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6 && p[1] < 3.2) continue; // кнопка «Бросить»
+      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[1] - p[1], t[2] - p[2]))) : 9;
       if (d > bestD) { bestD = d; best = p; }
     }
-    return best || [0, 2.6, z0];
+    return best || [0, 2.6, (-bounds.d / 2 + bounds.top + 0.15) / k0 + r];
   }
   /**
    * Тряска: кубы плавно покачиваются в воздухе и медленно кувыркаются, а раз в две-три секунды все разом
@@ -946,17 +970,25 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     if (frames) { applyFrame(frames[Math.min(frameAt, frames.length - 1)]); for (const b of bodies) if (b.target != null && !b.done) b.asleep = false; frames = null; playStart = 0; }
     const pool = opts.fresh ? [] : bodies.filter((b) => b.target == null);
     const used = [];
-    const cols = Math.max(1, Math.floor((bounds.aw - 1.4) / 1.9));
+    // Новые кубы вылетают снизу сеткой с шагом STEP, которая помещается между стенками (не больше трёх рядов);
+    // не влезли — следующим слоем выше, как горсть, высыпанная из руки (TASK-146: раньше ряды уходили за верхнюю
+    // стенку и кубы начинали бросок друг в друге).
+    const STEP = 2;
+    const fresh = targets.filter((t) => !pool.some((b) => b.kind === t.kind)).length;
+    const cols = Math.max(1, Math.floor((bounds.aw - 1.2) / STEP));
+    const rows = Math.max(1, Math.min(3, Math.floor((bounds.d - bounds.top - bounds.bottom - 1.2) / STEP)));
     const lane = opts.lane ?? 0; // смещение ряда вылета по ширине (−0.5…0.5): у разных бросков — разные места
-    targets.forEach((t, i) => {
+    let ni = 0;
+    targets.forEach((t) => {
       const k = pool.findIndex((b) => b.kind === t.kind);
       let b;
       if (k >= 0) b = pool.splice(k, 1)[0];
       else {
-        // Новые кубы вылетают из-под нижнего края рядами, не налезая друг на друга.
-        const n = Math.min(targets.length, cols), col = i % cols, row = Math.floor(i / cols);
-        const x = bounds.cx + (col + 0.5 - n / 2) * 1.9 + lane * Math.max(0, bounds.aw - n * 1.9) + (Math.random() - 0.5) * 0.3;
-        b = makeBody(t.kind, { x: [x, 1.4 + Math.random() * 0.8 + row * 0.4, bounds.d / 2 - bounds.bottom - 1.3 - row * 1.9], skin: opts.skin });
+        const n = Math.min(fresh, cols), col = ni % cols, row = Math.floor(ni / cols) % rows, layer = Math.floor(ni / (cols * rows));
+        ni++;
+        const x = bounds.cx + (col + 0.5 - n / 2) * STEP + lane * Math.max(0, bounds.aw - 1.2 - n * STEP) + (Math.random() - 0.5) * 0.2;
+        const z = bounds.d / 2 - bounds.bottom - 1.1 - row * STEP;
+        b = makeBody(t.kind, { x: [x, 1.3 + layer * STEP + Math.random() * 0.3, z], skin: opts.skin });
         bodies.push(b);
       }
       b.skin = opts.skin || b.skin;
@@ -996,7 +1028,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     const drop = sim.map((s, i) => { if (!free[i]) return 0; const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
     // Итоговые места: после выравнивания кубы, вошедшие друг в друга, разводятся — сквозь соседа не лежит никто.
     const fin = sim.map((s, i) => ({ g: s.g, x: [s.x[0], s.x[1] - drop[i], s.x[2]], q: finalQ[i] }));
-    separate(fin);
+    separate(fin, bounds);
     for (let k = 1; k <= 8; k++) {
       const t = k / 8;
       rec.push(last.map(([b, x, q], i) => [b, [x[0] + (fin[i].x[0] - x[0]) * t, x[1] + (fin[i].x[1] - x[1]) * t, x[2] + (fin[i].x[2] - x[2]) * t], qslerp(q, finalQ[i], t), [0, 0, 0], [0, 0, 0]]));
