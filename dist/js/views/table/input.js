@@ -187,6 +187,7 @@ export function attachInput(ctx) {
       if (ctx.ui.selection.size) { ctx.select([]); return; }
       if (ctx.ui.viewAs) { ctx.setViewAs(null); return; }
       if (toolId() !== 'move') { ctx.setTool('move'); return; }
+      if (ctx.ui.layer && ctx.isMasterView) { ctx.setLayer(false); return; }
       if (ctx.ui.widget) { ctx.panels.action('w-close'); return; }
       if (ctx.ui.panel) { ctx.panels.action('side-close'); return; }
       return;
@@ -222,8 +223,10 @@ export function attachInput(ctx) {
     if (map[k]) { ctx.setTool(map[k]); return; }
     if ((k === 'p' || k === 'з')) { ctx.setTool(ctx.isMaster ? 'measure' : 'ping'); if (!ctx.isMaster) return; }
     if (ctx.isMasterView) {
-      const mm = { s: 'select', ы: 'select', f: 'fog', а: 'fog', w: 'walls', ц: 'walls', l: 'lights', д: 'lights', t: 'terrain', е: 'terrain', g: 'gm', п: 'gm' };
+      const mm = { s: 'select', ы: 'select', f: 'fog', а: 'fog', w: 'walls', ц: 'walls', l: 'lights', д: 'lights', t: 'terrain', е: 'terrain' };
       if (mm[k]) { ctx.setTool(mm[k]); return; }
+      // G — открыть или закрыть слой мастера (TASK-088).
+      if (k === 'g' || k === 'п') { ctx.setLayer(!ctx.ui.layer); return; }
       if ((k === 'h' || k === 'р') && ctx.ui.selection.size) { ctx.panels.toggleHidden([...ctx.ui.selection]); return; }
     }
     if (k === '=' || k === '+') ctx.camera.zoomStep(1);
@@ -255,6 +258,10 @@ export function attachInput(ctx) {
     const prev = ctx.ui.tool;
     ctx.ui.tool = tool;
     if (sub) ctx.ui.sub[tool] = sub;
+    // Слой мастера (TASK-088): настройка карты открывает слой; «Перемещение» оставляет его открытым (настройка закрыта),
+    // остальные инструменты главного бара его закрывают.
+    if (FOCUS_TOOLS.includes(tool)) ctx.ui.layer = true;
+    else if (tool !== 'move') ctx.ui.layer = false;
     if (prev !== tool) {
       ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.ui.brush = null; ctx.ui.selectedWall = null; ctx.ui.selectedLight = null; ctx.ui.trapCells = null;
       if (tool !== 'measure') { ctx.clearMeasure(false); }
@@ -268,6 +275,13 @@ export function attachInput(ctx) {
     vp.dataset.tool = tool;
     ctx.applyFocus();
     ctx.invalidate('all');
+  };
+  /** Открыть или закрыть слой мастера. Закрытие сбрасывает выбранную настройку; несохранённая сетка — как «Отмена». */
+  ctx.setLayer = (on) => {
+    if (on && !ctx.isMasterView) return;
+    if (!on && FOCUS_TOOLS.includes(ctx.ui.tool)) ctx.setTool('move');
+    ctx.ui.layer = !!on;
+    ctx.invalidate('chrome');
   };
   // Фокус редактора: в стенах, свете, тумане, местности, слое мастера и сетке лишнее приглушается.
   ctx.applyFocus = () => {

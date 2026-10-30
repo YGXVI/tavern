@@ -278,6 +278,11 @@
 }
 /* Внизу два ряда — правая панель кончается над ними и ничего не накрывает (на телефоне панель во весь экран). */
 @media (min-width: 901px) and (max-width: 1520px) { .table:has(.ch-bc > .add-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); } }
+/* Слой мастера (TASK-088): над баром слоя — второй бар параметров выбранной настройки; панели справа кончаются над обоими. */
+@media (min-width: 901px) {
+  .table:has(.ch-bc > .setting-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); }
+  .table:has(.ch-bc > .setting-bar) .side-panel[data-panel="bestiary"] { bottom: calc(var(--edge) + 136px); height: min(649px, calc(100vh - 2 * var(--edge) - 148px)); }
+}
 .ch-br { bottom: var(--edge); right: var(--edge); }
 .chrome-logo { width: 60px; height: 60px; box-shadow: var(--shadow-panel); }
 .chrome-logo:hover { filter: brightness(1.05); }
