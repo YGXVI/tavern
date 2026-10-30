@@ -254,8 +254,8 @@ export function combatSetup(ctx, preselect = []) {
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
   const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
-  // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует.
-  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: true };
+  // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует. Мастер по умолчанию бросает за всех (TASK-111).
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false };
   ctx.panels.openWidget('initiative', true);
   ctx.panels.refreshWidget(true);
 }
