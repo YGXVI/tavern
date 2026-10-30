@@ -7,12 +7,13 @@
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
 import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT } from './model.js';
-import { advanceTurn, turnTokenId } from '../views/table/combat.js';
+import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
 const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'] };
 const pkOf = (table, row) => Object.fromEntries((PK[table] || ['id']).map((k) => [k, row[k]]));
 const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
+const AUTHORED = new Set(['log_entries', 'log_secrets', 'portal_requests']);
 
 let sb = null;
 let me = null;
@@ -97,24 +98,41 @@ async function loadAll() {
 
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 
-/** Загрузить кампанию целиком (то, что сервер разрешает видеть) и подписаться на её изменения. */
-export async function loadCampaign(cid, { silent = false } = {}) {
-  const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-  const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat] = await Promise.all([
-    sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
-    q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
-    q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
-    sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
-    q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
-  ]);
-  const logRows = must(log);
-  const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
-  const logSecrets = ids.length ? must(await sb.from('log_secrets').select('*').in('id', ids)) : [];
-  const rows = rowsFrom({
-    campaign: must(campaign), members: must(members), invite: must(invite), characters: must(characters), scenes: must(scenes),
-    secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
-    saves: must(saves), portals: must(portals), combat: must(combat),
-  });
+const loading = new Map(); // cid → {events, n}: изменения, пришедшие, пока кампания грузится
+
+/**
+ * Загрузить кампанию целиком (то, что сервер разрешает видеть) и подписаться на её изменения.
+ * Сначала ждёт, пока уйдут свои изменения (иначе загрузка их не увидит и затрёт кэш); изменения других,
+ * пришедшие во время загрузки, применяются поверх. afterFailure — вызов из обработчика отказа (очередь уже стоит).
+ */
+export async function loadCampaign(cid, { silent = false, afterFailure = false } = {}) {
+  if (!afterFailure) await whenSynced(cid);
+  const ld = loading.get(cid) || { events: [], n: 0 };
+  ld.n += 1; loading.set(cid, ld);
+  let rows;
+  try {
+    const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat] = await Promise.all([
+      sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
+      q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
+      q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
+      sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
+      q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
+    ]);
+    const logRows = must(log);
+    const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
+    const logSecrets = ids.length ? must(await sb.from('log_secrets').select('*').in('id', ids)) : [];
+    rows = rowsFrom({
+      campaign: must(campaign), members: must(members), invite: must(invite), characters: must(characters), scenes: must(scenes),
+      secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
+      saves: must(saves), portals: must(portals), combat: must(combat),
+    });
+  } finally {
+    ld.n -= 1;
+    if (!ld.n) loading.delete(cid);
+  }
+  for (const e of ld.events) applyChange(rows, e.table, e.type, e.row);
+  if (!ld.n) ld.events.length = 0;
   cache.set(cid, rows);
   const db = store.getDB();
   const c = assemble(rows);
@@ -152,12 +170,19 @@ export function afterCommit(before, after) {
     const a = explode(b0, rows), b = explode(a0, rows);
     let ops = diffRows(a, b, { isMaster: master });
     if (!master) ops = playerCombatOps(ops, rows);
+    ops = stamp(ops);
     if (!ops.length) continue;
     // Мастер скрыл токены — игрокам изменение не придёт (RLS), поэтому сообщаем id отдельно.
     const hiddenNow = ops.filter((o) => o.table === 'tokens' && o.op === 'update' && o.row.hidden && !o.prev?.hidden).map((o) => o.key);
     applyOps(rows, ops);
     enqueue(cid, () => send(cid, ops).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }));
   }
+}
+
+/** Служебные записи («Ася за столом», «принят в кампанию») пишет тот, кто сделал действие: сервер требует author = я. */
+function stamp(ops) {
+  for (const o of ops) if (o.op === 'insert' && AUTHORED.has(o.table) && !o.row.author) o.row = { ...o.row, author: me };
+  return ops;
 }
 
 /**
@@ -197,37 +222,66 @@ function enqueue(cid, job) {
 async function createCampaign(c) {
   const rows0 = emptyRows();
   const exploded = explode(c, rows0);
-  must(await sb.from('campaigns').insert({ ...exploded.campaign, owner_id: me }));
-  rows0.campaign = exploded.campaign;
+  // Кэш — до вставки: событие «вы мастер новой кампании» из личного канала не должно перезагружать её посреди отправки.
+  rows0.campaign = structuredClone(exploded.campaign);
   rows0.members.set(me, exploded.members.get(me) || { campaign_id: c.id, user_id: me, role: 'master', status: 'active', character_id: null, scene_id: null });
   cache.set(c.id, rows0);
-  const ops = diffRows(rows0, exploded, { isMaster: true }).filter((o) => o.table !== 'campaign_members');
+  await send(c.id, [{ table: 'campaigns', op: 'insert', key: c.id, row: { ...exploded.campaign, owner_id: me } }]);
+  const ops = stamp(diffRows(rows0, exploded, { isMaster: true }).filter((o) => o.table !== 'campaign_members'));
   applyOps(rows0, ops);
   await send(c.id, ops);
   subscribe(c.id);
 }
 
+/** Отправить операции по одной. Обрыв сети — ждём и повторяем ту же операцию; отказ сервера — ошибка. */
 async function send(cid, ops) {
   for (const o of ops) {
-    const t = sb.from(o.table);
-    let res;
-    if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
-    else if (o.op === 'delete') res = await t.delete().match(pkOf(o.table, o.prev));
-    else if (o.op === 'insert') res = await t.insert(o.row);
-    else if (['campaign_invites', 'combats', 'scene_secrets'].includes(o.table) && isMasterOf(cid)) res = await t.upsert(o.row);
-    else {
-      res = await t.update(o.row).match(pkOf(o.table, o.row)).select(PK[o.table]?.[0] || 'id');
-      if (!res.error && !res.data?.length) throw new Error('нет доступа к изменению');
+    for (let attempt = 0; ; attempt++) {
+      try { await sendOne(cid, o, attempt); break; }
+      catch (err) {
+        if (!isNetwork(err) || attempt >= 8) throw err;
+        netState(cid, false);
+        await new Promise((r) => setTimeout(r, Math.min(15000, 700 * 2 ** attempt)));
+      }
     }
-    if (res.error) throw res.error;
   }
+  netState(cid, true);
+}
+
+async function sendOne(cid, o, attempt) {
+  const t = sb.from(o.table);
+  let res;
+  if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
+  else if (o.op === 'delete') res = await t.delete().match(pkOf(o.table, o.prev));
+  else if (o.op === 'insert') {
+    res = await t.insert(o.row);
+    // Повтор после обрыва: строка уже успела записаться — это успех.
+    if (attempt && res.error?.code === '23505') return;
+  }
+  else if (['campaign_invites', 'combats', 'scene_secrets'].includes(o.table) && isMasterOf(cid)) res = await t.upsert(o.row);
+  else {
+    res = await t.update(o.row).match(pkOf(o.table, o.row)).select(PK[o.table]?.[0] || 'id');
+    if (!res.error && !res.data?.length) throw new Error('нет доступа к изменению');
+  }
+  if (res.error) throw res.error;
+}
+
+/** Ошибка сети (нет интернета, сервер не ответил), а не отказ базы. */
+const isNetwork = (e) => !e?.code && /fetch|network|load failed|timed? ?out|aborted/i.test(String(e?.message || e || ''));
+
+/** Связь с сервером: стол показывает «нет связи», пока изменения ждут сети или канал переподключается. */
+const down = new Set();
+function netState(cid, ok) {
+  if (ok ? !down.has(cid) : down.has(cid)) return;
+  if (ok) down.delete(cid); else down.add(cid);
+  store.deliver('connection', { cid, ok });
 }
 
 async function failed(cid, err) {
   console.warn('Сервер отклонил изменение', err);
   const msg = String(err?.message || err || '').replace(/^.*?: /, '');
   store.emitLocal('storage-error', { message: `Сервер не принял изменение${msg ? `: ${msg}` : ''}. Показываем, как сейчас на сервере.` });
-  try { await loadCampaign(cid); } catch (e) { console.warn(e); }
+  try { await loadCampaign(cid, { afterFailure: true }); } catch (e) { console.warn(e); }
 }
 
 /** Вызвать функцию сервера (вступление, выбор героя). */
@@ -257,10 +311,10 @@ function subscribe(cid) {
   ch.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       if (myPresence?.campaignId === cid) ch.track(myPresence);
-      if (ch.__wasDown) { ch.__wasDown = false; store.deliver('connection', { cid, ok: true }); loadCampaign(cid).catch(() => {}); }
+      if (ch.__wasDown) { ch.__wasDown = false; netState(cid, true); loadCampaign(cid).catch(() => {}); }
     }
     if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-      if (!ch.__wasDown) { ch.__wasDown = true; store.deliver('connection', { cid, ok: false }); }
+      if (!ch.__wasDown) { ch.__wasDown = true; netState(cid, false); }
     }
   });
   channels.set(cid, ch);
@@ -269,8 +323,13 @@ function subscribe(cid) {
 function onChange(cid, table, p) {
   const rows = cache.get(cid); if (!rows) return;
   const row = p.eventType === 'DELETE' ? p.old : p.new;
-  if (table === 'campaign_members' && row?.user_id === me && p.eventType === 'DELETE' && row.campaign_id === cid) { removed(cid); return; }
-  if (table === 'campaign_members' && p.eventType === 'DELETE' && row?.campaign_id && row.campaign_id !== cid) return;
+  if (p.eventType === 'DELETE') {
+    // Удаления Realtime не фильтрует по кампании и присылает только ключ строки — чужие отсекаем сами.
+    if (table === 'campaigns' && row?.id !== cid) return;
+    if (['campaign_members', 'campaign_invites', 'combats'].includes(table) && row?.campaign_id !== cid) return;
+    if (table === 'campaign_members' && row.user_id === me) { removed(cid); return; }
+  }
+  loading.get(cid)?.events.push({ table, type: p.eventType, row });
   applyChange(rows, table, p.eventType, row);
   if (table === 'campaign_members' && p.eventType !== 'DELETE' && !store.getDB().users[row.user_id]) loadProfiles().catch(() => {});
   scheduleAssemble(cid);
@@ -294,6 +353,13 @@ function scheduleAssemble(cid) {
 function masterDuties(cid, c) {
   if (!isMasterOf(cid)) return;
   const cb = c.combat;
+  if (cb?.active && cb.current && !cb.ended) {
+    // Инициатива игрока пересортировала очередь: номер хода догоняет того, кто ходит (current), иначе
+    // следующий commit мастера передал бы ход не тому.
+    const sc = c.scenes.find((s) => s.id === cb.sceneId) || c.scenes.find((s) => s.id === c.activeSceneId);
+    const i = initiativeOrder(c, sc).findIndex((e) => e.tokenId === cb.current);
+    if (i >= 0 && i !== cb.turn) store.commit((db) => { const cc = db.campaigns[cid]; if (cc?.combat?.active) cc.combat.turn = i; });
+  }
   if (cb?.active && cb.ended && cb.ended === cb.current) {
     store.commit((db) => {
       const cc = db.campaigns[cid]; if (!cc) return;
@@ -322,6 +388,8 @@ function listenToMe() {
     const row = p.eventType === 'DELETE' ? p.old : p.new;
     if (!row?.campaign_id) return;
     if (p.eventType === 'DELETE') { if (cache.has(row.campaign_id)) removed(row.campaign_id); return; }
+    // Уже сижу за столом этой кампании — её канал сам привезёт изменение. Грузим только новое: вступление, одобрение.
+    if (row.status === 'active' && cache.get(row.campaign_id)?.members.get(me)?.status === 'active') return;
     loadCampaign(row.campaign_id).catch((e) => console.warn(e));
   });
   userChannel.subscribe();

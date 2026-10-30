@@ -12,6 +12,7 @@ import { mountTable } from './views/table/index.js';
 import { getCampaign, membership } from './core/campaign.js';
 import { debounce } from './core/dom.js';
 import { getMode } from './server/config.js';
+import { useRemoteAssets } from './core/assets.js';
 
 let sync = null;          // server/sync.js — только в серверном режиме
 let loginMessage = null;  // «Вход через Discord отменён» и т. п.
@@ -71,6 +72,7 @@ async function boot() {
     try {
       sync = await import('./server/sync.js');
       useServerBackend(sync.backend);
+      useRemoteAssets({ get: sync.signedUrl, resolve: sync.resolveSigned, upload: sync.uploadImage });
       const res = await sync.startServer({ getDB, setDB, deliver, emitLocal, commit });
       loginMessage = res.error;
       if (res.user) { const back = sync.takeReturnHash(); if (back && back !== location.hash) { location.hash = back; } }

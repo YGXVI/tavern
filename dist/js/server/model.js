@@ -26,10 +26,14 @@ export function emptyRows() {
   };
 }
 
-/** Строки → кампания. */
-export function assemble(rows) {
+/**
+ * Строки → кампания. Кампания получает свои копии данных: интерфейс правит её на месте, а кэш строк должен
+ * оставаться тем, что лежит на сервере (по нему считаются разрешённые игроку изменения боя и порядок токенов).
+ */
+export function assemble(rows0) {
+  if (!rows0.campaign) return null;
+  const rows = structuredClone(rows0);
   const r = rows.campaign;
-  if (!r) return null;
   const d = r.data || {};
   const c = {
     ...omit(d, CAMPAIGN_SKIP),
@@ -91,9 +95,9 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
   const data = omit(c, CAMPAIGN_SKIP);
   rows.campaign = { id: c.id, owner_id: c.ownerId, name: c.name, data };
   for (const m of c.members || []) {
-    rows.members.set(m.userId, { campaign_id: c.id, user_id: m.userId, role: m.role, status: m.status, character_id: m.characterId || null, scene_id: m.sceneId || null, joined_at: prev.members.get(m.userId)?.joined_at ?? iso(m.joinedAt) });
+    rows.members.set(m.userId, withDefault({ campaign_id: c.id, user_id: m.userId, role: m.role, status: m.status, character_id: m.characterId || null, scene_id: m.sceneId || null, joined_at: prev.members.get(m.userId)?.joined_at ?? iso(m.joinedAt) }, 'joined_at'));
   }
-  if (c.invite?.code) rows.invite = { campaign_id: c.id, code: c.invite.code, expires_at: iso(c.invite.expiresAt), manual: !!c.invite.manual, revoked: !!c.invite.revoked, created_at: prev.invite?.created_at ?? iso(c.invite.createdAt) };
+  if (c.invite?.code) rows.invite = withDefault({ campaign_id: c.id, code: c.invite.code, expires_at: iso(c.invite.expiresAt), manual: !!c.invite.manual, revoked: !!c.invite.revoked, created_at: prev.invite?.created_at ?? iso(c.invite.createdAt) }, 'created_at');
   for (const ch of c.characters || []) {
     const { id, ownerId, ...rest } = ch;
     rows.characters.set(id, { id, campaign_id: c.id, owner_id: ownerId || null, data: rest });
@@ -138,6 +142,8 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
 }
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Колонка not null с умолчанием: если значения нет, не отправляем её вовсе (явный null база отвергнет). */
+function withDefault(row, key) { if (row[key] == null) delete row[key]; return row; }
 
 /**
  * Что изменилось между двумя разложениями одной кампании.
@@ -181,7 +187,9 @@ export function diffRows(a, b, { isMaster = false } = {}) {
 }
 
 /** Применить операции к кэшу строк (оптимистично — до ответа сервера). */
-export function applyOps(rows, ops) {
+export function applyOps(rows, ops0) {
+  // Копии: строки операций собраны из живой кампании, и её дальнейшие правки не должны менять кэш.
+  const ops = structuredClone(ops0);
   const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals' };
   for (const o of ops) {
     if (o.table === 'campaigns') { rows.campaign = o.row; continue; }

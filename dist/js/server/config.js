@@ -32,3 +32,9 @@ export function getMode() {
   try { return sessionStorage.getItem(MODE_KEY) || 'server'; } catch { return 'server'; }
 }
 export function setMode(mode) { try { sessionStorage.setItem(MODE_KEY, mode); } catch { /* приватный режим */ } }
+
+/** Ссылка-приглашение. Пока сервер включён не для всех, ссылка из серверной кампании включает его и у друга. */
+export function joinUrl(code, serverMode) {
+  const q = serverMode && !SERVER_ENABLED ? '?server=1' : '';
+  return `${location.origin}${location.pathname}${q}#/join/${code}`;
+}

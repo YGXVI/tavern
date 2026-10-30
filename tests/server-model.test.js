@@ -101,3 +101,37 @@ test('событие реального времени обновляет кэш
   assert.equal(assemble(rows).scenes[0].tokens.some((x) => x.id === t.id), false);
   assert.equal(assemble(emptyRows()), null);
 });
+
+test('собранная кампания не делит объекты с кэшем строк', () => {
+  const rows = explode(demo());
+  const c = assemble(rows);
+  const sid = c.scenes[0].id;
+  c.combat.entries.push({ tokenId: 'x', init: 5 });
+  c.scenes[0].tokens[0].conditions.push('prone');
+  c.scenes[0].walls.push({ id: 'w-new' });
+  assert.equal(rows.combat.data.entries.length, 0);
+  const t0 = c.scenes[0].tokens[0].id;
+  assert.ok(!rows.tokens.get(t0).data.conditions.includes('prone'));
+  assert.ok(!rows.scenes.get(sid).data.walls.some((w) => w.id === 'w-new'));
+});
+
+test('кэш после applyOps не меняется от дальнейших правок кампании', () => {
+  const c = demo();
+  const rows = explode(c);
+  const after = clone(c);
+  after.scenes[0].tokens[0].x += 10;
+  const b = explode(after, rows);
+  const ops = diffRows(rows, b, { isMaster: true });
+  applyOps(rows, ops);
+  b.tokens.get(after.scenes[0].tokens[0].id).data.x = 9999; // живая строка операции меняется позже
+  assert.equal(rows.tokens.get(after.scenes[0].tokens[0].id).data.x, after.scenes[0].tokens[0].x);
+});
+
+test('приглашение без даты создания не шлёт created_at: null', () => {
+  const c = demo();
+  delete c.invite.createdAt;
+  const rows = explode(c);
+  assert.ok(!('created_at' in rows.invite));
+  const m = { ...c.members[0] }; delete m.joinedAt; c.members[0] = m;
+  assert.ok(!('joined_at' in explode(c).members.get(m.userId)));
+});

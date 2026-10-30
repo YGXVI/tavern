@@ -293,11 +293,11 @@ export function newSceneModal(ctx) {
         const data = parseUniversalVTT(await file.text(), { feet: state.feet, uid: () => uid('') });
         if (!data.image) throw new Error('В файле нет картинки карты.');
         const bytes = Uint8Array.from(atob(data.image.base64), (ch) => ch.charCodeAt(0));
-        state.upload = await storeImage(new File([bytes], 'map', { type: data.image.mime }));
+        state.upload = await storeImage(new File([bytes], 'map', { type: data.image.mime }), { campaignId: ctx.cid });
         state.imported = scaleImport(data, state.upload.width / data.width);
         if (data.lights.length) state.lighting = 'dark';
         if (data.walls.length) state.fog = 'vision';
-      } else state.upload = await storeImage(file);
+      } else state.upload = await storeImage(file, { campaignId: ctx.cid });
       state.name = state.name || m.box.querySelector('#ns-name').value || file.name.replace(/\.[^.]+$/, '').slice(0, 60);
       rerender();
     } catch (err) { msg.textContent = err instanceof SyntaxError ? 'Файл повреждён: это не JSON карты Universal VTT.' : err.message; msg.classList.add('negative'); }

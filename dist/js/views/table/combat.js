@@ -45,6 +45,8 @@ export function advanceTurn(c, scene, dir = 1) {
   const order = initiativeOrder(c, scene);
   if (!order.length) return;
   let turn = c.combat.turn;
+  // Сервер: очередь могла пересортироваться чужой инициативой — считаем от того, кто реально ходит.
+  if (c.combat.current) { const i = order.findIndex((e) => e.tokenId === c.combat.current); if (i >= 0) turn = i; }
   for (let step = 0; step < order.length; step++) {
     turn += dir;
     if (turn >= order.length) { turn = 0; c.combat.round += 1; }

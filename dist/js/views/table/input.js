@@ -584,6 +584,29 @@ function findTrapOnPath(ctx, t, path) {
   return null;
 }
 
+/**
+ * Сервер (TASK-002): игрок не получает ловушек, поэтому его клиент их не заметит. Клиент мастера, увидев, что герой
+ * переместился чужими руками, сам строит путь от прежней точки до новой и, если на пути ловушка, ставит героя
+ * на неё и запускает её как обычно. prev — Map(tokenId → {x, y}) прежних положений героев этой сцены.
+ */
+export function remoteTrapCheck(ctx, prev) {
+  const sc = ctx.scene;
+  if (!sc || !ctx.isMaster || !(sc.traps || []).some((t) => !t.triggered)) return;
+  const grid = sceneGrid(ctx);
+  for (const t of sc.tokens) {
+    const p = prev.get(t.id);
+    if (t.kind !== 'hero' || !p || (p.x === t.x && p.y === t.y) || ctx.dragging?.has(t.id)) continue;
+    const opts = moveOpts(ctx, t);
+    const leg = routeLeg(grid, p, { x: t.x, y: t.y }, opts) || { pts: [p, { x: t.x, y: t.y }] };
+    const hit = findTrapOnPath(ctx, t, { cells: cellsAlong(grid, leg.pts, opts.n) });
+    if (!hit) continue;
+    const at = footprintCenter(grid, hit.cell.c, hit.cell.r, opts.n);
+    ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) { x.x = at.x; x.y = at.y; } });
+    ctx.panels.trapTriggered(hit.trap, { ...t, x: at.x, y: at.y });
+    return;
+  }
+}
+
 function leavingReach(ctx, t, move) {
   const grid = sceneGrid(ctx), n = cellsOfToken(t);
   const a = { ...footprintAt(grid, move.from.x, move.from.y, n), n };

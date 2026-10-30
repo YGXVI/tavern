@@ -54,9 +54,9 @@ export function mountLogin(root, { onSignedIn, message = null }) {
   </div>`);
   root.querySelector('[data-login]').addEventListener('click', async (e) => {
     if (!real) { openOAuth(onSignedIn); return; }
-    e.currentTarget.disabled = true;
+    const b = e.currentTarget; b.disabled = true;
     try { await (await server()).signInWithDiscord(location.hash.startsWith('#/join/') ? location.hash : '#/campaigns'); }
-    catch (err) { e.currentTarget.disabled = false; toast({ title: 'Не получилось открыть Discord', body: err.message, icon: 'alert-circle' }); }
+    catch (err) { b.disabled = false; toast({ title: 'Не получилось открыть Discord', body: err.message, icon: 'alert-circle' }); }
   });
   root.querySelector('[data-sandbox]')?.addEventListener('click', toSandbox);
   root.querySelector('[data-real]')?.addEventListener('click', toServer);
@@ -466,7 +466,8 @@ async function claimServer(cid, userId, chId) {
   try {
     const r = await sv.rpc('claim_character', { p_campaign: cid, p_character: chId });
     if (!r?.ok) { toast({ title: 'Этого героя уже взяли', body: 'Выберите другого', icon: 'user-group' }); await sv.loadCampaign(cid); return; }
-    await sv.loadCampaign(cid);
+    // Тихо: стол откроется уже с токеном героя (commit ниже), без «Вашего героя пока нет на карте».
+    await sv.loadCampaign(cid, { silent: true });
   } catch (err) { toast({ title: 'Не получилось сесть за стол', body: err.message, icon: 'alert-circle' }); return; }
   // Герой встаёт на сцену, которую видят игроки; членство и владелец уже записаны функцией сервера.
   commit((db) => {

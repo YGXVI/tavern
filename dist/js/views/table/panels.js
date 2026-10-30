@@ -2,7 +2,7 @@
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
 import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
 import { icon } from '../../icons.js';
-import { bus, emitLocal } from '../../core/store.js';
+import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
@@ -65,6 +65,8 @@ export class Panels {
         if (!mine(p) || p.sceneId !== ctx.sceneId) return;
         const tr = ctx.scene?.traps.find((x) => x.id === p.trapId), t = ctx.scene?.tokens.find((x) => x.id === p.tokenId);
         if (tr && t) M.trapTriggered(ctx, tr, t, true);
+        // Сервер: ловушку у игрока не видно — сработавшую на его герое заметил мастер.
+        else if (!tr && t && ctx.isMine(t)) ctx.toast({ title: 'Под ногой щёлкнуло!', body: 'Мастер решает, что будет дальше', icon: 'danger' });
       }),
       bus.on('template-share', (p) => {
         if (!mine(p) || !ctx.isMaster) return;
@@ -84,13 +86,16 @@ export class Panels {
     if (ctx.isMaster) {
       const pending = c.members.filter((m) => m.status === 'pending');
       if (pending.length) ctx.toast({ title: `${plural(pending.length, 'Заявка', 'Заявки', 'Заявок')} в кампанию: ${pending.length}`, body: pending.map((m) => userById(m.userId)?.name).filter(Boolean).join(', '), icon: 'user-add-01', action: { label: 'Открыть', onClick: () => D.inviteModal(ctx) } });
-    } else if (ctx.scene && !ctx.scene.tokens.some((t) => ctx.isMine(t))) {
-      ctx.toast({ title: 'Вашего героя пока нет на карте', body: 'Мастер поставит его, когда начнётся сцена', icon: 'chess-pawn' });
+    } else {
+      // С сервера токен только что выбранного героя приходит чуть позже стола — проверяем, когда всё доехало.
+      const noHero = () => ctx.c && ctx.scene && !ctx.scene.tokens.some((t) => ctx.isMine(t));
+      if (noHero()) setTimeout(() => { if (!this.gone && noHero()) ctx.toast({ title: 'Вашего героя пока нет на карте', body: 'Мастер поставит его, когда начнётся сцена', icon: 'chess-pawn' }); }, isServerMode() ? 1500 : 0);
     }
     this.refresh();
   }
 
   destroy() {
+    this.gone = true;
     clearInterval(this.pauseTick);
     for (const off of this.offs) off();
     closeSheet();
