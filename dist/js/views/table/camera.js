@@ -18,7 +18,15 @@ export class Camera {
   get size() { return { w: this.vp.clientWidth, h: this.vp.clientHeight }; }
 
   apply() {
+    // Пока камера движется — отдельный слой (плавно); через миг покоя — обычный transform без will-change,
+    // чтобы браузер перерисовал карту и токены в чёткости текущего масштаба (TASK-045).
     this.world.style.transform = `translate3d(${this.x}px, ${this.y}px, 0) scale(${this.z})`;
+    this.world.style.willChange = 'transform';
+    clearTimeout(this.settle);
+    this.settle = setTimeout(() => {
+      this.world.style.willChange = 'auto';
+      this.world.style.transform = `translate(${this.x}px, ${this.y}px) scale(${this.z})`;
+    }, 160);
     this.world.style.setProperty('--z', this.z);
     this.world.style.setProperty('--iz', 1 / this.z);
     cancelAnimationFrame(this.raf);
