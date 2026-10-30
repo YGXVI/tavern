@@ -9,7 +9,8 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
-import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll } from './dice.js';
+import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll } from './dice.js';
+import { diceTray } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
 import * as C from './chrome.js';
@@ -57,7 +58,13 @@ export class Panels {
     });
     const mine = (p) => p?.cid === ctx.cid;
     this.offs = [
-      bus.on('roll', (p) => { if (!mine(p)) return; showRollToast(ctx, p.entry); if (ctx.ui.widget === 'dice') this.refreshWidget(true); }),
+      bus.on('roll', (p) => {
+        if (!mine(p)) return;
+        showRollToast(ctx, p.entry);
+        // Открытый бросок другого участника катится и в нашем лотке (TASK-092).
+        if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceTray(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped });
+        if (ctx.ui.widget === 'dice') this.refreshWidget(true);
+      }),
       bus.on('read-aloud', (p) => { if (mine(p) && p.sceneId === ctx.sceneId && !ctx.isMaster) this.readAloud({ title: p.title, text: p.text }); }),
       bus.on('lockpick', (p) => { if (mine(p)) M.lockpickResult(ctx, p); }),
       bus.on('door-ask', (p) => { if (mine(p) && ctx.isMaster) ctx.toast({ title: `${p.name} спрашивает про ключ`, body: 'Есть ли у отряда ключ от этой двери?', icon: 'key-01', timeout: 10000 }); }),
@@ -100,6 +107,7 @@ export class Panels {
     clearInterval(this.pauseTick);
     for (const off of this.offs) off();
     closeSheet();
+    diceTray(this.ctx)?.destroy();
   }
 
   snapshot() {
@@ -186,6 +194,8 @@ export class Panels {
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
       }
     }
+    // Лоток с объёмными кубами стоит рядом с виджетом «Кубы» и держит выбранные кубы (TASK-092).
+    diceTray(this.ctx)?.syncPool(this.ctx.ui.dicePool);
   }
 
   openWidget(w, force = false) {
