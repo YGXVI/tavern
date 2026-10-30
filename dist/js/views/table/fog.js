@@ -193,8 +193,9 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
     for (const v of vis.visions) {
       if (!v.darkvision) continue;
       L.ctx.save(); pathPoly(L.ctx, v.poly); L.ctx.clip();
+      // TASK-080: тёмное зрение видит как при ярком свете (без затемнения), край — мягкий. Свет источников — как прежде.
       const g = L.ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, v.darkvision);
-      g.addColorStop(0, 'rgba(0,0,0,.6)'); g.addColorStop(0.9, 'rgba(0,0,0,.52)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.94, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
       L.ctx.fillStyle = g; L.ctx.beginPath(); L.ctx.arc(v.x, v.y, v.darkvision, 0, Math.PI * 2); L.ctx.fill();
       L.ctx.restore();
     }
