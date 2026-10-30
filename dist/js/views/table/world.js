@@ -88,11 +88,12 @@ export function renderDrawings(L, scene, ctx = null) {
   const mv = ctx?.ui.drawMove;
   const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
+  const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
   L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
     const ed = live && canEditDrawing(ctx, d);
     const attr = ed ? ` data-drawing="${d.id}"` : '';
-    const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;
+    const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
     if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
     if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
     const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -104,6 +105,16 @@ export function renderDrawings(L, scene, ctx = null) {
     const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
     bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
     L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  }
+  if (group?.size) {
+    const pad = 8 * (1 / (ctx.camera?.z || 1));
+    let out = '';
+    for (const id of group) {
+      const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); if (!n) continue;
+      const b = n.getBBox();
+      out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
+    }
+    L.drawings.insertAdjacentHTML('beforeend', out);
   }
   if (ctx) renderDrawBar(L, ctx, bbox);
 }

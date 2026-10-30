@@ -563,7 +563,7 @@ export class Panels {
   // ——— Мосты для ввода и токенов ———
   tokenBar() { return T.tokenBarHTML(this.ctx); }
   contextMenu(target, w, screen) { T.contextMenu(this.ctx, target, w, screen); }
-  deleteTokens(ids) { T.deleteTokens(this.ctx, ids); }
+  deleteTokens(ids, drawIds) { T.deleteTokens(this.ctx, ids, drawIds); }
   toggleHidden(ids, force) { T.toggleHidden(this.ctx, ids, force); }
   deleteWall(id) { M.deleteWall(this.ctx, id); }
   deleteLight(id) { M.deleteLight(this.ctx, id); }
