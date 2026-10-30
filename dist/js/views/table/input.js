@@ -885,9 +885,11 @@ const wallTool = {
     }
     if (ctx.ui.wallChain) { ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w, e), kind: ctx.ui.sub.walls || 'wall' }; ctx.invalidate('overlay'); }
   },
+  cancel(ctx, g) { if (g.handle && g.before) { ctx.scene.walls = structuredClone(g.before); ctx.invalidateVision(); ctx.invalidate('walls', 'fog'); } },
   up(ctx, g, w, e) {
     if (g.handle && g.moved) {
       const before = g.before, after = structuredClone(ctx.scene.walls);
+      ctx.scene.walls = structuredClone(before); // предпросмотр → «до», запись увидит разницу (TASK-166)
       ctx.mutateScene((s) => { s.walls = structuredClone(after); }, { label: 'Стена', undo: (s) => { s.walls = structuredClone(before); }, redo: (s) => { s.walls = structuredClone(after); } });
       return;
     }
@@ -971,10 +973,15 @@ const lightTool = {
     ctx.invalidateVision();
     ctx.invalidate('markers', 'areas', 'fog');
   },
+  cancel(ctx, g) {
+    const l = g.light && ctx.scene.lights.find((x) => x.id === g.light.id);
+    if (l) { l.x = g.light.x0; l.y = g.light.y0; ctx.invalidateVision(); ctx.invalidate('markers', 'areas', 'fog'); }
+  },
   up(ctx, g, w, e) {
     if (g.light && g.moved) {
       const l = ctx.scene.lights.find((x) => x.id === g.light.id);
       const to = { x: l.x, y: l.y }, from = { x: g.light.x0, y: g.light.y0 };
+      Object.assign(l, from); // предпросмотр → «до», запись увидит разницу (TASK-166)
       ctx.mutateScene((s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, to); }, { label: 'Свет', undo: (s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, from); }, redo: (s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, to); } });
       return;
     }
@@ -994,6 +1001,9 @@ const terrainTool = {
   up(ctx, g) {
     const before = g.before, after = structuredClone(ctx.scene.terrain);
     if (JSON.stringify(before) === JSON.stringify(after)) return;
+    // Кисть рисовала прямо в сцене (предпросмотр). Вернуть «до», иначе запись не увидит разницы
+    // и на сервер ничего не уйдёт — местность пропадёт после обновления (TASK-166).
+    ctx.scene.terrain = structuredClone(before);
     ctx.mutateScene((s) => { s.terrain = structuredClone(after); }, { label: 'Местность', undo: (s) => { s.terrain = structuredClone(before); }, redo: (s) => { s.terrain = structuredClone(after); } });
   },
   cancel(ctx, g) { if (g.before) ctx.scene.terrain = g.before; ctx.invalidate('terrain'); },
