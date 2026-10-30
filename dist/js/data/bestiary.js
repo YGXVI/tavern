@@ -1,7 +1,7 @@
 // Стартовый бестиарий. Игровые числа — из System Reference Document 5.1 (CC BY 4.0,
 // © Wizards of the Coast), названия и описания переведены своими словами.
 // «Порождение Безликого» — домашнее существо демо-кампании.
-// Полный каталог — отдельная задача (см. docs/features/library.md).
+// Полный бестиарий SRD 2014 догружается loadSrdBestiary() (TASK-083).
 
 const atk = (name, bonus, damage, type, reach = 'досягаемость 5 фт') => ({ name, bonus, damage, type, note: reach });
 
@@ -86,4 +86,24 @@ export const BESTIARY = [
   },
 ];
 
-export const monsterById = (id) => BESTIARY.find((m) => m.id === id);
+const index = new Map(BESTIARY.map((m) => [m.id, m]));
+export const monsterById = (id) => index.get(id);
+
+// ——— Полный бестиарий SRD 2014 (TASK-083): ещё 322 существа из каталога data/bestiary (Яра, TASK-011) ———
+// Грузится отдельным файлом после открытия стола (≈90 КБ сжатым), чтобы не тормозить вход и экраны кампаний.
+let srd = null, srdDone = false;
+/** Догрузить существа SRD в BESTIARY. Повторный вызов возвращает тот же Promise; после сбоя — пробует снова. */
+export function loadSrdBestiary() {
+  if (!srd) {
+    srd = import('./bestiary-srd.js').then(({ default: list }) => {
+      for (const m of list) if (!index.has(m.id)) { BESTIARY.push(m); index.set(m.id, m); }
+      BESTIARY.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      srdDone = true;
+      return BESTIARY.length;
+    });
+    srd.catch(() => { srd = null; });
+  }
+  return srd;
+}
+/** Полный бестиарий уже на месте. */
+export const srdLoaded = () => srdDone;

@@ -18,6 +18,8 @@ import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
+import { loadSrdBestiary } from '../../data/bestiary.js';
+import { refreshSheet } from './sheet.js';
 import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
@@ -398,6 +400,16 @@ export function mountTable(root, cid) {
   const offErr = bus.on('storage-error', (p) => ctx.toast({ title: 'Не сохранилось', body: p.message, icon: 'alert-circle' }));
 
   // ——— Старт ———
+  // Полный бестиарий SRD (TASK-083) — отдельным файлом после открытия стола: подписи, листы и список существ дорисуются.
+  let gone = false;
+  loadSrdBestiary().then(() => {
+    if (gone) return;
+    ctx.invalidate('all');
+    if (ctx.ui.panel === 'bestiary') ctx.panels.renderSide();
+    refreshSheet(ctx);
+  }, () => {
+    if (!gone && ctx.isMaster) ctx.toast({ title: 'Бестиарий не загрузился', body: 'Доступны только основные существа. Обновите страницу, когда появится сеть.', icon: 'alert-circle' });
+  });
   const c0 = ctx.c;
   ctx.switchScene(ctx.isMaster ? c0.activeSceneId || c0.scenes[0]?.id : sceneIdFor(c0, ctx.userId), { fit: true });
   renderChrome(ctx);
@@ -409,6 +421,7 @@ export function mountTable(root, cid) {
 
   return {
     unmount() {
+      gone = true;
       unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
