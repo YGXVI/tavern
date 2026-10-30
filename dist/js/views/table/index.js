@@ -50,7 +50,7 @@ export function mountTable(root, cid) {
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
       wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
     },
-    remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map() },
+    remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map(), selects: new Map() },
     dragging: null,
     history: new History(),
     get c() { return getCampaign(this.cid); },
@@ -194,7 +194,7 @@ export function mountTable(root, cid) {
     // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
     // каждый кадр пересчитываются только те, что сейчас тащат.
     if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
-    if (all || dirty.has('tokens')) renderTokens(L, ctx);
+    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); }
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);
@@ -347,6 +347,29 @@ export function mountTable(root, cid) {
     ctx.invalidate('areas');
   });
   ctx.sendDrag = throttle((payload) => bus.send('drag', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...payload }), 40);
+  // ——— Чужое выделение (TASK-164): кто какие токены выделил ———
+  bus.on('select', (p) => {
+    if (p.cid !== ctx.cid || !p.userId || p.userId === ctx.userId) return;
+    if (!p.ids?.length) ctx.remote.selects.delete(p.userId); else ctx.remote.selects.set(p.userId, { sceneId: p.sceneId, ids: new Set(p.ids) });
+    ctx.invalidate('tokens');
+  });
+  // Кто, кроме меня, выделил токен (в этой сцене).
+  ctx.selectorsOf = (id) => {
+    const out = [];
+    for (const [uid2, v] of ctx.remote.selects) if (v.sceneId === ctx.sceneId && v.ids.has(id)) { const u = userById(uid2); if (u) out.push(u); }
+    return out;
+  };
+  const sendSelect = throttle((ids) => bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids }), 80);
+  let selSig = null;
+  // Своё выделение — остальным; скрытые токены мастера не уходят. Шлём только при изменении.
+  ctx.syncSelection = (force = false) => {
+    const sc = ctx.scene;
+    const ids = sc ? [...ctx.ui.selection].filter((id) => { const t = sc.tokens.find((x) => x.id === id); return t && !t.hidden; }).sort() : [];
+    const sig = `${ctx.sceneId}|${ids.join(',')}`;
+    if (!force && sig === selSig) return;
+    if (selSig === null && !ids.length && !force) { selSig = sig; return; }
+    selSig = sig; sendSelect(ids);
+  };
   ctx.sendRuler = throttle((r) => bus.send('ruler', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...(r || {}), pts: r?.pts || null }), 50);
   ctx.sendTemplate = throttle((tpl) => bus.send('template', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, tpl }), 60);
 
@@ -393,7 +416,14 @@ export function mountTable(root, cid) {
   });
 
   // Присутствие: обновляем «в сети» в чипах.
-  const offPresence = bus.on('presence-change', () => ctx.invalidate('chrome', 'panels'));
+  const offPresence = bus.on('presence-change', () => {
+    // Ушедшие — их выделение снимаем; пришедшим — повторяем своё (TASK-164).
+    const on = onlineUsers(ctx.cid);
+    let gone2 = false;
+    for (const id of [...ctx.remote.selects.keys()]) if (!on.has(id)) { ctx.remote.selects.delete(id); gone2 = true; }
+    if (ctx.ui.selection.size) ctx.syncSelection(true);
+    ctx.invalidate('chrome', 'panels', ...(gone2 ? ['tokens'] : []));
+  });
   // Сервер: обрыв связи. Ходы ждут сети в очереди и уйдут сами; после переподключения кампания перечитывается.
   const offNet = bus.on('connection', (p) => {
     if (p.cid !== ctx.cid) return;
@@ -437,6 +467,7 @@ export function mountTable(root, cid) {
     update: sheetFromHash,
     unmount() {
       gone = true;
+      if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
       unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
