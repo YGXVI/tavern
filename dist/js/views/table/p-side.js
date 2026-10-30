@@ -402,19 +402,24 @@ export function placeHero(ctx, chId, at = null) {
 const ITEMS = [['package', 'Сундук'], ['barrel', 'Бочка'], ['potion', 'Зелье'], ['key-01', 'Ключ'], ['scroll', 'Свиток'], ['gem', 'Самоцвет'], ['skull', 'Останки'], ['bomb', 'Бомба'], ['flag-02', 'Флаг'], ['tent', 'Лагерь']];
 
 export function itemPicker(ctx, anchor) {
-  const pop = popover(`<div class="pick-pop"><div class="panel-header"><div class="titles"><div class="title">Предмет на карте</div><div class="subtitle">Фишка без хитов: сундук, ключ, лагерь</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
-    <div class="panel-section"><div class="item-grid">${ITEMS.map(([ic, name]) => `<button class="item-opt" data-item="${ic}" data-name="${esc(name)}"><img src="${esc(srcOf(`item:${ic}`))}" alt=""><span>${esc(name)}</span></button>`).join('')}</div>
+  const pop = popover(`<div class="pick-pop"><div class="panel-header"><div class="titles"><div class="title">Предмет на карте</div><div class="subtitle">Кликните или перетащите на карту: сундук, ключ, лагерь</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section"><div class="item-grid">${ITEMS.map(([ic, name]) => `<button class="item-opt" data-item="${ic}" data-name="${esc(name)}"><img src="${esc(srcOf(`item:${ic}`))}" alt="" draggable="false"><span>${esc(name)}</span></button>`).join('')}</div>
     <label class="check t-sm"><input type="checkbox" data-hid>Скрыть от игроков</label></div></div>`, anchor, { placement: 'top' });
   pop.node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-item]'); if (!b) return;
-    const hidden = pop.node.querySelector('[data-hid]').checked;
-    const p = freeSpots(ctx.scene, ctx.ui.placeAt || viewCenter(ctx), 1, 1)[0];
-    ctx.ui.placeAt = null;
-    const t = { id: uid('t-'), kind: 'item', name: nextTokenName(ctx.scene, b.dataset.name), img: `item:${b.dataset.item}`, size: 'small', x: p.x, y: p.y, hidden, conditions: [], hp: 0, hpMax: 0, ac: 10 };
-    ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Предмет', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
-    ctx.select([t.id]);
-    closePopover();
+    placeItem(ctx, b.dataset.item, b.dataset.name, pop.node.querySelector('[data-hid]').checked);
   });
+}
+
+/** Поставить предмет: по клику — у центра вида (или ctx.ui.placeAt), при перетаскивании — в точку броска (TASK-095). */
+export function placeItem(ctx, ic, name, hidden, at = null) {
+  if (!ctx.scene) return;
+  const p = freeSpots(ctx.scene, at || ctx.ui.placeAt || viewCenter(ctx), 1, 1)[0];
+  ctx.ui.placeAt = null;
+  const t = { id: uid('t-'), kind: 'item', name: nextTokenName(ctx.scene, name), img: `item:${ic}`, size: 'small', x: p.x, y: p.y, hidden, conditions: [], hp: 0, hpMax: 0, ac: 10 };
+  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Предмет', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
+  ctx.select([t.id]);
+  closePopover();
 }
 
 export { el, tokenStats, freeSpots };

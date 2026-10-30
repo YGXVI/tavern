@@ -414,12 +414,23 @@ export function mountTable(root, cid) {
   ctx.switchScene(ctx.isMaster ? c0.activeSceneId || c0.scenes[0]?.id : sceneIdFor(c0, ctx.userId), { fit: true });
   renderChrome(ctx);
   ctx.panels.onEnter();
+  // Лист героя по адресу #/c/<кампания>/sheet/<герой>: его можно открыть в новой вкладке (TASK-094).
+  // Адрес сразу возвращается к столу, чтобы обновление страницы не открывало лист снова.
+  const sheetFromHash = () => {
+    const mm = location.hash.match(/^#\/c\/[^/]+\/sheet\/([^/?#]+)/);
+    if (!mm) return;
+    const chId = decodeURIComponent(mm[1]);
+    history.replaceState(null, '', `#/c/${ctx.cid}`);
+    if (characterOf(ctx.c, chId)) ctx.panels.openSheetFor({ characterId: chId });
+  };
+  sheetFromHash();
   setPresence({ userId: ctx.userId, campaignId: ctx.cid, sceneId: ctx.sceneId });
   const onResize = () => ctx.invalidate('chrome');
   addEventListener('resize', onResize);
   viewport.focus({ preventScroll: true });
 
   return {
+    update: sheetFromHash,
     unmount() {
       gone = true;
       unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);

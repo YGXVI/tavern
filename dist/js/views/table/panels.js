@@ -679,6 +679,7 @@ export class Panels {
       case 'statblock': if (one) this.openSheetFor(one); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
+      case 'reference': D.referenceModal(this.ctx); break;
       case 'layer': ctx.setLayer(!ctx.ui.layer); break;
       // «Готово» слоя: подогнанная сетка сохраняется, а не теряется.
       case 'done': case 'layer-close': {
