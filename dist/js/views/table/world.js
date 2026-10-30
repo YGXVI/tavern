@@ -289,20 +289,27 @@ export function renderTokens(L, ctx) {
       if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
       node.dataset.tg = tgSig;
     }
-    // Кто тащит токен (TASK-162): кольцо его цвета, у ведущего токена — плашка с именем. Свои перетаскивания не помечаем.
+    // Кто тащит (TASK-162) или выделил (TASK-164) токен: кольцо цвета участника и плашка с именем.
+    // Перетаскивание ярче и важнее выделения; свои действия не помечаем.
     const rd = ctx.remote.drags.get(t.id);
     const byId = rd && rd.sceneId === ctx.sceneId && rd.by && rd.by !== ctx.userId ? rd.by : '';
-    const bySig = byId ? `${byId}|${rd.lead ? 1 : 0}` : '';
+    const sels = byId ? [] : ctx.selectorsOf?.(t.id) || [];
+    const colorOf = (id, u) => (isMasterOf(c, id) ? '#e9b052' : `hsl(${u?.hue ?? 32} 80% 62%)`);
+    const bySig = byId ? `d|${byId}|${rd.lead ? 1 : 0}` : sels.length ? `s|${sels.map((u) => u.id).join(',')}` : '';
     if (node.dataset.by !== bySig) {
       node.querySelector('.tok-by')?.remove();
-      node.classList.toggle('remote-drag', !!byId);
       if (byId) {
         const u = userById(byId);
-        node.style.setProperty('--dc', isMasterOf(c, byId) ? '#e9b052' : `hsl(${u?.hue ?? 32} 80% 62%)`);
+        node.style.setProperty('--dc', colorOf(byId, u));
         if (rd.lead) node.insertAdjacentHTML('beforeend', `<span class="tok-by">${icon('cursor-hold-01', 12)}${esc(u?.name || 'Кто-то')}</span>`);
+      } else if (sels.length) {
+        node.style.setProperty('--dc', colorOf(sels[0].id, sels[0]));
+        const names = sels.slice(0, 2).map((u) => esc(u.name)).join(', ') + (sels.length > 2 ? ` +${sels.length - 2}` : '');
+        node.insertAdjacentHTML('beforeend', `<span class="tok-by sel" title="Выделили: ${esc(sels.map((u) => u.name).join(', '))}">${icon('cursor-01', 12)}${names}</span>`);
       } else node.style.removeProperty('--dc');
       node.dataset.by = bySig;
-    } else if (byId) node.classList.add('remote-drag');
+    }
+    if (byId) node.classList.add('remote-drag'); else if (sels.length) node.classList.add('remote-sel');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
     const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
