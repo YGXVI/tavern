@@ -42,7 +42,14 @@ function randomQuat() {
 const PHI = (1 + Math.sqrt(5)) / 2;
 function rawVerts(kind) {
   const p = [];
-  if (kind === 4) return [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+  // к4 — кристалл (TASK-136): четырёхгранная призма вдоль оси y с заострёнными концами. Числа на длинных гранях;
+  // на остриё кристалл не встаёт — центр тяжести выходит за грань острия, и он ложится на длинную грань.
+  if (kind === 4) {
+    const a = 0.5, h = 0.72, tip = 0.42;
+    for (const y of [-h, h]) for (const [x, z] of [[a, a], [a, -a], [-a, -a], [-a, a]]) p.push([x, y, z]);
+    p.push([0, h + tip, 0], [0, -h - tip, 0]);
+    return p;
+  }
   if (kind === 6) { for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) p.push([x, y, z]); return p; }
   if (kind === 8) return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   if (kind === 12) {
@@ -87,8 +94,9 @@ function hullFaces(verts) {
   return faces;
 }
 
-// Размер (радиус описанной сферы) в единицах лотка — на глаз, чтобы кубы были соразмерны.
-const SIZE = { 4: 1.04, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
+// Размер (радиус описанной сферы) в единицах лотка, по просьбам sol0139 (TASK-139, TASK-142) —
+// радиус равного шара: к4 0,59, к8 0,62, к10 0,65, к6 0,66, к12 0,66, к20 0,76.
+const SIZE = { 4: 0.9, 6: 0.92, 8: 0.91, 10: 0.84, 12: 0.76, 20: 0.9 };
 const GEO = {};
 function geometry(kind) {
   if (GEO[kind]) return GEO[kind];
@@ -101,6 +109,7 @@ function geometry(kind) {
     const P = f.idx.map((i) => v[i]);
     let up;
     if (kind === 6) up = norm(sub(mul(add(P[0], P[1]), 0.5), f.c));
+    else if (kind === 4 && Math.abs(f.n[1]) < 1e-6) up = [0, 1, 0]; // к4: число вдоль кристалла
     else if (kind === 10) { const far = P.reduce((a, b) => (len(sub(b, f.c)) > len(sub(a, f.c)) ? b : a)); up = norm(sub(far, f.c)); }
     else up = norm(sub(P[0], f.c));
     f.up = up; f.right = cross(up, f.n);
@@ -109,7 +118,16 @@ function geometry(kind) {
     f.r = Math.min(...P.map((p, i) => { const q = P[(i + 1) % P.length]; const e = norm(sub(q, p)); const w = sub(f.c, p); return len(sub(w, mul(e, dot(w, e)))); }));
   }
   const R = Math.max(...v.map(len));
-  GEO[kind] = { verts: v, faces, R, inertia: 0.4 * R * R };
+  // Грани с числами по порядку меток: у к4 — только длинные (острия без чисел), у остальных — все.
+  const numbered = kind === 4 ? faces.map((f, i) => (Math.abs(f.n[1]) < 1e-6 ? i : -1)).filter((i) => i >= 0) : faces.map((_, i) => i);
+  // Точки касания соседей: вершины и середины рёбер (TASK-139). Только вершины пропускали скрещённые рёбра —
+  // кубы в куче проходили друг сквозь друга, особенно длинный к4 и к10.
+  const seen = new Set(), probes = v.slice();
+  for (const f of faces) f.idx.forEach((a, i) => {
+    const b = f.idx[(i + 1) % f.idx.length], k = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (!seen.has(k)) { seen.add(k); probes.push(mul(add(v[a], v[b]), 0.5)); }
+  });
+  GEO[kind] = { verts: v, faces, numbered, probes, R, inertia: 0.4 * R * R };
   return GEO[kind];
 }
 
@@ -139,15 +157,10 @@ function makeBody(kind, opts = {}) {
 // Материал по умолчанию — тёмный камень; наборы приходят из dice-art.js (поля light/base/dark/ink/spec/metal/lum).
 const DEFAULT_SKIN = { id: 'obsidian', light: '#5d606e', base: '#2e3038', dark: '#16171c', ink: '#f2ead8', spec: 0.6, metal: 0.18, lum: 1 };
 
-/** Значение, которое показывает куб сейчас (к4 — вершина сверху, остальные — верхняя грань). */
+/** Номер метки, которую куб показывает сейчас: верхняя из граней с числами (у к4 — верхняя длинная грань). */
 function topIndex(b) {
-  if (b.shape === 4) {
-    let best = 0, by = -Infinity;
-    b.g.verts.forEach((p, i) => { const y = qrot(b.q, p)[1]; if (y > by) { by = y; best = i; } });
-    return best;
-  }
   let best = 0, bd = -Infinity;
-  b.g.faces.forEach((f, i) => { const d = qrot(b.q, f.n)[1]; if (d > bd) { bd = d; best = i; } });
+  b.g.numbered.forEach((fi, i) => { const d = qrot(b.q, b.g.faces[fi].n)[1]; if (d > bd) { bd = d; best = i; } });
   return best;
 }
 /** Высота нижней вершины куба над дном при повороте q (0 — касается стола; заметно больше — лежит на соседе). */
@@ -158,10 +171,10 @@ function lowest(b, q = b.q) {
 function flatness(b) {
   return Math.max(...b.g.faces.map((f) => -qrot(b.q, f.n)[1]));
 }
-/** Поворот, после которого куб ровно лежит на ближайшей к низу грани. */
+/** Поворот, после которого куб ровно лежит на ближайшей к низу грани (к4 — на длинной: на остриё не ложится). */
 function alignedQuat(b) {
   let best = null, bd = -Infinity;
-  for (const f of b.g.faces) { const n = qrot(b.q, f.n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
+  for (const fi of b.g.numbered) { const n = qrot(b.q, b.g.faces[fi].n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
   const down = [0, -1, 0];
   const axis = cross(best, down), s = len(axis), c = dot(best, down);
   if (s < 1e-7) return c > 0 ? b.q : qnorm(qmul(qaxis([1, 0, 0], Math.PI), b.q));
@@ -172,6 +185,68 @@ function alignedQuat(b) {
 const G = -38, DT = 1 / 240, SUBSTEPS = 4;
 const FLOOR = { e: 0.32, mu: 0.42 }, WALL = { e: 0.45, mu: 0.25 };
 
+// ——— Звук ударов (TASK-145) ———
+// Удары записываются при просчёте броска (кадр, вид, скорость) и звучат при проигрывании в тот же кадр.
+// Звук синтезируется Web Audio — без файлов и чужих записей.
+let hitLog = null; // { frame, byKey: Map } — во время просчёта
+function noteHit(b, kind, v) {
+  if (!hitLog || v < 1.3) return;
+  const k = `${hitLog.frame}|${b.id}|${kind}`;
+  const was = hitLog.byKey.get(k);
+  if (!was || was.v < v) hitLog.byKey.set(k, { f: hitLog.frame, kind, v, die: b.shape });
+}
+let actx = null, noiseBuf = null, soundOn = true;
+/** Звук кубов вкл/выкл (на эту вкладку). */
+export function setDiceSound(on) { soundOn = !!on; }
+export function diceSoundOn() { return soundOn; }
+function audio() {
+  if (!soundOn) return null;
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      noiseBuf = actx.createBuffer(1, Math.round(actx.sampleRate * 0.25), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx.state === 'running' ? actx : null;
+  } catch { return null; }
+}
+/**
+ * Один удар: «щелчок» куба о куб — короткий и звонкий; о дно лотка (сукно на дереве) — глухой стук;
+ * о борт — деревянный. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
+ */
+function playHit(kind, v, vol = 1, die = 20) {
+  const ac = audio(); if (!ac) return;
+  const g0 = Math.min(1, Math.max(0, (v - 1.3) / 11)) ** 0.8 * vol;
+  if (g0 < 0.02) return;
+  const t = ac.currentTime + 0.005, r = () => 0.85 + Math.random() * 0.3;
+  const small = die === 4 || die === 6 ? 1.12 : die === 20 || die === 12 ? 0.92 : 1;
+  const out = ac.createGain(); out.connect(ac.destination);
+  // Шум через полосовой фильтр — «тело» удара.
+  const src = ac.createBufferSource(); src.buffer = noiseBuf;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass';
+  const ng = ac.createGain();
+  let f, q, dec, peak;
+  if (kind === 'dice') { f = 3200 * r() * small; q = 7; dec = 0.045; peak = 0.5; }
+  else if (kind === 'wall') { f = 1300 * r(); q = 4; dec = 0.07; peak = 0.45; }
+  else { f = 750 * r() * small; q = 2.2; dec = 0.09; peak = 0.6; }
+  bp.frequency.value = f; bp.Q.value = q;
+  ng.gain.setValueAtTime(peak * g0, t); ng.gain.exponentialRampToValueAtTime(0.0008, t + dec);
+  src.connect(bp); bp.connect(ng); ng.connect(out);
+  src.start(t, Math.random() * 0.15, dec + 0.02);
+  // Короткий тон — «щёлк» кости или «тук» дерева.
+  const osc = ac.createOscillator(); osc.type = 'triangle';
+  const og = ac.createGain();
+  const tone = kind === 'dice' ? 2400 * r() * small : kind === 'wall' ? 520 * r() : 210 * r() * small;
+  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.7, t + dec);
+  og.gain.setValueAtTime((kind === 'dice' ? 0.18 : 0.35) * g0, t); og.gain.exponentialRampToValueAtTime(0.0008, t + dec * 0.8);
+  osc.connect(og); og.connect(out);
+  osc.start(t); osc.stop(t + dec + 0.02);
+}
+
 function applyImpulse(b, r, J) {
   b.v = add(b.v, J);
   b.w = add(b.w, mul(cross(r, J), 1 / b.g.inertia));
@@ -179,7 +254,7 @@ function applyImpulse(b, r, J) {
 
 function contactPlane(b, n, off, mat, verts) {
   // Плоскость n·p >= off: последовательные импульсы с накоплением (как в PGS), трение по Кулону.
-  let deepest = 0;
+  let deepest = 0, hit = 0;
   const cs = [];
   for (const p of verts) {
     const pen = off - dot(n, p);
@@ -188,9 +263,11 @@ function contactPlane(b, n, off, mat, verts) {
     const r = sub(p, b.x);
     const rn = cross(r, n);
     const vn0 = dot(add(b.v, cross(b.w, r)), n);
+    if (-vn0 > hit) hit = -vn0;
     cs.push({ r, k: 1 + dot(rn, rn) / b.g.inertia, target: vn0 < -2 ? -mat.e * vn0 : 0, acc: 0, tacc: [0, 0, 0] });
   }
   if (!cs.length) return false;
+  noteHit(b, mat === FLOOR ? 'floor' : 'wall', hit);
   for (let it = 0; it < 6; it++) for (const c of cs) {
     const vel = add(b.v, cross(b.w, c.r));
     const vn = dot(vel, n);
@@ -214,13 +291,76 @@ function contactPlane(b, n, off, mat, verts) {
 }
 
 function worldVerts(b) { return b.g.verts.map((p) => add(b.x, qrot(b.q, p))); }
+function worldProbes(b) { return b.g.probes.map((p) => add(b.x, qrot(b.q, p))); }
+/** Насколько глубоко a вошёл в b: {pen, n} (n — наружу из b, мир) или null. */
+function overlap(a, b) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R) ** 2) return null;
+  let best = null;
+  for (const [A, B, sgn] of [[a, b, 1], [b, a, -1]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      let pen = Infinity, nf = null;
+      for (const f of B.g.faces) { const k = f.d - dot(f.n, lp); if (k < 0) { pen = -1; break; } if (k < pen) { pen = k; nf = f.n; } }
+      if (pen > 0 && nf && (!best || pen > best.pen)) best = { pen, n: mul(qrot(B.q, nf), sgn) };
+    }
+  }
+  return best;
+}
+/** Вернуть куб внутрь стенок площадки и не ниже дна (по настоящим вершинам, без поворота). */
+function keepInside(b, bounds) {
+  const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
+  const vs = worldVerts(b);
+  const lo = (k) => Math.min(...vs.map((p) => p[k])), hi = (k) => Math.max(...vs.map((p) => p[k]));
+  const x0 = -hw + (bounds.left || 0), x1 = hw - (bounds.right || 0), z0 = -hd + (bounds.top || 0), z1 = hd - (bounds.bottom || 0);
+  let dx = 0, dz = 0;
+  if (lo(0) < x0) dx = x0 - lo(0); else if (hi(0) > x1) dx = x1 - hi(0);
+  if (lo(2) < z0) dz = z0 - lo(2); else if (hi(2) > z1) dz = z1 - hi(2);
+  const dy = Math.max(0, -lo(1));
+  if (dx || dy || dz) b.x = [b.x[0] + dx, b.x[1] + dy, b.x[2] + dz];
+}
+/**
+ * Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота,
+ * не ниже дна и не за стенки. Если места внизу нет, куб поднимается на соседей (TASK-146).
+ */
+function separate(list, bounds, iters = 120) {
+  for (let it = 0; it < iters; it++) {
+    let any = false;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const o = overlap(list[i], list[j]);
+      if (!o || o.pen < 0.01) continue;
+      any = true;
+      // Под конец — чуть вверх тому, кто выше: кучу легче развести, подняв её, чем раздвинув по тесному дну.
+      const k = Math.min(o.pen, 0.25) * 0.55, up = it > iters / 2 ? 0.25 : 0;
+      const hiB = list[i].x[1] >= list[j].x[1] ? list[i] : list[j];
+      list[i].x = add(list[i].x, mul(o.n, k)); list[j].x = sub(list[j].x, mul(o.n, k));
+      if (up) hiB.x = [hiB.x[0], hiB.x[1] + k * up, hiB.x[2]];
+    }
+    for (const b of list) keepInside(b, bounds);
+    if (!any) break;
+  }
+}
+/** Касается ли куб соседа (в пределах eps): точка одного внутри другого или у самой его поверхности. */
+function touching(a, b, eps = 0.05) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R + eps) ** 2) return false;
+  for (const [A, B] of [[a, b], [b, a]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      if (B.g.faces.every((f) => dot(f.n, lp) - f.d < eps)) return true;
+    }
+  }
+  return false;
+}
 
 function collidePair(a, b) {
   const d = sub(b.x, a.x);
   if (dot(d, d) > (a.g.R + b.g.R) ** 2) return;
   for (const [A, B] of [[a, b], [b, a]]) {
     const qi = qinv(B.q);
-    for (const p of worldVerts(A)) {
+    for (const p of worldProbes(A)) {
       const lp = qrot(qi, sub(p, B.x));
       let minPen = Infinity, nf = null;
       for (const f of B.g.faces) {
@@ -238,6 +378,7 @@ function collidePair(a, b) {
       const vrel = sub(add(A.v, cross(A.w, ra)), add(B.v, cross(B.w, rb)));
       const vn = dot(vrel, n);
       if (vn < 0) {
+        noteHit(A, 'dice', -vn);
         const ran = cross(ra, n), rbn = cross(rb, n);
         const k = wa * (1 + dot(ran, ran) / A.g.inertia) + wb * (1 + dot(rbn, rbn) / B.g.inertia);
         const j = (-(1 + 0.3) * vn) / k;
@@ -285,9 +426,10 @@ function stepWorld(bodies, bounds) {
       if (contactPlane(b, [0, 1, 0], 0, FLOOR, wv)) { b.w = mul(b.w, 0.988); b.v = [b.v[0] * 0.994, b.v[1], b.v[2] * 0.994]; }
       // Стенки чуть внутри холста: в перспективе куб у стенки не обрезается краем.
       // Сверху — полоса под сумму и кнопки лотка (top): кубы туда не закатываются.
+      // Слева и справа — поля (left/right): на столе кубы катаются ближе к середине, не под правой панелью (TASK-130).
       const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
-      contactPlane(b, [1, 0, 0], -hw, WALL, worldVerts(b));
-      contactPlane(b, [-1, 0, 0], -hw, WALL, worldVerts(b));
+      contactPlane(b, [1, 0, 0], -hw + (bounds.left || 0), WALL, worldVerts(b));
+      contactPlane(b, [-1, 0, 0], -hw + (bounds.right || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, 1], -hd + (bounds.top || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, -1], -hd + (bounds.bottom || 0), WALL, worldVerts(b));
     }
@@ -315,6 +457,72 @@ function rgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+// ——— Нарисованные грани (набор с полем art, TASK-127) ———
+// Лист: 10 ячеек 128 px в ряд, грань в ячейке — ровно та же фигура, что строит to2() ниже (к4/к8/к20 — треугольник
+// вершиной вверх, к6 — квадрат, к10 — дельтоид, к12 — пятиугольник вершиной вверх). Порядок ячеек:
+const ART_LAYOUT = { frame4: 0, glyph: 1, d6: 11, d8: 17, d10: 25, d10t: 35, d12: 45, d20: 57, frame: { 6: 77, 8: 78, 10: 79, 12: 80, 20: 81 } };
+const ART_COLS = 10;
+const artImgs = new Map(); // адрес → Image
+const artWaiters = new Set(); // сцены, которые перерисуют кубы, когда лист догрузится
+function artImage(src) {
+  let im = artImgs.get(src);
+  if (!im) {
+    im = new Image(); im.decoding = 'async';
+    im.onload = () => { for (const f of artWaiters) f(); };
+    im.src = src; artImgs.set(src, im);
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
+/** Ячейка листа для подписи грани; null — нарисованной грани нет (например, «?»). */
+function artCell(kind, v) {
+  if (v === '?') return null;
+  const n = Number(v);
+  if (kind === 'd10t') return ART_LAYOUT.d10t + n / 10;
+  if (kind === 'd10u' || kind === 10) return ART_LAYOUT.d10 + (n % 10); // к10: «10» нарисовано как «0», как на настоящем кубе
+  const base = ART_LAYOUT[`d${kind}`];
+  return base === undefined ? null : base + n - 1;
+}
+function drawArtAtlas(b, cv, x, img) {
+  const faces = b.g.faces, cols = cv.width / CELL;
+  const cell = (i, ox, oy, w = CELL) => x.drawImage(img, (i % ART_COLS) * CELL, Math.floor(i / ART_COLS) * CELL, CELL, CELL, ox, oy, w, w);
+  x.fillStyle = b.skin.dark; x.fillRect(0, 0, cv.width, cv.height);
+  b.uv = [];
+  faces.forEach((f, fi) => {
+    const ox = (fi % cols) * CELL, oy = Math.floor(fi / cols) * CELL;
+    const sc = (CELL * 0.44) / f.R;
+    const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
+    const P = f.idx.map((i) => to2(b.g.verts[i]));
+    b.uv.push(P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
+    const text = (txt, cx, cy, ang) => {
+      x.save(); x.translate(cx, cy); x.rotate(ang); x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `600 ${fs}px Unbounded, Inter, system-ui, sans-serif`; x.fillStyle = b.skin.ink; x.fillText(txt, 0, 0); x.restore();
+    };
+    if (b.shape === 4) {
+      // к4-кристалл (TASK-136): граней такой формы в листе нет — грань светлая с каймой цвета набора,
+      // на длинной грани — цифра из листа (глифы 0–9), острия без чисел.
+      x.save(); x.beginPath(); P.forEach(([u, w], i) => (i ? x.lineTo(u, w) : x.moveTo(u, w))); x.closePath(); x.clip();
+      x.fillStyle = b.skin.light; x.fill();
+      x.lineJoin = 'round'; x.strokeStyle = b.skin.dark; x.lineWidth = 9; x.stroke();
+      x.restore();
+      const li = b.g.numbered.indexOf(fi);
+      if (li < 0) return;
+      const v = b.labels[li];
+      if (v === '?') { text('?', ox + CELL / 2, oy + CELL / 2, 0); return; }
+      // Ячейка глифа берётся с полем в 4 px — иначе на грани проступает край соседней ячейки.
+      const w = CELL * (fs * 0.9) / 96, gi = ART_LAYOUT.glyph + Number(v), pad = 4, k = w / CELL; // в ячейке цифра высотой 96 px
+      x.drawImage(img, (gi % ART_COLS) * CELL + pad, Math.floor(gi / ART_COLS) * CELL + pad, CELL - 2 * pad, CELL - 2 * pad,
+        ox + CELL / 2 - w / 2 + pad * k, oy + CELL / 2 - w / 2 + pad * k, w - 2 * pad * k, w - 2 * pad * k);
+      return;
+    }
+    const v = b.labels[fi];
+    const i = artCell(b.kind, v);
+    if (i !== null) { cell(i, ox, oy); return; }
+    cell(ART_LAYOUT.frame[b.shape], ox, oy);
+    text(labelText(b.kind, v), ox + CELL / 2, oy + CELL / 2, 0);
+  });
+}
+
 function drawAtlas(b) {
   const faces = b.g.faces;
   const cols = Math.ceil(Math.sqrt(faces.length));
@@ -324,6 +532,10 @@ function drawAtlas(b) {
   const x = cv.getContext('2d');
   const rnd = seeded(b.id * 7919);
   const sk = b.skin;
+  // Набор с нарисованными гранями: лист готов — рисуем им; нет — камнем в цветах набора, перерисуем по загрузке.
+  const art = sk.art ? artImage(sk.art) : null;
+  b.artPending = !!sk.art && !art;
+  if (art) { drawArtAtlas(b, cv, x, art); b.atlas = cv; b.texDirty = true; return; }
   // Камень набора: основа, мягкие пятна светлого и тёмного тона, тонкие прожилки.
   x.fillStyle = sk.base;
   x.fillRect(0, 0, cv.width, cv.height);
@@ -361,7 +573,7 @@ function drawAtlas(b) {
     x.strokeStyle = rgba(sk.light, 0.16); x.lineWidth = 16; x.stroke();
     x.restore();
     // Цифры: на светлых наборах вдавлены (тёмные с бликом снизу), на тёмных — светлые с тенью.
-    const fs = Math.max(18, f.r * sc * (b.shape === 4 ? 0.95 : b.shape === 10 ? 0.95 : 1.12));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
     x.textAlign = 'center'; x.textBaseline = 'middle';
     const put = (txt, cx, cy, ang, size = fs) => {
       x.save(); x.translate(cx, cy); x.rotate(ang);
@@ -372,14 +584,9 @@ function drawAtlas(b) {
       x.restore();
     };
     if (b.shape === 4) {
-      // к4: у каждой вершины грани — её число, повёрнутое к вершине.
-      f.idx.forEach((vi, k) => {
-        const [px, py] = P[k];
-        const cx = ox + CELL / 2, cy = oy + CELL / 2;
-        const tx = cx + (px - cx) * 0.6, ty = cy + (py - cy) * 0.6;
-        const ang = Math.atan2(px - cx, -(py - cy));
-        put(labelText(b.kind, b.labels[vi]), tx, ty, ang);
-      });
+      // к4-кристалл: число по центру длинной грани, вдоль кристалла; острия без чисел.
+      const li = b.g.numbered.indexOf(fi);
+      if (li >= 0) put(labelText(b.kind, b.labels[li]), ox + CELL / 2, oy + CELL / 2, 0);
     } else {
       const shift = b.shape === 10 ? f.r * sc * 0.12 : 0;
       put(labelText(b.kind, b.labels[fi]), ox + CELL / 2, oy + CELL / 2 + shift, 0);
@@ -454,13 +661,15 @@ export const PX_PER_UNIT = 42;
 const FADE_MS = 650;
 
 /**
- * Сцена с кубами на холсте. insetTop/insetBottom — полосы (px), куда кубы не закатываются (шапка лотка, панели стола).
+ * Сцена с кубами на холсте. insetTop/insetBottom/insetLeft/insetRight — полосы (px), куда кубы не закатываются
+ * (шапка лотка, панели стола); на столе их меняет setInsets() перед броском — площадка ближе к середине (TASK-130).
  * hover — кубы до броска висят в воздухе и трясутся, как в кулаке (лоток); иначе падают и укатываются.
  * API: add(kind, opts) — положить куб; remove(kind); throw(targets, opts) → Promise<{center, top, dice}> (px; dice — каждый куб);
- *      place(targets, opts) — без анимации; fade(group, delay); clear(); resize(); destroy().
+ *      place(targets, opts) — без анимации; fade(group, delay); setInsets({top, bottom, left, right}); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
-export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr = 2, hover = false } = {}) {
+export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false, sound = 1 } = {}) {
+  const inset = { top: insetTop, bottom: insetBottom, left: insetLeft, right: insetRight };
   const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
   if (!gl) return null;
   const prog = compile(gl, VS, FS), sprog = compile(gl, SVS, SFS);
@@ -474,12 +683,16 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   let bodies = [], frames = null, frameAt = 0, raf = 0, bounds = { w: 9, d: 14 }, camH = 20, pv = null, dpr = 1;
   let destroyed = false, pending = [], playStart = 0, liveAt = 0;
+  let sounds = null, soundAt = -1; // удары просчитанного броска по кадрам
+  const onArt = () => { let any = false; for (const b of bodies) if (b.artPending) { b.labelsDirty = true; any = true; } if (any) { render(); kick(); } };
+  artWaiters.add(onArt);
 
   function resize() {
     dpr = Math.min(maxDpr, devicePixelRatio || 1);
     const w = canvas.clientWidth || 300, h = canvas.clientHeight || 480;
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, top: insetTop / PX_PER_UNIT, bottom: insetBottom / PX_PER_UNIT, px: [w, h] };
+    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, px: [w, h] };
+    applyInsets();
     camH = bounds.d / 2 / Math.tan(FOV / 2);
     const proj = perspective(FOV, w / h, 1, camH + 10);
     // Камера над центром смотрит вниз; «вверх» экрана — к −z.
@@ -492,6 +705,20 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       if (!b.hover) b.asleep = false;
     }
     kick();
+  }
+
+  /** Поля площадки в единицах сцены; cx — середина площадки по ширине (туда бросок и целится). */
+  function applyInsets() {
+    const u = PX_PER_UNIT, maxSide = Math.max(0, bounds.w - 3);
+    bounds.top = inset.top / u; bounds.bottom = inset.bottom / u;
+    bounds.left = Math.min(maxSide, Math.max(0, inset.left / u));
+    bounds.right = Math.min(maxSide - bounds.left, Math.max(0, inset.right / u));
+    bounds.cx = (bounds.left - bounds.right) / 2;
+    bounds.aw = bounds.w - bounds.left - bounds.right;
+  }
+  function setInsets(next = {}) {
+    for (const k of ['top', 'bottom', 'left', 'right']) if (Number.isFinite(next[k])) inset[k] = Math.max(0, next[k]);
+    applyInsets();
   }
 
   function buildBuffer(b) {
@@ -599,8 +826,15 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       if (!playStart) playStart = now;
       frameAt = Math.floor((now - playStart) / (1000 / 60));
       applyFrame(frames[Math.min(frameAt, frames.length - 1)]);
+      // Удары — в те же кадры; если кадры пропущены, за раз звучит не больше шести самых громких.
+      if (sounds && frameAt > soundAt) {
+        const due = [];
+        for (let f = soundAt + 1; f <= Math.min(frameAt, frames.length - 1); f++) for (const h of sounds.get(f) || []) due.push(h);
+        soundAt = frameAt;
+        due.sort((a, b) => b.v - a.v).slice(0, 6).forEach((h) => playHit(h.kind, h.v, sound, h.die));
+      }
       if (frameAt >= frames.length - 1) {
-        frames = null; playStart = 0;
+        frames = null; playStart = 0; sounds = null;
         for (const b of bodies) { b.asleep = true; b.v = [0, 0, 0]; b.w = [0, 0, 0]; }
         for (const b of bodies) if (b.settled) { b.settled(b); b.settled = null; }
         render();
@@ -636,17 +870,23 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function hoverSlot() {
     const taken = bodies.filter((b) => b.hover).map((b) => b.hover.base);
     // Висящий куб ближе к камере — на экране он крупнее и дальше от центра: поля с запасом на перспективу.
-    const k = camH / (camH - 3.1), r = 0.95;
-    const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
-    const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+    // Много кубов в одном слое не помещается — следующие висят слоем выше, не внутри соседей (TASK-146).
+    const r = 0.95, gap = 2;
+    const k0 = camH / (camH - 3.1);
+    const cap = Math.max(2, Math.floor((2 * ((bounds.w / 2 - 0.25) / k0 - r)) / gap) * Math.floor(((bounds.d - bounds.top - bounds.bottom) / k0 - 2 * r) / gap) - 2);
+    const extra = gap * Math.floor(taken.length / cap);
     let best = null, bestD = -1;
-    for (let i = 0; i < 40; i++) {
-      const p = [(Math.random() * 2 - 1) * xr, 2.5 + Math.random() * 0.5, z0 + Math.random() * Math.max(0, z1 - z0)];
-      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6) continue; // кнопка «Бросить»
-      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[2] - p[2]))) : 9;
+    for (let i = 0; i < 60; i++) {
+      const y = 2.5 + Math.random() * (0.5 + extra);
+      const k = camH / (camH - y - 0.6);
+      const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
+      const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+      const p = [(Math.random() * 2 - 1) * xr, y, z0 + Math.random() * Math.max(0, z1 - z0)];
+      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6 && p[1] < 3.2) continue; // кнопка «Бросить»
+      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[1] - p[1], t[2] - p[2]))) : 9;
       if (d > bestD) { bestD = d; best = p; }
     }
-    return best || [0, 2.6, z0];
+    return best || [0, 2.6, (-bounds.d / 2 + bounds.top + 0.15) / k0 + r];
   }
   /**
    * Тряска: кубы плавно покачиваются в воздухе и медленно кувыркаются, а раз в две-три секунды все разом
@@ -711,12 +951,12 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function launch(b, k = 1) {
     if (b.fromAir) {
       const ang = Math.random() * Math.PI * 2, sp = k * (4 + Math.random() * 5);
-      b.v = [Math.cos(ang) * sp - b.x[0] * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
+      b.v = [Math.cos(ang) * sp - (b.x[0] - (bounds.cx || 0)) * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
       b.w = [(Math.random() - 0.5) * 40, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 40];
       return;
     }
     const speed = k * (8 + Math.random() * 9);
-    const ang = (Math.random() - 0.5) * 0.9 - (b.x[0] / bounds.w) * 0.5;
+    const ang = (Math.random() - 0.5) * 0.9 - ((b.x[0] - (bounds.cx || 0)) / (bounds.aw || bounds.w)) * 0.5;
     b.v = [Math.sin(ang) * speed, 3 + Math.random() * 4, -Math.cos(ang) * speed];
     if (b.x[2] < 0) b.v[2] = -b.v[2] * 0.6; // кубы в верхней половине летят вниз, навстречу
     b.w = [(Math.random() - 0.5) * 34, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 34];
@@ -730,17 +970,25 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     if (frames) { applyFrame(frames[Math.min(frameAt, frames.length - 1)]); for (const b of bodies) if (b.target != null && !b.done) b.asleep = false; frames = null; playStart = 0; }
     const pool = opts.fresh ? [] : bodies.filter((b) => b.target == null);
     const used = [];
-    const cols = Math.max(1, Math.floor((bounds.w - 1.4) / 1.9));
+    // Новые кубы вылетают снизу сеткой с шагом STEP, которая помещается между стенками (не больше трёх рядов);
+    // не влезли — следующим слоем выше, как горсть, высыпанная из руки (TASK-146: раньше ряды уходили за верхнюю
+    // стенку и кубы начинали бросок друг в друге).
+    const STEP = 2;
+    const fresh = targets.filter((t) => !pool.some((b) => b.kind === t.kind)).length;
+    const cols = Math.max(1, Math.floor((bounds.aw - 1.2) / STEP));
+    const rows = Math.max(1, Math.min(3, Math.floor((bounds.d - bounds.top - bounds.bottom - 1.2) / STEP)));
     const lane = opts.lane ?? 0; // смещение ряда вылета по ширине (−0.5…0.5): у разных бросков — разные места
-    targets.forEach((t, i) => {
+    let ni = 0;
+    targets.forEach((t) => {
       const k = pool.findIndex((b) => b.kind === t.kind);
       let b;
       if (k >= 0) b = pool.splice(k, 1)[0];
       else {
-        // Новые кубы вылетают из-под нижнего края рядами, не налезая друг на друга.
-        const n = Math.min(targets.length, cols), col = i % cols, row = Math.floor(i / cols);
-        const x = (col + 0.5 - n / 2) * 1.9 + lane * (bounds.w - n * 1.9) + (Math.random() - 0.5) * 0.3;
-        b = makeBody(t.kind, { x: [x, 1.4 + Math.random() * 0.8 + row * 0.4, bounds.d / 2 - bounds.bottom - 1.3 - row * 1.9], skin: opts.skin });
+        const n = Math.min(fresh, cols), col = ni % cols, row = Math.floor(ni / cols) % rows, layer = Math.floor(ni / (cols * rows));
+        ni++;
+        const x = bounds.cx + (col + 0.5 - n / 2) * STEP + lane * Math.max(0, bounds.aw - 1.2 - n * STEP) + (Math.random() - 0.5) * 0.2;
+        const z = bounds.d / 2 - bounds.bottom - 1.1 - row * STEP;
+        b = makeBody(t.kind, { x: [x, 1.3 + layer * STEP + Math.random() * 0.3, z], skin: opts.skin });
         bodies.push(b);
       }
       b.skin = opts.skin || b.skin;
@@ -754,25 +1002,37 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     });
     // Кубы лотка, не вошедшие в бросок, уходят (стол хранит прежние броски до угасания).
     if (!opts.keep) { dispose(bodies.filter((b) => !used.includes(b))); bodies = used.slice(); }
-    // Просчёт без экрана: все кубы сцены (спящие — опоры). Куб не остаётся лежать на соседе:
-    // такой исход просчитывается заново с другим замахом (до пяти попыток).
-    let sim, map, rec, finalQ;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt) for (const b of used) launch(b, opts.speed);
-      sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
-      map = new Map(sim.map((s, i) => [s, bodies[i]]));
-      rec = [];
+    // Просчёт без экрана: все кубы сцены (спящие — опоры). Кубы, как настоящие, могут лечь кучей друг на друга
+    // и чуть наискось (TASK-139); число читается с грани, которая смотрит вверх сильнее остальных.
+    const sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
+    const map = new Map(sim.map((s, i) => [s, bodies[i]]));
+    const rec = [];
+    hitLog = { frame: 0, byKey: new Map() };
+    let hits;
+    try {
       for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
+        hitLog.frame = f;
         stepWorld(sim, bounds);
         rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
       }
-      finalQ = sim.map((s) => alignedQuat(s));
-      if (!sim.some((s, i) => lowest(s, finalQ[i]) > 0.12)) break;
-    }
-    // Доводка: лечь ровно на грань и коснуться дна.
+    } finally { hits = hitLog ? [...hitLog.byKey.values()] : []; hitLog = null; }
+    // Звук по кадрам: в одном кадре — не больше пяти самых сильных ударов.
+    const byFrame = new Map();
+    for (const h of hits) { const l = byFrame.get(h.f) || []; l.push(h); byFrame.set(h.f, l); }
+    for (const [f, l] of byFrame) byFrame.set(f, l.sort((a, b) => b.v - a.v).slice(0, 5));
+    // Доводка — только у кубов, что лежат на дне сами по себе: ровно на грань и до дна. Куб на соседе или
+    // впритык к нему остаётся как лёг: выравнивание вдавило бы его в соседа.
+    const free = sim.map((s) => lowest(s) < 0.06 && !sim.some((o) => o !== s && touching(s, o, 0.12)));
+    const finalQ = sim.map((s, i) => (free[i] ? alignedQuat(s) : s.q));
     const last = rec[rec.length - 1] || sim.map((s) => [map.get(s), [...s.x], [...s.q], [0, 0, 0], [0, 0, 0]]);
-    const drop = sim.map((s, i) => { const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
-    for (let k = 1; k <= 8; k++) rec.push(last.map(([b, x, q], i) => [b, [x[0], x[1] - drop[i] * (k / 8), x[2]], qslerp(q, finalQ[i], k / 8), [0, 0, 0], [0, 0, 0]]));
+    const drop = sim.map((s, i) => { if (!free[i]) return 0; const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
+    // Итоговые места: после выравнивания кубы, вошедшие друг в друга, разводятся — сквозь соседа не лежит никто.
+    const fin = sim.map((s, i) => ({ g: s.g, x: [s.x[0], s.x[1] - drop[i], s.x[2]], q: finalQ[i] }));
+    separate(fin, bounds);
+    for (let k = 1; k <= 8; k++) {
+      const t = k / 8;
+      rec.push(last.map(([b, x, q], i) => [b, [x[0] + (fin[i].x[0] - x[0]) * t, x[1] + (fin[i].x[1] - x[1]) * t, x[2] + (fin[i].x[2] - x[2]) * t], qslerp(q, finalQ[i], t), [0, 0, 0], [0, 0, 0]]));
+    }
     // Метки: сверху — нужное число у каждого брошенного куба (и у задетых прежних).
     sim.forEach((s, i) => {
       const b = map.get(s);
@@ -787,7 +1047,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     // Текстуры с новыми метками готовим до старта: тяжёлый первый кадр не съедает начало полёта.
     for (const b of bodies) prepare(b);
     for (const b of used) b.settled = (x) => { x.done = true; if (x.target.dropped) x.alpha = 0.4; if (x.target.glow) x.glow = x.target.glow; };
-    frames = rec; frameAt = 0; playStart = 0;
+    frames = rec; frameAt = 0; playStart = 0; sounds = sound > 0 ? byFrame : null; soundAt = -1;
     return new Promise((resolve) => {
       pending.push(() => {
         const cx = used.reduce((a, b) => a + b.x[0], 0) / (used.length || 1), cz = used.reduce((a, b) => a + b.x[2], 0) / (used.length || 1);
@@ -804,10 +1064,10 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function placeDice(targets, opts = {}) {
     frames = null;
     if (!opts.keep) { dispose(bodies); bodies = []; }
-    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.w / 2)));
+    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.aw / 2)));
     const lane = opts.lane ?? 0;
     const placed = targets.map((t, i) => {
-      const x = ((i % cols) + 0.5 - cols / 2) * 2 + lane * (bounds.w - cols * 2);
+      const x = bounds.cx + ((i % cols) + 0.5 - cols / 2) * 2 + lane * Math.max(0, bounds.aw - cols * 2);
       const z = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * 2 + (bounds.top - bounds.bottom) / 2;
       const b = makeBody(t.kind, { x: [x, 0, z], skin: opts.skin });
       b.q = alignedQuat(b);
@@ -834,13 +1094,13 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   resize();
   return {
-    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, resize,
+    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, setInsets, resize,
     clear() { dispose(bodies); bodies = []; frames = null; const done = pending; pending = []; for (const r of done) r(); render(); },
     /** Кубы, лежащие в лотке до броска. */
     kinds: () => bodies.filter((b) => b.target == null).map((b) => b.kind),
     get count() { return bodies.length; },
     get playing() { return !!frames; },
-    destroy() { destroyed = true; cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
+    destroy() { destroyed = true; artWaiters.delete(onArt); cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
   };
 }
 

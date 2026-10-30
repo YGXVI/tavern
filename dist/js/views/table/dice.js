@@ -10,6 +10,7 @@ import { userAvatar, popover, closePopover } from '../../ui/kit.js';
 import { DICE } from '../../data/rules.js';
 import { diceTray, diceFloor, poolLabel } from './dice-tray.js';
 import { SKINS, skinById, railDie, mySkin, setMySkin } from './dice-art.js';
+import { setDiceSound, diceSoundOn } from './dice3d.js';
 
 function rnd(sides) { return rollFormulaEngine(`1d${sides}`).total; }
 
@@ -183,7 +184,11 @@ function skinsPopover(ctx, anchor) {
   const pool = dicePool(ctx);
   railPopover(ctx, anchor, `<div class="dp-title">Набор кубов</div>
     <div class="skin-grid" role="radiogroup" aria-label="Набор кубов">${SKINS.map((s) => `<button class="skin-opt ${s.id === pool.skin ? 'on' : ''}" data-skin="${s.id}" role="radio" aria-checked="${s.id === pool.skin}">${railDie(20, s.id)}<span>${esc(s.name)}</span></button>`).join('')}</div>
-    <p class="dp-hint">Ваши кубы в этом наборе увидят все за столом</p>`, (e) => {
+    <p class="dp-hint">Ваши кубы в этом наборе увидят все за столом</p>
+    <label class="dp-row dp-sound">${icon(diceSoundOn() ? 'volume-high' : 'volume-off', 20)}<span class="grow"><b>Звук кубов</b><small>Удары о лоток и друг о друга</small></span><input type="checkbox" class="switch" data-dice-sound ${diceSoundOn() ? 'checked' : ''}></label>`, (e) => {
+    // Звук кубов (TASK-145): только на этой вкладке, переключается не закрывая окна.
+    const sw = e.target.closest('[data-dice-sound]');
+    if (sw) { setDiceSound(sw.checked); sw.closest('.dp-sound').querySelector('svg').outerHTML = icon(sw.checked ? 'volume-high' : 'volume-off', 20); return; }
     const b = e.target.closest('[data-skin]'); if (!b) return;
     pool.skin = b.dataset.skin; setMySkin(ctx.userId, pool.skin);
     closePopover();
