@@ -1,6 +1,6 @@
 // Ввод на карте: мышь, тачпад, касания, клавиатура. Камера + инструменты.
-// Колесо мыши и щипок — масштаб к курсору (TASK-076); карту двигают пробел + перетаскивание, правая или средняя
-// кнопка, на тачпаде — два пальца.
+// Колесо (мышь и два пальца тачпада) и щипок — масштаб к курсору; карту двигают пробел + перетаскивание
+// или колесо, Shift + колесо — вбок, правая или средняя кнопка.
 import { uid, clamp } from '../../core/dom.js';
 import { bus } from '../../core/store.js';
 import {
@@ -40,19 +40,21 @@ export function attachInput(ctx) {
     return { kind: 'empty' };
   }
 
-  // ——— Колесо: масштаб (TASK-076, sol0139: «колесо — приближение, перемещение через пробел») ———
+  // ——— Колесо: всегда масштаб (sol0139: «колесо — приближение, перемещение через пробел») ———
+  // Мышь от тачпада по числам не отличить: при масштабе экрана Windows 125–150 %, на Mac и у плавных колёс
+  // шаг дробный или мелкий, и прежняя проверка «целое и ≥ 40» принимала мышь за тачпад и двигала карту.
   vp.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (hasModal()) return;
-    const mouseWheel = e.deltaMode !== 0 || (Math.abs(e.deltaY) >= 40 && e.deltaX === 0 && Number.isInteger(e.deltaY));
     const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? vp.clientHeight : 1; // строки и страницы → пиксели
-    const dy = e.deltaY * unit;
-    if (mouseWheel || e.ctrlKey || e.metaKey) {
-      // Колесо мыши, Ctrl/Cmd + колесо и щипок на тачпаде — масштаб к курсору.
-      ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-dy * (mouseWheel ? 0.0016 : 0.012)));
+    const dx = e.deltaX * unit, dy = e.deltaY * unit;
+    if (space || Math.abs(dx) > Math.abs(dy)) {
+      // Пробел + колесо — двигать карту; Shift + колесо и боковой жест тачпада — вбок.
+      ctx.camera.pan(-dx, -dy);
     } else {
-      // Два пальца на тачпаде — двигать карту (пробел + перетаскивание и правая кнопка — тоже).
-      ctx.camera.pan(-e.deltaX * unit, -dy);
+      // Щипок тачпада приходит как Ctrl + колесо мелкими шагами — ему нужна чувствительность выше.
+      const pinch = (e.ctrlKey || e.metaKey) && Math.abs(dy) < 40;
+      ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-clamp(dy, -240, 240) * (pinch ? 0.012 : 0.0016)));
     }
     closePopover();
     ctx.hoverWorld = W(e);
