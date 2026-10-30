@@ -69,8 +69,8 @@ export function assemble(rows0) {
     scene.terrain = sd.terrain || { difficult: [], blocked: [] };
     scene.pins = [...(sd.pins || []), ...(sec.pins || [])];
     scene.traps = sec.traps || [];
-    scene.tokens = (tok.get(s.id) || []).map((t) => ({ ...t.data, id: t.id, characterId: t.character_id || undefined, hidden: !!t.hidden }));
-    for (const t of scene.tokens) if (t.characterId === undefined) delete t.characterId;
+    scene.tokens = (tok.get(s.id) || []).map((t) => ({ ...t.data, id: t.id, characterId: t.character_id || undefined, ownerId: t.owner_id || undefined, hidden: !!t.hidden }));
+    for (const t of scene.tokens) { if (t.characterId === undefined) delete t.characterId; if (t.ownerId === undefined) delete t.ownerId; }
     scene.drawings = (drw.get(s.id) || []).map((x) => ({ ...x.data, id: x.id, author: x.author || null }));
     return scene;
   });
@@ -111,8 +111,12 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
     rows.secrets.set(id, { scene_id: id, campaign_id: c.id, data: { traps, pins: secret } });
     rows.explored.set(id, { scene_id: id, campaign_id: c.id, cells: [...explored] });
     tokens.forEach((t, k) => {
-      const { id: tid, characterId, hidden, ...td } = t;
-      rows.tokens.set(tid, { id: tid, campaign_id: c.id, scene_id: id, character_id: characterId || null, hidden: !!hidden, ord: prev.tokens.get(tid)?.ord ?? now + k, data: td });
+      const { id: tid, characterId, ownerId, hidden, ...td } = t;
+      const row = { id: tid, campaign_id: c.id, scene_id: id, character_id: characterId || null, hidden: !!hidden, ord: prev.tokens.get(tid)?.ord ?? now + k, data: td };
+      // Владелец своего токена и призыва (TASK-123) — колонка owner_id. Пишем её, только когда владелец есть
+      // или только что снят: токены без владельца отправляются как раньше.
+      if (ownerId || prev.tokens.get(tid)?.owner_id) row.owner_id = ownerId || null;
+      rows.tokens.set(tid, row);
     });
     drawings.forEach((d, k) => {
       const { id: did, author, ...dd } = d;
