@@ -2,7 +2,7 @@
 
 ## Задача и участники
 
-- TASK-ID: TASK-036 · Issue [#63](https://github.com/YGXVI/tavern/issues/63).
+- TASK-ID: TASK-063 · Issue [#63](https://github.com/YGXVI/tavern/issues/63). Первоначально ошибочно назван TASK-036 — этот номер у задачи процесса #60 (AGENTS.md, 30.10); в commit `4568380` и `0cc5a14` остался прежний номер, история не переписывается.
 - Автор: sol0139 + Claude Code (облачная сессия sol0139). Проверяющий: Яра — при слиянии пачки в `main`. Интегратор: Claude по DEC-013.
 - Ветка `claude/dev` (DEC-013), база `main` `a9c92e6`.
 
