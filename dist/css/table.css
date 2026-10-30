@@ -394,44 +394,7 @@ button.init-num:hover { background: var(--bg-control-off); }
 .init-who:hover { background: var(--bg-hover); }
 .widget .panel-footer { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
 
-/* Кубы */
-.dice-widget { width: 340px; }
-.dice-rail { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 12px 12px 8px; }
-.rail-die { position: relative; aspect-ratio: 1; border-radius: 10px; padding: 4px; transition: transform .1s, background .1s; }
-.rail-die:hover { background: var(--bg-hover); transform: translateY(-2px); }
-.rail-die:active { transform: scale(.94); }
-.rail-die .count { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--brand-500); color: var(--text-on-accent); font: 700 10px/16px var(--font-text); }
-.die { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 2px rgb(0 0 0 / .5)); }
-.tray { margin: 0 12px 12px; }
-.tray-felt {
-  min-height: 132px; padding: 12px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  background: radial-gradient(120% 120% at 50% 30%, #23212b, var(--dice-felt)); border: 6px solid var(--dice-frame);
-  box-shadow: inset 0 0 0 1px var(--dice-frame-dark), inset 0 6px 18px rgb(0 0 0 / .6), 0 1px 0 rgb(255 255 255 / .06);
-}
-.tray-dice { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
-.tray-die { width: 46px; display: block; }
-button.tray-die:hover { filter: brightness(1.1); }
-.tray-die.rolled .die { animation: tumble .5s cubic-bezier(.2, .9, .3, 1.2); }
-.tray-die.crit .die { filter: drop-shadow(0 0 8px var(--brand-500)); }
-.tray-die.fumble .die { filter: drop-shadow(0 0 8px var(--red-500)); }
-.tray-die.dropped { opacity: .35; transform: scale(.85); }
-@keyframes tumble { from { transform: rotate(-200deg) scale(.4) translateY(-20px); opacity: 0; } }
-.tray-total { display: flex; align-items: baseline; gap: 10px; }
-.tray-total span { font: 500 12px/14px var(--font-text); color: var(--text-secondary); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tray-total b { font: 600 34px/1 var(--font-display); color: var(--brand-400); text-shadow: 0 2px 10px rgb(233 176 82 / .35); }
-.tray-hint { font: 400 12px/16px var(--font-text); color: var(--text-tertiary); text-align: center; max-width: 220px; }
-.tray-foot { display: flex; align-items: center; gap: 6px; padding-top: 10px; }
-.mod-ctl { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--r-full); background: var(--bg-control); }
-.roll-modes { display: flex; gap: 1px; padding: 2px; border-radius: var(--r-full); background: var(--bg-control); }
-.roll-modes .icon-btn.active { background: var(--brand-500); color: var(--text-on-accent); }
-.mod-val { min-width: 34px; text-align: center; font: 600 13px/1 var(--font-text); }
-.roll-btn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-500); color: var(--text-on-accent); box-shadow: 0 4px 14px rgb(233 176 82 / .35); }
-.roll-btn:disabled { background: var(--bg-control); color: var(--icon-disabled); box-shadow: none; }
-.roll-btn:not(:disabled):hover { filter: brightness(1.08); }
-.dice-log { max-height: 150px; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--stroke-subtle); padding-top: 10px; }
-.log-row { display: flex; align-items: center; gap: 8px; font: 400 12px/14px var(--font-text); }
-.log-row small { color: var(--text-tertiary); }
-.log-row b { font: 600 13px/1 var(--font-display); color: var(--brand-400); min-width: 20px; text-align: right; }
+/* Кубы: рейка, лоток, кубы на столе — в конце файла (TASK-092/093). */
 
 /* ——— Поповеры стола ——— */
 .door-pop, .wall-pop, .light-pop, .pin-pop, .portal-pop, .trap-pop, .warn-pop, .pause-pop, .pick-pop { width: 320px; max-width: 100%; }
@@ -804,30 +767,81 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .atk-desc[data-desc] { cursor: pointer; }
 .atk-desc.open { display: block; overflow: visible; }
 
-/* ——— Лоток с объёмными кубами (TASK-092) ———
-   Как в референсе: высокое тёмное сукно в деревянной рамке. Стоит под кнопкой «Кубы»,
-   а при открытом виджете — справа от него. */
-.dice-tray { position: absolute; z-index: calc(var(--z-chrome) + 1); top: calc(var(--edge) + 72px); left: calc(var(--edge) + 244px); width: 300px; height: min(520px, calc(100vh - 2 * var(--edge) - 72px - 96px)); animation: rise .18s ease-out; }
-.table:has(.ch-widget .dice-widget) .dice-tray { left: calc(var(--edge) + 244px + 340px + 12px); }
+/* ——— Кубы по макету Figma «Dice» (TASK-100; объёмные кубы — TASK-092) ———
+   Рейка (dice-rail) под кнопкой «Кубы», справа от неё лоток (dice-tray 340×624): рамка-дерево, сукно, верхняя полоса,
+   подвал. Броски не из рейки и чужие открытые броски падают на стол (.dice-floor). */
+.dice-rail { gap: 6px; padding: 8px; }
+.rail-btn { position: relative; width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: var(--r-full); border: 1px solid transparent; transition: background .12s, border-color .12s, transform .1s; }
+.rail-die:hover { background: var(--bg-hover); }
+.rail-die:active { transform: scale(.94); }
+.rail-die.selected, .rail-die.dice-set { background: var(--brand-900); border-color: var(--stroke-accent); }
+.rail-svg { width: 32px; height: 32px; display: block; }
+.rail-btn .count, .rail-badge { position: absolute; top: -5px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-full); border: 2px solid var(--neutral-200); background: var(--brand-500); color: var(--text-on-accent); font: 700 10px/14px var(--font-text); text-align: center; pointer-events: none; }
+.dice-tray { position: absolute; z-index: calc(var(--z-chrome) + 1); top: calc(var(--edge) + 72px); left: calc(var(--edge) + 244px + 60px + 12px); width: 340px; height: min(624px, calc(100vh - var(--edge) - 72px - var(--edge))); padding: 8px; border: 1px solid var(--stroke-subtle); border-radius: 24px; background: linear-gradient(180deg, var(--dice-frame), var(--dice-frame-dark)); box-shadow: 0 4px 8px rgb(0 0 0 / .6); animation: rise .18s ease-out; }
 .dice-tray.hidden { display: none; }
-.dt-frame { height: 100%; padding: 8px; border-radius: 22px; background: linear-gradient(150deg, var(--dice-frame), var(--dice-frame-dark) 85%); box-shadow: var(--shadow-panel), inset 0 1px 0 rgb(255 255 255 / .1), inset 0 -2px 6px rgb(0 0 0 / .4); }
-.dt-felt { position: relative; height: 100%; border-radius: 15px; overflow: hidden; background: radial-gradient(110% 80% at 50% 45%, #1c1d24, var(--dice-felt) 75%); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .7), inset 0 12px 28px rgb(0 0 0 / .75), inset 0 -8px 20px rgb(0 0 0 / .5); }
+.dt-felt { position: relative; height: 100%; border-radius: 16px; overflow: hidden; background: var(--dice-felt); }
+.dt-felt::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 4px 18px rgb(0 0 0 / .75); pointer-events: none; }
 .dt-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.dt-head { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: grid; grid-template-columns: 36px 1fr 36px; align-items: start; padding: 8px; pointer-events: none; }
-.dt-head > * { pointer-events: auto; }
-.dt-head .icon-btn { background: rgb(0 0 0 / .35); }
-.dt-head .icon-btn:last-child { grid-column: 3; }
-.dt-total { grid-column: 2; text-align: center; padding-top: 2px; pointer-events: none; }
-.dt-total b { display: block; font: 600 32px/36px var(--font-display); color: var(--text-primary); text-shadow: 0 2px 12px rgb(0 0 0 / .9); animation: rise .2s ease-out; }
-.dt-total small { display: block; margin-top: 2px; font: 500 11px/14px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 6px #000; }
-.dt-hint { position: absolute; left: 24px; right: 24px; top: 46%; margin: 0; text-align: center; font: 400 13px/18px var(--font-text); color: var(--text-tertiary); pointer-events: none; }
-.dt-roll { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 18px; background: var(--brand-500); color: var(--text-on-accent); font: 600 13px/1 var(--font-text); box-shadow: 0 6px 18px rgb(0 0 0 / .5); }
-.dt-roll:hover { filter: brightness(1.08); }
-.dt-roll:active { transform: translateX(-50%) scale(.96); }
-.dt-reroll.hidden, .dt-roll.hidden, .dt-hint.hidden { display: none; }
-/* Плоский лоток виджета заменён объёмным — в виджете остаются рельса, модификатор, режимы и журнал. */
-.tray.tray-3d { margin-top: 4px; }
+.dt-top { position: absolute; z-index: 1; top: 12px; left: 12px; right: 12px; height: 44px; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dt-lead { width: 44px; height: 44px; display: flex; align-items: center; justify-content: flex-start; flex: none; }
+.dt-top .icon-btn-sm { width: 36px; height: 36px; color: var(--text-primary); }
+/* Большая кнопка броска посреди лотка: кубы висят вокруг неё. */
+.dt-go { position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%); height: 52px; padding: 0 22px 0 28px; display: none; align-items: center; gap: 10px; border-radius: var(--r-full); background: var(--brand-500); color: var(--text-on-accent); font: 600 16px/20px var(--font-text); letter-spacing: .2px; white-space: nowrap; box-shadow: 0 6px 18px rgb(0 0 0 / .55), 0 0 22px rgb(233 176 82 / .55); transition: transform .12s, box-shadow .15s, filter .12s; animation: go-breathe 1.5s ease-in-out infinite; }
+.dt-go:hover { filter: brightness(1.06); box-shadow: 0 6px 18px rgb(0 0 0 / .55), 0 0 30px rgb(233 176 82 / .8); }
+.dt-go:active { transform: translate(-50%, -50%) scale(.95); }
+.dt-go:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
+.dice-tray[data-state="ready"] .dt-go { display: inline-flex; }
+@keyframes go-breathe { 50% { box-shadow: 0 6px 18px rgb(0 0 0 / .55), 0 0 34px rgb(233 176 82 / .85); } }
+@media (prefers-reduced-motion: reduce) { .dt-go { animation: none; } }
+.dt-summary { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; pointer-events: none; }
+.dt-summary b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font: 600 16px/20px var(--font-text); }
+.dt-summary small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-tertiary); font: 400 12px/14px var(--font-text); }
+.dice-tray[data-state="result"] .dt-summary b { font: 500 36px/40px var(--font-display); letter-spacing: -1.3px; animation: rise .2s ease-out; }
+.dt-clear { flex: none; margin-left: 4px; }
+.dt-empty { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 220px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--text-primary); pointer-events: none; }
+.dt-empty svg { color: var(--text-secondary); }
+.dt-empty b { font: 600 14px/16px var(--font-text); }
+.dt-empty span { width: 200px; font: 400 12px/14px var(--font-text); color: var(--text-tertiary); }
+.dt-bottom { position: absolute; z-index: 1; left: 12px; right: 12px; bottom: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.dt-foot { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; color: var(--text-tertiary); font: 400 12px/14px var(--font-text); }
+/* Что выпало на каждом кубе — мелко, над подписью. */
+.dt-rolls { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; font: 400 11px/14px var(--font-text); color: var(--text-tertiary); }
+.dt-rolls:empty { display: none; }
+.dt-rolls b, .df-rolls b { font: 600 11px/14px var(--font-text); color: var(--text-secondary); }
+.dt-rolls s, .df-rolls s { opacity: .6; }
+.dt-foot-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dice-tray[data-state="empty"] :is(.dt-top, .dt-bottom), .dice-tray:not([data-state="empty"]) .dt-empty, .dice-tray[data-state="rolling"] :is(.dt-summary, .dt-bottom, .dt-lead) { display: none; }
+.dice-tray[data-state="rolling"] .dt-top { justify-content: flex-end; }
+/* Всплывашки рейки: набор кубов, видимость, модификатор, преимущество. */
+.dice-pop { width: 280px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.dice-pop.skins { width: 300px; }
+.dp-title { padding: 2px 4px 6px; font: 600 14px/16px var(--font-text); }
+.dp-hint { margin: 6px 4px 0; font: 400 12px/16px var(--font-text); color: var(--text-tertiary); }
+.dp-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; text-align: left; color: var(--text-primary); }
+.dp-row:hover { background: var(--bg-hover); }
+.dp-row.on { background: var(--brand-900); }
+.dp-row b { display: block; font: 600 13px/16px var(--font-text); }
+.dp-row small { display: block; font: 400 12px/14px var(--font-text); color: var(--text-tertiary); }
+.dp-row > svg:last-child { color: var(--brand-500); }
+.dp-stepper { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 0 8px; }
+.dp-mod { min-width: 64px; text-align: center; font: 500 28px/32px var(--font-display); }
+.dp-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.skin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.skin-opt { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border-radius: 14px; border: 1px solid transparent; font: 500 12px/14px var(--font-text); color: var(--text-secondary); }
+.skin-opt .rail-svg { width: 40px; height: 40px; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .5)); }
+.skin-opt:hover { background: var(--bg-hover); color: var(--text-primary); }
+.skin-opt.on { background: var(--brand-900); border-color: var(--stroke-accent); color: var(--text-primary); }
+/* Кубы на столе: слой поверх карты, под панелями; подпись «кто · что · сколько» над кубами. */
+.dice-floor { position: absolute; inset: 0; z-index: calc(var(--z-chrome) - 1); pointer-events: none; }
+.df-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.df-label { position: absolute; transform: translate(-50%, -100%); max-width: 360px; display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: var(--r-full); background: rgb(0 0 0 / .62); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 4px 8px rgb(0 0 0 / .6); font: 600 12px/14px var(--font-text); color: var(--text-primary); white-space: nowrap; animation: rise .2s ease-out; transition: opacity .6s; }
+.df-label > b { font: 500 20px/24px var(--font-display); color: var(--brand-500); }
+.df-text { display: flex; flex-direction: column; min-width: 0; }
+.df-rolls { display: flex; gap: 2px 8px; flex-wrap: wrap; font: 400 11px/13px var(--font-text); color: var(--text-tertiary); }
+.df-label.out { opacity: 0; }
 @media (max-width: 720px) {
-  .dice-tray, .table:has(.ch-widget .dice-widget) .dice-tray { top: auto; left: 8px; right: 8px; bottom: 84px; width: auto; height: min(46vh, 380px); }
-  .table:has(.dice-tray:not(.hidden)) .table-toasts { bottom: calc(92px + min(46vh, 380px)); }
+  .ch-widget:has(.dice-widget) { right: auto; }
+  .dice-widget .dice-rail { flex-direction: row; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
+  .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
