@@ -296,6 +296,12 @@ export class Panels {
         const m = this.saveMod(t, r.ability);
         cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${r.dc}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
       }
+      // Герой товарища, которого нет за столом: тихая карточка «бросить за него».
+      for (const r of reqs) for (const t of this.friendSaveTokens(r)) {
+        const ab = ABILITIES.find((a) => a.id === r.ability);
+        const name = tokenStats(c, t).name;
+        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${r.dc} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
+      }
     }
     const html = cards.join('');
     if (this.floats.__html !== html) {
@@ -324,6 +330,12 @@ export class Panels {
   mySaveTokens(r) {
     const ctx = this.ctx;
     return r.tokenIds.map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter((t) => t && ctx.isMine(t) && !r.results[t.id]);
+  }
+
+  /** Герои других игроков, которых нет за столом: за них можно бросить (решение 30.10). */
+  friendSaveTokens(r) {
+    const ctx = this.ctx;
+    return r.tokenIds.map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter((t) => t && !r.results[t.id] && ctx.playsFor(t) && ctx.ownerAway(t));
   }
 
   saveMod(t, ability) {
@@ -488,7 +500,7 @@ export class Panels {
     const ctx = this.ctx;
     const cur = currentEntry(ctx.c, ctx.scene);
     if (!cur) return;
-    if (!ctx.isMaster && !ctx.isMine(cur.token)) return;
+    if (!ctx.isMaster && !ctx.playsFor(cur.token)) return;
     this.nextTurn(1);
   }
 

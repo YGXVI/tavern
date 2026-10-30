@@ -64,6 +64,14 @@ export function mountTable(root, cid) {
   // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
   ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;
+  // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
+  ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
+  // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
+  ctx.ownerAway = (t) => {
+    if (!t?.characterId || ctx.isMine(t)) return false;
+    const owner = ctx.c?.members.find((m) => m.characterId === t.characterId && m.status === 'active');
+    return !owner || !onlineUsers(ctx.cid).has(owner.userId);
+  };
   ctx.canControl = (t) => canControlToken(ctx.c, ctx.userId, t) && !(ctx.c.paused && !ctx.isMaster);
 
   ctx.eyes = () => {

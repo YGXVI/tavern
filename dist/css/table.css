@@ -507,6 +507,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .float-card .titles b { font: 600 14px/16px var(--font-text); }
 .float-card .titles small { font: 400 12px/14px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-prompt { box-shadow: inset 0 0 0 1.5px var(--stroke-accent), var(--glow-turn); }
+.save-prompt.friend { box-shadow: inset 0 0 0 1px var(--stroke-subtle), var(--shadow-panel); }
 .save-card { flex-direction: column; align-items: stretch; }
 .sv-head { display: flex; align-items: center; gap: 10px; }
 .sv-list { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow: auto; }

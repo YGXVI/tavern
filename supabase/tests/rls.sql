@@ -53,7 +53,8 @@ select pg_temp.ok('мастер пишет тайное сцены', $q$insert i
 select pg_temp.ok('мастер ставит токены', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values
   ('t-gob', 'c-rls', 's-1', null, false, 1, '{"kind":"foe","name":"Гоблин","x":100,"y":100,"hp":7}'),
   ('t-ogre', 'c-rls', 's-1', null, true, 2, '{"kind":"foe","name":"Огр","x":300,"y":300,"hp":59}'),
-  ('t-lock', 'c-rls', 's-1', null, false, 3, '{"kind":"item","name":"Алтарь","x":50,"y":50,"locked":true}')$q$);
+  ('t-lock', 'c-rls', 's-1', null, false, 3, '{"kind":"item","name":"Алтарь","x":50,"y":50,"locked":true}'),
+  ('t-q2', 'c-rls', 's-1', 'ch-q', false, 7, '{"kind":"hero","name":"Торин","x":70,"y":70}')$q$);
 select pg_temp.ok('мастер пишет скрытый бросок', $q$insert into public.log_entries (id, campaign_id, author, at, vis, data) values ('r-gm', 'c-rls', '00000000-0000-0000-0000-00000000000a', 1, 'gm', '{"kind":"roll"}')$q$);
 select pg_temp.ok('тайная часть броска', $q$insert into public.log_secrets (id, campaign_id, author, vis, data) values ('r-gm', 'c-rls', '00000000-0000-0000-0000-00000000000a', 'gm', '{"label":"Огр: атака","total":19}')$q$);
 reset role;
@@ -89,7 +90,7 @@ select pg_temp.err('роль мастера себе не дать', $q$update p
 select pg_temp.ok('игрок ставит своего героя', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values ('t-p', 'c-rls', 's-1', 'ch-p', false, 4, '{"kind":"hero","name":"Лира","x":10,"y":10}')$q$);
 select pg_temp.err('чужого героя на сцену не поставить', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values ('t-q', 'c-rls', 's-1', 'ch-q', false, 5, '{"kind":"hero"}')$q$);
 select pg_temp.err('существо игрок не создаёт', $q$insert into public.tokens (id, campaign_id, scene_id, hidden, ord, data) values ('t-x', 'c-rls', 's-1', false, 6, '{"kind":"foe"}')$q$);
-select pg_temp.cnt('игрок видит только нескрытые токены', $q$select 1 from public.tokens where campaign_id = 'c-rls'$q$, 3);
+select pg_temp.cnt('игрок видит только нескрытые токены', $q$select 1 from public.tokens where campaign_id = 'c-rls'$q$, 4);
 select pg_temp.cnt('скрытого огра в ответе нет', $q$select 1 from public.tokens where id = 't-ogre'$q$, 0);
 select pg_temp.cnt('тайное сцены (ловушки) не видно', $q$select 1 from public.scene_secrets$q$, 0);
 select pg_temp.cnt('тайная часть броска мастера не видна', $q$select 1 from public.log_secrets$q$, 0);
@@ -119,7 +120,7 @@ reset role;
 
 -- ——— Бой и спасброски ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
-select pg_temp.ok('мастер начинает бой', $q$insert into public.combats (campaign_id, data) values ('c-rls', '{"active":true,"round":1,"turn":0,"current":"t-gob","entries":[{"tokenId":"t-gob","init":15},{"tokenId":"t-p","init":null}],"moved":{}}')$q$);
+select pg_temp.ok('мастер начинает бой', $q$insert into public.combats (campaign_id, data) values ('c-rls', '{"active":true,"round":1,"turn":0,"current":"t-gob","entries":[{"tokenId":"t-gob","init":15},{"tokenId":"t-p","init":null},{"tokenId":"t-q2","init":null},{"tokenId":"t-ogre","init":null}],"moved":{}}')$q$);
 select pg_temp.ok('мастер просит спасбросок', $q$insert into public.save_requests (id, campaign_id, data) values ('sv-1', 'c-rls', '{"status":"open","results":{}}')$q$);
 select pg_temp.cnt('мастер видит тайную часть броска', $q$select 1 from public.log_secrets$q$, 1);
 select pg_temp.ok('мастер выключает открытое перемещение', $q$update public.campaigns set data = jsonb_set(data, '{settings,openMovement}', 'false') where id = 'c-rls'$q$);
@@ -127,21 +128,25 @@ reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.rows('игрок бросает свою инициативу', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '12') where campaign_id = 'c-rls'$q$, 1);
 select pg_temp.err('второй раз инициативу не переписать', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '20') where campaign_id = 'c-rls'$q$);
+select pg_temp.rows('инициатива за другого героя (сидит с телефона)', $q$update public.combats set data = jsonb_set(data, '{entries,2,init}', '9') where campaign_id = 'c-rls'$q$, 1);
+select pg_temp.err('инициативу скрытого огра — мастер', $q$update public.combats set data = jsonb_set(data, '{entries,3,init}', '3') where campaign_id = 'c-rls'$q$);
 select pg_temp.err('инициативу гоблина не тронуть', $q$update public.combats set data = jsonb_set(data, '{entries,0,init}', '1') where campaign_id = 'c-rls'$q$);
-select pg_temp.err('чужой ход не закончить', $q$update public.combats set data = data || '{"ended":"t-gob"}' where campaign_id = 'c-rls'$q$);
+select pg_temp.err('ход монстра не закончить', $q$update public.combats set data = data || '{"ended":"t-gob"}' where campaign_id = 'c-rls'$q$);
 select pg_temp.err('раунд игрок не меняет', $q$update public.combats set data = data || '{"round":2}' where campaign_id = 'c-rls'$q$);
-select pg_temp.rows('своё движение в бою', $q$update public.combats set data = jsonb_set(data, '{moved}', '{"t-p":15}') where campaign_id = 'c-rls'$q$, 1);
+select pg_temp.rows('движение героя и видимого гоблина в бою', $q$update public.combats set data = jsonb_set(data, '{moved}', '{"t-p":15,"t-gob":10}') where campaign_id = 'c-rls'$q$, 1);
+select pg_temp.err('движение скрытого огра — мастер', $q$update public.combats set data = jsonb_set(data, '{moved,t-ogre}', '5') where campaign_id = 'c-rls'$q$);
 select pg_temp.rows('спасбросок своего героя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":13}') where id = 'sv-1'$q$, 1);
+select pg_temp.rows('спасбросок за другого героя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-q2}', '{"total":11}') where id = 'sv-1'$q$, 1);
 select pg_temp.err('спасбросок за гоблина нельзя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-gob}', '{"total":20}') where id = 'sv-1'$q$);
 select pg_temp.err('свой результат не переписать', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":20}') where id = 'sv-1'$q$);
 select pg_temp.err('выключено перемещение: гоблина не сдвинуть', $q$update public.tokens set data = data || '{"x":200}' where id = 't-gob'$q$);
 select pg_temp.rows('своего героя — можно', $q$update public.tokens set data = data || '{"x":30}' where id = 't-p'$q$, 1);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
-select pg_temp.ok('мастер передаёт ход игроку', $q$update public.combats set data = data || '{"turn":1,"current":"t-p"}' where campaign_id = 'c-rls'$q$);
+select pg_temp.ok('мастер передаёт ход Торину (его игрока нет за столом)', $q$update public.combats set data = data || '{"turn":2,"current":"t-q2"}' where campaign_id = 'c-rls'$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
-select pg_temp.rows('игрок заканчивает свой ход', $q$update public.combats set data = data || '{"ended":"t-p"}' where campaign_id = 'c-rls'$q$, 1);
+select pg_temp.rows('игрок заканчивает ход за другого героя', $q$update public.combats set data = data || '{"ended":"t-q2"}' where campaign_id = 'c-rls'$q$, 1);
 reset role;
 
 -- ——— Посторонний и ожидающий ———
