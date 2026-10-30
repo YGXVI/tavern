@@ -1,14 +1,16 @@
 // Чистые расчёты листа D&D 5e 2014 (TASK-004). Нет записи, случайных бросков и исполнения текста.
 export const knownInteger = (value) => Number.isSafeInteger(value) ? value : null;
+export const knownNumber = (value) => Number.isFinite(value) ? value : null;
 
 /** Пустой ввод остаётся неизвестным; Number('') и неявное приведение здесь запрещены. */
-export function parseSheetNumber(input, { nullable = true, min = -Infinity, max = Infinity } = {}) {
+export function parseSheetNumber(input, { nullable = true, integer = true, min = -Infinity, max = Infinity } = {}) {
   if (typeof input !== 'string' && typeof input !== 'number') return { valid: false, error: 'Нужно число' };
   const text = String(input).trim().replace(/^−/, '-');
   if (!text) return nullable ? { valid: true, value: null } : { valid: false, error: 'Введите число' };
-  if (!/^[+-]?\d+$/.test(text)) return { valid: false, error: 'Нужно целое число' };
+  const pattern = integer ? /^[+-]?\d+$/ : /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/;
+  if (!pattern.test(text)) return { valid: false, error: integer ? 'Нужно целое число' : 'Нужно число' };
   const value = Number(text);
-  if (!Number.isSafeInteger(value) || value < min || value > max) return { valid: false, error: 'Число вне допустимого диапазона' };
+  if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER || (integer && !Number.isSafeInteger(value)) || value < min || value > max) return { valid: false, error: 'Число вне допустимого диапазона' };
   return { valid: true, value };
 }
 

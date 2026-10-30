@@ -1,6 +1,6 @@
 // Read-only адаптер старого Character. Это view model, не новый формат записи JSONB.
 import { ABILITIES, SKILLS } from '../../data/rules.js';
-import { abilityModifier, knownInteger, sheetProficiency, checkBonus } from './sheet-rules.js';
+import { abilityModifier, knownInteger, knownNumber, sheetProficiency, checkBonus } from './sheet-rules.js';
 
 const list = (value) => Array.isArray(value) ? structuredClone(value) : [];
 const text = (value) => typeof value === 'string' ? value : '';
@@ -34,7 +34,7 @@ export function readLegacyCharacter(character) {
     level, abilities, proficiency,
     hp: { current: knownInteger(source.hp), max: knownInteger(source.hpMax), temp: knownInteger(source.tempHp) },
     ac: knownInteger(source.ac),
-    movement: { walk: knownInteger(source.speed) },
+    movement: { walk: knownNumber(source.speed) },
     initiative: source.initBonus === undefined ? abilityModifier(abilities.dex) : knownInteger(source.initBonus),
     deathSaves: { successes: knownInteger(source.deathSaves?.s), failures: knownInteger(source.deathSaves?.f) },
     conditions: list(source.conditions), hitDice, slotPools,

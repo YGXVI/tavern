@@ -59,6 +59,8 @@ test('числовой ввод различает пустое значение
   assert.equal(parseSheetNumber('', { nullable: false }).valid, false);
   assert.equal(parseSheetNumber('4', { min: 0, max: 3 }).valid, false);
   assert.equal(parseSheetNumber('9007199254740992').valid, false);
+  assert.deepEqual(parseSheetNumber('15.5', { integer: false, min: 0 }), { valid: true, value: 15.5 });
+  assert.equal(readLegacyCharacter({ speed: 15.5 }).movement.walk, 15.5);
 });
 
 test('воин 5: владение, экспертиза, половина PB, passive и нулевой override', () => {
