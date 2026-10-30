@@ -79,7 +79,7 @@ export function tokenBarHTML(ctx) {
     const same = names.every((n) => n === names[0]);
     const title = same ? `${toks.length} ${plural(toks.length, names[0].toLowerCase(), names[0].toLowerCase(), names[0].toLowerCase())}` : `${toks.length} ${plural(toks.length, 'токен', 'токена', 'токенов')}`;
     return `<div class="toolbar token-bar">
-      <span class="tb-avatars">${toks.slice(0, 3).map((t) => `<span class="mini-tok ${t.kind}" style="background-image:url(${esc(srcOf(t.img))})"></span>`).join('')}</span>
+      <span class="tb-avatars">${toks.slice(0, 3).map((t) => `<span class="mini-tok ${t.kind}" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>`).join('')}</span>
       <span class="tb-titles"><b>${esc(same && toks.length > 1 ? `${toks.length} ${names[0].toLowerCase()}${toks.length > 4 ? 'ов' : 'а'}` : title)}</b><small>${allHidden ? 'скрыты от игроков' : 'выделено'}</small></span>${div}
       ${ib('combat-add', 'sword-03', c.combat.active ? 'Добавить в бой' : 'Начать бой с ними')}${ib('hp', 'first-aid-kit', 'Хиты всем (урон по области)')}${ib('conditions', 'sparkles', 'Состояния')}${ib('visibility', allHidden ? 'view-off' : 'view', allHidden ? 'Скрыты от игроков' : 'Видны игрокам', allHidden ? 'aria-pressed="true"' : '')}${ib('token-menu', 'more-vertical', 'Ещё')}${div}
       ${allHidden ? `<button class="btn btn-sm btn-secondary" data-act="reveal">${icon('view', 16)}Показать игрокам</button>` : ''}${ib('deselect', 'cancel-01', 'Снять выделение')}</div>`;
@@ -87,7 +87,7 @@ export function tokenBarHTML(ctx) {
   const t = toks[0];
   const st = tokenStats(c, t);
   if (t.kind === 'item') {
-    return `<div class="toolbar token-bar"><span class="tb-avatar item" style="background-image:url(${esc(srcOf(t.img))})"></span><span class="tb-titles"><b>${esc(t.name)}</b><small>Предмет${t.hidden ? ' · скрыт' : ''}</small></span>${div}
+    return `<div class="toolbar token-bar"><span class="tb-avatar item" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span><span class="tb-titles"><b>${esc(t.name)}</b><small>Предмет${t.hidden ? ' · скрыт' : ''}</small></span>${div}
       ${ctx.isMasterView ? `${ib('visibility', t.hidden ? 'view-off' : 'view', t.hidden ? 'Скрыт от игроков' : 'Виден игрокам', t.hidden ? 'aria-pressed="true"' : '')}${ib('token-settings', 'settings-01', 'Имя и размер')}${ib('token-delete', 'delete-02', 'Убрать')}${div}` : ib('ping-token', 'location-01', 'Пинг: показать отряду')}
       ${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
   }
@@ -95,7 +95,7 @@ export function tokenBarHTML(ctx) {
   const mine = ctx.isMine(t);
   const master = ctx.isMasterView;
   const down = st.hpMax > 0 && st.hp <= 0;
-  const avatar = `<button class="tb-avatar ${t.kind} ${mine ? 'mine' : ''}" data-act="focus" data-tip="Показать на карте" style="background-image:url(${esc(srcOf(t.img))})"></button>`;
+  const avatar = `<button class="tb-avatar ${t.kind} ${mine ? 'mine' : ''}" data-act="focus" data-tip="Показать на карте" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></button>`;
   if (master || mine) {
     const sub = mine ? `${st.subtitle} · ваш герой` : st.subtitle + (t.hidden ? ' · скрыт' : '');
     const left = movementLeft(ctx, t);

@@ -790,3 +790,10 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .vision-edit .field { gap: 6px; }
 .vision-edit .field > label { font: 500 12px/16px var(--font-text); color: var(--text-secondary); }
 .vision-widget .panel-section > .vision-edit { padding: 0; }
+
+/* Статблок SRD (TASK-083): английские описания под действиями. У атак — две строки, тап раскрывает. */
+.attack-row.has-desc { align-items: flex-start; }
+.attack-row.has-desc > .btn, .attack-row.has-desc > .chip { margin-top: 2px; }
+.atk-desc { margin: 6px 0 0; font: 400 12px/17px var(--font-text); color: var(--text-secondary); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.atk-desc[data-desc] { cursor: pointer; }
+.atk-desc.open { display: block; overflow: visible; }

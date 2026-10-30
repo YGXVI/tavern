@@ -3,7 +3,7 @@ import { el, esc, uid, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc, storeImage, BUILTIN_MAP_LIST } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, sceneOf, tokenStats, updateCampaign, addLog, nextTokenName } from '../../core/campaign.js';
-import { BESTIARY, monsterById } from '../../data/bestiary.js';
+import { BESTIARY, monsterById, srdLoaded } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
 import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
@@ -60,7 +60,7 @@ function sceneCard(ctx, s) {
       <div class="scene-info">
         <div class="row"><b class="ellipsis grow">${esc(s.name)}</b><button class="icon-btn icon-btn-xs" data-act="scene-menu" data-id="${esc(s.id)}" aria-label="Действия со сценой">${icon('more-horizontal', 16)}</button></div>
         <div class="t-sm muted ellipsis">${esc(s.note || `${s.map.width}×${s.map.height} px`)}</div>
-        <div class="row scene-people">${heroes.slice(0, 5).map((t) => `<span class="mini-tok hero" style="background-image:url(${esc(srcOf(t.img))})"></span>`).join('')}${foes.length ? `<span class="t-xs tertiary">${heroes.length ? '·' : ''} ${foes.length} ${plural(foes.length, 'существо', 'существа', 'существ')}</span>` : ''}${!heroes.length && !foes.length ? '<span class="t-xs tertiary">пусто</span>' : ''}</div>
+        <div class="row scene-people">${heroes.slice(0, 5).map((t) => `<span class="mini-tok hero" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>`).join('')}${foes.length ? `<span class="t-xs tertiary">${heroes.length ? '·' : ''} ${foes.length} ${plural(foes.length, 'существо', 'существа', 'существ')}</span>` : ''}${!heroes.length && !foes.length ? '<span class="t-xs tertiary">пусто</span>' : ''}</div>
         ${setupChips(ctx, s)}
       </div>
     </div>`;
@@ -86,13 +86,21 @@ function scenesHTML(ctx) {
     <div class="panel-footer"><button class="btn btn-primary btn-block" data-act="scene-new">${icon('plus-sign', 16)}Новая сцена</button></div>`;
 }
 
-const B_FILTERS = [['all', 'Все'], ['Гуманоид', 'Гуманоиды'], ['Нежить', 'Нежить'], ['Зверь', 'Звери'], ['other', 'Прочие']];
+const B_FILTERS = [['all', 'Все'], ['Гуманоид', 'Гуманоиды'], ['Зверь', 'Звери'], ['Нежить', 'Нежить'], ['Дракон', 'Драконы'], ['Чудовище', 'Чудовища'], ['other', 'Прочие']];
+const B_NAMED = B_FILTERS.map(([v]) => v).filter((v) => v !== 'all' && v !== 'other');
+// Поиск: русское и английское имя, тип; «ко 5» или «cr 1/2» — по уровню опасности.
+function bMatch(m, q) {
+  if (!q) return true;
+  const cr = q.match(/^(?:ко|cr)\s*([\d/]+)$/);
+  if (cr) return m.cr === cr[1];
+  return m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q) || !!m.en?.toLowerCase().includes(q);
+}
 
 function bestiaryList(ctx) {
   const st = bState(ctx);
   const q = st.q.trim().toLowerCase();
-  const list = BESTIARY.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q)) && (st.type === 'all' || (st.type === 'other' ? !['Гуманоид', 'Нежить', 'Зверь'].includes(m.type) : m.type === st.type)));
-  if (!list.length) return '<p class="t-sm muted b-empty">Никого не нашлось. В демо — только существа из SRD 5.1.</p>';
+  const list = BESTIARY.filter((m) => bMatch(m, q) && (st.type === 'all' || (st.type === 'other' ? !B_NAMED.includes(m.type) : m.type === st.type)));
+  if (!list.length) return `<p class="t-sm muted b-empty">${srdLoaded() ? 'Никого не нашлось. Здесь существа SRD 5.1 — ищите по-русски, по-английски или «КО 5».' : 'Пока никого — догружаем полный бестиарий…'}</p>`;
   return list.map((m) => {
     const n = ctx.scene?.tokens.filter((t) => t.monsterId === m.id).length || 0;
     return `<button class="list-row b-row ${st.pick === m.id ? 'current' : ''}" data-act="b-pick" data-id="${esc(m.id)}"><span class="avatar sm foe"><img src="${esc(srcOf(m.img))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(m.name)}</span><span class="secondary ellipsis">${esc(m.type)} · КО ${esc(m.cr)} · КД ${m.ac} · ${m.hp} хп${sizeById(m.size).cells > 1 ? ` · ${sizeById(m.size).cells}×${sizeById(m.size).cells}` : ''}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
@@ -104,8 +112,8 @@ function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', typ
 function bestiaryHTML(ctx) {
   const st = bState(ctx);
   const m = st.pick ? monsterById(st.pick) : null;
-  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
-    <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, нежить…" aria-label="Поиск существ"></div>
+  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${srdLoaded() ? '' : ' · догружаем остальных…'}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, dragon, КО 5…" aria-label="Поиск существ"></div>
       <div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div></div>
     <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
     ${m ? `<div class="panel-footer b-foot"><div class="col grow" style="gap:8px">
