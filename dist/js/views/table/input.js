@@ -521,7 +521,7 @@ function dragTokens(ctx, g, w, e) {
     if (way.length) label += ` · точек: ${way.length}`;
     // Вне боя — без футов и остатка скорости: только предупреждение о стене. Линия — только если путь гнётся.
     if (!fight) { label = ''; over = false; }
-    if (blocked) label = ctx.isMaster ? 'Стена · Alt — пронести сквозь' : 'Дальше стена';
+    if (blocked) label = (ctx.isMaster ? 'Стена · Alt — пронести сквозь' : 'Дальше стена') + (way.length ? ` · точек: ${way.length}` : '');
     const quiet = !fight && !blocked && pts.length <= 2 && !way.length;
     path = { pts, label: feet || blocked ? label : '', over, blocked, cost: feet, waypoints: way.length, quiet };
     g.cost = feet;

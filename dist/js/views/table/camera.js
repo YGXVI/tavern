@@ -35,7 +35,7 @@ export class Camera {
     return { x: wx * this.z + this.x + r.left, y: wy * this.z + this.y + r.top };
   }
 
-  stop() { if (this.anim) { cancelAnimationFrame(this.anim); this.anim = null; } }
+  stop() { if (this.anim) { cancelAnimationFrame(this.anim); this.anim = null; } this.goal = null; }
 
   set(x, y, z) { this.stop(); this.x = x; this.y = y; this.z = clamp(z, MIN_ZOOM, MAX_ZOOM); this.apply(); }
 
@@ -58,9 +58,11 @@ export class Camera {
     const { w, h } = this.size;
     const r = this.vp.getBoundingClientRect();
     const steps = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 3, 4, 6];
-    let target = this.z;
-    if (dir > 0) target = steps.find((s) => s > this.z + 0.001) ?? MAX_ZOOM;
-    else target = [...steps].reverse().find((s) => s < this.z - 0.001) ?? MIN_ZOOM;
+    // Шаг считаем от масштаба, к которому камера уже летит: быстрые нажатия «−»/«+» складываются (TASK-034).
+    const cur = this.goal?.z ?? this.z;
+    let target = cur;
+    if (dir > 0) target = steps.find((s) => s > cur + 0.001) ?? MAX_ZOOM;
+    else target = [...steps].reverse().find((s) => s < cur - 0.001) ?? MIN_ZOOM;
     this.animateZoom(r.left + w / 2, r.top + h / 2, target);
   }
 
@@ -91,6 +93,7 @@ export class Camera {
 
   animateTo(x, y, z, ms = 260) {
     this.stop();
+    this.goal = { x, y, z };
     const from = { x: this.x, y: this.y, z: this.z };
     const t0 = performance.now();
     const ease = (t) => 1 - Math.pow(1 - t, 3);
@@ -102,6 +105,7 @@ export class Camera {
       this.y = from.y + (y - from.y) * k;
       this.apply();
       this.anim = t < 1 ? requestAnimationFrame(step) : null;
+      if (t >= 1) this.goal = null;
     };
     this.anim = requestAnimationFrame(step);
   }
