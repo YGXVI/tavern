@@ -177,6 +177,11 @@ reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.ok('места: 2 — у игрока два героя, но место одно', $q$update public.campaigns set data = jsonb_set(data, '{seats}', '2') where id = 'c-rls'$q$);
 select pg_temp.rows('второй игрок принят: места считают игроков, не героев', $q$update public.campaign_members set status = 'active' where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000c'$q$, 1);
+-- review #126: вторая кампания мастера — для проверки границы сцена/кампания и И1 у мастера
+select pg_temp.ok('TASK-123 (review): вторая кампания мастера со сценой', $q$insert into public.campaigns (id, owner_id, name, data) values ('c-rls2', '00000000-0000-0000-0000-00000000000a', 'Другая', '{"seats": 1, "settings": {}}')$q$);
+select pg_temp.ok('TASK-123 (review): сцена второй кампании', $q$insert into public.scenes (id, campaign_id, data) values ('s-2', 'c-rls2', '{"name":"Чужая"}')$q$);
+select pg_temp.err('TASK-123 (review): и мастер не ставит токен на сцену другой кампании', $q$insert into public.tokens (id, campaign_id, scene_id, ord, data) values ('t-xs', 'c-rls', 's-2', 1, '{"kind":"foe"}')$q$);
+select pg_temp.err('TASK-123 (review): второй токен героя и мастеру не поставить (И1)', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, ord, data) values ('t-q3', 'c-rls', 's-1', 'ch-q', 8, '{"kind":"hero","name":"Торин","x":90,"y":90}')$q$);
 reset role;
 
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
@@ -194,6 +199,8 @@ select pg_temp.ok('призыв волка ко второму герою', $q$i
 select pg_temp.err('призыв к чужому герою — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x8', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"foe","summonedBy":"t-q2"}')$q$);
 select pg_temp.err('существо без призывателя — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x9', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"foe"}')$q$);
 select pg_temp.err('верхом сразу при постановке — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x10', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"custom","riding":"t-horse"}')$q$);
+select pg_temp.err('TASK-123 (review): свой токен на сцену чужой кампании — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x11', 'c-rls', 's-2', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"custom"}')$q$);
+select pg_temp.err('TASK-123 (review): второй токен своего героя — отказ (И1)', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, ord, data) values ('t-s2', 'c-rls', 's-1', 'ch-s', 15, '{"kind":"hero","name":"Сид","x":10,"y":10}')$q$);
 select pg_temp.rows('статы своему токену', $q$update public.tokens set data = data || '{"hp":1,"hpMax":1,"ac":11,"speed":30,"initBonus":2}' where id = 't-owl'$q$, 1);
 select pg_temp.rows('имя, картинка, союзность, слой своему токену', $q$update public.tokens set data = data || '{"name":"Сова Аси","img":"sb:c-rls/b/owl2.webp","disposition":"friendly","layer":1}' where id = 't-owl'$q$, 1);
 select pg_temp.rows('ездовое и размер — своему призыву', $q$update public.tokens set data = data || '{"mount":true,"size":"large"}' where id = 't-horse'$q$, 1);
@@ -202,6 +209,7 @@ select pg_temp.err('вид токена не меняется', $q$update public
 select pg_temp.err('существо призыва не подменить', $q$update public.tokens set data = data || '{"monsterId":"ogre"}' where id = 't-horse'$q$);
 select pg_temp.err('призывателя не подменить', $q$update public.tokens set data = data || '{"summonedBy":"t-owl"}' where id = 't-horse'$q$);
 select pg_temp.err('владельца не сменить', $q$update public.tokens set owner_id = '00000000-0000-0000-0000-00000000000c' where id = 't-owl'$q$);
+select pg_temp.err('TASK-123 (review): свой токен на сцену чужой кампании не перенести', $q$update public.tokens set scene_id = 's-2' where id = 't-owl'$q$);
 select pg_temp.err('свой токен не скрыть', $q$update public.tokens set hidden = true where id = 't-owl'$q$);
 select pg_temp.err('имя своему герою — в листе, не на токене', $q$update public.tokens set data = data || '{"name":"Не Лира"}' where id = 't-p'$q$);
 -- Хиты прибавкой
@@ -214,6 +222,9 @@ select pg_temp.cnt('временные хиты прибавкой', $q$select 1
 select pg_temp.err('прибавкой — только хиты', $q$select public.adjust_token('t-horse', '{"ac":1}')$q$);
 select pg_temp.err('хиты героя — в листе', $q$select public.adjust_token('t-p', '{"hp":-1}')$q$);
 select pg_temp.err('хиты гоблина игрок не меняет и прибавкой', $q$select public.adjust_token('t-gob', '{"hp":-1}')$q$);
+select pg_temp.ok('TASK-123 (review): свой токен с hpMax 0', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-zero', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 16, '{"kind":"custom","name":"Ноль","x":10,"y":10,"hp":0,"hpMax":0}')$q$);
+select pg_temp.cnt('TASK-123 (review): при hpMax 0 хиты не выше нуля', $q$select 1 where (public.adjust_token('t-zero', '{"hp":5}') ->> 'hp')::int = 0$q$, 1);
+select pg_temp.rows('TASK-123 (review): токен с нулём удалён владельцем', $q$delete from public.tokens where id = 't-zero'$q$, 1);
 -- Частичная правка
 select pg_temp.ok('частичная правка: только место совы', $q$select public.patch_token('t-owl', '{"x":210}')$q$);
 select pg_temp.cnt('остальные поля совы на месте', $q$select 1 from public.tokens where id = 't-owl' and (data ->> 'x')::int = 210 and (data ->> 'hp')::int = 1 and data ->> 'name' = 'Сова Аси'$q$, 1);
@@ -221,6 +232,20 @@ select pg_temp.ok('частичная правка снимает поле', $q$
 select pg_temp.cnt('слой совы снят', $q$select 1 from public.tokens where id = 't-owl' and not data ? 'layer'$q$, 1);
 select pg_temp.err('правка исчезнувшего токена — «Токен удалён мастером»', $q$select public.patch_token('t-nope', '{"x":1}')$q$);
 select pg_temp.err('частичная правка хитов гоблина — отказ', $q$select public.patch_token('t-gob', '{"hp":0}')$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.rows('TASK-123 (review): мастер закрепляет сову игрока', $q$update public.tokens set data = data || '{"locked":true}' where id = 't-owl'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.err('TASK-123 (review): закреплённую свою сову владелец не двигает', $q$select public.move_tokens('s-1', '[{"id":"t-owl","x":99}]')$q$);
+select pg_temp.err('TASK-123 (review): и частичной правкой тоже', $q$select public.patch_token('t-owl', '{"x":99}')$q$);
+select pg_temp.err('TASK-123 (review): и не поворачивает', $q$select public.patch_token('t-owl', '{"rot":90}')$q$);
+select pg_temp.err('TASK-123 (review): и замок сам не снимает', $q$select public.patch_token('t-owl', '{}', array['locked'])$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.rows('TASK-123 (review): мастер снимает замок', $q$update public.tokens set data = data - 'locked' where id = 't-owl'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 -- Езда
 select pg_temp.err('сесть на не ездовое — «Это не ездовое»', $q$select public.patch_token('t-p', '{"riding":"t-owl","x":210,"y":200}')$q$);
 select pg_temp.ok('Лира садится на коня', $q$select public.patch_token('t-p', '{"riding":"t-horse","x":300,"y":200}')$q$);
@@ -272,6 +297,8 @@ reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.cnt('скрытую свою сову владелец не видит (В1)', $q$select 1 from public.tokens where id = 't-owl'$q$, 0);
 select pg_temp.err('и не правит', $q$select public.patch_token('t-owl', '{"x":1}')$q$);
+select pg_temp.err('TASK-123 (review): id своих токенов снаружи не запросить — в том числе скрытой совы (И7)', $q$select public.owned_token_ids('c-rls')$q$);
+select pg_temp.err('TASK-123 (review): и id героев тоже', $q$select public.hero_token_ids('c-rls')$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер показывает сову', $q$update public.tokens set hidden = false where id = 't-owl'$q$, 1);

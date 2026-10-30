@@ -113,9 +113,11 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
     tokens.forEach((t, k) => {
       const { id: tid, characterId, ownerId, hidden, ...td } = t;
       const row = { id: tid, campaign_id: c.id, scene_id: id, character_id: characterId || null, hidden: !!hidden, ord: prev.tokens.get(tid)?.ord ?? now + k, data: td };
-      // Владелец своего токена и призыва (TASK-123) — колонка owner_id. Пишем её, только когда владелец есть
-      // или только что снят: токены без владельца отправляются как раньше.
-      if (ownerId || prev.tokens.get(tid)?.owner_id) row.owner_id = ownerId || null;
+      // Владелец своего токена и призыва (TASK-123) — колонка owner_id. Пишем её, когда владелец есть, только что снят
+      // или колонка уже пришла с сервера (после миграции SELECT отдаёт owner_id: null у каждого токена — без неё
+      // «null» и «нет поля» разошлись бы, и любое действие слало бы все токены заново). До миграции поля нет — как раньше.
+      const was = prev.tokens.get(tid);
+      if (ownerId || (was && 'owner_id' in was)) row.owner_id = ownerId || null;
       rows.tokens.set(tid, row);
     });
     drawings.forEach((d, k) => {

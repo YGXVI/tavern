@@ -7,6 +7,12 @@
 alter table public.tokens add column owner_id uuid references public.profiles (id) on delete set null;
 create index tokens_owner on public.tokens (campaign_id, owner_id);
 
+-- Токен стоит на сцене своей кампании (review #126, п. 3): пара (scene_id, campaign_id) — внешним ключом.
+-- not valid: старые строки не проверяются и не удаляются, новые и изменённые — проверяются для всех ролей.
+create unique index scenes_id_campaign on public.scenes (id, campaign_id);
+alter table public.tokens add constraint tokens_scene_campaign foreign key (scene_id, campaign_id)
+  references public.scenes (id, campaign_id) on delete cascade not valid;
+
 -- Герой вошедшего: по владельцу листа (у игрока может быть несколько героев) или по выбору в членстве.
 -- Только пока вошедший — активный участник кампании (И4).
 create or replace function public.is_my_character(c text, ch text)
@@ -35,7 +41,8 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 
--- Свои токены и призывы вошедшего в кампании (бой и спасброски).
+-- Свои токены и призывы вошедшего в кампании (бой и спасброски). Только для охранников: снаружи не вызывается,
+-- иначе по ней видны id своих скрытых токенов (review #126, И7).
 create or replace function public.owned_token_ids(c text)
 returns text[] language sql stable security definer set search_path = '' as $$
   select coalesce(array_agg(t.id), '{}') from public.tokens t
@@ -49,7 +56,10 @@ $$;
 --   свой герой — место, поворот, размер, свет, аура, высота, зрение, езда;
 --   свой токен и призыв — ещё имя, картинка, размер, союзность, ездовое, слой, статы и хиты;
 --   чужой видимый незакреплённый — место и поворот при открытом перемещении;
---   всадника двигает тот, кто двигает его ездовое, если всадник встаёт на место ездового (согласие дано посадкой).
+--   всадника двигает тот, кто двигает его ездовое, если всадник встаёт на место ездового (согласие дано посадкой);
+--   закреплённый токен не двигает и не поворачивает никто, кроме мастера, — и владелец тоже.
+-- Для всех вошедших, включая мастера: сцена из той же кампании; у героя один токен на кампанию (И1);
+-- посадки верхом на сцене идут по очереди — цепочка не возникнет от двух одновременных посадок.
 create or replace function public.guard_token()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
@@ -65,9 +75,31 @@ declare
   rest text[];
   ref public.tokens;
   carried boolean := false;
+  locked boolean := tg_op = 'UPDATE' and coalesce((old.data ->> 'locked')::boolean, false);
 begin
   -- Без входа (служебный ключ, каскады при удалении аккаунта) охранник не мешает: у ролей API без входа нет прав на таблицу.
-  if me is null or public.is_master(cid) then return new; end if;
+  if me is null then return new; end if;
+
+  -- Сцена — из той же кампании (дублирует внешний ключ понятным отказом).
+  if (tg_op = 'INSERT' or new.scene_id <> old.scene_id or new.campaign_id <> old.campaign_id)
+     and not exists (select 1 from public.scenes s where s.id = new.scene_id and s.campaign_id = new.campaign_id) then
+    raise exception 'Сцена из другой кампании' using errcode = '23514';
+  end if;
+  -- И1: у экземпляра с листом один токен на кампанию — «Герой на сцену» переносит его, а не ставит второй.
+  -- Блокировка по паре кампания+лист: два одновременных запроса (две вкладки) не поставят двух.
+  if new.character_id is not null and (tg_op = 'INSERT' or new.character_id is distinct from old.character_id
+     or new.campaign_id <> old.campaign_id) then
+    perform pg_advisory_xact_lock(hashtextextended('rsp-token-character:' || new.campaign_id || ':' || new.character_id, 0));
+    if exists (select 1 from public.tokens t where t.campaign_id = new.campaign_id and t.character_id = new.character_id and t.id <> new.id) then
+      raise exception 'Этот герой уже на карте — его переносят, второй токен не ставят' using errcode = '23505';
+    end if;
+  end if;
+  -- Посадки верхом на одной сцене — по очереди: проверка цепочки ниже читает уже записанные посадки.
+  if tg_op = 'UPDATE' and (new.data ->> 'riding') is not null and (new.data ->> 'riding') is distinct from (old.data ->> 'riding') then
+    perform pg_advisory_xact_lock(hashtextextended('rsp-token-riding:' || new.scene_id, 0));
+  end if;
+
+  if public.is_master(cid) then return new; end if;
   -- Игрок не раздувает токен больше 64 КБ (старые большие токены мастера двигать по-прежнему можно).
   if octet_length(new.data::text) > 65536 and (tg_op = 'INSERT' or octet_length(new.data::text) > octet_length(old.data::text)) then
     raise exception 'Слишком много данных в токене' using errcode = '54000';
@@ -120,6 +152,9 @@ begin
     select jsonb_object_keys(old.data) k union select jsonb_object_keys(new.data)
   ) s where (old.data -> s.k) is distinct from (new.data -> s.k);
 
+  -- Закреплённый токен стоит на месте и для владельца (docs/data.md: не сдвигает никто, пока мастер не снимет замок).
+  if locked and changed && pos then raise exception 'Токен закреплён мастером' using errcode = '42501'; end if;
+
   -- Езда: сесть может владелец всадника; спешиться — он, владелец ездового, кто тянет всадника; висячую ссылку снимает любой.
   if 'riding' = any (changed) then
     if (new.data ->> 'riding') is null then
@@ -155,7 +190,7 @@ begin
   -- Всадник едет вместе с ездовым: меняются только место и время хода, всадник встаёт на новое место ездового.
   if rest <@ array['x', 'y', 'movedAt'] and (old.data ->> 'riding') is not null
      and (new.data ->> 'riding') is not distinct from (old.data ->> 'riding')
-     and not coalesce((old.data ->> 'locked')::boolean, false) and not old.hidden then
+     and not locked and not old.hidden then
     select * into ref from public.tokens t where t.id = old.data ->> 'riding' and t.scene_id = new.scene_id;
     carried := found and public.can_move_token(ref)
       and abs(coalesce((ref.data ->> 'x')::numeric, 0) - coalesce((new.data ->> 'x')::numeric, 0)) < 0.5
@@ -164,10 +199,7 @@ begin
   end if;
 
   if rest && stats then raise exception 'Статы меняет владелец или мастер' using errcode = '42501'; end if;
-  if rest && pos then
-    if coalesce((old.data ->> 'locked')::boolean, false) then raise exception 'Токен закреплён мастером' using errcode = '42501'; end if;
-    raise exception 'Чужие токены двигает мастер' using errcode = '42501';
-  end if;
+  if rest && pos then raise exception 'Чужие токены двигает мастер' using errcode = '42501'; end if;
   raise exception 'Нельзя менять «%» у этого токена', rest[1] using errcode = '42501';
 end $$;
 
@@ -219,7 +251,8 @@ end $$;
 
 -- Хиты и временные хиты одноразового экземпляра — прибавкой к текущему значению на сервере:
 -- два одновременных расхода учитываются оба (строка блокируется, второе обновление считает от первого).
--- Хиты не ниже 0 и не выше hpMax, если он задан; временные — не ниже 0. Хиты героя — в листе (TASK-004).
+-- Хиты не ниже 0 и не выше hpMax, если он задан числом (в том числе 0); временные — не ниже 0.
+-- Нечисловые hp/hpMax на токене считаются: хиты — 0, максимума нет. Хиты героя — в листе (TASK-004).
 create or replace function public.adjust_token(p_id text, p_deltas jsonb)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare d jsonb;
@@ -233,10 +266,14 @@ begin
   end if;
   update public.tokens t set data = t.data
     || case when p_deltas ? 'hp' then jsonb_build_object('hp', least(
-         greatest(0, round(coalesce((t.data ->> 'hp')::numeric, 0) + (p_deltas ->> 'hp')::numeric)),
-         coalesce(nullif((t.data ->> 'hpMax')::numeric, 0), 1000000000))::int) else '{}'::jsonb end
+         greatest(0, round(case when jsonb_typeof(t.data -> 'hp') = 'number' then (t.data ->> 'hp')::numeric else 0 end
+                           + (p_deltas ->> 'hp')::numeric)),
+         case when jsonb_typeof(t.data -> 'hpMax') = 'number' then greatest(0, (t.data ->> 'hpMax')::numeric) else 1000000000 end)::int)
+       else '{}'::jsonb end
     || case when p_deltas ? 'tempHp' then jsonb_build_object('tempHp',
-         greatest(0, round(coalesce((t.data ->> 'tempHp')::numeric, 0) + (p_deltas ->> 'tempHp')::numeric))::int) else '{}'::jsonb end
+         greatest(0, round(case when jsonb_typeof(t.data -> 'tempHp') = 'number' then (t.data ->> 'tempHp')::numeric else 0 end
+                           + (p_deltas ->> 'tempHp')::numeric))::int)
+       else '{}'::jsonb end
   where t.id = p_id returning t.data into d;
   if not found then raise exception 'Токен удалён мастером' using errcode = 'P0002'; end if;
   return d;
@@ -326,13 +363,14 @@ end $$;
 -- Игрок берёт ещё одного свободного героя; первый выбранный остаётся героем в членстве.
 -- Занят герой, которого выбрал другой активный игрок или которым владеет другой участник кампании (в том числе
 -- ожидающий). Герой ушедшего игрока свободен. Места считают игроков, не героев.
+-- Строка героя блокируется до проверки (review #126, п. 2): второй одновременный запрос ждёт и видит нового владельца — «taken».
 create or replace function public.claim_character(p_campaign text, p_character text)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare me uuid := (select auth.uid()); mem public.campaign_members; ch public.characters;
 begin
   select * into mem from public.campaign_members m where m.campaign_id = p_campaign and m.user_id = me and m.status = 'active';
   if not found or mem.role <> 'player' then raise exception 'Выбирает героя игрок кампании' using errcode = '42501'; end if;
-  select * into ch from public.characters x where x.id = p_character and x.campaign_id = p_campaign;
+  select * into ch from public.characters x where x.id = p_character and x.campaign_id = p_campaign for update;
   if not found then raise exception 'Нет такого героя' using errcode = 'P0002'; end if;
   if exists (select 1 from public.campaign_members m where m.campaign_id = p_campaign and m.user_id <> me
              and ((m.status = 'active' and m.character_id = p_character) or m.user_id = ch.owner_id)) then
@@ -369,9 +407,12 @@ revoke execute on function public.guard_token(), public.guard_token_delete(), pu
   public.guard_save_request(), public.guard_combat(),
   public.owns_token(public.tokens), public.can_move_token(public.tokens)
 from public, anon, authenticated;
-revoke execute on function public.is_my_character(text, text), public.owned_token_ids(text),
+revoke execute on function public.is_my_character(text, text),
   public.patch_token(text, jsonb, text[]), public.adjust_token(text, jsonb), public.move_tokens(text, jsonb)
 from public, anon;
-grant execute on function public.is_my_character(text, text), public.owned_token_ids(text),
+grant execute on function public.is_my_character(text, text),
   public.patch_token(text, jsonb, text[]), public.adjust_token(text, jsonb), public.move_tokens(text, jsonb)
 to authenticated;
+-- Списки id токенов — только для охранников (security definer): снаружи по ним видны id скрытых токенов (И7).
+-- hero_token_ids с TASK-002 отдавал и id скрытых героев — закрываем вместе.
+revoke execute on function public.owned_token_ids(text), public.hero_token_ids(text) from public, anon, authenticated;
