@@ -70,7 +70,7 @@ function visionPlayer(ctx) {
       ${tok ? visionFields(ctx, tok) : `<div class="setting-row">${icon('eye', 20)}<span class="titles"><span class="label-main">Тёмное зрение</span><span class="hint">${ch?.darkvision ? `${ch.darkvision} фт` : 'Нет'} · героя нет на этой сцене</span></span></div>`}
       <div class="setting-row">${icon(dark ? 'moon-02' : 'sun-01', 20)}<span class="titles"><span class="label-main">${dark ? 'Здесь темно' : 'Здесь светло'}</span><span class="hint">${c.settings.sharedVision ? 'Вы видите то же, что и весь отряд' : 'Вы видите только глазами своего героя'}</span></span></div>
     </div>
-    ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — без цвета, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}
+    ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — видно как при свете, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}
     ${sc.fog.mode !== 'off' || dark ? `<hr class="panel-divider"><div class="panel-section"><p class="t-sm muted"><span class="legend fog-dark"></span>Чёрное — то, чего отряд сейчас не видит. Уже найденные двери и метки остаются на карте.</p></div>` : ''}
   </div>`;
 }
