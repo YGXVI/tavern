@@ -6,7 +6,8 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot } from './model.js';
+import { createCharacterSheetClient, SheetCommandError } from './character-sheet.js';
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
@@ -27,6 +28,34 @@ let myPresence = null;
 let userChannel = null;
 
 export const serverUserId = () => me;
+
+const sheets = createCharacterSheetClient(async () => {
+  if (!sb || !me) throw new Error('Нет серверной сессии');
+  return sb;
+});
+
+/** Явный путь листа; optimistic commit не является подтверждением этого запроса. */
+export async function readCharacterSheet(cid, characterId) {
+  if (!sb || !me) throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  return sheets.read(cid, characterId);
+}
+
+export async function submitCharacterCommand(request) {
+  if (!sb || !me) throw new SheetCommandError('forbidden', { request });
+  await whenSynced(request.campaignId);
+  const result = await sheets.execute(request);
+  const rows = cache.get(request.campaignId);
+  if (rows) applyCharacterSnapshot(rows, result.sheet);
+  // Архив затрагивает токены/бой; перечитываем транзакцию целиком, не показываем частичный ACK.
+  try { await loadCampaign(request.campaignId); }
+  catch (cause) {
+    const error = new SheetCommandError('network', { request, cause });
+    error.acknowledged = result; // запись уже подтверждена; ошибка относится к перечитыванию кампании
+    throw error;
+  }
+  return result;
+}
 
 /** Объект для store.useServerBackend: как хранилище говорит с сервером. */
 export const backend = {

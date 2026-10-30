@@ -26,6 +26,20 @@ export function emptyRows() {
   };
 }
 
+/** ACK RPC листа → кэш строк. Служебные колонки не попадают в characters.data. */
+export function applyCharacterSnapshot(rows, sheet) {
+  if (!rows.campaign || sheet?.campaignId !== rows.campaign.id || typeof sheet.id !== 'string'
+    || typeof sheet.data !== 'object' || sheet.data === null || Array.isArray(sheet.data)
+    || typeof sheet.version !== 'string' || !/^\d+$/.test(sheet.version)) throw new TypeError('Некорректный снимок листа');
+  const previous = rows.characters.get(sheet.id);
+  if (previous?.sheet_version !== undefined && BigInt(previous.sheet_version) > BigInt(sheet.version)) return rows;
+  rows.characters.set(sheet.id, {
+    id: sheet.id, campaign_id: sheet.campaignId, owner_id: sheet.ownerId ?? null, data: structuredClone(sheet.data),
+    sheet_version: sheet.version, sheet_managed: !!sheet.managed, archived_at: sheet.archivedAt ?? null,
+  });
+  return rows;
+}
+
 /**
  * Строки → кампания. Кампания получает свои копии данных: интерфейс правит её на месте, а кэш строк должен
  * оставаться тем, что лежит на сервере (по нему считаются разрешённые игроку изменения боя и порядок токенов).
