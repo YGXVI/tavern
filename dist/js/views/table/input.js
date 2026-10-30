@@ -1,6 +1,6 @@
 // Ввод на карте: мышь, тачпад, касания, клавиатура. Камера + инструменты.
-// Колесо прокручивает карту вверх-вниз (Shift — вбок), Ctrl/Cmd + колесо и щипок — масштаб к курсору
-// (как в Figma, TASK-036); два пальца на тачпаде двигают карту; средняя/правая кнопка или пробел — панорама.
+// Колесо мыши и щипок — масштаб к курсору (TASK-047); карту двигают пробел + перетаскивание, правая или средняя
+// кнопка, на тачпаде — два пальца.
 import { uid, clamp } from '../../core/dom.js';
 import { bus } from '../../core/store.js';
 import {
@@ -40,21 +40,19 @@ export function attachInput(ctx) {
     return { kind: 'empty' };
   }
 
-  // ——— Колесо: прокрутка и масштаб (TASK-036) ———
+  // ——— Колесо: масштаб (TASK-047, sol0139: «колесо — приближение, перемещение через пробел») ———
   vp.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (hasModal()) return;
     const mouseWheel = e.deltaMode !== 0 || (Math.abs(e.deltaY) >= 40 && e.deltaX === 0 && Number.isInteger(e.deltaY));
     const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? vp.clientHeight : 1; // строки и страницы → пиксели
-    const dx = e.deltaX * unit, dy = e.deltaY * unit;
-    if (e.ctrlKey || e.metaKey) {
-      // Щипок на тачпаде или Ctrl/Cmd + колесо — масштаб к курсору.
+    const dy = e.deltaY * unit;
+    if (mouseWheel || e.ctrlKey || e.metaKey) {
+      // Колесо мыши, Ctrl/Cmd + колесо и щипок на тачпаде — масштаб к курсору.
       ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-dy * (mouseWheel ? 0.0016 : 0.012)));
-    } else if (e.shiftKey && !dx) {
-      // Shift + колесо — вбок (если браузер сам не перевёл прокрутку в горизонтальную).
-      ctx.camera.pan(-dy, 0);
     } else {
-      ctx.camera.pan(-dx, -dy);
+      // Два пальца на тачпаде — двигать карту (пробел + перетаскивание и правая кнопка — тоже).
+      ctx.camera.pan(-e.deltaX * unit, -dy);
     }
     closePopover();
     ctx.hoverWorld = W(e);
