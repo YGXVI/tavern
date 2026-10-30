@@ -45,28 +45,6 @@ begin
   return jsonb_build_object('ok', true, 'campaignId', inv.campaign_id, 'status', st);
 end $$;
 
--- ——— Выбор свободного героя ———
-create or replace function public.claim_character(p_campaign text, p_character text)
-returns jsonb language plpgsql security definer set search_path = '' as $$
-declare me uuid := (select auth.uid()); mem public.campaign_members;
-begin
-  select * into mem from public.campaign_members m where m.campaign_id = p_campaign and m.user_id = me and m.status = 'active';
-  if not found or mem.role <> 'player' then raise exception 'Выбирает героя игрок кампании' using errcode = '42501'; end if;
-  if mem.character_id is not null and mem.character_id <> p_character then
-    raise exception 'У вас уже есть герой в этой кампании' using errcode = '42501';
-  end if;
-  if not exists (select 1 from public.characters ch where ch.id = p_character and ch.campaign_id = p_campaign) then
-    raise exception 'Нет такого героя' using errcode = 'P0002';
-  end if;
-  if exists (select 1 from public.campaign_members m where m.campaign_id = p_campaign and m.character_id = p_character and m.status = 'active' and m.user_id <> me) then
-    return jsonb_build_object('ok', false, 'error', 'taken');
-  end if;
-  -- Обходим проверку членства для собственной записи: здесь проверено всё нужное.
-  update public.campaign_members set character_id = p_character where campaign_id = p_campaign and user_id = me;
-  update public.characters set owner_id = me, data = jsonb_set(data, '{ownerId}', to_jsonb(me::text)) where id = p_character;
-  return jsonb_build_object('ok', true);
-end $$;
-
 -- ——— Исследованные клетки: только добавление ———
 create or replace function public.add_explored(p_scene text, p_cells text[])
 returns void language plpgsql security definer set search_path = '' as $$
@@ -82,8 +60,9 @@ begin
     set cells = (select array_agg(distinct x) from unnest(e.cells || excluded.cells) x);
 end $$;
 
--- Обходы проверок в функциях выше выполняет владелец функции; триггеры-охранники пропускают их по флагу.
--- guard_member_update сверяет character_id — для claim_character разрешаем через параметр сессии.
+-- ——— Выбор свободного героя ———
+-- Охранники членства и героя пропускают смену героя/владельца, только если её делает claim_character
+-- (параметр транзакции rasputye.claim; из PostgREST его не выставить).
 create or replace function public.guard_member_update()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
