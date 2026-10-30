@@ -10,6 +10,7 @@
 | sessionStorage | `rasputye-v2-session` | `{userId, at}` | Кто «вошёл» в этой вкладке: у каждой вкладки свой человек. Не токен. |
 | localStorage | `rasputye-v2-last-user` | строка `userId` | Кого подставить в новой вкладке (кроме ссылки-приглашения). |
 | sessionStorage | `rasputye-v2-cam:<campaignId>:<sceneId>` | `{x, y, z}` | Камера стола в этой вкладке. |
+| localStorage | `rasputye-v2-prefs:<userId>` | `{diceSkin}` | Личные настройки интерфейса на этом устройстве (TASK-104): набор кубов — `bone`, `obsidian`, `gold`, `ruby`, `jade`, `sapphire`; неизвестное значение читается как `bone`. Неизвестные поля объекта сохраняются при записи. Нет ключа — настройки по умолчанию, миграция не нужна. |
 | IndexedDB | `rasputye-v2-assets` / `images` | Blob по UUID | Загруженные карты. В данных — ссылка `idb:<uuid>`, файл живёт только в этом браузере. |
 
 Старые ключи прототипа (ниже) новый интерфейс не читает и не стирает.
@@ -50,6 +51,7 @@
 | localStorage | `rasputye-server-preview` | `'1'` | Предпросмотр сервера до включения флага (`?server=1` / `?server=0`). |
 | sessionStorage | `rasputye-v2-mode` | `'server'`/`'sandbox'` | Режим вкладки: «Попробовать без входа» переключает на песочницу. |
 | sessionStorage | `rasputye-v2-return` | hash | Куда вернуться после Discord (например, ссылка-приглашение). |
+| localStorage | `rasputye-v2-prefs:<userId>` | `{diceSkin}` | Тот же ключ, что в песочнице: личные настройки этого устройства, на сервер не уходят и между устройствами не синхронизируются (TASK-104). |
 
 ### Таблицы (схема `public`, RLS на всех)
 
