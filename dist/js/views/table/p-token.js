@@ -546,7 +546,7 @@ export function contextMenu(ctx, target, w, screen) {
         'divider',
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
-        { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', onClick: () => ctx.panels.openSheetFor(t) },
+        { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) },
         !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
         !t.characterId ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
         { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) },
@@ -557,7 +557,7 @@ export function contextMenu(ctx, target, w, screen) {
       menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     } else {
       const items = [
-        ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor(t) } : null,
+        ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
         !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,
         ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,

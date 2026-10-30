@@ -63,7 +63,7 @@ export function renderChrome(ctx) {
   cache(root.querySelector('.ch-tl'), topLeft(ctx));
   cache(root.querySelector('.ch-tc'), topCenter(ctx));
   cache(root.querySelector('.ch-tr'), topRight(ctx));
-  cache(root.querySelector('.ch-bl'), `<div class="toolbar">${ib('help', 'bubble-chat-question', 'Справка и горячие клавиши', { kbd: '?' })}</div>`);
+  cache(root.querySelector('.ch-bl'), `<div class="toolbar">${ib('reference', 'bubble-chat-question', 'Справочник')}</div>`);
   cache(root.querySelector('.ch-bc'), ctx.scene ? bottomCenter(ctx) : '');
   cache(root.querySelector('.ch-br'), ctx.scene ? bottomRight(ctx) : '');
   root.dataset.role = ctx.isMaster ? 'master' : 'player';
@@ -185,7 +185,7 @@ function bottomCenter(ctx) {
     if (bar) return bar;
   }
   if (ctx.isMasterView) {
-    return `<div class="toolbar add-bar">${ib('add:search', 'search-01', 'Найти существо')}${div}${ib('add:hero', 'chess-pawn', 'Герой на сцену')}${ib('add:creature', 'monster', 'Существа', { active: ctx.ui.panel === 'bestiary' })}${ib('add:item', 'potion', 'Предмет')}${ib('add:environment', 'pine-tree', 'Окружение и свет')}${ib('add:note', 'note-edit', 'Заметка')}${ib('add:map', 'maps', 'Новая сцена')}</div>
+    return `<div class="toolbar add-bar">${ib('add:search', 'search-01', 'Найти существо')}${div}${ib('add:hero', 'chess-pawn', 'Герой на сцену')}${ib('add:creature', 'monster', 'Существа', { active: ctx.ui.panel === 'bestiary' })}${ib('add:item', 'potion', 'Предмет · можно перетащить на карту')}</div>
       <div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V' })}${ib('tool:select', 'cursor-rectangle-selection-01', 'Выделение рамкой', { active: tool === 'select', kbd: 'S' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('layer', 'layers-01', 'Слой мастера: стены, двери, свет, туман, ловушки, сетка', { kbd: 'G' })}${ib('tool:text', 'text-font', 'Текст', { active: tool === 'text' })}${div}${undoRedo(ctx, false)}</div>`;
   }
   const lock = ctx.c.paused;
@@ -198,7 +198,7 @@ const LAYER_ITEMS = [
   ['layer:walls:wall', 'path', 'Стены', 'W', (t, s) => t === 'walls' && !isDoor(s.walls)],
   ['layer:walls:door', 'door-01', 'Двери', '', (t, s) => t === 'walls' && isDoor(s.walls)],
   ['layer:terrain', 'mountain', 'Местность', 'T', (t) => t === 'terrain'],
-  ['layer:lights', 'fire', 'Свет', 'L', (t) => t === 'lights'],
+  ['layer:lights', 'fire', 'Свет и окружение', 'L', (t) => t === 'lights'],
   ['layer:fog', 'cloud', 'Туман войны', 'F', (t) => t === 'fog'],
   null,
   ['layer:gm:trap', 'danger', 'Ловушки', '', (t, s) => t === 'gm' && (s.gm || 'trap') === 'trap'],
@@ -216,7 +216,8 @@ export function layerItemActive(ctx, act) {
 
 function layerBar(ctx) {
   const items = LAYER_ITEMS.map((x) => (x ? ib(x[0], x[1], x[2], { active: x[4](ctx.ui.tool, ctx.ui.sub), kbd: x[3] }) : div)).join('');
-  return `<div class="toolbar layer-bar" role="toolbar" aria-label="Слой мастера">${items}${div}${ib('preview-players', 'user-group', 'Как видят игроки')}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="layer-close">${icon('tick-02', 18)}Готово</button></div>`;
+  // Свет, заметки и сцены живут здесь, а не в нижнем баре (TASK-095).
+  return `<div class="toolbar layer-bar" role="toolbar" aria-label="Слой мастера">${items}${div}${ib('scenes', 'maps', 'Сцены', { active: ctx.ui.panel === 'scenes' })}${ib('preview-players', 'user-group', 'Как видят игроки')}${undoRedo(ctx)}${div}<button class="btn btn-primary" data-act="layer-close">${icon('tick-02', 18)}Готово</button></div>`;
 }
 
 /** Второй бар: параметры выбранной настройки. У ловушек, меток, переходов и заметок параметров нет — бара тоже. */
