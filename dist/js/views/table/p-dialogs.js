@@ -2,7 +2,8 @@
 import { esc, plural, timeAgo } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { replaceDB, getDB, commit } from '../../core/store.js';
+import { replaceDB, getDB, commit, isServerMode } from '../../core/store.js';
+import { joinUrl } from '../../server/config.js';
 import { characterOf, tokenStats, updateCampaign, userById, addLog } from '../../core/campaign.js';
 import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
@@ -71,7 +72,7 @@ export function inviteModal(ctx) {
   const render = () => {
     const c = ctx.c;
     const inv = c.invite || {};
-    const link = `${location.origin}${location.pathname}#/join/${inv.code}`;
+    const link = joinUrl(inv.code, isServerMode());
     const players = c.members.filter((m) => m.role === 'player' && m.status === 'active').length;
     const pending = c.members.filter((m) => m.status === 'pending');
     const expired = inv.expiresAt && inv.expiresAt < Date.now();

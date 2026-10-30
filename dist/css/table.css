@@ -507,6 +507,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .float-card .titles b { font: 600 14px/16px var(--font-text); }
 .float-card .titles small { font: 400 12px/14px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .save-prompt { box-shadow: inset 0 0 0 1.5px var(--stroke-accent), var(--glow-turn); }
+.save-prompt.friend { box-shadow: inset 0 0 0 1px var(--stroke-subtle), var(--shadow-panel); }
 .save-card { flex-direction: column; align-items: stretch; }
 .sv-head { display: flex; align-items: center; gap: 10px; }
 .sv-list { display: flex; flex-direction: column; gap: 2px; max-height: 210px; overflow: auto; }
@@ -743,3 +744,10 @@ button.tray-die:hover { filter: brightness(1.1); }
 .creature-ghost .cg-name { padding: 2px 8px; border-radius: var(--r-full); background: rgb(0 0 0 / .75); color: #fff; font: 600 12px/1.3 var(--font-text); white-space: nowrap; }
 .creature-ghost.ok { opacity: 1; }
 body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; user-select: none; }
+
+/* Сервер (TASK-002): нет связи — плашка сверху по центру, пока ходы ждут сети. */
+.net-pill { position: fixed; top: 96px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: var(--r-full); background: var(--bg-panel); color: var(--text-primary); font: 500 13px/16px var(--font-text);
+  box-shadow: inset 0 0 0 1px var(--status-negative), var(--shadow-panel); max-width: calc(100vw - 32px); pointer-events: none; animation: fade 200ms ease; }
+.net-pill svg { color: var(--text-negative); flex: none; }
+.net-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -8,6 +8,11 @@ export const SCHEMA = 1;
 
 let db = null;
 const listeners = new Set();
+// Серверный режим (TASK-002): данные приходят с Supabase, изменения уходят туда же (server/sync.js).
+// API для экранов и стола не меняется: getDB, commit, subscribe, bus, setPresence, onlineUsers.
+let backend = null;
+export const isServerMode = () => !!backend;
+export const backendUserId = () => backend?.userId() || null;
 const tabId = crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
 const channel = 'BroadcastChannel' in self ? new BroadcastChannel('rasputye-v2') : null;
 
@@ -44,11 +49,36 @@ export function initStore(seed) {
 
 export const getDB = () => db;
 
+/** Включить серверный режим: пустая база, которую наполнит sync.js. */
+export function useServerBackend(b) {
+  backend = b;
+  db = { version: SCHEMA, rev: 0, users: {}, campaigns: {}, server: true };
+  channel?.close();
+  return db;
+}
+
+/** Серверный режим: новые данные с сервера (загрузка, изменения других участников). */
+export function setDB(next, meta = {}) { db = next; db.rev = (db.rev || 0) + 1; notify(meta); }
+
+/** Серверный режим: мгновенное событие от другого участника — тем же обработчикам, что и BroadcastChannel. */
+export function deliver(type, payload, meta = {}) {
+  for (const fn of [...(busHandlers.get(type) || [])]) { try { fn(payload, { ...meta, tab: 'remote' }); } catch (err) { console.error(err); } }
+}
+
 /**
  * Изменить данные. Перед изменением перечитываем свежую версию — так две вкладки
  * реже затирают друг друга (последняя запись всё равно побеждает).
  */
 export function commit(mutator, meta = {}) {
+  if (backend) {
+    const before = { campaigns: structuredClone(db.campaigns) };
+    const result = mutator(db);
+    db.rev = (db.rev || 0) + 1;
+    db.updatedAt = Date.now();
+    try { backend.afterCommit(before, db, meta); } catch (err) { console.error(err); }
+    notify(meta);
+    return result;
+  }
   const fresh = read();
   if (fresh && fresh.rev >= db.rev) db = fresh;
   const result = mutator(db);
@@ -70,6 +100,7 @@ const busHandlers = new Map();
 export const bus = {
   tabId,
   send(type, payload = {}) {
+    if (backend) { if (!type.startsWith('presence')) backend.send(type, payload); return; }
     const msg = { type, payload, tab: tabId, at: Date.now() };
     channel?.postMessage(msg);
   },
@@ -91,10 +122,12 @@ channel?.addEventListener('message', (e) => {
 const presence = new Map(); // tab -> {userId, campaignId, sceneId, at}
 let me = null;
 export function setPresence(info) {
+  if (backend) { backend.setPresence(info); return; }
   me = info ? { ...info, tab: tabId } : null;
   beat();
 }
 function beat() {
+  if (backend) return;
   if (me) { presence.set(tabId, { ...me, at: Date.now() }); bus.send('presence', me); }
   else bus.send('presence-bye', {});
 }
@@ -107,11 +140,12 @@ setInterval(() => {
   for (const [t, p] of presence) if (t !== tabId && now - p.at > 11000) { presence.delete(t); changed = true; }
   if (changed) emitLocal('presence-change', {});
 }, 3000);
-window.addEventListener('pagehide', () => bus.send('presence-bye', {}));
+window.addEventListener('pagehide', () => { if (!backend) bus.send('presence-bye', {}); });
 bus.send('presence-ask', {});
 
 /** Пользователи, у которых открыта вкладка с этой кампанией (включая текущую). */
 export function onlineUsers(campaignId) {
+  if (backend) return backend.online(campaignId);
   const ids = new Set();
   for (const p of presence.values()) if (!campaignId || p.campaignId === campaignId) ids.add(p.userId);
   return ids;

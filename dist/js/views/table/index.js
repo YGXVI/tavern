@@ -1,6 +1,6 @@
 // Стол кампании: связывает данные, камеру, слои мира, ввод, панели и события между вкладками.
 import { el, throttle, debounce, uid } from '../../core/dom.js';
-import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal } from '../../core/store.js';
+import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMode } from '../../core/store.js';
 import { currentUser } from '../../core/auth.js';
 import {
   getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, updateCampaign, updateScene,
@@ -14,7 +14,7 @@ import {
 import { computeVision, isVisible, visibleCells } from './fog.js';
 import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder } from './combat.js';
-import { attachInput } from './input.js';
+import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
@@ -23,6 +23,7 @@ import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
 import { History } from './history.js';
 import { go } from '../screens.js';
+import { icon } from '../../icons.js';
 
 export function mountTable(root, cid) {
   const user = currentUser();
@@ -64,6 +65,14 @@ export function mountTable(root, cid) {
   // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
   ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;
+  // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
+  ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
+  // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
+  ctx.ownerAway = (t) => {
+    if (!t?.characterId || ctx.isMine(t)) return false;
+    const owner = ctx.c?.members.find((m) => m.characterId === t.characterId && m.status === 'active');
+    return !owner || !onlineUsers(ctx.cid).has(owner.userId);
+  };
   ctx.canControl = (t) => canControlToken(ctx.c, ctx.userId, t) && !(ctx.c.paused && !ctx.isMaster);
 
   ctx.eyes = () => {
@@ -353,6 +362,7 @@ export function mountTable(root, cid) {
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
+  let heroPos = { scene: null, map: new Map() };
   const unsub = subscribe((db, meta) => {
     const c = ctx.c;
     if (!c) { go('#/campaigns'); return; }
@@ -367,6 +377,9 @@ export function mountTable(root, cid) {
       return;
     }
     if (!ctx.scene) { showNoScene(); return; }
+    // Сервер: ловушки на пути чужого героя замечает клиент мастера (у игрока их нет).
+    if (isServerMode() && ctx.isMaster && meta?.remote && heroPos.scene === ctx.sceneId) remoteTrapCheck(ctx, heroPos.map);
+    heroPos = { scene: ctx.sceneId, map: new Map(ctx.scene.tokens.filter((t) => t.kind === 'hero').map((t) => [t.id, { x: t.x, y: t.y }])) };
     // Для оставшихся выделенных токенов, которые удалили.
     for (const id of [...ctx.ui.selection]) if (!ctx.scene.tokens.some((t) => t.id === id)) ctx.ui.selection.delete(id);
     ctx.invalidate('all');
@@ -375,6 +388,13 @@ export function mountTable(root, cid) {
 
   // Присутствие: обновляем «в сети» в чипах.
   const offPresence = bus.on('presence-change', () => ctx.invalidate('chrome', 'panels'));
+  // Сервер: обрыв связи. Ходы ждут сети в очереди и уйдут сами; после переподключения кампания перечитывается.
+  const offNet = bus.on('connection', (p) => {
+    if (p.cid !== ctx.cid) return;
+    ctx.root.querySelector('.net-pill')?.remove();
+    if (!p.ok) ctx.root.append(el(`<div class="net-pill" role="status">${icon('wifi-disconnected-01', 16)}<span>Нет связи с сервером · ходы уйдут, когда сеть вернётся</span></div>`));
+    else ctx.toast({ title: 'Связь восстановлена', icon: 'wifi-01', timeout: 2500 });
+  });
   const offErr = bus.on('storage-error', (p) => ctx.toast({ title: 'Не сохранилось', body: p.message, icon: 'alert-circle' }));
 
   // ——— Старт ———
@@ -389,7 +409,7 @@ export function mountTable(root, cid) {
 
   return {
     unmount() {
-      unsub(); offPresence(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },
