@@ -33,4 +33,7 @@
 
 ## OpenSpec и команда
 
-Новые изменения ведём через OpenSpec 1.15.0. После pull: `npm ci`, затем `npm run spec:validate` и `npm test`. Интеграции Codex и Claude Code сохранены в репозитории. Обязательный процесс: [docs/open-spec.md](docs/open-spec.md); требования: [openspec/specs](openspec/specs/); [сообщение коллегам](docs/open-spec-message.md). Старые TASK-006–009 сохраняют историю; новые заявки — GitHub Issues.
+Новые изменения ведём через OpenSpec 1.15.0. После pull: `npm ci`, затем `npm run spec:validate` и `npm test`. Интеграции Codex и Claude Code сохранены в репозитории. Канонический процесс: [AGENTS.md](AGENTS.md); команды change: [docs/open-spec.md](docs/open-spec.md); требования: [openspec/specs](openspec/specs/); [сообщение коллегам](docs/open-spec-message.md). Старые TASK-006–009 сохраняют историю; новые заявки — GitHub Issues.
+
+
+Рабочие направления и постоянные ветки: [реестр](docs/workstreams.md). Задачи учитываются отдельно в Issues/OpenSpec; одинаковый процесс review и интеграции для всех участников описан в [AGENTS.md](AGENTS.md).
