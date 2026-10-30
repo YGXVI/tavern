@@ -9,7 +9,7 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
-import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv } from './dice.js';
+import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
@@ -64,6 +64,15 @@ export class Panels {
         // Открытый бросок другого участника падает на наш стол — его кубы в его наборе (TASK-092/093).
         if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceFloor(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped, skin: p.skin });
         if (ctx.ui.widget === 'dice') this.refreshWidget(true);
+      }),
+      // Инициатива мастера: к20 видимых участников падают и на наш стол, у каждого — имя и итог.
+      bus.on('init-dice', (p) => {
+        if (!mine(p) || p.sceneId !== ctx.sceneId) return;
+        const items = (p.items || []).map((x) => {
+          const t = ctx.scene?.tokens.find((y) => y.id === x.tokenId);
+          return t && ctx.tokenShown(t) ? { name: ctx.nameOf(t), natural: x.natural, total: x.total } : null;
+        }).filter(Boolean);
+        diceFloor(ctx)?.rollGroup({ id: p.id, userId: p.userId, title: 'Инициатива', items, skin: p.skin });
       }),
       bus.on('read-aloud', (p) => { if (mine(p) && p.sceneId === ctx.sceneId && !ctx.isMaster) this.readAloud({ title: p.title, text: p.text }); }),
       bus.on('lockpick', (p) => { if (mine(p)) M.lockpickResult(ctx, p); }),
@@ -479,10 +488,16 @@ export class Panels {
     if (!c.combat.active) { D.combatSetup(ctx, ids); return; }
     const inCombat = new Set(c.combat.entries.map((e) => e.tokenId));
     const removeAll = ids.every((id) => inCombat.has(id));
-    this.keepTurn((cc, sc) => {
+    // Новых участников бросаем до записи — их к20 падают на стол.
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
+      const t = ctx.scene?.tokens.find((x) => x.id === id);
+      return t && t.kind !== 'item' ? { tokenId: id, ...rollInitiative(c, t) } : null;
+    }).filter(Boolean);
+    this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
-      else for (const id of ids) if (!inCombat.has(id)) { const t = sc.tokens.find((x) => x.id === id); if (t && t.kind !== 'item') cc.combat.entries.push({ tokenId: id, init: rollInitiative(cc, t).init }); }
+      else for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
     });
+    initiativeDice(ctx, rolled);
     ctx.toast({ title: removeAll ? 'Убраны из боя' : 'В бою', body: `${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}`, icon: 'sword-03' });
   }
 

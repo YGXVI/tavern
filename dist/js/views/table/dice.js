@@ -102,6 +102,25 @@ export function showRollToast(ctx, entry, mine = false) {
   ctx.toast({ title: `${mine ? 'Вы' : u?.name || 'Кто-то'} · ${entry.label}${tag}`, body: entry.detail + crit, avatar: userAvatar(u, 'sm'), result: entry.total });
 }
 
+// ——— Инициатива на столе ———
+/**
+ * Инициатива при начале боя и добавлении в бой: к20 каждого участника падают на стол — сколько участников,
+ * столько кубов. rolls: [{tokenId, natural, init}]. Другим за столом уходят только участники, которых они видят.
+ */
+export function initiativeDice(ctx, rolls) {
+  const list = rolls.filter((r) => r && r.natural != null);
+  if (!list.length) return;
+  const skin = dicePool(ctx).skin;
+  const id = uid('i-');
+  const items = list.map((r) => {
+    const t = ctx.scene?.tokens.find((x) => x.id === r.tokenId);
+    return t && { tokenId: r.tokenId, name: ctx.nameOf(t), natural: r.natural, total: r.init, hidden: !!t.hidden };
+  }).filter(Boolean);
+  diceFloor(ctx)?.rollGroup({ id, userId: ctx.userId, title: 'Инициатива', items, skin, mine: true });
+  const open = items.filter((x) => !x.hidden).map(({ tokenId, natural, total }) => ({ tokenId, natural, total }));
+  if (open.length) bus.send('init-dice', { cid: ctx.cid, sceneId: ctx.sceneId, id, userId: ctx.userId, items: open, skin });
+}
+
 // ——— Рейка кубов (Figma: Dice → dice-rail) ———
 /** Набор кубов в рейке: кости, модификатор, преимущество, видимость, набор (материал). */
 export function dicePool(ctx) {

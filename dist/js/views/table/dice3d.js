@@ -456,7 +456,7 @@ const FADE_MS = 650;
 /**
  * Сцена с кубами на холсте. insetTop/insetBottom — полосы (px), куда кубы не закатываются (шапка лотка, панели стола).
  * hover — кубы до броска висят в воздухе и трясутся, как в кулаке (лоток); иначе падают и укатываются.
- * API: add(kind, opts) — положить куб; remove(kind); throw(targets, opts) → Promise<{center}>;
+ * API: add(kind, opts) — положить куб; remove(kind); throw(targets, opts) → Promise<{center, top, dice}> (px; dice — каждый куб);
  *      place(targets, opts) — без анимации; fade(group, delay); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
@@ -792,7 +792,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       pending.push(() => {
         const cx = used.reduce((a, b) => a + b.x[0], 0) / (used.length || 1), cz = used.reduce((a, b) => a + b.x[2], 0) / (used.length || 1);
         const top = Math.min(...used.map((b) => b.x[2])) - 1;
-        resolve({ center: toPx(cx, cz), top: toPx(cx, top) });
+        resolve({ center: toPx(cx, cz), top: toPx(cx, top), dice: used.map((b) => toPx(b.x[0], b.x[2])) });
       });
       kick();
     });
@@ -822,7 +822,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     bodies.push(...placed);
     render();
     const cx = placed.reduce((a, b) => a + b.x[0], 0) / (placed.length || 1), cz = placed.reduce((a, b) => a + b.x[2], 0) / (placed.length || 1);
-    return Promise.resolve({ center: toPx(cx, cz), top: toPx(cx, Math.min(...placed.map((b) => b.x[2])) - 1) });
+    return Promise.resolve({ center: toPx(cx, cz), top: toPx(cx, Math.min(...placed.map((b) => b.x[2])) - 1), dice: placed.map((b) => toPx(b.x[0], b.x[2])) });
   }
 
   /** Угаснуть группе кубов через delay мс (бросок на столе). */
