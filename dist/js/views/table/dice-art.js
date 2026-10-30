@@ -37,13 +37,29 @@ export function railDie(sides, skinId = 'bone') {
 }
 
 /**
- * Набор пользователя: живёт в этой вкладке до перезагрузки, остальным уходит вместе с броском.
- * Запоминать его на устройстве — новый ключ хранилища (docs/data.md), это отдельное изменение L2.
+ * Набор пользователя запоминается на этом устройстве (TASK-104): localStorage `rasputye-v2-prefs:<userId>` →
+ * `{diceSkin}` — общий объект личных настроек интерфейса, чужие поля в нём сохраняются. На сервер не уходит;
+ * остальным за столом набор приходит вместе с открытым броском. Хранилище недоступно — набор живёт до перезагрузки.
  */
+const PREFS = (userId) => `rasputye-v2-prefs:${userId}`;
 const chosen = new Map();
-export const mySkin = (userId) => skinById(chosen.get(userId)).id;
+function readPrefs(userId) {
+  try {
+    const v = JSON.parse(localStorage.getItem(PREFS(userId)) || 'null');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+export function mySkin(userId) {
+  if (!chosen.has(userId)) {
+    const s = skinById(readPrefs(userId).diceSkin); // неизвестное → «Кость»
+    chosen.set(userId, s.id);
+    if (s.art) new Image().src = s.art;
+  }
+  return chosen.get(userId);
+}
 export function setMySkin(userId, id) {
   const s = skinById(id);
   chosen.set(userId, s.id);
   if (s.art) new Image().src = s.art; // лист граней заранее — к первому броску он уже в кэше
+  try { localStorage.setItem(PREFS(userId), JSON.stringify({ ...readPrefs(userId), diceSkin: s.id })); } catch { /* приватный режим — до перезагрузки */ }
 }
