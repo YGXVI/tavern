@@ -66,3 +66,26 @@ test('ручные существа не дублируются; SRD догру�
   const names = BESTIARY.map((m) => m.name);
   assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, 'ru')));
 });
+
+// TASK-119: генератор берёт только статблоки SRD 5.1. Не-SRD (другой source) в общий каталог сайта не попадают,
+// даже если у записи есть slug и полный статблок (решение #116: не-SRD — только личная библиотека мастера).
+test('Генератор: в каталог стола идут только статблоки SRD', async () => {
+  const { readFileSync, writeFileSync, mkdtempSync } = await import('node:fs');
+  const { execFileSync } = await import('node:child_process');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const root = new URL('../', import.meta.url);
+  const data = JSON.parse(readFileSync(new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
+  const srd = data.monsters.find((m) => m.stat_block?.source === 'srd_api_2014' && !['cultist', 'goblin'].includes(m.identity?.srd_index));
+  assert.ok(srd, 'в каталоге есть SRD-статблок');
+  const other = structuredClone(srd);
+  other.id = 'test:non-srd'; other.identity = { ...other.identity, srd_index: null, slug: 'not-srd-creature' };
+  other.stat_block = { ...other.stat_block, source: 'dndsu_public_technical_fields' };
+  const dir = mkdtempSync(join(tmpdir(), 'bestiary-'));
+  const inFile = join(dir, 'in.json'), outFile = join(dir, 'out.js');
+  writeFileSync(inFile, JSON.stringify({ ...data, monsters: [srd, other] }));
+  execFileSync(process.execPath, [new URL('tools/bestiary-srd.mjs', root).pathname, inFile, outFile], { stdio: 'pipe' });
+  const { default: list } = await import(pathToFileURL(outFile).href);
+  assert.deepEqual(list.map((m) => m.id), [`srd:${srd.identity.srd_index || srd.identity.slug}`]);
+});
