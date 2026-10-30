@@ -285,9 +285,10 @@ function stepWorld(bodies, bounds) {
       if (contactPlane(b, [0, 1, 0], 0, FLOOR, wv)) { b.w = mul(b.w, 0.988); b.v = [b.v[0] * 0.994, b.v[1], b.v[2] * 0.994]; }
       // Стенки чуть внутри холста: в перспективе куб у стенки не обрезается краем.
       // Сверху — полоса под сумму и кнопки лотка (top): кубы туда не закатываются.
+      // Слева и справа — поля (left/right): на столе кубы катаются ближе к середине, не под правой панелью (TASK-130).
       const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
-      contactPlane(b, [1, 0, 0], -hw, WALL, worldVerts(b));
-      contactPlane(b, [-1, 0, 0], -hw, WALL, worldVerts(b));
+      contactPlane(b, [1, 0, 0], -hw + (bounds.left || 0), WALL, worldVerts(b));
+      contactPlane(b, [-1, 0, 0], -hw + (bounds.right || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, 1], -hd + (bounds.top || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, -1], -hd + (bounds.bottom || 0), WALL, worldVerts(b));
     }
@@ -522,13 +523,15 @@ export const PX_PER_UNIT = 42;
 const FADE_MS = 650;
 
 /**
- * Сцена с кубами на холсте. insetTop/insetBottom — полосы (px), куда кубы не закатываются (шапка лотка, панели стола).
+ * Сцена с кубами на холсте. insetTop/insetBottom/insetLeft/insetRight — полосы (px), куда кубы не закатываются
+ * (шапка лотка, панели стола); на столе их меняет setInsets() перед броском — площадка ближе к середине (TASK-130).
  * hover — кубы до броска висят в воздухе и трясутся, как в кулаке (лоток); иначе падают и укатываются.
  * API: add(kind, opts) — положить куб; remove(kind); throw(targets, opts) → Promise<{center, top, dice}> (px; dice — каждый куб);
- *      place(targets, opts) — без анимации; fade(group, delay); clear(); resize(); destroy().
+ *      place(targets, opts) — без анимации; fade(group, delay); setInsets({top, bottom, left, right}); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
-export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr = 2, hover = false } = {}) {
+export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false } = {}) {
+  const inset = { top: insetTop, bottom: insetBottom, left: insetLeft, right: insetRight };
   const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
   if (!gl) return null;
   const prog = compile(gl, VS, FS), sprog = compile(gl, SVS, SFS);
@@ -549,7 +552,8 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     dpr = Math.min(maxDpr, devicePixelRatio || 1);
     const w = canvas.clientWidth || 300, h = canvas.clientHeight || 480;
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, top: insetTop / PX_PER_UNIT, bottom: insetBottom / PX_PER_UNIT, px: [w, h] };
+    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, px: [w, h] };
+    applyInsets();
     camH = bounds.d / 2 / Math.tan(FOV / 2);
     const proj = perspective(FOV, w / h, 1, camH + 10);
     // Камера над центром смотрит вниз; «вверх» экрана — к −z.
@@ -562,6 +566,20 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       if (!b.hover) b.asleep = false;
     }
     kick();
+  }
+
+  /** Поля площадки в единицах сцены; cx — середина площадки по ширине (туда бросок и целится). */
+  function applyInsets() {
+    const u = PX_PER_UNIT, maxSide = Math.max(0, bounds.w - 3);
+    bounds.top = inset.top / u; bounds.bottom = inset.bottom / u;
+    bounds.left = Math.min(maxSide, Math.max(0, inset.left / u));
+    bounds.right = Math.min(maxSide - bounds.left, Math.max(0, inset.right / u));
+    bounds.cx = (bounds.left - bounds.right) / 2;
+    bounds.aw = bounds.w - bounds.left - bounds.right;
+  }
+  function setInsets(next = {}) {
+    for (const k of ['top', 'bottom', 'left', 'right']) if (Number.isFinite(next[k])) inset[k] = Math.max(0, next[k]);
+    applyInsets();
   }
 
   function buildBuffer(b) {
@@ -781,12 +799,12 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function launch(b, k = 1) {
     if (b.fromAir) {
       const ang = Math.random() * Math.PI * 2, sp = k * (4 + Math.random() * 5);
-      b.v = [Math.cos(ang) * sp - b.x[0] * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
+      b.v = [Math.cos(ang) * sp - (b.x[0] - (bounds.cx || 0)) * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
       b.w = [(Math.random() - 0.5) * 40, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 40];
       return;
     }
     const speed = k * (8 + Math.random() * 9);
-    const ang = (Math.random() - 0.5) * 0.9 - (b.x[0] / bounds.w) * 0.5;
+    const ang = (Math.random() - 0.5) * 0.9 - ((b.x[0] - (bounds.cx || 0)) / (bounds.aw || bounds.w)) * 0.5;
     b.v = [Math.sin(ang) * speed, 3 + Math.random() * 4, -Math.cos(ang) * speed];
     if (b.x[2] < 0) b.v[2] = -b.v[2] * 0.6; // кубы в верхней половине летят вниз, навстречу
     b.w = [(Math.random() - 0.5) * 34, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 34];
@@ -800,7 +818,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     if (frames) { applyFrame(frames[Math.min(frameAt, frames.length - 1)]); for (const b of bodies) if (b.target != null && !b.done) b.asleep = false; frames = null; playStart = 0; }
     const pool = opts.fresh ? [] : bodies.filter((b) => b.target == null);
     const used = [];
-    const cols = Math.max(1, Math.floor((bounds.w - 1.4) / 1.9));
+    const cols = Math.max(1, Math.floor((bounds.aw - 1.4) / 1.9));
     const lane = opts.lane ?? 0; // смещение ряда вылета по ширине (−0.5…0.5): у разных бросков — разные места
     targets.forEach((t, i) => {
       const k = pool.findIndex((b) => b.kind === t.kind);
@@ -809,7 +827,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       else {
         // Новые кубы вылетают из-под нижнего края рядами, не налезая друг на друга.
         const n = Math.min(targets.length, cols), col = i % cols, row = Math.floor(i / cols);
-        const x = (col + 0.5 - n / 2) * 1.9 + lane * (bounds.w - n * 1.9) + (Math.random() - 0.5) * 0.3;
+        const x = bounds.cx + (col + 0.5 - n / 2) * 1.9 + lane * Math.max(0, bounds.aw - n * 1.9) + (Math.random() - 0.5) * 0.3;
         b = makeBody(t.kind, { x: [x, 1.4 + Math.random() * 0.8 + row * 0.4, bounds.d / 2 - bounds.bottom - 1.3 - row * 1.9], skin: opts.skin });
         bodies.push(b);
       }
@@ -874,10 +892,10 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function placeDice(targets, opts = {}) {
     frames = null;
     if (!opts.keep) { dispose(bodies); bodies = []; }
-    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.w / 2)));
+    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.aw / 2)));
     const lane = opts.lane ?? 0;
     const placed = targets.map((t, i) => {
-      const x = ((i % cols) + 0.5 - cols / 2) * 2 + lane * (bounds.w - cols * 2);
+      const x = bounds.cx + ((i % cols) + 0.5 - cols / 2) * 2 + lane * Math.max(0, bounds.aw - cols * 2);
       const z = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * 2 + (bounds.top - bounds.bottom) / 2;
       const b = makeBody(t.kind, { x: [x, 0, z], skin: opts.skin });
       b.q = alignedQuat(b);
@@ -904,7 +922,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   resize();
   return {
-    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, resize,
+    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, setInsets, resize,
     clear() { dispose(bodies); bodies = []; frames = null; const done = pending; pending = []; for (const r of done) r(); render(); },
     /** Кубы, лежащие в лотке до броска. */
     kinds: () => bodies.filter((b) => b.target == null).map((b) => b.kind),
