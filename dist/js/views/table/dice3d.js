@@ -523,6 +523,133 @@ function drawArtAtlas(b, cv, x, img) {
   });
 }
 
+// ——— Набор «Воронёная сталь» (TASK-148): грани рисует код ———
+// Тёмный металл с серебряными шипами-листьями у вершин и рёбер, в центре грани — синий эмалевый медальон
+// в серебряной оправе, цифра — серебро. Основа (металл, шипы, медальон) рисуется один раз на форму куба,
+// перед броском поверх неё ставятся только цифры.
+const filigreeBase = new Map(); // форма → холст основы
+function faceCells(b, cv) {
+  const cols = cv.width / CELL;
+  return b.g.faces.map((f, fi) => {
+    const ox = (fi % cols) * CELL, oy = Math.floor(fi / cols) * CELL;
+    const sc = (CELL * 0.44) / f.R;
+    const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
+    return { f, fi, ox, oy, sc, P: f.idx.map((i) => to2(b.g.verts[i])), cx: ox + CELL / 2, cy: oy + CELL / 2, rr: f.r * sc };
+  });
+}
+/** Радиус медальона на грани: у к4 — по узкой стороне длинной грани; на остриях к4 медальона нет. */
+function medalR(b, fc) {
+  if (b.shape === 4) return b.g.numbered.includes(fc.fi) ? fc.rr * 0.78 : 0;
+  return fc.rr * (b.shape === 12 ? 0.6 : b.shape === 10 ? 0.62 : 0.66);
+}
+function leaf(x, ax, ay, bx, by, w) {
+  const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+  const mx = ax + dx * 0.42, my = ay + dy * 0.42;
+  const g = x.createLinearGradient(ax, ay, bx, by);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#c6ccd6'); g.addColorStop(1, '#5d6470');
+  x.fillStyle = g;
+  x.beginPath(); x.moveTo(ax, ay);
+  x.quadraticCurveTo(mx + nx * w, my + ny * w, bx, by);
+  x.quadraticCurveTo(mx - nx * w, my - ny * w, ax, ay);
+  x.closePath(); x.fill(); x.stroke();
+}
+function filigreeBaseCanvas(b, w, h) {
+  const key = `${b.shape}|${w}x${h}`;
+  if (filigreeBase.has(key)) return filigreeBase.get(key);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const rnd = seeded(b.shape * 131);
+  x.fillStyle = '#0d0f13'; x.fillRect(0, 0, w, h);
+  for (const fc of faceCells(b, cv)) {
+    const { P, cx, cy } = fc;
+    x.save();
+    x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath(); x.clip();
+    // Воронёный металл: тёмный градиент, мелкие светлые риски.
+    const mg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    mg.addColorStop(0, '#454c58'); mg.addColorStop(0.5, '#23272f'); mg.addColorStop(1, '#0e1014');
+    x.fillStyle = mg; x.fillRect(fc.ox, fc.oy, CELL, CELL);
+    x.lineCap = 'round';
+    for (let i = 0; i < 26; i++) {
+      x.strokeStyle = `rgba(210,220,235,${0.03 + rnd() * 0.06})`; x.lineWidth = 0.6 + rnd();
+      const a = rnd() * Math.PI, l = 8 + rnd() * 30, px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL;
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
+    }
+    // Кромка грани — серебряный валик с тёмным швом по самому ребру.
+    x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath();
+    const rg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    rg.addColorStop(0, '#f4f6fa'); rg.addColorStop(0.5, '#8d95a2'); rg.addColorStop(1, '#3a404a');
+    x.strokeStyle = rg; x.lineWidth = 12; x.stroke();
+    x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 3; x.stroke();
+    // Шипы-листья: большой от каждой вершины к центру и по два боковых; маленький — от середины ребра.
+    x.lineJoin = 'round'; x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 1.4;
+    const reach = b.shape === 12 ? 0.42 : b.shape === 4 ? 0.34 : 0.5;
+    P.forEach(([vx, vy], i) => {
+      const dx = cx - vx, dy = cy - vy, D = Math.hypot(dx, dy) || 1, ux = dx / D, uy = dy / D;
+      for (const sgn of [-1, 1]) {
+        const a = Math.atan2(uy, ux) + sgn * 0.7, bx0 = vx + dx * 0.1, by0 = vy + dy * 0.1, L = D * 0.27;
+        leaf(x, bx0, by0, bx0 + Math.cos(a) * L, by0 + Math.sin(a) * L, L * 0.27);
+      }
+      leaf(x, vx + dx * 0.02, vy + dy * 0.02, vx + dx * reach, vy + dy * reach, D * 0.1);
+      const [qx, qy] = P[(i + 1) % P.length], mx = (vx + qx) / 2, my = (vy + qy) / 2;
+      const ex = cx - mx, ey = cy - my;
+      leaf(x, mx, my, mx + ex * 0.32, my + ey * 0.32, Math.hypot(ex, ey) * 0.09);
+    });
+    // Медальон: синяя эмаль с разводами в серебряной оправе.
+    const R = medalR(b, fc);
+    if (R > 0) {
+      x.beginPath(); x.arc(cx, cy, R * 1.18, 0, Math.PI * 2);
+      x.fillStyle = 'rgba(0,0,0,.55)'; x.fill();
+      // Лепестки вокруг оправы.
+      const petals = R > 22 ? 8 : 6;
+      for (let k = 0; k < petals; k++) {
+        const a = (k / petals) * Math.PI * 2 + Math.PI / petals;
+        leaf(x, cx + Math.cos(a) * R * 1.05, cy + Math.sin(a) * R * 1.05, cx + Math.cos(a) * R * 1.5, cy + Math.sin(a) * R * 1.5, R * 0.13);
+      }
+      const ring = x.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+      ring.addColorStop(0, '#ffffff'); ring.addColorStop(0.45, '#b9c0cc'); ring.addColorStop(1, '#3d434d');
+      x.beginPath(); x.arc(cx, cy, R * 1.17, 0, Math.PI * 2); x.fillStyle = ring; x.fill();
+      x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 1.4; x.stroke();
+      const en = x.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+      en.addColorStop(0, '#7cc2ff'); en.addColorStop(0.45, '#2a74e6'); en.addColorStop(1, '#0a2766');
+      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fillStyle = en; x.fill();
+      x.save(); x.clip();
+      for (let i = 0; i < 7; i++) {
+        x.strokeStyle = `rgba(150,205,255,${0.12 + rnd() * 0.18})`; x.lineWidth = 1 + rnd() * 1.6;
+        const a0 = rnd() * Math.PI * 2, rr = R * (0.35 + rnd() * 0.6);
+        x.beginPath(); x.arc(cx + (rnd() - 0.5) * R * 0.5, cy + (rnd() - 0.5) * R * 0.5, rr, a0, a0 + 1.2 + rnd() * 1.6); x.stroke();
+      }
+      x.restore();
+      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.strokeStyle = 'rgba(4,10,25,.8)'; x.lineWidth = 2; x.stroke();
+    }
+    x.restore();
+  }
+  filigreeBase.set(key, cv);
+  return cv;
+}
+function drawFiligreeAtlas(b, cv, x) {
+  x.drawImage(filigreeBaseCanvas(b, cv.width, cv.height), 0, 0);
+  b.uv = [];
+  for (const fc of faceCells(b, cv)) {
+    b.uv.push(fc.P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const li = b.g.numbered.indexOf(fc.fi);
+    if (li < 0) continue;
+    const R = medalR(b, fc);
+    const v = b.labels[li];
+    // Как на настоящем к10: «10» — это «0».
+    const txt = v === '?' ? '?' : b.kind === 10 && Number(v) === 10 ? '0' : labelText(b.kind, v);
+    const size = R * (txt.length > 1 ? 0.95 : 1.3);
+    x.save(); x.translate(fc.cx, fc.cy + R * 0.04);
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `700 ${size}px Unbounded, Inter, system-ui, sans-serif`;
+    x.lineJoin = 'round'; x.strokeStyle = 'rgba(3,8,20,.9)'; x.lineWidth = Math.max(2, size * 0.12); x.strokeText(txt, 0, 0);
+    const sg = x.createLinearGradient(0, -size / 2, 0, size / 2);
+    sg.addColorStop(0, '#ffffff'); sg.addColorStop(0.55, '#dfe5ee'); sg.addColorStop(1, '#9aa4b3');
+    x.fillStyle = sg; x.fillText(txt, 0, 0);
+    if (txt === '6' || txt === '9') { x.fillRect(-size * 0.22, size * 0.44, size * 0.44, Math.max(2, size * 0.07)); }
+    x.restore();
+  }
+}
+
 function drawAtlas(b) {
   const faces = b.g.faces;
   const cols = Math.ceil(Math.sqrt(faces.length));
@@ -536,6 +663,7 @@ function drawAtlas(b) {
   const art = sk.art ? artImage(sk.art) : null;
   b.artPending = !!sk.art && !art;
   if (art) { drawArtAtlas(b, cv, x, art); b.atlas = cv; b.texDirty = true; return; }
+  if (sk.paint === 'filigree') { drawFiligreeAtlas(b, cv, x); b.atlas = cv; b.texDirty = true; return; }
   // Камень набора: основа, мягкие пятна светлого и тёмного тона, тонкие прожилки.
   x.fillStyle = sk.base;
   x.fillRect(0, 0, cv.width, cv.height);

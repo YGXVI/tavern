@@ -15,7 +15,8 @@ const RAIL = {
 /**
  * Наборы кубов. light/base/dark — грани иконки и основа камня объёмного куба, ink — цифры,
  * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость;
- * art — лист нарисованных граней (вместо камня и шрифта), пока не загрузился — рисуется камнем в цветах набора.
+ * art — лист нарисованных граней (вместо камня и шрифта), пока не загрузился — рисуется камнем в цветах набора;
+ * paint: 'filigree' — грани рисует код (металл с орнаментом и эмалевым медальоном).
  */
 export const SKINS = [
   { id: 'bone', name: 'Кость', light: '#f3e8d2', base: '#d9c49c', dark: '#9a7f55', ink: '#2b1e15', engrave: true, spec: 0.35, metal: 0.05, lum: 0.78 },
@@ -27,6 +28,8 @@ export const SKINS = [
   // Пилот (TASK-127): грани нарисованы — лист картинок из макета sol0139, порядок ячеек — ART_LAYOUT в dice3d.js.
   { id: 'cobalt', name: 'Кобальт', light: '#ffffff', base: '#dfe5f1', dark: '#1e3c96', ink: '#1e3c96', spec: 0.85, metal: 0.03, lum: 0.9,
     art: new URL('./dice-cobalt.webp', import.meta.url).href },
+  // TASK-148: грани рисует код (paint: 'filigree' в dice3d.js) — воронёный металл, серебряные шипы, синяя эмаль.
+  { id: 'blued', name: 'Воронёная сталь', light: '#3d8bff', base: '#9aa3b0', dark: '#16191f', ink: '#e8ecf2', spec: 0.9, metal: 0.5, lum: 1.05, paint: 'filigree' },
 ];
 export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 
