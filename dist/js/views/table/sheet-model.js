@@ -60,6 +60,6 @@ export function readCharacter(character) {
   for(const kind of ['saves','skills'])for(const a of kind==='saves'?ABILITIES:SKILLS){
     view[kind][a.id]=checkBonus({score:view.abilities[a.ab||a.id],proficiency:view.proficiency,multiplier:Number(s.proficiencies?.[kind]?.[a.id]??(s[kind]?.includes(a.id)?1:0)),override:s.overrides?.[kind]?.[a.id]?.value==null?null:s.overrides[kind][a.id]});
   }
-  view.movement={...view.movement,...(s.movement||{})};
+  view.movement={...(s.movement||{}),walk:knownNumber(s.speed)};
   return view;
 }

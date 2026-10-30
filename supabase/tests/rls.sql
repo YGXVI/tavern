@@ -319,6 +319,21 @@ select pg_temp.ok('архив: текущий по инициативе сним
 select pg_temp.cnt('архив: следующим ходит средняя инициатива без лишнего раунда', $q$select 1 from public.combats where campaign_id='c-rls' and data->>'current'='t-order-mid' and data->'round'='7' and not (data ? 'ended')$q$,1);
 reset role;
 
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('статблок: восстановление для проверки полей', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000001','restore') from public.characters where id='ch-edit'$q$);
+select pg_temp.code('статблок: save требует кто бросает', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000002','patch','{"statblock":{"actions":[{"name":"Взгляд","text":"Описание","save":{"ability":"wis","dc":12}}]}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.ok('статблок: нулевые бонусы и явный self сохраняются', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000003','patch','{"statblock":{"source":"manual","legendary":{"count":0,"actions":[]},"actions":[{"name":"Своя способность","text":"Это текст, HP не изменяются","attack":{"bonus":0},"save":{"ability":"wis","dc":0,"who":"self"},"damage":[{"dice":"1d6+1","type":"свой"}]}]}}') from public.characters where id='ch-edit'$q$);
+select pg_temp.cnt('статблок: текст и формула не изменили HP', $q$select 1 from public.characters where id='ch-edit' and data->'hp'='9' and data#>'{statblock,actions,0,attack,bonus}'='0' and data#>'{statblock,legendary,count}'='0'$q$,1);
+select pg_temp.code('статблок: неизвестный бонус не строка', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000004','patch','{"statblock":{"actions":[{"name":"Атака","text":"","attack":{"bonus":"неизвестно"}}]}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('статблок: изображение требует ref', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000005','patch','{"statblock":{"source":"image"}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('статблок: перезарядка не произвольное число', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000006','patch','{"statblock":{"actions":[{"name":"Дыхание","text":"","rechargeMin":5,"rechargeMax":3}]}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('статблок: размер UTF8 ограничен', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000007','patch',jsonb_build_object('statblock',jsonb_build_object('senses',repeat('я',34000)))) from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('override: булев итог не число', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000008','patch','{"overrides":{"initiative":{"value":true,"reason":""}}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.ok('override: явный ноль допустим', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000009','patch','{"overrides":{"initiative":{"value":0,"reason":"Исключение"}}}') from public.characters where id='ch-edit'$q$);
+select pg_temp.code('Sidekick: класс только из трёх', $q$select public.character_command('c-rls','ch-sk',sheet_version,'90000000-0000-0000-0000-000000000010','patch','{"sidekick":{"class":"wizard"}}') from public.characters where id='ch-sk'$q$,'22023');
+select pg_temp.ok('Sidekick: подтверждённая базовая точка', $q$select public.character_command('c-rls','ch-sk',sheet_version,'90000000-0000-0000-0000-000000000011','patch','{"sidekick":{"class":"warrior","baseLevel":5,"hitDie":8,"partyIds":["ch-q"]}}') from public.characters where id='ch-sk'$q$);
+reset role;
+
 -- ——— Исключение ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер исключает игрока', $q$delete from public.campaign_members where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000b'$q$, 1);

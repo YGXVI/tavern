@@ -902,3 +902,5 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .sheet-editor { background:rgb(12 14 22); }
 .sheet-actor-switch { padding:0 16px 10px; }
 .sheet-actor-switch select { width:100%; padding:6px; color:var(--text-primary); background:var(--bg-control); border:1px solid var(--stroke-subtle); border-radius:6px; }
+.sheet-actor-tools { padding:0 16px 8px; flex-shrink:0; }
+.sheet-source-image { display:block; max-width:100%; height:auto; margin:12px 0; }

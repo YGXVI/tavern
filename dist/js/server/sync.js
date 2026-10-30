@@ -74,6 +74,20 @@ export async function submitCharacterCommand(request) {
   return result;
 }
 
+/** Создание отдельного экземпляра; ID сохраняется вызывающим до ответа для безопасного повтора. */
+export async function createCharacterSheet(cid, character) {
+  if(!sb||!me)throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  const {id,ownerId,...data}=structuredClone(character);
+  const result=await sb.from('characters').insert({id,campaign_id:cid,owner_id:ownerId,data}).select('*').single();
+  if(result.error&&result.error.code!=='23505')throw result.error;
+  // Повтор после потери ответа не делает вторую копию. Существующую строку не перезаписываем.
+  const snapshot=await sheets.read(cid,id);
+  if(snapshot.ownerId!==ownerId)throw new SheetCommandError('conflict');
+  await loadCampaign(cid);
+  return snapshot;
+}
+
 /** Объект для store.useServerBackend: как хранилище говорит с сервером. */
 export const backend = {
   userId: () => me,

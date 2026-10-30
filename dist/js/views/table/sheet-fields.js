@@ -24,7 +24,8 @@ export function sheetBonus(ch, group, id, ability) {
   const multiplier = ch.proficiencies?.[group]?.[id] ?? (ch[group]?.includes(id) ? 1 : 0);
   return checkBonus({ score: ch.stats?.[ability], proficiency: proficiencyValue(ch).value, multiplier: Number(multiplier), override: ch.overrides?.[group]?.[id]?.value == null ? null : ch.overrides[group][id] });
 }
-export function sheetInitiative(ch) { return ch.initBonus ?? abilityModifier(ch.stats?.dex); }
+export function sheetInitiative(ch) { const calc=abilityModifier(ch.stats?.dex);if(Object.hasOwn(ch.overrides||{},'initiative')){const o=ch.overrides.initiative;return resolveSheetValue(calc,o?.value==null?null:o).value;}return ch.initBonus??calc; }
+export function prepareSheetDerived(ch){const next=copy(ch);if(next.initBonus==null&&!Object.hasOwn(next.overrides||{},'initiative')){next.overrides??={};next.overrides.initiative=null;}next.initBonus=sheetInitiative(next);next.profBonus=proficiencyValue(next).value;return next;}
 export function validateDraft(ch) {
   const errors = [];
   if (!ch.name?.trim()) errors.push('Укажите имя');

@@ -3,26 +3,28 @@ import {createRequire} from 'node:module';import assert from 'node:assert/strict
 import {fakeServer} from '../server-e2e/harness.mjs';
 import {seedDB} from '../../../dist/js/data/demo.js';import {explode,emptyRows} from '../../../dist/js/server/model.js';
 const {chromium}=createRequire(import.meta.url)('playwright');
-const A='00000000-0000-0000-0000-0000000000a1',B='00000000-0000-0000-0000-0000000000b2';
-let lost=false,applied=0;const replies=new Map(),commands=[];
+const A='00000000-0000-0000-0000-0000000000a1',B='00000000-0000-0000-0000-0000000000b2',C='00000000-0000-0000-0000-0000000000c3';
+let lost=false,applied=0;const replies=new Map(),commands=[],grants=new Map();
 function merge(a,b){const out=structuredClone(a);for(const[k,v]of Object.entries(b))out[k]=v&&typeof v==='object'&&!Array.isArray(v)?merge(out[k]||{},v):structuredClone(v);return out;}
-const fake=fakeServer({names:{[A]:'Мастер',[B]:'Игрок'},rpcOverride({name,args:a,tables:T}){
+const fake=fakeServer({names:{[A]:'Мастер',[B]:'Игрок',[C]:'Читатель'},rpcOverride({name,args:a,tables:T,emit}){
  if(!['read_character_sheet','character_command'].includes(name))return;
  const ch=T.characters.find(c=>c.id===a.p_character&&c.campaign_id===a.p_campaign);
- const snapshot=()=>({id:ch.id,campaignId:ch.campaign_id,ownerId:ch.owner_id,version:String(ch.sheet_version),managed:ch.sheet_managed,archivedAt:null,data:structuredClone(ch.data),controllers:[]});
+ const snapshot=()=>({id:ch.id,campaignId:ch.campaign_id,ownerId:ch.owner_id,version:String(ch.sheet_version),managed:ch.sheet_managed,archivedAt:null,data:structuredClone(ch.data),controllers:[...(grants.get(ch.id)||[])]});
+ if(name==='read_character_sheet'){ch.sheet_version??='0';ch.sheet_managed??=false;}
  if(name==='read_character_sheet')return{data:snapshot(),error:null};
  commands.push(structuredClone(a));
  if(replies.has(a.p_operation))return{data:{...replies.get(a.p_operation),replayed:true},error:null};
  if(String(ch.sheet_version)!==a.p_expected_version)return{data:null,error:{code:'40001',message:'version conflict'}};
+ if(a.p_kind==='controller'){const ids=grants.get(ch.id)||new Set();if(a.p_payload.enabled)ids.add(a.p_payload.userId);else ids.delete(a.p_payload.userId);grants.set(ch.id,ids);}
  ch.data=merge(ch.data,a.p_payload.patch||{});ch.data=merge(ch.data,a.p_payload.current||{});
  const d=a.p_payload.adjust||{};if(d.currentHp)ch.data.hp+=d.currentHp;if(d.tempHp)ch.data.tempHp+=d.tempHp;
  for(const c of d.counters||[]){const p=ch.data[c.field].find(p=>p.id===c.id);p.spent+=c.delta;}
- ch.sheet_version=String(BigInt(ch.sheet_version)+1n);ch.sheet_managed=true;applied++;
+ ch.sheet_version=String(BigInt(ch.sheet_version)+1n);ch.sheet_managed=true;applied++;emit('characters','UPDATE',ch);
  const ack={ok:true,operationId:a.p_operation,replayed:false,sheet:snapshot()};replies.set(a.p_operation,structuredClone(ack));
  if(lost){lost=false;return{data:null,error:{message:'Failed to fetch'}};}return{data:ack,error:null};
 }});
-const c=seedDB().campaigns['c-crypt'];c.ownerId=A;c.members=[{userId:A,role:'master',status:'active',joinedAt:Date.now()},{userId:B,role:'player',status:'active',characterId:'ch-lira',joinedAt:Date.now()}];c.log=[];c.invite=null;c.characters.forEach(ch=>ch.ownerId=B);
-const rows=explode(c,emptyRows());fake.ensureProfile(A);fake.ensureProfile(B);fake.sysInsert('campaigns',rows.campaign);
+const c=seedDB().campaigns['c-crypt'];c.ownerId=A;c.members=[{userId:A,role:'master',status:'active',joinedAt:Date.now()},{userId:B,role:'player',status:'active',characterId:'ch-lira',joinedAt:Date.now()},{userId:C,role:'player',status:'active',characterId:'ch-torin',joinedAt:Date.now()}];c.log=[];c.invite=null;c.characters.forEach(ch=>ch.ownerId=ch.id==='ch-torin'?C:B);
+const rows=explode(c,emptyRows());fake.ensureProfile(A);fake.ensureProfile(B);fake.ensureProfile(C);fake.sysInsert('campaigns',rows.campaign);
 const maps={members:'campaign_members',characters:'characters',scenes:'scenes',secrets:'scene_secrets',explored:'scene_explored',tokens:'tokens',drawings:'drawings'};
 for(const[key,table]of Object.entries(maps))for(const row of rows[key].values())fake.sysInsert(table,key==='characters'?{...row,sheet_version:'0',sheet_managed:false,archived_at:null}:row);
 fake.sysInsert('combats',rows.combat);
@@ -48,4 +50,14 @@ assert.equal(await page.locator('[data-field="name"]').inputValue(),'Локал�
 await page.click('[data-reload]');await page.waitForSelector('[data-resolve="0"]');await page.click('[data-resolve="0"][data-choice="local"]');await page.click('[data-save]');
 await page.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Сохранено'));
 assert.equal(fake.T.characters.find(c=>c.id==='ch-lira').data.name,'Локальная версия');
-assert.deepEqual(errors,[]);console.log('sheet server harness OK: ACK, lost ACK/reopen/same UUID, legacy store bridge, conflict choice');await browser.close();
+await page.click('[data-new-sheet]');await page.locator('[data-create-name]').fill('Серверный NPC');await page.locator('[data-create-profile]').selectOption('creature');await page.click('[data-create-ok]');
+await page.waitForFunction(()=>document.querySelector('[data-field="name"]')?.value==='Серверный NPC');
+assert.equal(fake.T.characters.filter(c=>c.data.name==='Серверный NPC').length,1);
+await page.click('[data-tab="combat"]');await page.locator('[data-field="hpMax"]').fill('10');await page.locator('[data-field="hp"]').fill('10');await page.click('[data-save]');await page.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Сохранено'));
+await page.click('[data-tab="notes"]');await page.check(`[data-controller="${B}"]`);await page.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Сохранено'));
+const npcId=fake.T.characters.find(c=>c.data.name==='Серверный NPC').id;
+async function participant(user){const ctx=await browser.newContext();await fake.attach(ctx);await ctx.route(/fonts\.(googleapis|gstatic)\.com/,r=>r.abort());const p=await ctx.newPage();p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(u=>localStorage.setItem('fake-sb-user',u),user);await p.goto('http://127.0.0.1:4173/?server=1#/c/c-crypt');await p.waitForSelector('.viewport');await p.evaluate(async({user,npcId})=>{const{openCharacterSheet}=await import('/js/views/table/sheet.js');const{getCampaign}=await import('/js/core/campaign.js');openCharacterSheet({cid:'c-crypt',userId:user,get c(){return getCampaign(this.cid)},root:document.querySelector('.table'),toast:()=>{},ui:{},panels:{}},npcId);},{user,npcId});await p.waitForFunction(()=>document.querySelector('.sheet-head')?.textContent.includes('Лист загружен'));return p;}
+const controlled=await participant(B);assert.equal(await controlled.locator('[data-field="name"]').isDisabled(),true);await controlled.click('[data-tab="combat"]');assert.equal(await controlled.locator('[data-field="hp"]').isDisabled(),false);assert.equal(await controlled.locator('[data-field="hpMax"]').isDisabled(),true);await controlled.locator('[data-field="hp"]').fill('8');await controlled.click('[data-save]');await controlled.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Сохранено'));assert.equal(commands.at(-1).p_payload.patch,undefined);
+const reader=await participant(C);await reader.click('[data-tab="combat"]');assert.equal(await reader.locator('[data-field="hp"]').isDisabled(),true);assert.equal(await reader.locator('[data-field="hp"]').inputValue(),'8');await reader.setViewportSize({width:390,height:844});await reader.waitForTimeout(250);await reader.screenshot({path:'/tmp/task004-server-reader-mobile.png'});
+await page.click('[data-reload]');await page.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Лист загружен'));await page.uncheck(`[data-controller="${B}"]`);await page.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Сохранено'));await controlled.click('[data-reload]');await controlled.waitForFunction(()=>document.querySelector('.sheet-head').textContent.includes('Лист загружен'));assert.equal(await controlled.locator('[data-field="hp"]').isDisabled(),true);
+assert.deepEqual(errors,[]);console.log('sheet server harness OK: ACK, lost ACK/reopen/same UUID, legacy store bridge, conflict choice, owner/controller/reader/revocation');await browser.close();

@@ -45,3 +45,32 @@ test('архив песочницы передаёт ход по инициат�
  archiveLocalCharacter(c,'a');assert.equal(c.combat.current,'tc');assert.equal(c.combat.round,2);assert.equal(c.combat.ended,undefined);assert.equal(c.archivedCharacters[0].hp,3);
  restoreLocalCharacter(c,'a');assert.equal(c.characters.find(x=>x.id==='a').hp,3);assert.equal(c.scenes[0].tokens.some(t=>t.id==='ta'),false);
 });
+
+test('две копии листа независимы, сохраняют раны и переназначают ссылки источников магии',async()=>{
+ const {copySheet}=await import('../dist/js/views/table/sheet-creature.js');let n=0;
+ const original={id:'old',ownerId:'a',name:'Старый',hp:3,hpMax:10,tempHp:2,controllerIds:['b'],spellSources:[{id:'s',name:'Источник'}],knownSpells:[{id:'spell',sourceId:'s',name:'Заклинание'}],custom:{keep:true}};
+ const ch=copySheet(original,{id:'new',ownerId:'c',name:'Копия'},()=>String(++n));
+ assert.equal(ch.hp,3);assert.equal(ch.tempHp,2);assert.equal(ch.controllerIds,undefined);assert.notEqual(ch.spellSources[0].id,'s');assert.equal(ch.knownSpells[0].sourceId,ch.spellSources[0].id);
+ ch.custom.keep=false;assert.equal(original.custom.keep,true);
+});
+
+test('SRD становится независимым экземпляром с источником; неизвестный NPC не получает уровень героя',async()=>{
+ const {sheetFromSrd,emptySheet,validateSheetStatblock}=await import('../dist/js/views/table/sheet-creature.js');
+ const list=(await import('../dist/js/data/bestiary-srd.js')).default,template=list.find(m=>m.id==='srd:cat');
+ const a=sheetFromSrd(template,{id:'npc-a',ownerId:null,name:'Кот'}),b=sheetFromSrd(template,{id:'npc-b',ownerId:null,name:'Другой'});
+ assert.equal(a.hpMax,template.hp);assert.equal(a.level,null);assert.deepEqual(validateSheetStatblock(a),[]);
+ a.hp=0;a.statblock.baseSnapshot.stats.dex=1;assert.equal(b.hp,template.hp);assert.notEqual(b.statblock.baseSnapshot.stats.dex,1);
+ assert.equal(emptySheet({id:'n',ownerId:null,name:'Неполный',profile:'creature'}).hp,null);
+});
+
+test('инициатива сохраняет legacy-итог, явный ноль и общий расчёт DEX для токена',async()=>{
+ const {prepareSheetDerived,sheetInitiative}=await import('../dist/js/views/table/sheet-fields.js');
+ assert.equal(prepareSheetDerived({level:5,stats:{dex:18},initBonus:0}).initBonus,0);
+ const ch=prepareSheetDerived({level:5,stats:{dex:18},initBonus:0,overrides:{initiative:null}});assert.equal(ch.initBonus,4);assert.equal(ch.profBonus,3);
+ ch.stats.dex=20;assert.equal(prepareSheetDerived(ch).initBonus,5);ch.overrides.initiative={value:0,reason:'Исключение'};assert.equal(sheetInitiative(ch),0);
+});
+
+test('все runtime SRD проходят валидацию статблока после отделения текущих статов',async()=>{
+ const {sheetFromSrd,validateSheetStatblock}=await import('../dist/js/views/table/sheet-creature.js');const list=(await import('../dist/js/data/bestiary-srd.js')).default;
+ for(const template of list){const ch=sheetFromSrd(template,{id:'check',ownerId:null,name:template.name});assert.deepEqual(validateSheetStatblock(ch),[],template.id);assert.equal(ch.statblock.hp,undefined);assert.equal(ch.hpMax,template.hp);}
+});

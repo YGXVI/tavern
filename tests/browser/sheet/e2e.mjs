@@ -45,5 +45,13 @@ await page.click('[data-close-sheet]');await open('u-timur');assert.equal(await 
 await page.click('[data-tab="combat"]');assert.equal(await page.locator('[data-field="hp"]').isDisabled(),true);
 await page.click('[data-close-sheet]');await open();await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/tmp/task004-sheet-mobile.png'});
 const rect=await page.locator('.sheet-drawer').boundingBox();assert.ok(rect.x>=0&&rect.x+rect.width<=391);
+// Новый Sidekick из SRD: профиль, независимая база и рост после предпросмотра.
+await page.click('[data-new-sheet]');await page.locator('[data-create-name]').fill('Кошка-напарник');await page.locator('[data-create-profile]').selectOption('sidekick');await page.locator('[data-create-source]').selectOption('srd:cat');await page.click('[data-create-ok]');
+await page.waitForFunction(()=>document.querySelector('[data-field="name"]')?.value==='Кошка-напарник');await page.click('[data-tab="creature"]');await page.locator('[data-field="sidekick.hitDie"]').selectOption('4');await page.click('[data-save]');
+await page.click('[data-growth]');await page.locator('[data-target-level]').fill('2');await page.locator('[data-growth-rolls]').fill('3');await page.click('[data-preview-growth]');await page.click('[data-apply-growth]');
+const sidekick=await page.evaluate(async()=> (await import('/js/core/campaign.js')).getCampaign('c-crypt').characters.find(c=>c.name==='Кошка-напарник'));
+assert.equal(sidekick.level,2);assert.equal(sidekick.hp,2);assert.equal(sidekick.hpMax,5);assert.equal(sidekick.statblock.baseSnapshot.hp,2);assert.equal(sidekick.sidekick.growthHistory.length,1);assert.ok(sidekick.statblock.templateVersion.startsWith('sha256:'));
+await page.click('[data-copy-sheet]');await page.locator('[data-create-name]').fill('Вторая кошка');await page.click('[data-create-ok]');await page.waitForFunction(()=>document.querySelector('[data-field="name"]')?.value==='Вторая кошка');
+const cats=await page.evaluate(async()=> (await import('/js/core/campaign.js')).getCampaign('c-crypt').characters.filter(c=>c.name.includes('кошка')||c.name.includes('Кошка')));assert.equal(cats.length,2);assert.notEqual(cats[0].id,cats[1].id);
 assert.deepEqual(errors,[]);console.log('sheet browser OK: draft, tabs, close/reopen, save, unknown HP, expertise, readonly, long rest, archive/restore, 390px');
 await browser.close();
