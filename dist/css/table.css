@@ -13,7 +13,8 @@
 .viewport.panning, .viewport.panning * { cursor: grabbing !important; }
 .viewport[data-tool="measure"], .viewport[data-tool="draw"], .viewport[data-tool="walls"], .viewport[data-tool="gm"],
 .viewport[data-tool="terrain"], .viewport[data-tool="lights"] { cursor: crosshair; }
-.viewport[data-tool="fog"] { cursor: none; }
+/* Туман: курсор-прицел виден поверх круга кисти — видно, куда указываешь (TASK-087). */
+.viewport[data-tool="fog"] { cursor: crosshair; }
 .viewport[data-tool="text"] { cursor: text; }
 .viewport[data-tool="ping"] { cursor: cell; }
 .viewport[data-tool="select"] { cursor: crosshair; }
@@ -277,6 +278,11 @@
 }
 /* Внизу два ряда — правая панель кончается над ними и ничего не накрывает (на телефоне панель во весь экран). */
 @media (min-width: 901px) and (max-width: 1520px) { .table:has(.ch-bc > .add-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); } }
+/* Слой мастера (TASK-088): над баром слоя — второй бар параметров выбранной настройки; панели справа кончаются над обоими. */
+@media (min-width: 901px) {
+  .table:has(.ch-bc > .setting-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); }
+  .table:has(.ch-bc > .setting-bar) .side-panel[data-panel="bestiary"] { bottom: calc(var(--edge) + 136px); height: min(649px, calc(100vh - 2 * var(--edge) - 148px)); }
+}
 .ch-br { bottom: var(--edge); right: var(--edge); }
 .chrome-logo { width: 60px; height: 60px; box-shadow: var(--shadow-panel); }
 .chrome-logo:hover { filter: brightness(1.05); }

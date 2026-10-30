@@ -48,7 +48,7 @@ export function mountTable(root, cid) {
     ui: {
       tool: 'move', sub: {}, selection: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
-      wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null,
+      wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
     },
     remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map() },
     dragging: null,

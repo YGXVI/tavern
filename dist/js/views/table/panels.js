@@ -12,6 +12,7 @@ import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder }
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll } from './dice.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
+import * as C from './chrome.js';
 import { widgetHTML } from './p-widgets.js';
 import * as T from './p-token.js';
 import * as M from './p-map.js';
@@ -613,6 +614,16 @@ export class Panels {
     const ctx = this.ctx, c = ctx.c;
     if (!c) return;
     if (DICE_ACTS.has(act)) { diceAction(ctx, act, b, e); return; }
+    // Слой мастера (TASK-088): выбрать настройку карты; повторный клик закрывает её, слой остаётся.
+    if (act.startsWith('layer:')) {
+      const [, tool, sub] = act.split(':');
+      if (C.layerItemActive(ctx, act)) { ctx.setTool('move'); return; }
+      const cur = ctx.ui.sub.walls;
+      const door = (v) => v === 'door' || v === 'secret';
+      const s = tool !== 'walls' ? sub : sub === 'door' ? (door(cur) ? cur : 'door') : (cur && !door(cur) ? cur : 'wall');
+      ctx.setTool(tool, s);
+      return;
+    }
     if (act.startsWith('tool:')) { ctx.setTool(act.slice(5)); if (act === 'tool:measure') ctx.ui.sub.measure = ctx.ui.sub.measure || 'ruler'; return; }
     if (act.startsWith('sub:')) {
       const [, tool, v] = act.split(':');
@@ -658,7 +669,19 @@ export class Panels {
       case 'statblock': if (one) this.openSheetFor(one); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
-      case 'done': ctx.setTool('move'); break;
+      case 'layer': ctx.setLayer(!ctx.ui.layer); break;
+      // «Готово» слоя: подогнанная сетка сохраняется, а не теряется.
+      case 'done': case 'layer-close': {
+        // Сетку, которую подгоняли, «Готово» сохраняет; нетронутую не перезаписываем (токены не прыгают).
+        const b = ctx.ui.gridBefore;
+        if (ctx.ui.tool === 'grid' && b && ctx.ui.calib) {
+          applyCalibPreview(ctx);
+          const g = ctx.scene.grid, near = (x, y) => Math.abs((x || 0) - (y || 0)) < 0.01;
+          if (!near(g.size, b.size) || !near(g.offsetX, b.offsetX) || !near(g.offsetY, b.offsetY) || (g.feet || 5) !== (b.feet || 5) || (g.visible !== false) !== (b.visible !== false)) this.gridDone();
+        }
+        ctx.setLayer(false);
+        break;
+      }
       case 'focus-toggle': ctx.ui.focusOff = !ctx.ui.focusOff; ctx.applyFocus(); ctx.invalidate('chrome'); break;
       case 'toggle-dark': {
         const before = ctx.scene.lighting, after = before === 'dark' ? 'bright' : 'dark';
