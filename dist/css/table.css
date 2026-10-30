@@ -13,7 +13,8 @@
 .viewport.panning, .viewport.panning * { cursor: grabbing !important; }
 .viewport[data-tool="measure"], .viewport[data-tool="draw"], .viewport[data-tool="walls"], .viewport[data-tool="gm"],
 .viewport[data-tool="terrain"], .viewport[data-tool="lights"] { cursor: crosshair; }
-.viewport[data-tool="fog"] { cursor: none; }
+/* Туман: курсор-прицел виден поверх круга кисти — видно, куда указываешь (TASK-087). */
+.viewport[data-tool="fog"] { cursor: crosshair; }
 .viewport[data-tool="text"] { cursor: text; }
 .viewport[data-tool="ping"] { cursor: cell; }
 .viewport[data-tool="select"] { cursor: crosshair; }
