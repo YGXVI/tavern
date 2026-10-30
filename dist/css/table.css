@@ -811,6 +811,9 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .dt-go:active { transform: translate(-50%, -50%) scale(.95); }
 .dt-go:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 3px; }
 .dice-tray[data-state="ready"] .dt-go { display: inline-flex; }
+/* Кубы ждут броска: весь лоток — кнопка броска. */
+.dice-tray[data-state="ready"] .dt-felt { cursor: pointer; }
+.dice-tray[data-state="ready"] .dt-felt:hover .dt-go { filter: brightness(1.06); box-shadow: 0 6px 18px rgb(0 0 0 / .55), 0 0 30px rgb(233 176 82 / .8); }
 @keyframes go-breathe { 50% { box-shadow: 0 6px 18px rgb(0 0 0 / .55), 0 0 34px rgb(233 176 82 / .85); } }
 @media (prefers-reduced-motion: reduce) { .dt-go { animation: none; } }
 .dt-summary { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; pointer-events: none; }
