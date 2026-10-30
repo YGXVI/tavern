@@ -427,6 +427,79 @@ export function auraPopover(ctx, id, anchor) {
 }
 
 // ——— Контекстное меню ———
+// ——— Параметры в меню токена (TASK-039): хиты/максимум, временные, КД — правятся на месте ———
+/** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
+function canEditStats(ctx, t) {
+  if (!t || t.kind === 'item') return false;
+  return ctx.isMasterView || ctx.isMine(t);
+}
+
+function statsBlock(ctx, t) {
+  const st = tokenStats(ctx.c, t);
+  const num = (k, v, label, cls = '') => `<input class="ts-in ${cls}" data-st="${k}" value="${v}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="${label}">`;
+  return `<div class="tok-stats" data-stats="${esc(t.id)}">
+    <div class="ts-cell ts-hp"><span class="ts-cap">Хиты</span>
+      <div class="ts-hp-box" data-tip="Впишите, сколько осталось, или −урон / +лечение">${num('hp', st.hp, 'Хиты сейчас')}<i>/</i>${num('hpMax', st.hpMax, 'Максимум хитов')}</div>
+      <span class="ts-sub">сейчас · максимум</span></div>
+    <div class="ts-cell ts-temp"><span class="ts-cap">Временные</span>${num('tempHp', st.tempHp || 0, 'Временные хиты', 'ts-round')}</div>
+    <div class="ts-cell ts-ac"><span class="ts-cap">КД</span>${num('ac', st.ac ?? 10, 'Класс доспеха', 'ts-round ts-shield')}</div>
+  </div><hr>`;
+}
+
+/** Записать одно поле параметров (максимум, временные, КД) с отменой. */
+function setStat(ctx, id, field, value) {
+  const t = ctx.scene.tokens.find((x) => x.id === id); if (!t) return;
+  const st = tokenStats(ctx.c, t);
+  const cur = field === 'tempHp' ? st.tempHp || 0 : st[field];
+  if (cur === value) return;
+  const pick = (x) => ({ [field]: x[field], ...(field === 'hpMax' ? { hp: x.hp } : {}) });
+  let before = null, after = null;
+  ctx.mutateScene((s, c) => {
+    patchTokenStats(c, s, id, (x) => {
+      before = pick(x);
+      const out = { [field]: value, ...(field === 'hpMax' ? { hp: Math.min(x.hp ?? value, value) } : {}) };
+      after = { ...before, ...out };
+      return out;
+    });
+  }, {
+    label: { hpMax: 'Максимум хитов', tempHp: 'Временные хиты', ac: 'КД' }[field],
+    undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
+    redo: (s, c) => { if (after) patchTokenStats(c, s, id, () => structuredClone(after)); },
+  });
+}
+
+function bindStats(ctx, node) {
+  const box = node.querySelector('[data-stats]'); if (!box) return;
+  const id = box.dataset.stats;
+  // После записи поле показывает итог («−3» → новое число): повторного change при уходе с поля не будет.
+  const refresh = () => {
+    const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t) return;
+    const st = tokenStats(ctx.c, t);
+    const vals = { hp: st.hp, hpMax: st.hpMax, tempHp: st.tempHp || 0, ac: st.ac ?? 10 };
+    for (const inp of box.querySelectorAll('[data-st]')) { inp.value = vals[inp.dataset.st]; inp.closest('.ts-cell')?.classList.remove('error'); }
+  };
+  const commit = (inp) => {
+    const k = inp.dataset.st, raw = inp.value.trim();
+    const bad = () => inp.closest('.ts-cell').classList.add('error');
+    if (k === 'hp') { if (raw !== '' && !commitHpInput(ctx, id, raw)) { const t = ctx.scene?.tokens.find((x) => x.id === id); const now = t && tokenStats(ctx.c, t).hp; if (String(now) !== raw) return bad(); } }
+    else {
+      const n = Math.floor(Number(raw.replace(',', '.')));
+      if (!Number.isFinite(n) || raw === '') return bad();
+      const lim = { hpMax: [1, 999], tempHp: [0, 999], ac: [0, 40] }[k];
+      setStat(ctx, id, k, Math.max(lim[0], Math.min(lim[1], n)));
+    }
+    refresh();
+  };
+  box.addEventListener('focusin', (e) => { if (e.target.matches('[data-st]')) e.target.select(); });
+  box.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('[data-st]'); if (!inp) return;
+    e.stopPropagation(); // клавиши стола (Del, H, стрелки) не срабатывают, пока печатаем
+    if (e.key === 'Enter') { e.preventDefault(); commit(inp); inp.select(); }
+    if (e.key === 'Escape') closePopover();
+  });
+  box.addEventListener('change', (e) => { const inp = e.target.closest('[data-st]'); if (inp) commit(inp); });
+}
+
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
   if (target.kind === 'token') {
@@ -450,7 +523,8 @@ export function contextMenu(ctx, target, w, screen) {
         'divider',
         { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = ids.length === 1 && canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     } else {
       const items = [
         ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor(t) } : null,
@@ -460,7 +534,8 @@ export function contextMenu(ctx, target, w, screen) {
         { icon: 'location-01', label: 'Пинг', onClick: () => ctx.ping(t.x, t.y) },
         { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); ctx.ui.ruler = { pts: [{ x: t.x, y: t.y }, { x: t.x, y: t.y }], label: '' }; } },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     }
     return;
   }

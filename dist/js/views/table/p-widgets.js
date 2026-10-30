@@ -100,17 +100,17 @@ function party(ctx) {
 
 function setupPanel(ctx) {
   const c = ctx.c, sc = ctx.scene, st = ctx.ui.setup;
-  const toks = sc.tokens.filter((t) => t.kind !== 'item' && t.id in st.rolls);
+  const toks = sc.tokens.filter((t) => t.kind !== 'item' && st.pool.includes(t.id));
   const n = toks.filter((t) => st.ids.has(t.id)).length;
   const rows = toks.map((t) => {
     const s = tokenStats(c, t);
     const self = st.self && t.characterId && c.members.some((m) => m.characterId === t.characterId && m.status === 'active' && m.role === 'player');
-    return `<label class="list-row setup-row ${st.ids.has(t.id) ? '' : 'off'}"><input type="checkbox" class="check-input" data-act="setup-toggle" data-id="${esc(t.id)}" ${st.ids.has(t.id) ? 'checked' : ''}>${avatarImg(t.img, t.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, s))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span></span><span class="t-xs tertiary">ИНЦ ${fmtMod(s.initBonus || 0)}</span>${self ? '<span class="chip chip-accent">бросает игрок</span>' : `<span class="init-num">${st.rolls[t.id]}</span>`}</label>`;
+    return `<label class="list-row setup-row ${st.ids.has(t.id) ? '' : 'off'}"><input type="checkbox" class="check-input" data-act="setup-toggle" data-id="${esc(t.id)}" ${st.ids.has(t.id) ? 'checked' : ''}>${avatarImg(t.img, t.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, s))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span></span>${self ? '<span class="chip chip-accent">бросает игрок</span>' : `<span class="init-roll-hint" data-tip="Бросок при «Начать бой»">к20 ${fmtMod(s.initBonus || 0)}</span>`}</label>`;
   }).join('');
   return `<div class="widget panel init-widget setup-widget">${head('Начать бой', `Кто участвует · ${n} из ${toks.length}`)}
     <div class="w-list scroll init-list">${rows}</div>
     <label class="setting-row compact"><span class="titles"><span class="label-main">Игроки бросают сами</span></span><input type="checkbox" class="switch" data-act="setup-self" ${st.self ? 'checked' : ''} aria-label="Игроки бросают сами"></label>
-    <div class="panel-footer"><button class="btn btn-sm btn-secondary" data-act="setup-reroll">${icon('refresh', 14)}Перебросить врагов</button><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-act="setup-cancel">Отмена</button><button class="btn btn-sm btn-primary" data-act="setup-start" ${n ? '' : 'disabled'}>${icon('sword-03', 14)}Начать бой</button></div></div>`;
+    <div class="panel-footer"><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-act="setup-cancel">Отмена</button><button class="btn btn-sm btn-primary" data-act="setup-start" ${n ? '' : 'disabled'}>${icon('sword-03', 14)}Начать бой</button></div></div>`;
 }
 
 function initiative(ctx) {

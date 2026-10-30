@@ -9,7 +9,7 @@ import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
-import { startCombat, rollInitiative } from './combat.js';
+import { startCombat } from './combat.js';
 import { closeSheet } from './sheet.js';
 
 // ——— Меню кампании (логотип) ———
@@ -244,7 +244,8 @@ export function combatSetup(ctx, preselect = []) {
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
   const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
-  ctx.ui.setup = { ids: new Set(on), rolls: Object.fromEntries(toks.map((t) => [t.id, rollInitiative(ctx.c, t).init])), self: true };
+  // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует.
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: true };
   ctx.panels.openWidget('initiative', true);
   ctx.panels.refreshWidget(true);
 }
@@ -257,13 +258,13 @@ export function setupAction(ctx, act, b) {
   const sc = ctx.scene;
   if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
   else if (act === 'setup-self') st.self = !st.self;
-  else if (act === 'setup-reroll') { for (const t of sc.tokens) if (t.kind === 'foe' && t.id in st.rolls) st.rolls[t.id] = rollInitiative(ctx.c, t).init; }
   else if (act === 'setup-cancel') ctx.ui.setup = null;
   else if (act === 'setup-start') {
     const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
     if (!ids.length) return;
     const use = {};
-    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); use[id] = st.self && hasPlayerHero(ctx, t) ? null : st.rolls[id]; }
+    // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); if (st.self && hasPlayerHero(ctx, t)) use[id] = null; }
     const sid = ctx.sceneId;
     ctx.ui.setup = null;
     updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));

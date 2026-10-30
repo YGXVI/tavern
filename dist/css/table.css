@@ -40,7 +40,7 @@
 .viewport[data-focus="grid"] :is(.tokens-layer, .fog-canvas, .glow-canvas, .terrain-layer) { opacity: 0; }
 
 
-.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .world > .layer, .world > svg, .world > canvas, .world > img { position: absolute; left: 0; top: 0; }
 .map-img { pointer-events: none; max-width: none; box-shadow: 0 0 0 1px rgb(0 0 0 / .5), 0 30px 90px rgb(0 0 0 / .55); background: #0b0d14; }
 .glow-canvas, .fog-canvas { pointer-events: none; }
@@ -157,9 +157,11 @@
 }
 
 /* ——— Токены ——— */
-.tok { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: auto; touch-action: none; will-change: transform; --ring: var(--side-neutral); }
+.tok { position: absolute; left: 0; top: 0; border-radius: 50%; pointer-events: auto; touch-action: none; --ring: var(--side-neutral); }
 .tok.can { cursor: grab; }
-.tok.dragging { cursor: grabbing; }
+/* TASK-045: will-change только пока тянем. С ним Chrome «замораживает» растр слоя на масштабе, при котором
+   слой создан: открыли стол издалека, приблизили — картинка мутная. */
+.tok.dragging { cursor: grabbing; will-change: transform; }
 .tok.hero { --ring: var(--side-hero); }
 .tok.foe { --ring: var(--side-foe); }
 .tok.disp-neutral { --ring: var(--yellow-500, #e9b052); }
@@ -198,8 +200,9 @@
 }
 .tok-badge .ic { width: calc(var(--fs) * 1.25); height: calc(var(--fs) * 1.25); }
 /* Хиты слева красным (временные — мелко после «+»), КД справа синим (TASK-029). */
-.tok-badge.hp-b { top: -6%; left: -8%; background: var(--red-600, #c53030); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 1px; }
-.tok-badge.hp-b i { font-style: normal; font-size: .78em; opacity: .9; color: #bfe3ff; }
+.tok-badge.hp-b { top: -6%; left: -8%; background: var(--red-600, #c53030); font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; gap: 1px; }
+/* TASK-043: число по центру круга (было по базовой линии — съезжало вверх); временные — мелко рядом. */
+.tok-badge.hp-b i { font-style: normal; font-size: .78em; line-height: 1; opacity: .9; color: #bfe3ff; transform: translateY(.08em); }
 .tok-badge.ac-b { top: -6%; right: -8%; background: var(--blue-600, #2b6cb0); font-variant-numeric: tabular-nums; border-radius: calc(var(--fs) * .5) calc(var(--fs) * .5) var(--r-full) var(--r-full); }
 .tok-badge.hidden-b { bottom: -4%; right: -6%; display: none; }
 .tok.is-hidden.downed .tok-badge.hidden-b { right: 24%; bottom: -10%; }
@@ -268,7 +271,12 @@
 .ch-bc { bottom: var(--edge); left: 50%; transform: translateX(-50%); flex-direction: column; align-items: center; max-width: calc(100vw - 200px); }
 /* Мастер: «добавить» и «инструменты» — в один ряд, как в макетах; на узком экране — друг над другом. */
 .ch-bc:has(> .add-bar) { flex-direction: row; gap: 24px; }
-@media (max-width: 1180px) { .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; } }
+/* Ряд «добавить + инструменты» шире 900 px: пока рядом с масштабом справа ему тесно, ставим панели друг над другом (TASK-040). */
+@media (max-width: 1520px) {
+  .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; }
+}
+/* Внизу два ряда — правая панель кончается над ними и ничего не накрывает (на телефоне панель во весь экран). */
+@media (min-width: 901px) and (max-width: 1520px) { .table:has(.ch-bc > .add-bar) .side-panel:not([data-panel="bestiary"]) { bottom: calc(var(--edge) + 140px); } }
 .ch-br { bottom: var(--edge); right: var(--edge); }
 .chrome-logo { width: 60px; height: 60px; box-shadow: var(--shadow-panel); }
 .chrome-logo:hover { filter: brightness(1.05); }
@@ -632,12 +640,11 @@ button.tray-die:hover { filter: brightness(1.1); }
   .table-toasts { top: auto; bottom: calc(var(--edge) + 72px); right: var(--edge); flex-direction: column-reverse; width: min(360px, calc(100vw - 32px)); }
   .table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .table-toasts { right: calc(var(--edge) + 570px); }
 }
-/* Открыты сцены: центр сверху и снизу — в свободной части экрана левее панели. */
-.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) :is(.ch-tc, .ch-bc, .float-stack) { left: calc((100% - 582px) / 2); }
-.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-bc { max-width: calc(100vw - 640px); }
+/* Открыты сцены: баннер и карточки сверху — левее панели, чтобы не прятаться под ней. Нижние панели
+   остаются на месте: правая панель просто появляется поверх и до них не достаёт (TASK-040). */
+.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) :is(.ch-tc, .float-stack) { left: calc((100% - 582px) / 2); }
 .table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-tc { max-width: max(300px, calc(100vw - 1180px)); }
 .table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .float-stack { width: min(520px, calc(100vw - 640px)); }
-.table:has(.side-panel[data-panel="scenes"]:not(.hidden)) .ch-bc:has(> .add-bar) { flex-direction: column; gap: 8px; }
 /* Лист героя — справа во всю высоту: правая колонка уходит левее. */
 .table:has(.sheet-drawer) .ch-tr { right: 428px; }
 .table:has(.sheet-drawer) .chrome > .ch-br { display: none; }
@@ -698,6 +705,7 @@ button.tray-die:hover { filter: brightness(1.1); }
 .setup-widget .setup-row { gap: 10px; padding: 6px 12px; cursor: pointer; }
 .setup-widget .setup-row.off { opacity: .55; }
 .setup-widget .setup-row .init-num { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--bg-control); font: 600 13px/1 var(--font-text); }
+.setup-widget .init-roll-hint { flex: none; padding: 4px 8px; border-radius: 8px; background: var(--bg-control); color: var(--text-secondary); font: 500 12px/16px var(--font-text); white-space: nowrap; }
 .setting-row.compact { padding: 6px 16px; }
 
 /* ——— Издалека: подписи только у важных токенов ——— */
@@ -735,6 +743,12 @@ button.tray-die:hover { filter: brightness(1.1); }
 .db-sw { width: 26px; height: 26px; margin: 0 3px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgb(0 0 0 / .25); }
 .db-sw.on { box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px rgb(0 0 0 / .25); }
 .db-div { width: 1px; align-self: stretch; margin: 4px 4px; background: rgb(255 255 255 / .15); }
+/* Свободные фигуры (TASK-042): ручка «кончика», подпись размера и угла, кнопка «переместить» в панели. */
+.sh-h { z-index: 1; }
+.sh-val { position: absolute; transform-origin: 0 0; transform: scale(var(--iz)) translate(-50%, calc(-100% - 22px)); padding: 3px 9px; border-radius: var(--r-full);
+  background: rgb(0 0 0 / .78); color: #fff; font: 600 13px/1.2 var(--font-text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.db-move { cursor: grab; touch-action: none; }
+.db-move:active { cursor: grabbing; }
 
 /* Перетаскивание существа из панели на карту (TASK-033) */
 .b-row { touch-action: pan-y; }
@@ -751,3 +765,18 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
   box-shadow: inset 0 0 0 1px var(--status-negative), var(--shadow-panel); max-width: calc(100vw - 32px); pointer-events: none; animation: fade 200ms ease; }
 .net-pill svg { color: var(--text-negative); flex: none; }
 .net-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Параметры токена в меню (TASK-039): хиты/максимум, временные хиты, КД — правка на месте. */
+.menu-stats .menu { min-width: 248px; }
+.tok-stats { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 6px 6px 8px; }
+.ts-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ts-cap, .ts-sub { font: 600 10px/12px var(--font-text); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); white-space: nowrap; }
+.ts-sub { font-weight: 500; letter-spacing: .02em; }
+.ts-in { width: 40px; height: 36px; border: 0; background: transparent; color: #fff; text-align: center; font: 700 17px/1 var(--font-text); font-variant-numeric: tabular-nums; outline: none; border-radius: 8px; padding: 0; }
+.ts-in:focus { background: rgb(255 255 255 / .14); }
+.ts-hp-box { display: flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 12px; background: color-mix(in srgb, var(--red-600, #c53030) 82%, black); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.ts-hp-box i { font-style: normal; color: rgb(255 255 255 / .55); font: 500 15px/1 var(--font-text); }
+.ts-round { width: 44px; height: 44px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); }
+.ts-temp .ts-round { background: color-mix(in srgb, var(--green-500) 58%, black); }
+.ts-ac .ts-round { background: var(--blue-600, #2b6cb0); border-radius: 12px 12px 50% 50%; }
+.ts-cell.error .ts-in, .ts-cell.error .ts-hp-box { box-shadow: inset 0 0 0 2px var(--status-negative); }

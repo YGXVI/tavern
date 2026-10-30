@@ -34,13 +34,54 @@ export function nearShape(grid, d, p, tol) {
   return false;
 }
 
-/** Фигура по жесту: от точки нажатия до курсора. Размер — по 5 фт (free — по 1 фт). */
-export function shapeFromDrag(grid, shape, from, to, color, free = false) {
-  if (shape === 'seg') return { type: 'shape', shape, a: { ...from }, b: { ...to }, color };
+/**
+ * Угол и размер фигуры от точки origin до курсора (TASK-042): без привязки к клеткам — размер по 0,5 фт,
+ * угол липнет к 45°; Shift — размер по 5 фт и угол по 15°; Alt — угол свободно.
+ */
+export function aimShape(grid, origin, to, mods = {}) {
   const s = gridSize(grid), feet = grid.feet || 5;
-  const ft = (Math.hypot(to.x - from.x, to.y - from.y) / s) * feet;
-  const size = free ? Math.max(1, Math.round(ft)) : Math.max(5, Math.round(ft / 5) * 5);
-  return { type: 'shape', shape, origin: { ...from }, angle: Math.atan2(to.y - from.y, to.x - from.x), size, color };
+  const ft = (Math.hypot(to.x - origin.x, to.y - origin.y) / s) * feet;
+  const size = mods.shift ? Math.max(5, Math.round(ft / 5) * 5) : Math.max(1, Math.round(ft * 2) / 2);
+  let deg = (Math.atan2(to.y - origin.y, to.x - origin.x) * 180) / Math.PI;
+  if (mods.shift) deg = Math.round(deg / 15) * 15;
+  else if (!mods.alt) { const near = Math.round(deg / 45) * 45; if (Math.abs(deg - near) <= 9) deg = near; }
+  return { size, angle: Math.round(((deg * Math.PI) / 180) * 1000) / 1000, deg: ((Math.round(deg) % 360) + 360) % 360 };
+}
+
+/** Фигура по жесту: от точки нажатия до курсора (свободно, см. aimShape). */
+export function shapeFromDrag(grid, shape, from, to, color, mods = {}) {
+  if (shape === 'seg') return { type: 'shape', shape, a: { ...from }, b: { ...to }, color };
+  const { size, angle } = aimShape(grid, from, to, mods);
+  return { type: 'shape', shape, origin: { ...from }, angle, size, color };
+}
+
+/** Ручки выделенной фигуры: концы прямой или «кончик» шаблона (тянуть — поворот и размер). */
+export function shapeHandles(grid, d) {
+  if (d?.type !== 'shape') return [];
+  if (d.shape === 'seg') return [{ k: 'a', p: d.a }, { k: 'b', p: d.b }];
+  const len = ((d.size || 5) / (grid.feet || 5)) * gridSize(grid), a = d.angle || 0;
+  return [{ k: 'tip', p: { x: d.origin.x + Math.cos(a) * len, y: d.origin.y + Math.sin(a) * len } }];
+}
+
+/** Правка фигуры ручкой k к точке w. Возвращает {patch, label}. */
+export function shapeEdit(grid, d, k, w, mods = {}) {
+  const r = (v) => Math.round(v * 10) / 10;
+  if (k === 'a' || k === 'b') {
+    const other = k === 'a' ? d.b : d.a;
+    const ft = Math.round((Math.hypot(w.x - other.x, w.y - other.y) / gridSize(grid)) * (grid.feet || 5) * 2) / 2;
+    return { patch: { [k]: { x: r(w.x), y: r(w.y) } }, label: `${String(ft).replace('.', ',')} фт` };
+  }
+  const { size, angle, deg } = aimShape(grid, d.origin, w, mods);
+  const ft = String(size).replace('.', ',');
+  return { patch: { size, angle }, label: d.shape === 'sphere' ? `радиус ${ft} фт` : `${ft} фт · ${deg}°` };
+}
+
+/** Рисунок с учётом того, что сейчас тянут (сдвиг или правка ручкой). */
+export function liveDrawing(ctx, d) {
+  const mv = ctx?.ui.drawMove, ed = ctx?.ui.shapeEdit;
+  if (mv?.id === d.id) return shiftDrawing(d, mv.dx, mv.dy);
+  if (ed?.id === d.id) return { ...d, ...ed.patch };
+  return d;
 }
 
 export const DRAW_COLORS = [
@@ -96,18 +137,30 @@ export function deleteDrawing(ctx, id) {
 /** Панель выделенного рисунка: цвет, (надпись: текст и размер), удалить. */
 export function renderDrawBar(L, ctx, bbox) {
   const box = L.drawUi;
-  const d = ctx.ui.selDrawing && !ctx.ui.drawMove ? ctx.scene.drawings.find((x) => x.id === ctx.ui.selDrawing) : null;
-  if (!d || !bbox) { if (box.innerHTML) box.innerHTML = ''; return; }
+  const d0 = ctx.ui.selDrawing && !ctx.ui.drawMove ? ctx.scene.drawings.find((x) => x.id === ctx.ui.selDrawing) : null;
+  if (!d0 || !bbox) { if (box.innerHTML) box.innerHTML = ''; return; }
+  const d = liveDrawing(ctx, d0);
+  // Ручки фигуры (TASK-042): тянуть кончик — поворот и размер; у прямой — концы.
+  const handles = shapeHandles(ctx.scene.grid, d).map((h) => `<button class="gz-h sh-h" data-sh="${h.k}" style="left:${h.p.x}px;top:${h.p.y}px" aria-label="${h.k === 'tip' ? 'Повернуть и изменить размер' : 'Конец прямой'}" data-tip="${h.k === 'tip' ? 'Тянуть — поворот и размер · угол липнет к 45°, Shift — по 15° и 5 фт, Alt — свободно' : 'Тянуть конец'}">${icon(h.k === 'tip' ? 'rotate-clockwise' : 'arrow-all-direction', 16)}</button>`).join('');
+  const ed = ctx.ui.shapeEdit?.id === d.id ? ctx.ui.shapeEdit : null;
+  const hp = ed && shapeHandles(ctx.scene.grid, d).find((h) => h.k === ed.k);
+  const val = ed && hp ? `<span class="sh-val" style="left:${hp.p.x}px;top:${hp.p.y}px">${esc(ed.label || '')}</span>` : '';
+  if (ed) { box.innerHTML = handles + val; return; }
   const sw = DRAW_COLORS.map((c) => `<button class="db-sw ${d.color === c.id ? 'on' : ''}" data-db="color" data-v="${c.id}" style="--c:${c.id}" aria-label="${esc(c.name)}" data-tip="${esc(c.name)}"></button>`).join('');
   const text = d.type === 'text'
     ? `<span class="db-div"></span><button class="gz-b" data-db="edit" data-tip="Изменить текст" aria-label="Изменить текст">${icon('pencil-edit-02', 18)}</button><button class="gz-b" data-db="smaller" data-tip="Мельче" aria-label="Мельче">${icon('minus-sign', 18)}</button><button class="gz-b" data-db="bigger" data-tip="Крупнее" aria-label="Крупнее">${icon('plus-sign', 18)}</button>`
     : '';
-  box.innerHTML = `<div class="db" style="transform: translate(${bbox.x + bbox.width / 2}px, ${bbox.y + bbox.height}px)"><div class="gz-bar db-bar">${sw}${text}<span class="db-div"></span><button class="gz-b danger" data-db="del" data-tip="Удалить · Del" aria-label="Удалить">${icon('delete-02', 18)}</button></div></div>`;
+  const mover = `<button class="gz-b db-move" data-db="move" data-tip="Тянуть — переместить" aria-label="Переместить">${icon('arrow-all-direction', 18)}</button><span class="db-div"></span>`;
+  box.innerHTML = `${handles}<div class="db" style="transform: translate(${bbox.x + bbox.width / 2}px, ${bbox.y + bbox.height}px)"><div class="gz-bar db-bar">${mover}${sw}${text}<span class="db-div"></span><button class="gz-b danger" data-db="del" data-tip="Удалить · Del" aria-label="Удалить">${icon('delete-02', 18)}</button></div></div>`;
 }
 
 export function attachDrawBar(L, ctx) {
   const box = L.drawUi;
-  box.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-db]') || e.target.closest('.db-bar')) e.stopPropagation(); });
+  box.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('[data-sh], [data-db="move"]');
+    if (h) { dragHandle(ctx, e, h.dataset.sh || 'move'); return; }
+    if (e.target.closest('[data-db]') || e.target.closest('.db-bar')) e.stopPropagation();
+  });
   box.addEventListener('click', (e) => {
     const b = e.target.closest('[data-db]'); if (!b) return;
     e.stopPropagation();
@@ -119,4 +172,26 @@ export function attachDrawBar(L, ctx) {
     if (k === 'del') deleteDrawing(ctx, id);
     ctx.invalidate('drawings');
   });
+}
+
+/** Тянуть ручку фигуры или кнопку «переместить» (TASK-042). Слушаем окно: разметка ручек перерисовывается на ходу. */
+function dragHandle(ctx, e, kind) {
+  e.stopPropagation(); e.preventDefault();
+  const id = ctx.ui.selDrawing;
+  const d0 = ctx.scene?.drawings.find((x) => x.id === id); if (!d0) return;
+  const w0 = ctx.camera.toWorld(e.clientX, e.clientY);
+  const grid = ctx.scene.grid;
+  const move = (ev) => {
+    const w = ctx.camera.toWorld(ev.clientX, ev.clientY);
+    if (kind === 'move') ctx.ui.drawMove = { id, dx: Math.round((w.x - w0.x) * 10) / 10, dy: Math.round((w.y - w0.y) * 10) / 10 };
+    else { const r = shapeEdit(grid, d0, kind, w, { shift: ev.shiftKey, alt: ev.altKey }); ctx.ui.shapeEdit = { id, k: kind, ...r }; }
+    ctx.invalidate('drawings');
+  };
+  const up = () => {
+    removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+    if (kind === 'move') { const mv = ctx.ui.drawMove; ctx.ui.drawMove = null; if (mv && (mv.dx || mv.dy)) moveDrawing(ctx, id, mv.dx, mv.dy); }
+    else { const ed = ctx.ui.shapeEdit; ctx.ui.shapeEdit = null; if (ed) updateDrawing(ctx, id, ed.patch, 'Фигура'); }
+    ctx.invalidate('drawings');
+  };
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
 }

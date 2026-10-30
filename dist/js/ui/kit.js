@@ -135,7 +135,9 @@ function place(node, rect, placement, gap) {
 /** items: [{icon, label, hint, danger, onClick} | 'divider'] */
 export function menu(items, anchor, opts = {}) {
   const body = items.map((it, i) => it === 'divider' ? '<hr>' : `<button class="menu-item ${it.danger ? 'danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}>${it.icon ? icon(it.icon, 18) : ''}<span>${esc(it.label)}</span>${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}</button>`).join('');
-  const p = popover(`<div class="menu">${body}</div>`, anchor, { placement: opts.placement || 'bottom', gap: 6, ...opts });
+  // opts.header — разметка над пунктами (например, параметры токена), opts.onOpen(node) — навесить её события.
+  const p = popover(`<div class="menu">${opts.header || ''}${body}</div>`, anchor, { placement: opts.placement || 'bottom', gap: 6, ...opts });
+  opts.onOpen?.(p.node);
   p.node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-i]');
     if (!b) return;

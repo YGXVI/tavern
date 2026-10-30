@@ -13,7 +13,7 @@ import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { renderChrome } from './chrome.js';
-import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape } from './drawings.js';
+import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape, aimShape } from './drawings.js';
 
 const DRAG_THRESHOLD = 4;
 export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
@@ -648,14 +648,15 @@ const measureTool = {
     } else {
       const def = TEMPLATES.find((t) => t.id === sub);
       const size = ctx.ui.sub.templateSize?.[sub] || def.size;
-      const origin = sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
+      // TASK-042: шаблон ставится свободно; Shift — к узлу сетки, как раньше.
+      const origin = !g.shift ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
       ctx.ui.template = { type: sub, origin, angle: ctx.ui.template?.angle || 0, size, owner: ctx.userId };
       closePopover();
       g.mode = 'template';
     }
     ctx.invalidate('overlay', 'areas');
   },
-  move(ctx, g, w) {
+  move(ctx, g, w, e) {
     if (g.mode === 'ruler') {
       const r = ctx.ui.ruler;
       r.pts[r.pts.length - 1] = g.alt ? w : snapToCellCenter(ctx, w);
@@ -664,8 +665,8 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
-      t.angle = Math.atan2(w.y - t.origin.y, w.x - t.origin.x);
-      if (t.type === 'cube') t.angle = Math.round(t.angle / (Math.PI / 2)) * (Math.PI / 2);
+      // Угол свободно, липнет к 45° (Shift — по 15°, Alt — без магнита), как у фигур рисования (TASK-042).
+      t.angle = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey }).angle;
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
       ctx.invalidate('areas');
     }
@@ -713,7 +714,7 @@ const drawTool = {
   },
   move(ctx, g, w, e) {
     if (g.erase) { eraseAt(ctx, w); return; }
-    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, e.shiftKey); ctx.invalidate('overlay'); return; }
+    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, { shift: e.shiftKey, alt: e.altKey }); ctx.invalidate('overlay'); return; }
     const s = ctx.ui.liveStroke; if (!s) return;
     const last = s.pts.at(-1);
     if (Math.hypot(w.x - last.x, w.y - last.y) * ctx.camera.z < 3) return;

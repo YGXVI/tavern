@@ -8,7 +8,7 @@ import { tokenStats } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
-import { shiftDrawing, canEditDrawing, renderDrawBar, shapeMarkup } from './drawings.js';
+import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing } from './drawings.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -87,7 +87,7 @@ export function renderDrawings(L, scene, ctx = null) {
   const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
   L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
-    const d = mv?.id === d0.id ? shiftDrawing(d0, mv.dx, mv.dy) : d0;
+    const d = ctx ? liveDrawing(ctx, d0) : d0;
     const ed = live && canEditDrawing(ctx, d);
     const attr = ed ? ` data-drawing="${d.id}"` : '';
     const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;

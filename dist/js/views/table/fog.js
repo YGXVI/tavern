@@ -100,6 +100,8 @@ function drawOps(ctx, ops, type, color = '#000') {
 
 // Туман мягкий, поэтому считаем его в уменьшенном холсте и растягиваем CSS — так он дешевле при перетаскивании.
 const FOG_RES = 1100;
+/** Показывать ли исследованные клетки полутьмой (память тумана). TASK-041: нет. */
+const FOG_MEMORY = false;
 const FOG_RES_HI = 2400;
 const GLOW_RES = 800;
 const off = { a: null, b: null, c: null };
@@ -219,8 +221,10 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
     L.ctx.globalCompositeOperation = 'source-over';
   }
 
-  // E — исследованные клетки (полутьма). Слой кэшируется: он меняется редко, а размытие дорогое.
-  const E = !fogOff && explored?.size ? exploredLayer(scene, explored, ops, w, h, k) : null;
+  // E — исследованные клетки полутьмой. Выключено (TASK-041, sol0139): у тумана две крайности — что отряд видит
+  // сейчас, то видно, остальное — полностью тёмное. Исследованные клетки по-прежнему копятся: по ним игрок
+  // помнит двери и метки, которые уже видел.
+  const E = FOG_MEMORY && !fogOff && explored?.size ? exploredLayer(scene, explored, ops, w, h, k) : null;
 
   if (view === 'master') {
     // Мастер видит карту, но понимает, что скрыто от отряда.

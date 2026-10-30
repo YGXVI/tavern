@@ -712,7 +712,7 @@ export class Panels {
         break;
       }
       case 'combat-start': D.combatSetup(ctx, sel); break;
-      case 'setup-toggle': case 'setup-self': case 'setup-reroll': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
+      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
       case 'combat-next': this.nextTurn(1); break;
       case 'combat-prev': this.nextTurn(-1); break;
       case 'combat-end': updateCampaign(ctx.cid, (cc) => endCombat(cc)); ctx.toast({ title: 'Бой окончен', icon: 'sword-03' }); break;
