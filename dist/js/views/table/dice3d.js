@@ -42,7 +42,14 @@ function randomQuat() {
 const PHI = (1 + Math.sqrt(5)) / 2;
 function rawVerts(kind) {
   const p = [];
-  if (kind === 4) return [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+  // к4 — кристалл (TASK-136): четырёхгранная призма вдоль оси y с заострёнными концами. Числа на длинных гранях;
+  // на остриё кристалл не встаёт — центр тяжести выходит за грань острия, и он ложится на длинную грань.
+  if (kind === 4) {
+    const a = 0.5, h = 0.85, tip = 0.42;
+    for (const y of [-h, h]) for (const [x, z] of [[a, a], [a, -a], [-a, -a], [-a, a]]) p.push([x, y, z]);
+    p.push([0, h + tip, 0], [0, -h - tip, 0]);
+    return p;
+  }
   if (kind === 6) { for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) p.push([x, y, z]); return p; }
   if (kind === 8) return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   if (kind === 12) {
@@ -88,7 +95,7 @@ function hullFaces(verts) {
 }
 
 // Размер (радиус описанной сферы) в единицах лотка — на глаз, чтобы кубы были соразмерны.
-const SIZE = { 4: 1.04, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
+const SIZE = { 4: 1.2, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
 const GEO = {};
 function geometry(kind) {
   if (GEO[kind]) return GEO[kind];
@@ -101,6 +108,7 @@ function geometry(kind) {
     const P = f.idx.map((i) => v[i]);
     let up;
     if (kind === 6) up = norm(sub(mul(add(P[0], P[1]), 0.5), f.c));
+    else if (kind === 4 && Math.abs(f.n[1]) < 1e-6) up = [0, 1, 0]; // к4: число вдоль кристалла
     else if (kind === 10) { const far = P.reduce((a, b) => (len(sub(b, f.c)) > len(sub(a, f.c)) ? b : a)); up = norm(sub(far, f.c)); }
     else up = norm(sub(P[0], f.c));
     f.up = up; f.right = cross(up, f.n);
@@ -109,7 +117,9 @@ function geometry(kind) {
     f.r = Math.min(...P.map((p, i) => { const q = P[(i + 1) % P.length]; const e = norm(sub(q, p)); const w = sub(f.c, p); return len(sub(w, mul(e, dot(w, e)))); }));
   }
   const R = Math.max(...v.map(len));
-  GEO[kind] = { verts: v, faces, R, inertia: 0.4 * R * R };
+  // Грани с числами по порядку меток: у к4 — только длинные (острия без чисел), у остальных — все.
+  const numbered = kind === 4 ? faces.map((f, i) => (Math.abs(f.n[1]) < 1e-6 ? i : -1)).filter((i) => i >= 0) : faces.map((_, i) => i);
+  GEO[kind] = { verts: v, faces, numbered, R, inertia: 0.4 * R * R };
   return GEO[kind];
 }
 
@@ -139,15 +149,10 @@ function makeBody(kind, opts = {}) {
 // Материал по умолчанию — тёмный камень; наборы приходят из dice-art.js (поля light/base/dark/ink/spec/metal/lum).
 const DEFAULT_SKIN = { id: 'obsidian', light: '#5d606e', base: '#2e3038', dark: '#16171c', ink: '#f2ead8', spec: 0.6, metal: 0.18, lum: 1 };
 
-/** Значение, которое показывает куб сейчас (к4 — вершина сверху, остальные — верхняя грань). */
+/** Номер метки, которую куб показывает сейчас: верхняя из граней с числами (у к4 — верхняя длинная грань). */
 function topIndex(b) {
-  if (b.shape === 4) {
-    let best = 0, by = -Infinity;
-    b.g.verts.forEach((p, i) => { const y = qrot(b.q, p)[1]; if (y > by) { by = y; best = i; } });
-    return best;
-  }
   let best = 0, bd = -Infinity;
-  b.g.faces.forEach((f, i) => { const d = qrot(b.q, f.n)[1]; if (d > bd) { bd = d; best = i; } });
+  b.g.numbered.forEach((fi, i) => { const d = qrot(b.q, b.g.faces[fi].n)[1]; if (d > bd) { bd = d; best = i; } });
   return best;
 }
 /** Высота нижней вершины куба над дном при повороте q (0 — касается стола; заметно больше — лежит на соседе). */
@@ -158,10 +163,10 @@ function lowest(b, q = b.q) {
 function flatness(b) {
   return Math.max(...b.g.faces.map((f) => -qrot(b.q, f.n)[1]));
 }
-/** Поворот, после которого куб ровно лежит на ближайшей к низу грани. */
+/** Поворот, после которого куб ровно лежит на ближайшей к низу грани (к4 — на длинной: на остриё не ложится). */
 function alignedQuat(b) {
   let best = null, bd = -Infinity;
-  for (const f of b.g.faces) { const n = qrot(b.q, f.n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
+  for (const fi of b.g.numbered) { const n = qrot(b.q, b.g.faces[fi].n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
   const down = [0, -1, 0];
   const axis = cross(best, down), s = len(axis), c = dot(best, down);
   if (s < 1e-7) return c > 0 ? b.q : qnorm(qmul(qaxis([1, 0, 0], Math.PI), b.q));
@@ -352,24 +357,26 @@ function drawArtAtlas(b, cv, x, img) {
     const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
     const P = f.idx.map((i) => to2(b.g.verts[i]));
     b.uv.push(P.map(([u, v]) => [u / cv.width, v / cv.height]));
-    const fs = Math.max(18, f.r * sc * (b.shape === 4 || b.shape === 10 ? 0.95 : 1.12));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
     const text = (txt, cx, cy, ang) => {
       x.save(); x.translate(cx, cy); x.rotate(ang); x.textAlign = 'center'; x.textBaseline = 'middle';
       x.font = `600 ${fs}px Unbounded, Inter, system-ui, sans-serif`; x.fillStyle = b.skin.ink; x.fillText(txt, 0, 0); x.restore();
     };
     if (b.shape === 4) {
-      // к4: чистая рамка и у каждой вершины — цифра из листа (глифы 0–9), повёрнутая к вершине.
-      // Ближе к центру, чем у камня: углы заняты росписью.
-      cell(ART_LAYOUT.frame4, ox, oy);
-      f.idx.forEach((vi, k) => {
-        const [px, py] = P[k];
-        const cx = ox + CELL / 2, cy = oy + CELL / 2;
-        const tx = cx + (px - cx) * 0.36, ty = cy + (py - cy) * 0.36, ang = Math.atan2(px - cx, -(py - cy));
-        const v = b.labels[vi];
-        if (v === '?') { text('?', tx, ty, ang); return; }
-        const w = CELL * (fs * 0.8) / 96; // в ячейке глифа цифра высотой 96 px
-        x.save(); x.translate(tx, ty); x.rotate(ang); cell(ART_LAYOUT.glyph + Number(v), -w / 2, -w / 2, w); x.restore();
-      });
+      // к4-кристалл (TASK-136): граней такой формы в листе нет — грань светлая с каймой цвета набора,
+      // на длинной грани — цифра из листа (глифы 0–9), острия без чисел.
+      x.save(); x.beginPath(); P.forEach(([u, w], i) => (i ? x.lineTo(u, w) : x.moveTo(u, w))); x.closePath(); x.clip();
+      x.fillStyle = b.skin.light; x.fill();
+      x.lineJoin = 'round'; x.strokeStyle = b.skin.dark; x.lineWidth = 9; x.stroke();
+      x.restore();
+      const li = b.g.numbered.indexOf(fi);
+      if (li < 0) return;
+      const v = b.labels[li];
+      if (v === '?') { text('?', ox + CELL / 2, oy + CELL / 2, 0); return; }
+      // Ячейка глифа берётся с полем в 4 px — иначе на грани проступает край соседней ячейки.
+      const w = CELL * (fs * 0.9) / 96, gi = ART_LAYOUT.glyph + Number(v), pad = 4, k = w / CELL; // в ячейке цифра высотой 96 px
+      x.drawImage(img, (gi % ART_COLS) * CELL + pad, Math.floor(gi / ART_COLS) * CELL + pad, CELL - 2 * pad, CELL - 2 * pad,
+        ox + CELL / 2 - w / 2 + pad * k, oy + CELL / 2 - w / 2 + pad * k, w - 2 * pad * k, w - 2 * pad * k);
       return;
     }
     const v = b.labels[fi];
@@ -430,7 +437,7 @@ function drawAtlas(b) {
     x.strokeStyle = rgba(sk.light, 0.16); x.lineWidth = 16; x.stroke();
     x.restore();
     // Цифры: на светлых наборах вдавлены (тёмные с бликом снизу), на тёмных — светлые с тенью.
-    const fs = Math.max(18, f.r * sc * (b.shape === 4 ? 0.95 : b.shape === 10 ? 0.95 : 1.12));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
     x.textAlign = 'center'; x.textBaseline = 'middle';
     const put = (txt, cx, cy, ang, size = fs) => {
       x.save(); x.translate(cx, cy); x.rotate(ang);
@@ -441,14 +448,9 @@ function drawAtlas(b) {
       x.restore();
     };
     if (b.shape === 4) {
-      // к4: у каждой вершины грани — её число, повёрнутое к вершине.
-      f.idx.forEach((vi, k) => {
-        const [px, py] = P[k];
-        const cx = ox + CELL / 2, cy = oy + CELL / 2;
-        const tx = cx + (px - cx) * 0.6, ty = cy + (py - cy) * 0.6;
-        const ang = Math.atan2(px - cx, -(py - cy));
-        put(labelText(b.kind, b.labels[vi]), tx, ty, ang);
-      });
+      // к4-кристалл: число по центру длинной грани, вдоль кристалла; острия без чисел.
+      const li = b.g.numbered.indexOf(fi);
+      if (li >= 0) put(labelText(b.kind, b.labels[li]), ox + CELL / 2, oy + CELL / 2, 0);
     } else {
       const shift = b.shape === 10 ? f.r * sc * 0.12 : 0;
       put(labelText(b.kind, b.labels[fi]), ox + CELL / 2, oy + CELL / 2 + shift, 0);
