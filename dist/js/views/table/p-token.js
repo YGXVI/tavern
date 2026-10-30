@@ -250,6 +250,35 @@ function auraEditor(a) {
   </div>`;
 }
 
+/** Свет на токене (и в листе героя) по пресету; 'none' — погасить. С отменой. Общий для настроек токена и виджета «Зрение». */
+export function setTokenLight(ctx, id, presetId) {
+  const p = LIGHTS.find((l) => l.id === presetId);
+  const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null;
+  let before;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; t.light = v ? { ...v } : null; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = v ? { ...v } : null; } };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); before = t?.light ? { ...t.light } : null; put(val)(s, c); },
+    { label: 'Свет', undo: (s, c) => put(before)(s, c), redo: put(val) });
+}
+
+/** Тёмное зрение героя (в листе) или существа (на токене), футы. С отменой. */
+export function setDarkvision(ctx, id, ft) {
+  let before = 0;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; const ch = t.characterId && c.characters.find((x) => x.id === t.characterId); if (ch) ch.darkvision = v; else t.darkvision = v; };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); if (t) before = tokenStats(c, t).darkvision || 0; put(ft)(s, c); },
+    { label: 'Тёмное зрение', undo: (s, c) => put(before)(s, c), redo: put(ft) });
+}
+
+/** Блок «Несёт свет» и «Тёмное зрение» (виджет «Зрение», TASK-046). act — префикс data-act для кликов. */
+export function visionFields(ctx, t, act = 'v') {
+  const st = tokenStats(ctx.c, t);
+  const lightId = t.light?.preset || (t.light ? 'custom' : 'none');
+  const chip = (on, a, v, label) => `<button class="chip chip-md ${on ? 'chip-accent' : ''}" data-act="${act}-${a}" data-id="${esc(t.id)}" data-v="${v}">${esc(label)}</button>`;
+  return `<div class="vision-edit">
+    <div class="field"><label>Несёт свет</label><div class="chips-wrap">${chip(lightId === 'none', 'light', 'none', 'Нет')}${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => chip(lightId === l.id, 'light', l.id, l.name)).join('')}</div></div>
+    <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => chip((st.darkvision || 0) === d, 'dv', d, d ? `${d} фт` : 'нет')).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
+  </div>`;
+}
+
 export function tokenSettings(ctx, id, anchor) {
   const t0 = ctx.scene.tokens.find((t) => t.id === id);
   if (!t0) return;
@@ -264,10 +293,10 @@ export function tokenSettings(ctx, id, anchor) {
         <div class="field"><label>Имя для игроков</label><div class="chips-wrap"><button class="chip chip-md ${!t.nameHidden ? 'chip-accent' : ''}" data-namehide="0">Показывать</button><button class="chip chip-md ${t.nameHidden ? 'chip-accent' : ''}" data-namehide="1">Скрыть — «Неизвестное существо»</button></div></div>` : ''}
         <div class="field"><label for="tk-elev">Высота над полом</label><div class="row"><div class="input" style="width:110px"><input id="tk-elev" type="number" step="5" data-elev value="${t.elevation || 0}"><span class="suffix">фт</span></div>${[0, 10, 30].map((v) => `<button class="chip chip-md ${(t.elevation || 0) === v ? 'chip-accent' : ''}" data-elev-q="${v}">${v ? `${v} фт` : 'на полу'}</button>`).join('')}</div></div>
         <div class="field"><label>Размер</label><div class="chips-wrap">${SIZES.map((s) => `<button class="chip chip-md ${t.size === s.id ? 'chip-accent' : ''}" data-size="${s.id}">${s.name}${s.cells > 1 ? ` · ${s.cells}×${s.cells}` : ''}</button>`).join('')}</div></div>
-        <div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
+        ${t.characterId ? `<div class="field"><label>Свет и тёмное зрение</label><button class="btn btn-sm btn-secondary" data-vision-open>${icon('view', 14)}Настроить в «Зрении»</button><span class="t-xs tertiary">${st.darkvision ? `Тёмное зрение ${st.darkvision} фт` : 'Без тёмного зрения'}${t.light ? ` · несёт свет` : ''}</span></div>` : `<div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
           ${t.light ? `<label class="aura-op"><span class="t-sm muted">Яркий свет</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.bright}" data-tl="bright" style="--fill:${(t.light.bright / 60) * 100}%" aria-label="Яркий свет"><b class="t-sm" data-tl-out="bright">${t.light.bright} фт</b></label>
           <label class="aura-op"><span class="t-sm muted">Тусклый ещё</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.dim}" data-tl="dim" style="--fill:${(t.light.dim / 60) * 100}%" aria-label="Тусклый свет"><b class="t-sm" data-tl-out="dim">${t.light.dim} фт</b></label>` : ''}</div>
-        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
+        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>`}
         <div class="field"><label>Аура</label>${t.aura ? auraEditor(t.aura) : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
       </div></div>`;
   };
@@ -284,6 +313,7 @@ export function tokenSettings(ctx, id, anchor) {
   box.addEventListener('click', (e) => {
     const sz = e.target.closest('[data-size]');
     if (sz) upd((t, c, s) => { const n1 = sizeById(sz.dataset.size).cells; const p = snapCenter(ctx.scene.grid, t.x, t.y, n1); t.x = p.x; t.y = p.y; t.size = sz.dataset.size; });
+    if (e.target.closest('[data-vision-open]')) { closePopover(); ctx.panels.openVisionFor(id); return; }
     const li = e.target.closest('[data-light]');
     if (li) upd((t, c) => { const p = LIGHTS.find((l) => l.id === li.dataset.light); const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null; t.light = val; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = val; } });
     const dv = e.target.closest('[data-dv]');
