@@ -3,12 +3,16 @@ import { normalizeCreature, validateCreature } from '../rules/creature.js';
 
 const FIELDS = 'id,owner_id,data,updated_at';
 export const LIBRARY_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const LIBRARY_IMAGE_TOTAL_BYTES = 100 * 1024 * 1024;
+export const LIBRARY_IMAGE_MAX_FILES = 200;
 const TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
 
 function queryError(error) {
   if (!error) return;
   if (error.code === '23514' && /creature_library_quota_used_check/.test(error.message || '')) throw new Error('В библиотеке уже 500 существ.');
   if (error.code === '23514' && /creature.*64k/.test(error.message || '')) throw new Error('Статблок больше 64 КБ в представлении базы. Уменьшите текст.');
+  if (/library_storage_usage_files_check/.test(error.message || '')) throw new Error('В библиотеке уже 200 изображений. Очистите неиспользуемые файлы.');
+  if (/library_storage_usage_bytes_check/.test(error.message || '')) throw new Error('Изображения библиотеки занимают 100 МиБ. Очистите неиспользуемые файлы.');
   throw error;
 }
 
@@ -49,7 +53,7 @@ export function createServerLibrary(client, ownerId) {
     if (error) throw error;
     if (!ownerId || data?.user?.id !== ownerId) throw new Error('Пользователь изменился. Войдите снова.');
   }
-  return {
+  const api = {
     async list() {
       await auth();
       const { data, error } = await client.from('creatures').select(FIELDS).eq('owner_id', ownerId).order('updated_at', { ascending: false }).limit(500);
@@ -61,7 +65,7 @@ export function createServerLibrary(client, ownerId) {
       if (c.ownerId !== ownerId) throw new Error('Нельзя сохранить чужую запись.');
       await auth();
       const { id, ownerId: uid, updatedAt, ...data } = c;
-      const result = await client.from('creatures').upsert({ id, owner_id: uid, data }, { onConflict: 'id' }).select(FIELDS).single();
+      const result = await client.from('creatures').upsert({ id, owner_id: uid, data }, { onConflict: 'owner_id,id' }).select(FIELDS).single();
       queryError(result.error);
       return fromRow(result.data, ownerId);
     },
@@ -77,7 +81,7 @@ export function createServerLibrary(client, ownerId) {
       await auth();
       const path = `${ownerId}/${crypto.randomUUID()}.${ext}`;
       const { error } = await client.storage.from('library').upload(path, file, { contentType: file.type, upsert: false });
-      if (error) throw error;
+      queryError(error);
       return `library:${path}`;
     },
     async resolveImage(ref) {
@@ -91,9 +95,42 @@ export function createServerLibrary(client, ownerId) {
     async removeImage(ref) {
       const path = imagePath(ref, ownerId);
       await auth();
-      const { error } = await client.storage.from('library').remove([path]);
-      if (error) throw error;
+      const { data, error } = await client.storage.from('library').remove([path]);
+      queryError(error);
+      if (!data?.some(file => file.name === path)) throw new Error('Удаление изображения не подтверждено.');
       return true;
     },
+    async imageUsage() {
+      await auth();
+      const { data, error } = await client.rpc('library_image_usage');
+      queryError(error);
+      const usage = data?.[0];
+      if (!usage || !Number.isSafeInteger(usage.files) || usage.files < 0 || usage.files > LIBRARY_IMAGE_MAX_FILES
+        || !Number.isSafeInteger(usage.bytes) || usage.bytes < 0 || usage.bytes > LIBRARY_IMAGE_TOTAL_BYTES) throw new Error('Не удалось получить квоту изображений.');
+      return { files: usage.files, bytes: usage.bytes, maxFiles: LIBRARY_IMAGE_MAX_FILES, maxBytes: LIBRARY_IMAGE_TOTAL_BYTES };
+    },
+    async unusedImages() {
+      await auth();
+      const { data, error } = await client.rpc('library_unused_images');
+      queryError(error);
+      if (!Array.isArray(data) || data.length > LIBRARY_IMAGE_MAX_FILES) throw new Error('Не удалось получить список изображений.');
+      return data.map(file => {
+        const ref = `library:${file.path}`;
+        imagePath(ref, ownerId);
+        if (!Number.isSafeInteger(file.bytes) || file.bytes < 0 || file.bytes > LIBRARY_IMAGE_MAX_BYTES) throw new Error('Неверный размер изображения.');
+        return { ref, bytes: file.bytes };
+      });
+    },
+    // Explicit cleanup only. The database checks references again at DELETE,
+    // so a concurrent save wins safely or returns a visible save/delete error.
+    async cleanupUnusedImages() {
+      const files = await api.unusedImages(), removed = [], failed = [];
+      for (const { ref } of files) {
+        try { await api.removeImage(ref); removed.push(ref); }
+        catch (error) { failed.push({ ref, message: error.message || String(error) }); }
+      }
+      return { removed, failed };
+    },
   };
+  return api;
 }

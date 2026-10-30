@@ -32,9 +32,22 @@ export function createLibrary({ getContext, storage, onSandboxWrite = () => {},
     storage.setItem(KEY, JSON.stringify(db)); // Throw on quota/private-mode failures; never optimistic success.
     onSandboxWrite(clone(db));
   }
+  const entryKey = (ownerId, id) => JSON.stringify([ownerId, id]);
+  const ownEntry = (entries, ownerId, id) => {
+    const scoped = entries[entryKey(ownerId, id)];
+    if (scoped?.ownerId === ownerId && scoped.id === id) return scoped;
+    const legacy = Object.hasOwn(entries, id) ? entries[id] : null;
+    return legacy?.ownerId === ownerId && legacy.id === id ? legacy : null;
+  };
+  function personal(entries, ownerId) {
+    // Old flat keys stay readable. A scoped copy wins if both representations exist.
+    const result = new Map();
+    for (const c of Object.values(entries)) if (c?.ownerId === ownerId) result.set(c.id, ownEntry(entries, ownerId, c.id) || c);
+    return [...result.values()];
+  }
   const api = {
     list: () => scoped(async ctx => {
-      const list = ctx.server ? await ctx.server.list() : Object.values(read().creatures || {}).filter(c => c.ownerId === ctx.userId);
+      const list = ctx.server ? await ctx.server.list() : personal(read().creatures || {}, ctx.userId);
       if (list.some(c => c.ownerId !== ctx.userId)) throw new Error('Получены данные другого пользователя.');
       return list.map(checked).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
     }),
@@ -44,16 +57,19 @@ export function createLibrary({ getContext, storage, onSandboxWrite = () => {},
       const c = checked({ ...input, id: input.id === '' ? makeId() : input.id, ownerId: ctx.userId, updatedAt: now() });
       if (ctx.server) return ctx.server.save(c);
       const db = read(); db.creatures ||= {};
-      const old = db.creatures[c.id];
-      if (old && old.ownerId !== ctx.userId) throw new Error('Нельзя сохранить чужую запись.');
-      if (!old && Object.values(db.creatures).filter(x => x.ownerId === ctx.userId).length >= 500) throw new Error('В библиотеке уже 500 существ.');
-      db.creatures[c.id] = c; write(db); return c;
+      const old = ownEntry(db.creatures, ctx.userId, c.id);
+      if (!old && personal(db.creatures, ctx.userId).length >= 500) throw new Error('В библиотеке уже 500 существ.');
+      // Upgrade only this owner's legacy entry; a foreign flat key is never removed.
+      if (Object.hasOwn(db.creatures, c.id) && db.creatures[c.id]?.ownerId === ctx.userId) delete db.creatures[c.id];
+      db.creatures[entryKey(ctx.userId, c.id)] = c; write(db); return c;
     }),
     remove: id => scoped(async ctx => {
       if (ctx.server) return ctx.server.remove(id);
       const db = read();
-      if (!db.creatures?.[id] || db.creatures[id].ownerId !== ctx.userId) throw new Error('Запись не найдена или недоступна.');
-      delete db.creatures[id]; write(db); return true;
+      if (!ownEntry(db.creatures || {}, ctx.userId, id)) throw new Error('Запись не найдена или недоступна.');
+      delete db.creatures[entryKey(ctx.userId, id)];
+      if (Object.hasOwn(db.creatures, id) && db.creatures[id]?.ownerId === ctx.userId) delete db.creatures[id];
+      write(db); return true;
     }),
     copyFromSrd: monster => api.save(fromSrd(monster)),
     uploadImage: file => scoped(async ctx => {
@@ -66,6 +82,18 @@ export function createLibrary({ getContext, storage, onSandboxWrite = () => {},
       if (ctx.server) return ctx.server.resolveImage(ref);
       if (!resolveSandbox) throw new Error('Хранилище изображений недоступно.');
       return resolveSandbox(ref);
+    }),
+    imageUsage: () => scoped(async ctx => {
+      if (!ctx.server) throw new Error('Серверная квота недоступна в песочнице.');
+      return ctx.server.imageUsage();
+    }),
+    unusedImages: () => scoped(async ctx => {
+      if (!ctx.server) throw new Error('Очистка серверных файлов недоступна в песочнице.');
+      return ctx.server.unusedImages();
+    }),
+    cleanupUnusedImages: () => scoped(async ctx => {
+      if (!ctx.server) throw new Error('Очистка серверных файлов недоступна в песочнице.');
+      return ctx.server.cleanupUnusedImages();
     }),
   };
   return api;
@@ -97,3 +125,6 @@ export const deleteCreature = async id => (await library()).remove(id);
 export const copySrdCreature = async monster => (await library()).copyFromSrd(monster);
 export const uploadLibraryImage = async file => (await library()).uploadImage(file);
 export const resolveLibraryImage = async ref => (await library()).resolveImage(ref);
+export const getLibraryImageUsage = async () => (await library()).imageUsage();
+export const listUnusedLibraryImages = async () => (await library()).unusedImages();
+export const cleanupUnusedLibraryImages = async () => (await library()).cleanupUnusedImages();

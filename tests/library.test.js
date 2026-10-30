@@ -19,7 +19,7 @@ test('sandbox CRUD preserves campaigns/version and returns detached personal dat
   await assert.rejects(s.api.save(null), /объектом/);
   await assert.rejects(s.api.save(creature({ id: 0 })), e => e.errors.some(x => x.path === 'id'));
   const saved = await s.api.save(creature()); saved.stats.dex = 20;
-  assert.equal(s.read().creatures['cr-1'].stats.dex, null);
+  assert.equal(s.read().creatures[JSON.stringify(['user-a', 'cr-1'])].stats.dex, null);
   assert.equal(s.read().version, 1); assert.equal(s.read().campaigns.c.name, 'Не потерять');
   assert.equal((await s.api.list()).length, 1);
   s.user('user-b'); assert.deepEqual(await s.api.list(), []);
@@ -37,19 +37,58 @@ test('copy SRD assigns new identity/owner, preserves source and never writes a p
   assert.deepEqual(SRD[0], original);
 });
 
+test('same ID belongs independently to two sandbox users, including legacy flat keys', async () => {
+  const s = sandbox(), db = s.read();
+  db.creatures = { 'cr-1': creature({ name: 'Старый A' }) };
+  s.storage.setItem('', JSON.stringify(db));
+  s.user('user-b');
+  const b = await s.api.save(creature({ ownerId: '', name: 'Новый B' }));
+  assert.equal(b.id, 'cr-1');
+  assert.equal((await s.api.list())[0].name, 'Новый B');
+  assert.equal(s.read().creatures['cr-1'].name, 'Старый A');
+  s.user('user-a');
+  assert.equal((await s.api.list())[0].name, 'Старый A');
+  await s.api.save(creature({ name: 'Обновлён A' }));
+  assert.equal(Object.hasOwn(s.read().creatures, 'cr-1'), false, 'only A legacy key is upgraded');
+  assert.equal(s.read().creatures[JSON.stringify(['user-b', 'cr-1'])].name, 'Новый B');
+  await s.api.remove('cr-1');
+  assert.deepEqual(await s.api.list(), []);
+  s.user('user-b');
+  assert.equal((await s.api.list())[0].name, 'Новый B');
+  await s.api.remove('cr-1');
+  assert.deepEqual(s.read().creatures, {});
+  assert.deepEqual(s.read().campaigns, db.campaigns);
+  assert.equal(s.read().version, 1);
+});
+
+test('legacy and scoped copies of one sandbox entry consume one quota slot', async () => {
+  const s = sandbox(), db = s.read(); db.creatures = {};
+  for (let i = 0; i < 499; i++) db.creatures[`c-${i}`] = creature({ id: `c-${i}` });
+  db.creatures[JSON.stringify(['user-a', 'c-1'])] = creature({ id: 'c-1', name: 'Актуальный' });
+  s.storage.setItem('', JSON.stringify(db));
+  assert.equal((await s.api.list()).length, 499);
+  assert.equal((await s.api.list()).find(c => c.id === 'c-1').name, 'Актуальный');
+  await s.api.save(creature({ id: 'last' }));
+  assert.equal((await s.api.list()).length, 500);
+  await assert.rejects(s.api.save(creature({ id: 'too-many' })), /500/);
+  await s.api.remove('c-1');
+  assert.equal(Object.hasOwn(s.read().creatures, 'c-1'), false);
+  assert.equal(Object.hasOwn(s.read().creatures, JSON.stringify(['user-a', 'c-1'])), false);
+});
+
 test('sandbox quota is per owner; update is allowed at 500 and failed writes stay failed', async () => {
   const s = sandbox(), db = s.read(); db.creatures = {};
   for (let i = 0; i < 500; i++) db.creatures[`c-${i}`] = creature({ id: `c-${i}` });
   s.storage.setItem('', JSON.stringify(db));
   await assert.rejects(s.api.save(creature({ id: 'extra' })), /500/);
   await s.api.save(creature({ id: 'c-1', name: 'Обновлён' }));
-  assert.equal(s.read().creatures['c-1'].name, 'Обновлён');
+  assert.equal(s.read().creatures[JSON.stringify(['user-a', 'c-1'])].name, 'Обновлён');
   await s.api.remove('c-1'); await s.api.save(creature({ id: 'extra' }));
   assert.equal(Object.keys(s.read().creatures).length, 500);
   s.user('user-b'); await s.api.save(creature({ id: 'other', ownerId: '' }));
   assert.equal((await s.api.list()).length, 1);
   s.fail(); await assert.rejects(s.api.remove('other'), /Storage full/);
-  assert.equal(s.read().creatures.other.ownerId, 'user-b');
+  assert.equal(s.read().creatures[JSON.stringify(['user-b', 'other'])].ownerId, 'user-b');
 });
 
 test('malformed sandbox data and invalid statblocks are reported without destructive reset', async () => {
@@ -79,6 +118,7 @@ function transport(responses = []) {
   const calls = []; let user = 'user-a';
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: user } }, error: null }) },
+    async rpc(name) { calls.push({ rpc: name }); return responses.shift() || { data: [], error: null }; },
     from(table) {
       const call = { table, steps: [] }; calls.push(call);
       const query = new Proxy({}, { get: (_, method) => method === 'then'
@@ -89,7 +129,7 @@ function transport(responses = []) {
     storage: { from(bucket) { return {
       async upload(path, file, options) { calls.push({ bucket, upload: path, options }); return responses.shift() || { error: null }; },
       async createSignedUrl(path, seconds) { calls.push({ bucket, path, seconds }); return responses.shift() || { data: { signedUrl: 'https://private.example/signed' }, error: null }; },
-      async remove(paths) { calls.push({ bucket, remove: paths }); return responses.shift() || { error: null }; },
+      async remove(paths) { calls.push({ bucket, remove: paths }); return responses.shift() || { data: paths.map(name => ({ name })), error: null }; },
     }; } },
   };
   return { client, calls, user: id => { user = id; } };
@@ -103,6 +143,7 @@ test('server save waits for returned row; list/delete filter by owner and metada
   assert.equal(saved.hp, 22, 'return the acknowledged server value, not optimistic input');
   const payload = t.calls[0].steps.find(s => s[0] === 'upsert')[1];
   assert.equal(payload.owner_id, 'user-a');
+  assert.deepEqual(t.calls[0].steps.find(s => s[0] === 'upsert')[2], { onConflict: 'owner_id,id' });
   assert.equal(payload.data.id, undefined); assert.equal(payload.data.ownerId, undefined); assert.equal(payload.data.updatedAt, undefined);
   assert.equal((await api.list())[0].ownerId, 'user-a');
   assert.equal(await api.remove('cr-1'), true);
@@ -144,4 +185,37 @@ test('private image paths are owner-scoped, signed URLs short-lived and never st
     await assert.rejects(api.resolveImage(invalid), /не из вашей/);
   }
   assert.equal(await api.removeImage(ref), true);
+});
+
+test('image quota comes from the server, counts unused files and reports both limits', async () => {
+  const t = transport([{ data: [{ files: 2, bytes: 100 }] }]);
+  assert.deepEqual(await createServerLibrary(t.client, 'user-a').imageUsage(), { files: 2, bytes: 100, maxFiles: 200, maxBytes: 104857600 });
+  assert.deepEqual(t.calls, [{ rpc: 'library_image_usage' }]);
+  for (const [constraint, message] of [['files', /200 изображений/], ['bytes', /100 МиБ/]]) {
+    const denied = transport([{ error: { message: `library_storage_usage_${constraint}_check` } }]);
+    await assert.rejects(createServerLibrary(denied.client, 'user-a').uploadImage(png()), message);
+  }
+  const malformed = transport([{ data: [{ files: 201, bytes: 100 }] }]);
+  await assert.rejects(createServerLibrary(malformed.client, 'user-a').imageUsage(), /квоту/);
+});
+
+test('explicit cleanup uses Storage API and reports concurrent reference protection and missing ACKs', async () => {
+  const t = transport([
+    { data: [{ path: 'user-a/unused.png', bytes: 8 }, { path: 'user-a/just-attached.png', bytes: 8 }, { path: 'user-a/no-ack.png', bytes: 8 }] },
+    { data: [{ name: 'user-a/unused.png' }] },
+    { error: new Error('Изображение используется в личной библиотеке') },
+    { data: [] },
+  ]);
+  const result = await createServerLibrary(t.client, 'user-a').cleanupUnusedImages();
+  assert.deepEqual(result.removed, ['library:user-a/unused.png']);
+  assert.equal(result.failed.length, 2);
+  assert.match(result.failed[0].message, /используется/);
+  assert.match(result.failed[1].message, /не подтверждено/);
+  assert.equal(t.calls[0].rpc, 'library_unused_images');
+  assert.equal(t.calls.filter(c => c.remove).length, 3);
+  const foreign = transport([{ data: [{ path: 'user-b/other.png', bytes: 8 }] }]);
+  await assert.rejects(createServerLibrary(foreign.client, 'user-a').cleanupUnusedImages(), /не из вашей/);
+  assert.equal(foreign.calls.length, 1);
+  const s = sandbox();
+  await assert.rejects(s.api.cleanupUnusedImages(), /недоступна в песочнице/);
 });
