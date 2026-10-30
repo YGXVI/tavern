@@ -75,7 +75,7 @@ function createTray(ctx) {
   const $ = (s) => node.querySelector(s);
   let stage = null, mode = 'empty', wantKey = '', result = null;
 
-  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 64, insetBottom: 36, hover: true }); return stage; };
+  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 64, insetBottom: 56, hover: true }); return stage; };
   const show = () => { if (node.classList.contains('hidden')) { node.classList.remove('hidden'); ensure(); stage.resize(); } else ensure(); };
   const hide = () => node.classList.add('hidden');
   const setMode = (m) => { mode = m; node.dataset.state = m; };
@@ -101,7 +101,7 @@ function createTray(ctx) {
     $('.dt-summary b').textContent = poolLabel(pool.dice);
     const one20 = pool.dice[20] === 1;
     const adv = pool.adv ? (one20 ? (pool.adv === 'adv' ? 'с преимуществом' : 'с помехой') : `${pool.adv === 'adv' ? 'преимущество' : 'помеха'} — только для одного к20`) : '';
-    $('.dt-summary small').textContent = [pool.mod ? fmtMod(pool.mod) : 'без модификатора', adv].filter(Boolean).join(' · ');
+    $('.dt-summary small').textContent = [pool.mod ? fmtMod(pool.mod) : adv ? '' : 'без модификатора', adv].filter(Boolean).join(' · ');
     visFoot(pool.vis || 'all');
     $('.dt-rolls').innerHTML = '';
   }
@@ -127,6 +127,7 @@ function createTray(ctx) {
       if (ctx.ui.widget !== 'dice') { hide(); return; }
       show();
       const want = Object.entries(pool?.dice || {}).flatMap(([s, n]) => Array.from({ length: n }, () => (Number(s) === 100 ? ['d10t', 'd10u'] : [Number(s)])).flat());
+      if (pool?.adv && pool.dice?.[20] === 1) want.push(20); // преимущество/помеха: второй к20 висит рядом
       const key = want.join(',');
       // Итог лежит, пока набор не поменяли: новый куб — новый набор в лотке.
       if ((mode === 'result' || mode === 'rolling') && want.length && key !== wantKey) { stage.clear(); result = null; setMode('ready'); }

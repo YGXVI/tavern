@@ -111,28 +111,45 @@ const modeOf = (ctx, vis) => {
   const m = ROLL_MODES.find((x) => x.id === vis) || ROLL_MODES[0];
   return ctx.isMaster && m.id === 'gm' ? { ...m, name: 'Скрыто', icon: 'view-off', tip: 'Игроки увидят только факт броска' } : m;
 };
-const ADV = [
-  { id: null, name: 'Обычный бросок', hint: 'Один к20' },
-  { id: 'adv', name: 'С преимуществом', hint: 'Два к20, берётся больший' },
-  { id: 'dis', name: 'С помехой', hint: 'Два к20, берётся меньший' },
-];
+// Кнопка преимущества — по кругу: обычный → преимущество (зелёная) → помеха (красная) → обычный.
+const ADV_NEXT = { none: 'adv', adv: 'dis', dis: null };
+const ADV_TIP = {
+  none: 'Обычный бросок · клик — с преимуществом',
+  adv: 'С преимуществом: два к20, берётся больший · клик — с помехой',
+  dis: 'С помехой: два к20, берётся меньший · клик — обычный бросок',
+};
+
+/**
+ * Преимущество/помеха: в лотке сразу два к20 — к20 набора и второй, из которых выбирают.
+ * Нет к20 — он добавляется сам (и уходит при возврате к обычному броску); несколько к20 — остаётся один.
+ */
+export function setAdv(pool, next) {
+  if (next && !pool.adv) {
+    if (!pool.dice[20]) pool.autoD20 = true;
+    pool.dice[20] = 1;
+  }
+  if (!next && pool.adv && pool.autoD20 && pool.dice[20] === 1) delete pool.dice[20];
+  if (!next) pool.autoD20 = false;
+  pool.adv = next || null;
+}
 
 export function diceWidget(ctx) {
   const pool = dicePool(ctx);
   const skin = skinById(pool.skin);
   const mode = modeOf(ctx, pool.vis || 'all');
-  const tool = (act, ic, tip, { active = false, badge = '' } = {}) => `<button class="icon-btn rail-btn ${active ? 'active' : ''}" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" aria-haspopup="dialog">${icon(ic, 24)}${badge ? `<span class="rail-badge">${esc(badge)}</span>` : ''}</button>`;
+  const tool = (act, ic, tip, { active = false, badge = '', cls = '', menu = true } = {}) => `<button class="icon-btn rail-btn ${active ? 'active' : ''} ${cls}" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}"${menu ? ' aria-haspopup="dialog"' : ''}>${icon(ic, 24)}${badge ? `<span class="rail-badge">${esc(badge)}</span>` : ''}</button>`;
+  const adv = pool.adv || 'none';
   return `<div class="dice-widget"><div class="toolbar toolbar-v dice-rail" role="toolbar" aria-label="Кубы">
     <button class="rail-btn rail-die dice-set" data-act="dice-set" data-tip="Набор кубов: ${esc(skin.name)}" aria-label="Набор кубов: ${esc(skin.name)}" aria-haspopup="dialog">${railDie(20, skin.id)}</button>
     <span class="divider"></span>
     ${DICE.map((s) => {
-      const n = pool.dice[s] || 0;
+      const n = (pool.dice[s] || 0) + (s === 20 && pool.adv && pool.dice[20] === 1 ? 1 : 0); // при преимуществе к20 два
       return `<button class="rail-btn rail-die ${n ? 'selected' : ''}" data-act="die-add" data-sides="${s}" data-tip="к${s}${n ? ' · правый клик — убрать' : ''}" aria-label="Положить к${s}${n ? `, в лотке ${n}` : ''}">${railDie(s, skin.id)}${n ? `<span class="count">${n}</span>` : ''}</button>`;
     }).join('')}
     <span class="divider"></span>
     ${tool('dice-vis-menu', mode.icon, `Кому виден бросок: ${mode.name}`, { active: (pool.vis || 'all') !== 'all' })}
     ${tool('dice-mod-menu', 'plus-minus', pool.mod ? `Модификатор ${fmtMod(pool.mod)}` : 'Модификатор', { active: !!pool.mod, badge: pool.mod ? fmtMod(pool.mod) : '' })}
-    ${tool('dice-adv-menu', 'justice-scale-01', pool.adv ? (pool.adv === 'adv' ? 'С преимуществом' : 'С помехой') : 'Преимущество или помеха', { active: !!pool.adv, badge: pool.adv === 'adv' ? '↑' : pool.adv === 'dis' ? '↓' : '' })}
+    ${tool('dice-adv', 'justice-scale-01', ADV_TIP[adv], { cls: pool.adv ? `adv-${pool.adv}` : '', badge: pool.adv === 'adv' ? '↑' : pool.adv === 'dis' ? '↓' : '', menu: false })}
   </div></div>`;
 }
 
@@ -181,33 +198,26 @@ function modPopover(ctx, anchor) {
   }, 'mod');
 }
 
-function advPopover(ctx, anchor) {
-  const pool = dicePool(ctx);
-  railPopover(ctx, anchor, `<div class="dp-title">Преимущество и помеха</div>${ADV.map((a) => `<button class="dp-row ${pool.adv === a.id ? 'on' : ''}" data-adv="${a.id || ''}"><span class="grow"><b>${esc(a.name)}</b><small>${esc(a.hint)}</small></span>${pool.adv === a.id ? icon('tick-02', 18) : ''}</button>`).join('')}
-    <p class="dp-hint">Работает, когда в лотке один к20 — остальные кубы бросаются как есть</p>`, (e) => {
-    const b = e.target.closest('[data-adv]'); if (!b) return;
-    pool.adv = b.dataset.adv || null;
-    closePopover();
-    ctx.panels.refreshWidget(true);
-  });
-}
-
 export function diceAction(ctx, act, el, e) {
   const pool = dicePool(ctx);
   const s = Number(el?.dataset.sides);
   if (act === 'dice-set') { skinsPopover(ctx, el); return; }
   if (act === 'dice-vis-menu') { visPopover(ctx, el); return; }
   if (act === 'dice-mod-menu') { modPopover(ctx, el); return; }
-  if (act === 'dice-adv-menu') { advPopover(ctx, el); return; }
-  if (act === 'die-add') pool.dice[s] = Math.min(20, (pool.dice[s] || 0) + 1);
-  else if (act === 'die-remove') { pool.dice[s] = Math.max(0, (pool.dice[s] || 0) - 1); if (!pool.dice[s]) delete pool.dice[s]; }
+  if (act === 'dice-adv') setAdv(pool, ADV_NEXT[pool.adv || 'none']);
+  else if (act === 'die-add' || act === 'die-remove') {
+    pool.dice[s] = act === 'die-add' ? Math.min(20, (pool.dice[s] || 0) + 1) : Math.max(0, (pool.dice[s] || 0) - 1);
+    if (!pool.dice[s]) delete pool.dice[s];
+    // Преимущество — ровно для одного к20: добавили или убрали к20 — бросок снова обычный.
+    if (s === 20 && pool.adv && pool.dice[20] !== 1) { pool.adv = null; pool.autoD20 = false; }
+  }
   else if (act === 'mod-inc') pool.mod = Math.min(30, pool.mod + 1);
   else if (act === 'mod-dec') pool.mod = Math.max(-30, pool.mod - 1);
   else if (act === 'adv') pool.adv = pool.adv === el.dataset.v ? null : el.dataset.v;
   else if (act === 'dice-vis') pool.vis = el.dataset.v;
   else if (act === 'dice-clear') {
     // Крестик лотка: кубы и итог уходят; модификатор, видимость и набор остаются.
-    pool.dice = {}; pool.adv = null; ctx.ui.lastRoll = null;
+    pool.dice = {}; pool.adv = null; pool.autoD20 = false; ctx.ui.lastRoll = null;
     diceTray(ctx)?.clear();
   } else if (act === 'dice-reroll' && ctx.ui.lastRoll) {
     const l = ctx.ui.lastRoll;
@@ -221,7 +231,7 @@ export function diceAction(ctx, act, el, e) {
     const vis = ctx.isMaster && pool.vis === 'blind' ? 'gm' : pool.vis || 'all';
     const r = doRoll(ctx, { label, dice: { ...pool.dice }, mod: pool.mod, adv: pool.adv, vis, fromTray: true });
     ctx.ui.lastRoll = { ...r, label, vis };
-    pool.dice = {}; pool.adv = null;
+    pool.dice = {}; pool.adv = null; pool.autoD20 = false;
   }
   ctx.panels.refreshWidget(true);
 }

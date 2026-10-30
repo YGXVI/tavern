@@ -9,7 +9,7 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
-import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll } from './dice.js';
+import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
@@ -22,7 +22,7 @@ import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 
-const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv-menu']);
+const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
 
 /** Вкладка в фоне: «⚔ Ваш ход» в заголовке, пока игрок не вернётся. */
 let baseTitle = null;
@@ -195,6 +195,9 @@ export class Panels {
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
       }
     }
+    // Лоток закрыли вместе с виджетом «Кубы» — преимущество и помеха сбрасываются.
+    if (this.diceOpen && this.ctx.ui.widget !== 'dice' && this.ctx.ui.dicePool) setAdv(this.ctx.ui.dicePool, null);
+    this.diceOpen = this.ctx.ui.widget === 'dice';
     // Лоток с объёмными кубами стоит рядом с виджетом «Кубы» и держит выбранные кубы (TASK-092).
     diceTray(this.ctx)?.syncPool(this.ctx.ui.dicePool);
   }
