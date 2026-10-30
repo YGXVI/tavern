@@ -16,7 +16,7 @@ const RAIL = {
  * Наборы кубов. light/base/dark — грани иконки и основа камня объёмного куба, ink — цифры,
  * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость;
  * art — лист нарисованных граней (вместо камня и шрифта), пока не загрузился — рисуется камнем в цветах набора;
- * paint: 'filigree' — грани рисует код (металл с орнаментом и эмалевым медальоном).
+ * paint — грани рисует код: 'filigree' — металл с орнаментом и эмалевым медальоном, 'bloodiron' — железо с рамкой, заклёпками и кровью.
  */
 export const SKINS = [
   { id: 'bone', name: 'Кость', light: '#f3e8d2', base: '#d9c49c', dark: '#9a7f55', ink: '#2b1e15', engrave: true, spec: 0.35, metal: 0.05, lum: 0.78 },
@@ -30,6 +30,8 @@ export const SKINS = [
     art: new URL('./dice-cobalt.webp', import.meta.url).href },
   // TASK-148: грани рисует код (paint: 'filigree' в dice3d.js) — воронёный металл, серебряные шипы, синяя эмаль.
   { id: 'blued', name: 'Воронёная сталь', light: '#3d8bff', base: '#9aa3b0', dark: '#16191f', ink: '#e8ecf2', spec: 0.9, metal: 0.5, lum: 1.05, paint: 'filigree' },
+  // TASK-152: грани рисует код (paint: 'bloodiron' в dice3d.js) — тёмное железо, стальная рамка, заклёпки, кровь.
+  { id: 'bloodiron', name: 'Кровавое железо', light: '#6e1b22', base: '#bfa6a2', dark: '#1a1112', ink: '#f3e2de', spec: 0.85, metal: 0.45, lum: 1.05, paint: 'bloodiron' },
 ];
 export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 

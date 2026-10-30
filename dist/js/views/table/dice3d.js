@@ -650,6 +650,137 @@ function drawFiligreeAtlas(b, cv, x) {
   }
 }
 
+// ——— Набор «Кровавое железо» (TASK-152): грани рисует код ———
+// Тёмное железо с красными прожилками, по рёбрам — светлая стальная рамка с гравировкой, на вершинах — пирамидки
+// заклёпок, вокруг цифры — гравированное кольцо, брызги и потёки крови. Основа — один раз на форму куба, цифры поверх.
+const bloodBase = new Map(); // форма → холст основы
+const polyPath = (x, P) => { x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath(); };
+const shrink = (P, cx, cy, k) => P.map(([u, v]) => [cx + (u - cx) * k, cy + (v - cy) * k]);
+/** Радиус гравированного кольца и цифры: у к4 — только на длинных гранях. */
+function bloodR(b, fc) {
+  if (b.shape === 4) return b.g.numbered.includes(fc.fi) ? fc.rr * 0.7 : 0;
+  return fc.rr * (b.shape === 10 ? 0.6 : b.shape === 12 ? 0.62 : 0.66);
+}
+function bloodBaseCanvas(b, w, h) {
+  const key = `${b.shape}|${w}x${h}`;
+  if (bloodBase.has(key)) return bloodBase.get(key);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const rnd = seeded(b.shape * 977 + 5);
+  x.fillStyle = '#0a0707'; x.fillRect(0, 0, w, h);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  for (const fc of faceCells(b, cv)) {
+    const { P, cx, cy, rr } = fc;
+    const band = Math.max(5, rr * 0.2);
+    x.save(); polyPath(x, P); x.clip();
+    // Железо: тёмный градиент, ржаво-красные пятна, тонкие кровяные прожилки.
+    const mg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    mg.addColorStop(0, '#3a2c2d'); mg.addColorStop(0.5, '#1c1515'); mg.addColorStop(1, '#0b0808');
+    x.fillStyle = mg; x.fillRect(fc.ox, fc.oy, CELL, CELL);
+    for (let i = 0; i < 9; i++) {
+      const px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL, r = 8 + rnd() * 26;
+      const gr = x.createRadialGradient(px, py, 0, px, py, r);
+      const tone = rnd(); // кровь, копоть или светлый металл
+      gr.addColorStop(0, `rgba(${tone > 0.55 ? '125,18,24' : tone > 0.25 ? '0,0,0' : '120,100,100'},${0.16 + rnd() * 0.22})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = gr; x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    for (let i = 0; i < 7; i++) {
+      x.strokeStyle = `rgba(150,18,26,${0.3 + rnd() * 0.3})`; x.lineWidth = 0.6 + rnd() * 1.4;
+      let px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL;
+      x.beginPath(); x.moveTo(px, py);
+      for (let k = 0; k < 4; k++) { const nx = px + (rnd() - 0.5) * 34, ny = py + (rnd() - 0.5) * 34; x.quadraticCurveTo((px + nx) / 2 + (rnd() - 0.5) * 12, (py + ny) / 2 + (rnd() - 0.5) * 12, nx, ny); px = nx; py = ny; }
+      x.stroke();
+    }
+    // Рамка по рёбрам: светлая сталь с розоватым отливом, паз и насечки гравировки.
+    polyPath(x, P);
+    const fg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    fg.addColorStop(0, '#f6e9e6'); fg.addColorStop(0.45, '#a88e8a'); fg.addColorStop(1, '#3f2e2e');
+    x.strokeStyle = fg; x.lineWidth = band * 2; x.stroke();
+    x.strokeStyle = 'rgba(8,3,3,.95)'; x.lineWidth = 2.5; x.stroke();
+    const k1 = Math.max(0.3, 1 - band / rr), kMid = Math.max(0.3, 1 - band * 0.5 / rr);
+    polyPath(x, shrink(P, cx, cy, kMid));
+    x.setLineDash([1.5, 4.5]); x.strokeStyle = 'rgba(30,14,14,.7)'; x.lineWidth = band * 0.32; x.stroke(); x.setLineDash([]);
+    polyPath(x, shrink(P, cx, cy, k1));
+    x.strokeStyle = 'rgba(8,3,3,.9)'; x.lineWidth = 2.6; x.stroke();
+    polyPath(x, shrink(P, cx, cy, k1 - 1.6 / rr));
+    x.strokeStyle = 'rgba(240,215,210,.35)'; x.lineWidth = 1; x.stroke();
+    // Ржавчина и кровь на рамке.
+    x.globalCompositeOperation = 'multiply';
+    for (let i = 0; i < 6; i++) {
+      const [vx, vy] = P[Math.floor(rnd() * P.length)], [qx, qy] = P[Math.floor(rnd() * P.length)], t = rnd();
+      const px = vx + (qx - vx) * t, py = vy + (qy - vy) * t, r = 6 + rnd() * 14;
+      const gr = x.createRadialGradient(px, py, 0, px, py, r);
+      gr.addColorStop(0, 'rgba(190,60,62,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = gr; x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    x.globalCompositeOperation = 'source-over';
+    // Гравированное кольцо вокруг цифры.
+    const R = bloodR(b, fc);
+    if (R > 0) {
+      x.beginPath(); x.arc(cx, cy, R * 1.12, 0, Math.PI * 2); x.fillStyle = 'rgba(0,0,0,.35)'; x.fill();
+      x.beginPath(); x.arc(cx, cy, R * 1.04, 0, Math.PI * 2);
+      x.setLineDash([R * 0.05, R * 0.09]); x.strokeStyle = 'rgba(200,170,166,.55)'; x.lineWidth = R * 0.11; x.stroke(); x.setLineDash([]);
+      for (const rq of [R * 1.13, R * 0.95]) {
+        x.beginPath(); x.arc(cx, cy, rq, 0, Math.PI * 2);
+        x.strokeStyle = 'rgba(8,3,3,.9)'; x.lineWidth = 2.4; x.stroke();
+        x.strokeStyle = 'rgba(232,206,201,.75)'; x.lineWidth = 1; x.stroke();
+      }
+    }
+    // Заклёпки-пирамидки на вершинах: каждая грань рисует свою часть, на кубе они складываются в одну.
+    P.forEach(([vx, vy]) => {
+      const th = Math.atan2(cy - vy, cx - vx), s = Math.max(7, rr * 0.44);
+      const C = [0, 1, 2, 3].map((q) => [vx + Math.cos(th + Math.PI / 4 + q * Math.PI / 2) * s, vy + Math.sin(th + Math.PI / 4 + q * Math.PI / 2) * s]);
+      x.beginPath(); x.arc(vx, vy, s * 1.25, 0, Math.PI * 2); x.fillStyle = 'rgba(0,0,0,.5)'; x.fill();
+      const tones = ['#fff4f1', '#c2a6a2', '#3e2c2c', '#86696a'];
+      C.forEach((c, q) => {
+        const d = C[(q + 1) % 4];
+        x.beginPath(); x.moveTo(vx, vy); x.lineTo(c[0], c[1]); x.lineTo(d[0], d[1]); x.closePath();
+        x.fillStyle = tones[q]; x.fill(); x.strokeStyle = 'rgba(8,3,3,.8)'; x.lineWidth = 0.8; x.stroke();
+      });
+      x.beginPath(); x.arc(vx + Math.cos(th) * s * 0.18, vy + Math.sin(th) * s * 0.18, s * 0.12, 0, Math.PI * 2); x.fillStyle = 'rgba(255,255,255,.7)'; x.fill();
+    });
+    // Брызги и потёки крови.
+    for (let i = 0; i < 6; i++) {
+      const [vx, vy] = P[Math.floor(rnd() * P.length)], [qx, qy] = P[Math.floor(rnd() * P.length)], t = 0.15 + rnd() * 0.7, inn = 0.8 + rnd() * 0.18;
+      const px = cx + (vx + (qx - vx) * t - cx) * inn, py = cy + (vy + (qy - vy) * t - cy) * inn, r = 1 + rnd() * 2.2;
+      x.fillStyle = `rgba(120,6,14,${0.55 + rnd() * 0.3})`;
+      for (let k = 0; k < 4; k++) { // неровная клякса из нескольких капель
+        const a = rnd() * Math.PI * 2, d = rnd() * r * 1.4, q = r * (0.35 + rnd() * 0.6);
+        x.beginPath(); x.arc(px + Math.cos(a) * d, py + Math.sin(a) * d, q, 0, Math.PI * 2); x.fill();
+      }
+      if (rnd() > 0.65) { // потёк: сужается к концу
+        const L = 5 + rnd() * 11, a = Math.atan2(cy - py, cx - px) + (rnd() - 0.5) * 0.5, nx = -Math.sin(a), ny = Math.cos(a);
+        x.beginPath(); x.moveTo(px + nx * r * 0.6, py + ny * r * 0.6); x.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L); x.lineTo(px - nx * r * 0.6, py - ny * r * 0.6); x.closePath(); x.fill();
+      }
+    }
+    x.restore();
+  }
+  bloodBase.set(key, cv);
+  return cv;
+}
+function drawBloodAtlas(b, cv, x) {
+  x.drawImage(bloodBaseCanvas(b, cv.width, cv.height), 0, 0);
+  b.uv = [];
+  for (const fc of faceCells(b, cv)) {
+    b.uv.push(fc.P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const li = b.g.numbered.indexOf(fc.fi);
+    if (li < 0) continue;
+    const R = bloodR(b, fc), txt = labelText(b.kind, b.labels[li]);
+    const size = R * (txt.length > 1 ? 1.12 : 1.6);
+    x.save(); x.translate(fc.cx, fc.cy + R * 0.05);
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `700 ${size}px Unbounded, Inter, system-ui, sans-serif`;
+    x.lineJoin = 'round';
+    x.fillStyle = 'rgba(0,0,0,.6)'; x.fillText(txt, size * 0.03, size * 0.07);
+    x.strokeStyle = 'rgba(14,4,5,.95)'; x.lineWidth = Math.max(2, size * 0.15); x.strokeText(txt, 0, 0);
+    const sg = x.createLinearGradient(0, -size / 2, 0, size / 2);
+    sg.addColorStop(0, '#fff6f3'); sg.addColorStop(0.5, '#e6d0cc'); sg.addColorStop(1, '#9a7773');
+    x.fillStyle = sg; x.fillText(txt, 0, 0);
+    if (txt === '6' || txt === '9') { x.fillRect(-size * 0.22, size * 0.44, size * 0.44, Math.max(2, size * 0.07)); }
+    x.restore();
+  }
+}
+
 function drawAtlas(b) {
   const faces = b.g.faces;
   const cols = Math.ceil(Math.sqrt(faces.length));
@@ -664,6 +795,7 @@ function drawAtlas(b) {
   b.artPending = !!sk.art && !art;
   if (art) { drawArtAtlas(b, cv, x, art); b.atlas = cv; b.texDirty = true; return; }
   if (sk.paint === 'filigree') { drawFiligreeAtlas(b, cv, x); b.atlas = cv; b.texDirty = true; return; }
+  if (sk.paint === 'bloodiron') { drawBloodAtlas(b, cv, x); b.atlas = cv; b.texDirty = true; return; }
   // Камень набора: основа, мягкие пятна светлого и тёмного тона, тонкие прожилки.
   x.fillStyle = sk.base;
   x.fillRect(0, 0, cv.width, cv.height);
