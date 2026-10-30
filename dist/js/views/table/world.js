@@ -4,7 +4,7 @@ import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
-import { tokenStats } from '../../core/campaign.js';
+import { tokenStats, userById, isMasterOf } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
@@ -269,7 +269,7 @@ export function renderTokens(L, ctx) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
     }
-    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; }
+    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; node.dataset.by = ''; }
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
@@ -289,6 +289,20 @@ export function renderTokens(L, ctx) {
       if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
       node.dataset.tg = tgSig;
     }
+    // Кто тащит токен (TASK-162): кольцо его цвета, у ведущего токена — плашка с именем. Свои перетаскивания не помечаем.
+    const rd = ctx.remote.drags.get(t.id);
+    const byId = rd && rd.sceneId === ctx.sceneId && rd.by && rd.by !== ctx.userId ? rd.by : '';
+    const bySig = byId ? `${byId}|${rd.lead ? 1 : 0}` : '';
+    if (node.dataset.by !== bySig) {
+      node.querySelector('.tok-by')?.remove();
+      node.classList.toggle('remote-drag', !!byId);
+      if (byId) {
+        const u = userById(byId);
+        node.style.setProperty('--dc', isMasterOf(c, byId) ? '#e9b052' : `hsl(${u?.hue ?? 32} 80% 62%)`);
+        if (rd.lead) node.insertAdjacentHTML('beforeend', `<span class="tok-by">${icon('cursor-hold-01', 12)}${esc(u?.name || 'Кто-то')}</span>`);
+      } else node.style.removeProperty('--dc');
+      node.dataset.by = bySig;
+    } else if (byId) node.classList.add('remote-drag');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
     const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
