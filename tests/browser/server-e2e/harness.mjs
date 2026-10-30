@@ -11,7 +11,7 @@ const S = {
   campaigns: { pk: ['id'], cols: { id: 'text!', owner_id: 'uuid!', name: 'text!', data: 'json', created_at: 'ts', updated_at: 'ts' } },
   campaign_members: { pk: ['campaign_id', 'user_id'], cols: { campaign_id: 'text!', user_id: 'uuid!', role: 'text!', status: 'text!', character_id: 'text', scene_id: 'text', joined_at: 'ts' } },
   campaign_invites: { pk: ['campaign_id'], cols: { campaign_id: 'text!', code: 'text!', expires_at: 'ts', manual: 'bool', revoked: 'bool', created_at: 'ts' } },
-  characters: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', owner_id: 'uuid', data: 'json', updated_at: 'ts' } },
+  characters: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', owner_id: 'uuid', data: 'json', updated_at: 'ts', sheet_version: 'text', sheet_managed: 'bool', archived_at: 'ts' } },
   scenes: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', ord: 'int', data: 'json' } },
   scene_secrets: { pk: ['scene_id'], cols: { scene_id: 'text!', campaign_id: 'text!', data: 'json' } },
   scene_explored: { pk: ['scene_id'], cols: { scene_id: 'text!', campaign_id: 'text!', cells: 'text[]' } },
@@ -40,7 +40,7 @@ const typeOk = (t, v) => {
   return true;
 };
 
-export function fakeServer({ names = {} } = {}) {
+export function fakeServer({ names = {}, rpcOverride = null } = {}) {
   const T = Object.fromEntries(Object.keys(S).map((k) => [k, []]));
   const subs = new Map();  // chan → {page, uid, topic, pg, self}
   const pres = new Map();  // topic → Map(chan → {key, info})
@@ -249,6 +249,7 @@ export function fakeServer({ names = {} } = {}) {
 
   function rpc(uid, name, a) {
     ensureProfile(uid);
+    if (rpcOverride) { const custom = rpcOverride({ uid, name, args: a, tables: T, emit }); if (custom !== undefined) return custom; }
     const ok = (data) => ({ data, error: null });
     if (name === 'invite_preview') {
       const inv = T.campaign_invites.find((i) => i.code === String(a.p_code).trim().toUpperCase());

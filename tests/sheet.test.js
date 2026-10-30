@@ -216,3 +216,9 @@ test('рост Sidekick сохраняет override и различает вла
   assert.ok(!preview.changes.some((c) => c.id === 'half' || c.id === 'manual'));
   assert.ok(preview.manual.some((c) => c.id === 'manual'));
 });
+
+test('структурированный лист читается без перезаписи старого текста и неизвестных полей', async () => {
+  const { readCharacter }=await import('../dist/js/views/table/sheet-model.js');
+  const ch={id:'new',level:1,name:'Мультикласс',stats:{int:16,dex:14},classes:[{id:'f',name:'Воин',levels:1},{id:'w',name:'Волшебник',levels:4}],hitDicePools:[{id:'f',die:10,total:1,spent:0},{id:'w',die:6,total:4,spent:2}],slotPools:[{id:'pact',max:2,spent:1,recovery:'short'}],inventory:'Старая запись',inventoryItems:[{id:'a',name:'Свой предмет'}],skills:['arcana'],proficiencies:{skills:{arcana:2}},custom:{keep:true}};
+  const original=structuredClone(ch),view=readCharacter(ch);assert.equal(view.level,5);assert.equal(view.proficiency,3);assert.equal(view.skills.arcana.value,9);assert.equal(view.inventory.legacyText,'Старая запись');assert.equal(view.inventory.entries[0].name,'Свой предмет');assert.equal(view.hitDice[1].spent,2);assert.deepEqual(ch,original);
+});

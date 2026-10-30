@@ -30,3 +30,13 @@ test('исторический ACK не откатывает новую верс
   assert.throws(() => applyCharacterSnapshot(rows, { ...snapshot(), campaignId: 'other' }));
   assert.equal(rows.characters.size, 1);
 });
+
+test('архив не возвращается в активный список и не удаляется при обычной записи кампании', () => {
+  const rows = emptyRows(); rows.campaign = {id:'c-test',data:{}};
+  applyCharacterSnapshot(rows,{...snapshot(),archivedAt:'2026-10-30T00:00:00Z'});
+  const campaign=assemble(rows);assert.equal(campaign.characters.length,0);assert.equal(campaign.archivedCharacters.length,1);
+  const roundtrip=explode(campaign,rows);assert.equal(roundtrip.characters.size,1);
+  assert.equal(roundtrip.characters.get('ch-test').archived_at,'2026-10-30T00:00:00Z');
+  assert.equal(roundtrip.characters.get('ch-test').sheet_managed,true);
+  assert.equal(roundtrip.campaign.data.archivedCharacters,undefined);
+});

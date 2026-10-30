@@ -282,6 +282,43 @@ set local role anon;
 select pg_temp.code('лист: аноним не вызывает команду', $q$select public.character_command('c-rls','ch-p',0,'60000000-0000-0000-0000-000000000001','archive')$q$,'42501');
 reset role;
 
+-- Совместимость прежних элементов стола с versioned листом: одна edit-транзакция.
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('edit: отдельный лист для передачи', $q$insert into public.characters(id,campaign_id,owner_id,data) values('ch-edit','c-rls','00000000-0000-0000-0000-00000000000b','{"name":"До","hp":10,"hpMax":20,"tempHp":3}')$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.ok('edit: dirty patch и уже рассчитанный урон атомарны', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000001','edit','{"patch":{"name":"После"},"adjust":{"currentHp":-2,"tempHp":-3}}') from public.characters where id='ch-edit'$q$);
+select pg_temp.cnt('edit: temp не поглощает урон второй раз', $q$select 1 from public.characters where id='ch-edit' and data->>'name'='После' and data->'hp'='8' and data->'tempHp'='0'$q$,1);
+select pg_temp.code('edit: владелец не передаёт права себе произвольно', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000002','edit','{"ownerId":null}') from public.characters where id='ch-edit'$q$,'42501');
+select pg_temp.code('edit: два толкования HP не принимаются', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000003','edit','{"adjust":{"hp":-1,"currentHp":-1}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.ok('edit: назначение управляющего', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000004','controller','{"userId":"00000000-0000-0000-0000-00000000000c","enabled":true}') from public.characters where id='ch-edit'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.ok('edit: управляющий меняет текущие значения', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000005','edit','{"current":{"conditions":["poisoned"]},"adjust":{"currentHp":1}}') from public.characters where id='ch-edit'$q$);
+select pg_temp.code('edit: управляющий не прячет сборку в общей команде', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000006','edit','{"patch":{"hpMax":100},"current":{"hp":20}}') from public.characters where id='ch-edit'$q$,'42501');
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.code('edit: ошибочный выбор героя откатывает передачу целиком', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000007','edit','{"ownerId":"00000000-0000-0000-0000-00000000000c","membership":[{"userId":"00000000-0000-0000-0000-00000000000c","before":null,"after":null}]}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.cnt('edit: после отказа владелец прежний', $q$select 1 from public.characters where id='ch-edit' and owner_id='00000000-0000-0000-0000-00000000000b'$q$,1);
+select pg_temp.ok('edit: передача владения и выбранного героя атомарна', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000008','edit','{"ownerId":"00000000-0000-0000-0000-00000000000c","membership":[{"userId":"00000000-0000-0000-0000-00000000000c","before":null,"after":"ch-edit"}]}') from public.characters where id='ch-edit'$q$);
+select pg_temp.cnt('edit: владение и выбор согласованы', $q$select 1 from public.characters ch join public.campaign_members m on m.campaign_id=ch.campaign_id and m.user_id=ch.owner_id where ch.id='ch-edit' and m.character_id=ch.id and ch.data->'hp'='9'$q$,1);
+reset role;
+
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.code('поля: ссылка заклинания должна существовать', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000001','patch','{"knownSpells":[{"id":"s","name":"Своё","sourceId":"missing"}]}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('поля: круг пула не больше девяти', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000002','patch','{"slotPools":[{"id":"p","circle":10,"max":2,"spent":1}]}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('поля: расход без структурированной записи не принимается', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000003','patch','{"attacks":["не объект"]}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.code('поля: строка не множитель владения', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000004','patch','{"proficiencies":{"skills":{"stealth":"2"}}}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.ok('поля: неизвестный ресурс не становится нулём', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000005','patch','{"resources":[{"id":"unknown","max":null,"spent":null,"recovery":"manual"}]}') from public.characters where id='ch-edit'$q$);
+select pg_temp.cnt('поля: неизвестный расход сохраняется', $q$select 1 from public.characters where id='ch-edit' and data#>'{resources,0,spent}'='null'::jsonb$q$,1);
+select pg_temp.ok('поля: корректный мультикласс', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000006','patch','{"level":5,"classes":[{"id":"f","name":"Воин","levels":1},{"id":"w","name":"Волшебник","levels":4}]}') from public.characters where id='ch-edit'$q$);
+select pg_temp.code('поля: общий уровень нельзя оторвать от классов', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000007','patch','{"level":6}') from public.characters where id='ch-edit'$q$,'22023');
+select pg_temp.ok('архив: три участника с несортированными entries', $q$insert into public.tokens(id,campaign_id,scene_id,character_id,data) values('t-order-low','c-rls','s-1','ch-q','{"name":"Низкий","kind":"hero"}'),('t-order-high','c-rls','s-1','ch-edit','{"name":"Высокий","kind":"hero"}'),('t-order-mid','c-rls','s-1','ch-sk','{"name":"Средний","kind":"hero"}')$q$);
+select pg_temp.ok('архив: очередь по добавлению отличается от инициативы', $q$update public.combats set data='{"active":true,"sceneId":"s-1","round":7,"turn":0,"current":"t-order-high","ended":"t-order-high","moved":{},"entries":[{"tokenId":"t-order-low","init":5},{"tokenId":"t-order-high","init":20},{"tokenId":"t-order-mid","init":15}]}' where campaign_id='c-rls'$q$);
+select pg_temp.ok('архив: текущий по инициативе снимается', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000009','archive') from public.characters where id='ch-edit'$q$);
+select pg_temp.cnt('архив: следующим ходит средняя инициатива без лишнего раунда', $q$select 1 from public.combats where campaign_id='c-rls' and data->>'current'='t-order-mid' and data->'round'='7' and not (data ? 'ended')$q$,1);
+reset role;
+
 -- ——— Исключение ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер исключает игрока', $q$delete from public.campaign_members where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000b'$q$, 1);

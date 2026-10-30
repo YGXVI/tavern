@@ -1,6 +1,7 @@
 // Read-only адаптер старого Character. Это view model, не новый формат записи JSONB.
+import { proficiencyValue, sheetInitiative } from './sheet-fields.js';
 import { ABILITIES, SKILLS } from '../../data/rules.js';
-import { abilityModifier, knownInteger, knownNumber, sheetProficiency, checkBonus } from './sheet-rules.js';
+import { abilityModifier, knownInteger, knownNumber, sheetProficiency, checkBonus, totalClassLevel } from './sheet-rules.js';
 
 const list = (value) => Array.isArray(value) ? structuredClone(value) : [];
 const text = (value) => typeof value === 'string' ? value : '';
@@ -44,4 +45,21 @@ export function readLegacyCharacter(character) {
     spells: section(source.spells), inventory: section(source.inventory), features: section(source.features), notes: text(source.notes),
     warnings,
   };
+}
+
+/** Единое чтение: структурированные поля имеют приоритет, старый текст не переписывается. */
+export function readCharacter(character) {
+  const view=readLegacyCharacter(character), s=view.source;
+  if(Array.isArray(s.classes)&&s.classes.length){view.classes=list(s.classes);view.level=totalClassLevel(view.classes);view.proficiency=sheetProficiency(view.level);}
+  if(Array.isArray(s.hitDicePools))view.hitDice=list(s.hitDicePools);
+  if(Array.isArray(s.slotPools))view.slotPools=list(s.slotPools);
+  view.proficiency=proficiencyValue(s).value;view.initiative=sheetInitiative(s);
+  view.resources=list(s.resources);view.spellSources=list(s.spellSources);view.knownSpells=list(s.knownSpells);
+  view.inventory.entries=list(s.inventoryItems??(Array.isArray(s.inventory)?s.inventory:[]));
+  view.features.entries=list(s.featureEntries??(Array.isArray(s.features)?s.features:[]));
+  for(const kind of ['saves','skills'])for(const a of kind==='saves'?ABILITIES:SKILLS){
+    view[kind][a.id]=checkBonus({score:view.abilities[a.ab||a.id],proficiency:view.proficiency,multiplier:Number(s.proficiencies?.[kind]?.[a.id]??(s[kind]?.includes(a.id)?1:0)),override:s.overrides?.[kind]?.[a.id]?.value==null?null:s.overrides[kind][a.id]});
+  }
+  view.movement={...view.movement,...(s.movement||{})};
+  return view;
 }

@@ -1,7 +1,7 @@
 // TASK-004: отдельный подтверждаемый путь листа. Не подключается к sync.js автоматически.
 import { supabase } from './client.js';
 
-const KINDS = new Set(['patch', 'set_current', 'adjust', 'rest', 'growth', 'controller', 'archive', 'restore']);
+const KINDS = new Set(['patch', 'set_current', 'adjust', 'rest', 'growth', 'controller', 'archive', 'restore', 'edit']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MESSAGES = {
   conflict: 'Лист изменился. Перечитайте данные и проверьте свой ввод.',
