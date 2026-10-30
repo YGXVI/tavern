@@ -7,7 +7,7 @@ import { characterOf, ownerOfCharacter, tokenStats, myCharacter } from '../../co
 import { LIGHTS, conditionById, woundLabel } from '../../data/rules.js';
 import { diceWidget } from './dice.js';
 import { visionFields } from './p-token.js';
-import { currentEntry } from './combat.js';
+import { currentEntry, combatRound } from './combat.js';
 
 const close = `<button class="icon-btn icon-btn-sm" data-act="w-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button>`;
 const head = (title, sub) => `<div class="panel-header"><div class="titles"><div class="title">${esc(title)}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${close}</div>`;
@@ -145,7 +145,7 @@ function initiative(ctx) {
   }).join('');
   const myTurn = cur && ctx.isMine(cur.token);
   const curName = cur ? ctx.nameOf(cur.token, cur.stats) : '';
-  return `<div class="widget panel init-widget">${head(`Бой · раунд ${cb.round}`, cur ? `Ходит ${curName}` : '')}
+  return `<div class="widget panel init-widget">${head(`Бой · раунд ${combatRound(c, sc)}`, cur ? `Ходит ${curName}` : '')}
     <div class="w-list scroll init-list">${rows}</div>
     <div class="panel-footer">${ctx.isMaster
       ? `<button class="icon-btn icon-btn-sm" data-act="combat-prev" data-tip="Предыдущий ход">${icon('arrow-left-01', 18)}</button><button class="btn btn-primary grow" data-act="combat-next">Следующий ход${icon('arrow-right-01', 16)}</button><button class="icon-btn icon-btn-sm" data-act="combat-end" data-tip="Закончить бой">${icon('stop-circle', 18)}</button>`

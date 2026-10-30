@@ -8,7 +8,7 @@ import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myC
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
@@ -125,7 +125,8 @@ export class Panels {
     const cur = ctx.scene ? currentEntry(c, ctx.scene) : null;
     return {
       combat: c.combat.active,
-      turnKey: c.combat.active ? `${c.combat.round}:${c.combat.turn}:${cur?.tokenId}` : null,
+      // Раунд и чей ход — как видно за столом (номер хода в записи может догонять current с задержкой).
+      turnKey: c.combat.active ? `${ctx.scene ? combatRound(c, ctx.scene) : c.combat.round}:${cur?.tokenId}` : null,
       curToken: cur?.tokenId || null,
       pending: new Set(c.members.filter((m) => m.status === 'pending').map((m) => m.userId)),
       portals: new Set((c.portalRequests || []).map((r) => r.id)),
@@ -154,7 +155,7 @@ export class Panels {
       const t = ctx.scene?.tokens.find((x) => x.id === now.curToken);
       const free = ['move', 'select'].includes(ctx.ui.tool) && !ctx.dragging?.size;
       if (t && !ctx.isMaster && ctx.isMine(t)) {
-        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${c.combat.round} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
+        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${combatRound(c, ctx.scene)} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
         flagTab(document.hidden ? `⚔ Ваш ход — ${tokenStats(c, t).name}` : null);
         if (free) { queueMicrotask(() => ctx.select([t.id])); this.centerIfAway(t); }
       } else if (t && ctx.isMasterView && t.kind === 'foe' && free) {
@@ -506,7 +507,7 @@ export class Panels {
     const ctx = this.ctx, sid = ctx.sceneId;
     updateCampaign(ctx.cid, (c) => {
       const sc = c.scenes.find((s) => s.id === sid);
-      const before = currentEntry(c, sc)?.tokenId;
+      const before = currentEntry(c, sc, { raw: true })?.tokenId;
       fn(c, sc);
       if (!c.combat.entries.length) { endCombat(c); return; }
       const order = initiativeOrder(c, sc);

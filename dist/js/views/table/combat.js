@@ -59,13 +59,43 @@ export function advanceTurn(c, scene, dir = 1) {
   if ('current' in c.combat) c.combat.current = cur?.tokenId || null;
 }
 
-export function currentEntry(c, scene) {
+/**
+ * Чей ход. Сервер: игрок нажал «Закончить ход» (ended), а клиент мастера ещё не передал ход — за столом
+ * уже ходит следующий; иначе очередь прыгала бы туда-обратно, пока ход едет через мастера (TASK-113).
+ * raw — ход по записи, без этого предпросмотра (служебные пересчёты очереди).
+ */
+export function currentEntry(c, scene, { raw = false } = {}) {
   if (!c.combat?.active) return null;
   const order = initiativeOrder(c, scene);
+  let cur;
   // В серверной кампании игрок не видит скрытых участников боя, и индекс хода у него разъехался бы
   // с мастерским; поэтому мастер записывает, чей ход, полем current (TASK-002).
-  if (c.combat.current) { const e = order.find((x) => x.tokenId === c.combat.current); if (e || c.combat.current) return e || null; }
-  return order[c.combat.turn % Math.max(1, order.length)] || null;
+  if (c.combat.current) cur = order.find((x) => x.tokenId === c.combat.current) || null;
+  else cur = order[c.combat.turn % Math.max(1, order.length)] || null;
+  if (raw || !cur || !turnEnded(c)) return cur;
+  return nextInOrder(order, cur.tokenId).entry;
+}
+
+/** Номер раунда за столом: если законченный ход замыкает круг, а мастер ещё не передал ход, — уже следующий. */
+export function combatRound(c, scene) {
+  const cb = c.combat;
+  if (!cb?.active || !turnEnded(c)) return cb?.round || 1;
+  return cb.round + (nextInOrder(initiativeOrder(c, scene), cb.current).wrapped ? 1 : 0);
+}
+
+const turnEnded = (c) => !!c.combat.ended && c.combat.ended === c.combat.current;
+
+/** Следующий по очереди после id (павшие враги пропускаются, как в advanceTurn); wrapped — начался новый раунд. */
+function nextInOrder(order, id) {
+  const i = order.findIndex((e) => e.tokenId === id);
+  if (i < 0 || !order.length) return { entry: null, wrapped: false };
+  let turn = i, wrapped = false;
+  for (let step = 0; step < order.length; step++) {
+    turn += 1;
+    if (turn >= order.length) { turn = 0; wrapped = true; }
+    if (!fallenFoe(order[turn])) break;
+  }
+  return { entry: order[turn] || null, wrapped };
 }
 
 /** Чей ход по очереди мастера (без учёта current) — мастер пишет это в current перед отправкой. */
