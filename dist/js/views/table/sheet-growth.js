@@ -37,3 +37,29 @@ export function previewSidekickGrowth({ level, targetLevel, hpMax, constitution,
   manual.push({ field: 'classChoices', reason: 'Уточните классовые способности и выборы новых уровней' });
   return { changes: errors.length ? [] : changes, manual, errors };
 }
+
+/** Подтверждение готового расчёта. Каждая операция хранит собственный пул прироста. */
+export function applySidekickGrowthPreview(character, preview, { operationId, poolId }) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operationId || '')
+    || typeof poolId !== 'string' || !poolId) throw new TypeError('Нужны ID операции и пула');
+  if (character?.profile !== 'sidekick' || !preview || !Array.isArray(preview.errors) || preview.errors.length || !Array.isArray(preview.changes)) throw new TypeError('Нужен подтверждаемый расчёт Sidekick');
+  const level = preview.changes.find(c => c.field === 'level');
+  const hp = preview.changes.find(c => c.field === 'hpMax');
+  const dice = preview.changes.find(c => c.field === 'hitDice');
+  if (!level || !hp || !dice || sheetProficiency(level.to)===null || knownInteger(hp.to)===null || hp.to<hp.from || level.from !== character.level || hp.from !== character.hpMax
+    || !Number.isSafeInteger(dice.added) || dice.added < 1 || dice.added !== level.to - level.from
+    || dice.die !== character.sidekick?.hitDie) throw new TypeError('Расчёт устарел: проверьте уровень, HP и кость');
+  if (character.hitDicePools?.some(p => p.id === poolId || p.operationId === operationId)
+    || character.sidekick?.growthHistory?.some(h => h.operationId === operationId || h.id === operationId)) throw new TypeError('Развитие с этим ID уже записано');
+  const next = structuredClone(character);
+  next.level = level.to; next.hpMax = hp.to;
+  next.sidekick.baseLevel ??= character.level;
+  next.sidekick.baseSnapshot ??= structuredClone(character.statblock?.baseSnapshot || { stats: character.stats, hpMax: character.hpMax });
+  next.hitDicePools ??= [];
+  next.hitDicePools.push({ id: poolId, name: `Прирост Sidekick ${level.from} → ${level.to}`, source: 'sidekick-growth',
+    operationId, die: dice.die, total: dice.added, spent: 0 });
+  next.sidekick.growthHistory ??= [];
+  next.sidekick.growthHistory.push({ id: operationId, operationId, kind: 'growth', from: level.from, to: level.to,
+    hpFrom: hp.from, hpTo: hp.to, note: 'Классовые выборы и неописанные зависимости вручную' });
+  return next;
+}

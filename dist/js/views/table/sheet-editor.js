@@ -14,7 +14,7 @@ import { storeImage, resolveSrc, srcOf } from '../../core/assets.js';
 import { BESTIARY, loadSrdBestiary } from '../../data/bestiary.js';
 import { applyZeroHp, archiveLocalCharacter, restoreLocalCharacter } from './sheet-lifecycle.js';
 import { readCharacter } from './sheet-model.js';
-import { previewSidekickGrowth } from './sheet-growth.js';
+import { previewSidekickGrowth, applySidekickGrowthPreview } from './sheet-growth.js';
 import { partyLevelHint } from './sheet-rules.js';
 import { previewRest } from './sheet-rest.js';
 import { doRoll, parseFormula } from './dice.js';
@@ -155,10 +155,10 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
       change();m.close();render();
     };
   }
-  async function special(kind,payload,after) {
+  async function special(kind,payload,after,operationId) {
     if(dirty()||pending){ctx.toast('Сначала сохраните или отмените черновик');return false;}
     const old=copy(draft);draft=copy(after);
-    if(isServerMode()){pending={request:makeSheetCommand({campaignId:ctx.cid,characterId:id,version,kind,payload}),sent:copy(after)};persist();return save(true);}
+    if(isServerMode()){pending={request:makeSheetCommand({campaignId:ctx.cid,characterId:id,version,kind,payload,...(operationId?{operationId}:{})}),sent:copy(after)};persist();return save(true);}
     // Песочница использует ту же явную операцию, без обещания серверных прав.
     if(sameSheetValue(old,after)){status='Изменений нет';render();return true;}
     return save();
@@ -235,17 +235,18 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
     m.box.querySelector('[data-apply-growth]').onclick=async()=>{
       if(!sameSheetValue(base,revision)||dirty()){result=null;revision=copy(base);m.box.querySelector('[data-growth-preview]').textContent='Лист изменился. Проверьте новые исходные значения и рассчитайте развитие заново. Введённые результаты сохранены.';m.box.querySelector('[data-apply-growth]').disabled=!manual;return;}
       const target=parseField(m.box.querySelector('[data-target-level]').value,'number',{nullable:false,min:1,max:20});if(!target.valid)return;
-      const after=copy(draft);after.sidekick??={};after.sidekick.baseLevel??=draft.level;
-      after.sidekick.baseSnapshot??=copy(draft.statblock?.baseSnapshot||{stats:draft.stats,hpMax:draft.hpMax});
-      if(manual){after.level=target.value;}
-      else{if(previewInput!==JSON.stringify([m.box.querySelector('[data-target-level]').value,m.box.querySelector('[data-growth-rolls]').value])){m.box.querySelector('[data-growth-preview]').textContent='Ввод изменился. Рассчитайте развитие заново.';return;}if(!result||result.errors.length||result.changes.find(c=>c.field==='level')?.to!==target.value)return;
-        after.level=target.value;after.hpMax=result.changes.find(c=>c.field==='hpMax').to;
-        const added=result.changes.find(c=>c.field==='hitDice').added;
-        after.hitDicePools??=[];let pool=after.hitDicePools.find(p=>p.source==='sidekick-growth'&&p.die===draft.sidekick.hitDie);
-        if(pool)pool.total+=added;else after.hitDicePools.push({id:uid('hd-'),name:'Прирост Sidekick',source:'sidekick-growth',die:draft.sidekick.hitDie,total:added,spent:0});
+      const operationId=crypto.randomUUID();let after;
+      if(manual){
+        after=copy(draft);after.level=target.value;after.sidekick??={};after.sidekick.baseLevel??=draft.level;
+        after.sidekick.baseSnapshot??=copy(draft.statblock?.baseSnapshot||{stats:draft.stats,hpMax:draft.hpMax});
+        after.sidekick.growthHistory??=[];after.sidekick.growthHistory.push({id:operationId,operationId,kind:'manual-level',from:draft.level,to:after.level,hpFrom:draft.hpMax,hpTo:after.hpMax,note:m.box.querySelector('[data-level-reason]').value});
+      }else{
+        if(previewInput!==JSON.stringify([m.box.querySelector('[data-target-level]').value,m.box.querySelector('[data-growth-rolls]').value])){m.box.querySelector('[data-growth-preview]').textContent='Ввод изменился. Рассчитайте развитие заново.';return;}
+        if(!result||result.errors.length||result.changes.find(c=>c.field==='level')?.to!==target.value)return;
+        try{after=applySidekickGrowthPreview({...draft,profile:'sidekick'},result,{operationId,poolId:uid('hd-')});}
+        catch(e){m.box.querySelector('[data-growth-preview]').textContent=e.message;return;}
       }
-      after.sidekick.growthHistory??=[];after.sidekick.growthHistory.push({id:uid('growth-'),kind:manual?'manual-level':'growth',from:draft.level,to:after.level,hpFrom:draft.hpMax,hpTo:after.hpMax,note:manual?m.box.querySelector('[data-level-reason]').value:'Классовые выборы и неописанные зависимости вручную'});
-      const normalized=prepareSheetDerived(after);const patch=characterEditPayload(base,normalized).patch||{};m.close();await special('growth',{patch},normalized);
+      const normalized=prepareSheetDerived(after);const patch=characterEditPayload(base,normalized).patch||{};m.close();await special('growth',{patch},normalized,operationId);
     };
   }
   function requestClose(){

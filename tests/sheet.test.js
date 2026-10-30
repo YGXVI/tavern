@@ -222,3 +222,26 @@ test('структурированный лист читается без пер
   const ch={id:'new',level:1,name:'Мультикласс',stats:{int:16,dex:14},classes:[{id:'f',name:'Воин',levels:1},{id:'w',name:'Волшебник',levels:4}],hitDicePools:[{id:'f',die:10,total:1,spent:0},{id:'w',die:6,total:4,spent:2}],slotPools:[{id:'pact',max:2,spent:1,recovery:'short'}],inventory:'Старая запись',inventoryItems:[{id:'a',name:'Свой предмет'}],skills:['arcana'],proficiencies:{skills:{arcana:2}},custom:{keep:true}};
   const original=structuredClone(ch),view=readCharacter(ch);assert.equal(view.level,5);assert.equal(view.proficiency,3);assert.equal(view.skills.arcana.value,9);assert.equal(view.inventory.legacyText,'Старая запись');assert.equal(view.inventory.entries[0].name,'Свой предмет');assert.equal(view.hitDice[1].spent,2);assert.deepEqual(ch,original);
 });
+
+test('подтверждённые приросты Sidekick раздельны по операции, раны и база сохраняются',async()=>{
+  const {applySidekickGrowthPreview}=await import('../dist/js/views/table/sheet-growth.js');
+  const original={profile:'sidekick',level:4,hp:6,hpMax:20,tempHp:3,stats:{con:14},sidekick:{hitDie:8,baseSnapshot:{hp:10},growthHistory:[]},hitDicePools:[{id:'base',die:8,total:2,spent:1}],overrides:{saves:{wis:{value:0,reason:'Вручную'}}}};
+  const preview=ch=>previewSidekickGrowth({level:ch.level,targetLevel:ch.level+1,hpMax:ch.hpMax,constitution:ch.stats.con,hitDie:ch.sidekick.hitDie,rolls:[3]});
+  const a=applySidekickGrowthPreview(original,preview(original),{operationId:'a0000000-0000-0000-0000-000000000001',poolId:'gain-1'});
+  const b=applySidekickGrowthPreview(a,preview(a),{operationId:'a0000000-0000-0000-0000-000000000002',poolId:'gain-2'});
+  assert.equal(b.level,6);assert.equal(b.hpMax,30);assert.equal(b.hp,6);assert.equal(b.tempHp,3);
+  assert.deepEqual(b.hitDicePools.map(p=>p.total),[2,1,1]);assert.equal(b.hitDicePools[1].operationId,b.sidekick.growthHistory[0].operationId);
+  assert.notEqual(b.hitDicePools[1].id,b.hitDicePools[2].id);assert.equal(b.sidekick.baseLevel,4);assert.deepEqual(b.sidekick.baseSnapshot,{hp:10});assert.deepEqual(b.overrides,original.overrides);
+  assert.equal(original.level,4);assert.equal(original.hitDicePools.length,1);assert.equal(original.sidekick.growthHistory.length,0);
+  assert.throws(()=>applySidekickGrowthPreview(a,preview(a),{operationId:'a0000000-0000-0000-0000-000000000001',poolId:'another'}),/уже записано/);
+  assert.throws(()=>applySidekickGrowthPreview(a,preview(original),{operationId:'a0000000-0000-0000-0000-000000000003',poolId:'other'}),/устарел/);
+});
+
+test('мигрированный Sidekick не получает прежние уровни второй раз',async()=>{
+  const {applySidekickGrowthPreview}=await import('../dist/js/views/table/sheet-growth.js');
+  const ch={profile:'sidekick',level:5,hp:4,hpMax:18,stats:{con:10},sidekick:{hitDie:6}};
+  const p=previewSidekickGrowth({level:5,targetLevel:7,hpMax:18,constitution:10,hitDie:6,rolls:[2,4]});
+  const next=applySidekickGrowthPreview(ch,p,{operationId:'b0000000-0000-0000-0000-000000000001',poolId:'new-dice'});
+  assert.equal(next.hpMax,24);assert.equal(next.hp,4);assert.equal(next.sidekick.baseLevel,5);assert.equal(next.hitDicePools[0].total,2);
+  assert.equal(ch.sidekick.baseLevel,undefined);
+});

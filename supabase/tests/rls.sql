@@ -334,6 +334,15 @@ select pg_temp.code('Sidekick: класс только из трёх', $q$select
 select pg_temp.ok('Sidekick: подтверждённая базовая точка', $q$select public.character_command('c-rls','ch-sk',sheet_version,'90000000-0000-0000-0000-000000000011','patch','{"sidekick":{"class":"warrior","baseLevel":5,"hitDie":8,"partyIds":["ch-q"]}}') from public.characters where id='ch-sk'$q$);
 reset role;
 
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+insert into _sheet_replies(name,expected) select 'growth-repeat',sheet_version from public.characters where id='ch-sk';
+select pg_temp.ok('Sidekick: развитие с ID операции и отдельным пулом', $q$update _sheet_replies set reply=public.character_command('c-rls','ch-sk',expected,'a1000000-0000-0000-0000-000000000001','growth','{"patch":{"level":6,"hpMax":38,"hitDicePools":[{"id":"growth-die-1","source":"sidekick-growth","operationId":"a1000000-0000-0000-0000-000000000001","die":8,"total":1,"spent":0}],"sidekick":{"growthHistory":[{"id":"a1000000-0000-0000-0000-000000000001","operationId":"a1000000-0000-0000-0000-000000000001","from":5,"to":6}]}}}') where name='growth-repeat'$q$);
+select pg_temp.cnt('Sidekick: повтор роста возвращает ACK', $q$select 1 from _sheet_replies where name='growth-repeat' and (public.character_command('c-rls','ch-sk',expected,'a1000000-0000-0000-0000-000000000001','growth','{"patch":{"level":6,"hpMax":38,"hitDicePools":[{"id":"growth-die-1","source":"sidekick-growth","operationId":"a1000000-0000-0000-0000-000000000001","die":8,"total":1,"spent":0}],"sidekick":{"growthHistory":[{"id":"a1000000-0000-0000-0000-000000000001","operationId":"a1000000-0000-0000-0000-000000000001","from":5,"to":6}]}}}')->>'replayed')::boolean$q$,1);
+select pg_temp.cnt('Sidekick: повтор не добавляет HP или кости, раны остаются', $q$select 1 from public.characters where id='ch-sk' and data->'level'='6' and data->'hpMax'='38' and data->'hp'='20' and jsonb_array_length(data->'hitDicePools')=1 and data#>'{hitDicePools,0,total}'='1'$q$,1);
+select pg_temp.cnt('Sidekick: одна запись серверной истории на развитие', $q$select 1 from public.character_history where operation_id='a1000000-0000-0000-0000-000000000001'$q$,1);
+select pg_temp.code('Sidekick: устаревшая новая команда не применяет рост', $q$select public.character_command('c-rls','ch-sk',expected,'a1000000-0000-0000-0000-000000000002','growth','{"patch":{"level":6,"hpMax":38,"hitDicePools":[{"id":"growth-die-1","source":"sidekick-growth","operationId":"a1000000-0000-0000-0000-000000000001","die":8,"total":1,"spent":0}],"sidekick":{"growthHistory":[{"id":"a1000000-0000-0000-0000-000000000001","operationId":"a1000000-0000-0000-0000-000000000001","from":5,"to":6}]}}}') from _sheet_replies where name='growth-repeat'$q$,'40001');
+reset role;
+
 -- ——— Исключение ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер исключает игрока', $q$delete from public.campaign_members where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000b'$q$, 1);
