@@ -32,7 +32,7 @@ test('image-only and zero-valued manual templates retain their actual values', (
   assert.equal(toMonster(image).init, null);
   const snapshot = { ...manual, ownerId: null };
   assert.equal(validateCreature(snapshot).valid, false, 'private persistence still requires an owner');
-  assert.equal(toMonster(snapshot).id, 'lib:cr-1'.replace('cr-1', manual.id));
+  assert.equal(toMonster(snapshot).id, 'lib:private-1');
   assert.equal(toMonster(snapshot).ownerId, undefined);
 });
 
