@@ -294,9 +294,9 @@ function stepWorld(bodies, bounds) {
   }
   for (const b of bodies) {
     if (b.asleep) continue;
-    // После двух секунд — «вязкость»: долгие перекаты затихают, бросок ложится за 2–4 секунды.
+    // После секунды — «вязкость»: долгие перекаты затихают, бросок ложится за 1,5–3 секунды.
     b.age = (b.age || 0) + 1;
-    if (b.age > 120) { const k = Math.min(0.06, (b.age - 120) * 0.0008); b.v = mul(b.v, 1 - k); b.w = mul(b.w, 1 - k * 1.5); }
+    if (b.age > 60) { const k = Math.min(0.06, (b.age - 60) * 0.0008); b.v = mul(b.v, 1 - k); b.w = mul(b.w, 1 - k * 1.5); }
     const slow = len(b.v) < 0.2 && len(b.w) < 0.35;
     b.still = slow ? b.still + 1 : 0;
     if (b.still > 12) {
@@ -649,14 +649,14 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     return best || [0, 2.6, z0];
   }
   /**
-   * Тряска: кубы покачиваются в воздухе и медленно кувыркаются, а раз в секунду-полторы все разом
-   * гремят — как в кулаке перед броском. Появившийся куб взлетает со дна к своему месту.
+   * Тряска: кубы плавно покачиваются в воздухе и медленно кувыркаются, а раз в две-три секунды все разом
+   * мягко встряхиваются — как в ладонях перед броском. Появившийся куб взлетает со дна к своему месту.
    */
   function stepHover(now) {
     const list = bodies.filter((b) => b.hover);
     if (!list.length) return false;
     const calm = still(), t = now / 1000;
-    const rattle = calm ? 0 : 0.3 + 0.7 * Math.max(0, Math.sin(t * 4.2)) ** 3;
+    const rattle = calm ? 0 : 0.25 + 0.75 * Math.max(0, Math.sin(t * 2.4)) ** 3;
     let moving = false;
     for (const b of list) {
       const h = b.hover;
@@ -666,14 +666,14 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       const e = 1 - (1 - rise) ** 3;
       if (rise < 1) moving = true;
       if (!calm) h.qb = qnorm(qmul(qaxis(h.axis, h.spin * dt), h.qb));
-      const a = 0.07 * rattle;
-      const bob = calm ? 0 : Math.sin(t * 1.7 + h.ph) * 0.12;
+      const a = 0.05 * rattle;
+      const bob = calm ? 0 : Math.sin(t * 1.1 + h.ph) * 0.1;
       b.x = [
-        h.base[0] + Math.sin(t * 31 + h.ph * 3) * a,
-        h.base[1] * e + bob + Math.sin(t * 26 + h.ph) * a * 0.6,
-        h.base[2] + Math.sin(t * 37 + h.ph * 2) * a,
+        h.base[0] + Math.sin(t * 11 + h.ph * 3) * a,
+        h.base[1] * e + bob + Math.sin(t * 9 + h.ph) * a * 0.6,
+        h.base[2] + Math.sin(t * 13 + h.ph * 2) * a,
       ];
-      b.q = calm ? h.qb : qmul(qaxis(h.jaxis, Math.sin(t * 29 + h.ph) * 0.16 * rattle), h.qb);
+      b.q = calm ? h.qb : qmul(qaxis(h.jaxis, Math.sin(t * 8 + h.ph) * 0.09 * rattle), h.qb);
     }
     return moving || !calm;
   }
@@ -688,7 +688,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
         base, born: performance.now(), ph: Math.random() * Math.PI * 2, qb: b.q,
         axis: norm([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]),
         jaxis: norm([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]),
-        spin: (0.5 + Math.random() * 0.7) * (Math.random() < 0.5 ? -1 : 1),
+        spin: (0.3 + Math.random() * 0.35) * (Math.random() < 0.5 ? -1 : 1),
       };
       bodies.push(b);
       kick();
