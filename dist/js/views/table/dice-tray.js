@@ -208,7 +208,7 @@ function createFloor(ctx) {
   if (chrome) chrome.before(node); else ctx.root.append(node);
   const canvas = node.querySelector('.df-canvas');
   let stage = null;
-  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 100, insetBottom: 110, maxDpr: 1.5 }); return stage; };
+  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 100, insetBottom: 110, maxDpr: 1.5, sound: 0.6 }); return stage; };
   const onResize = () => stage?.resize();
   addEventListener('resize', onResize);
 

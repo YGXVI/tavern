@@ -185,6 +185,68 @@ function alignedQuat(b) {
 const G = -38, DT = 1 / 240, SUBSTEPS = 4;
 const FLOOR = { e: 0.32, mu: 0.42 }, WALL = { e: 0.45, mu: 0.25 };
 
+// ——— Звук ударов (TASK-145) ———
+// Удары записываются при просчёте броска (кадр, вид, скорость) и звучат при проигрывании в тот же кадр.
+// Звук синтезируется Web Audio — без файлов и чужих записей.
+let hitLog = null; // { frame, byKey: Map } — во время просчёта
+function noteHit(b, kind, v) {
+  if (!hitLog || v < 1.3) return;
+  const k = `${hitLog.frame}|${b.id}|${kind}`;
+  const was = hitLog.byKey.get(k);
+  if (!was || was.v < v) hitLog.byKey.set(k, { f: hitLog.frame, kind, v, die: b.shape });
+}
+let actx = null, noiseBuf = null, soundOn = true;
+/** Звук кубов вкл/выкл (на эту вкладку). */
+export function setDiceSound(on) { soundOn = !!on; }
+export function diceSoundOn() { return soundOn; }
+function audio() {
+  if (!soundOn) return null;
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      noiseBuf = actx.createBuffer(1, Math.round(actx.sampleRate * 0.25), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx.state === 'running' ? actx : null;
+  } catch { return null; }
+}
+/**
+ * Один удар: «щелчок» куба о куб — короткий и звонкий; о дно лотка (сукно на дереве) — глухой стук;
+ * о борт — деревянный. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
+ */
+function playHit(kind, v, vol = 1, die = 20) {
+  const ac = audio(); if (!ac) return;
+  const g0 = Math.min(1, Math.max(0, (v - 1.3) / 11)) ** 0.8 * vol;
+  if (g0 < 0.02) return;
+  const t = ac.currentTime + 0.005, r = () => 0.85 + Math.random() * 0.3;
+  const small = die === 4 || die === 6 ? 1.12 : die === 20 || die === 12 ? 0.92 : 1;
+  const out = ac.createGain(); out.connect(ac.destination);
+  // Шум через полосовой фильтр — «тело» удара.
+  const src = ac.createBufferSource(); src.buffer = noiseBuf;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass';
+  const ng = ac.createGain();
+  let f, q, dec, peak;
+  if (kind === 'dice') { f = 3200 * r() * small; q = 7; dec = 0.045; peak = 0.5; }
+  else if (kind === 'wall') { f = 1300 * r(); q = 4; dec = 0.07; peak = 0.45; }
+  else { f = 750 * r() * small; q = 2.2; dec = 0.09; peak = 0.6; }
+  bp.frequency.value = f; bp.Q.value = q;
+  ng.gain.setValueAtTime(peak * g0, t); ng.gain.exponentialRampToValueAtTime(0.0008, t + dec);
+  src.connect(bp); bp.connect(ng); ng.connect(out);
+  src.start(t, Math.random() * 0.15, dec + 0.02);
+  // Короткий тон — «щёлк» кости или «тук» дерева.
+  const osc = ac.createOscillator(); osc.type = 'triangle';
+  const og = ac.createGain();
+  const tone = kind === 'dice' ? 2400 * r() * small : kind === 'wall' ? 520 * r() : 210 * r() * small;
+  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.7, t + dec);
+  og.gain.setValueAtTime((kind === 'dice' ? 0.18 : 0.35) * g0, t); og.gain.exponentialRampToValueAtTime(0.0008, t + dec * 0.8);
+  osc.connect(og); og.connect(out);
+  osc.start(t); osc.stop(t + dec + 0.02);
+}
+
 function applyImpulse(b, r, J) {
   b.v = add(b.v, J);
   b.w = add(b.w, mul(cross(r, J), 1 / b.g.inertia));
@@ -192,7 +254,7 @@ function applyImpulse(b, r, J) {
 
 function contactPlane(b, n, off, mat, verts) {
   // Плоскость n·p >= off: последовательные импульсы с накоплением (как в PGS), трение по Кулону.
-  let deepest = 0;
+  let deepest = 0, hit = 0;
   const cs = [];
   for (const p of verts) {
     const pen = off - dot(n, p);
@@ -201,9 +263,11 @@ function contactPlane(b, n, off, mat, verts) {
     const r = sub(p, b.x);
     const rn = cross(r, n);
     const vn0 = dot(add(b.v, cross(b.w, r)), n);
+    if (-vn0 > hit) hit = -vn0;
     cs.push({ r, k: 1 + dot(rn, rn) / b.g.inertia, target: vn0 < -2 ? -mat.e * vn0 : 0, acc: 0, tacc: [0, 0, 0] });
   }
   if (!cs.length) return false;
+  noteHit(b, mat === FLOOR ? 'floor' : 'wall', hit);
   for (let it = 0; it < 6; it++) for (const c of cs) {
     const vel = add(b.v, cross(b.w, c.r));
     const vn = dot(vel, n);
@@ -244,18 +308,36 @@ function overlap(a, b) {
   }
   return best;
 }
-/** Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота, не ниже дна. */
-function separate(list, iters = 24) {
+/** Вернуть куб внутрь стенок площадки и не ниже дна (по настоящим вершинам, без поворота). */
+function keepInside(b, bounds) {
+  const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
+  const vs = worldVerts(b);
+  const lo = (k) => Math.min(...vs.map((p) => p[k])), hi = (k) => Math.max(...vs.map((p) => p[k]));
+  const x0 = -hw + (bounds.left || 0), x1 = hw - (bounds.right || 0), z0 = -hd + (bounds.top || 0), z1 = hd - (bounds.bottom || 0);
+  let dx = 0, dz = 0;
+  if (lo(0) < x0) dx = x0 - lo(0); else if (hi(0) > x1) dx = x1 - hi(0);
+  if (lo(2) < z0) dz = z0 - lo(2); else if (hi(2) > z1) dz = z1 - hi(2);
+  const dy = Math.max(0, -lo(1));
+  if (dx || dy || dz) b.x = [b.x[0] + dx, b.x[1] + dy, b.x[2] + dz];
+}
+/**
+ * Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота,
+ * не ниже дна и не за стенки. Если места внизу нет, куб поднимается на соседей (TASK-146).
+ */
+function separate(list, bounds, iters = 120) {
   for (let it = 0; it < iters; it++) {
     let any = false;
     for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
       const o = overlap(list[i], list[j]);
       if (!o || o.pen < 0.01) continue;
       any = true;
-      const k = Math.min(o.pen, 0.25) * 0.55;
+      // Под конец — чуть вверх тому, кто выше: кучу легче развести, подняв её, чем раздвинув по тесному дну.
+      const k = Math.min(o.pen, 0.25) * 0.55, up = it > iters / 2 ? 0.25 : 0;
+      const hiB = list[i].x[1] >= list[j].x[1] ? list[i] : list[j];
       list[i].x = add(list[i].x, mul(o.n, k)); list[j].x = sub(list[j].x, mul(o.n, k));
+      if (up) hiB.x = [hiB.x[0], hiB.x[1] + k * up, hiB.x[2]];
     }
-    for (const b of list) { const low = lowest(b); if (low < 0) b.x = [b.x[0], b.x[1] - low, b.x[2]]; }
+    for (const b of list) keepInside(b, bounds);
     if (!any) break;
   }
 }
@@ -296,6 +378,7 @@ function collidePair(a, b) {
       const vrel = sub(add(A.v, cross(A.w, ra)), add(B.v, cross(B.w, rb)));
       const vn = dot(vrel, n);
       if (vn < 0) {
+        noteHit(A, 'dice', -vn);
         const ran = cross(ra, n), rbn = cross(rb, n);
         const k = wa * (1 + dot(ran, ran) / A.g.inertia) + wb * (1 + dot(rbn, rbn) / B.g.inertia);
         const j = (-(1 + 0.3) * vn) / k;
@@ -585,7 +668,7 @@ const FADE_MS = 650;
  *      place(targets, opts) — без анимации; fade(group, delay); setInsets({top, bottom, left, right}); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
-export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false } = {}) {
+export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false, sound = 1 } = {}) {
   const inset = { top: insetTop, bottom: insetBottom, left: insetLeft, right: insetRight };
   const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
   if (!gl) return null;
@@ -600,6 +683,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
 
   let bodies = [], frames = null, frameAt = 0, raf = 0, bounds = { w: 9, d: 14 }, camH = 20, pv = null, dpr = 1;
   let destroyed = false, pending = [], playStart = 0, liveAt = 0;
+  let sounds = null, soundAt = -1; // удары просчитанного броска по кадрам
   const onArt = () => { let any = false; for (const b of bodies) if (b.artPending) { b.labelsDirty = true; any = true; } if (any) { render(); kick(); } };
   artWaiters.add(onArt);
 
@@ -742,8 +826,15 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
       if (!playStart) playStart = now;
       frameAt = Math.floor((now - playStart) / (1000 / 60));
       applyFrame(frames[Math.min(frameAt, frames.length - 1)]);
+      // Удары — в те же кадры; если кадры пропущены, за раз звучит не больше шести самых громких.
+      if (sounds && frameAt > soundAt) {
+        const due = [];
+        for (let f = soundAt + 1; f <= Math.min(frameAt, frames.length - 1); f++) for (const h of sounds.get(f) || []) due.push(h);
+        soundAt = frameAt;
+        due.sort((a, b) => b.v - a.v).slice(0, 6).forEach((h) => playHit(h.kind, h.v, sound, h.die));
+      }
       if (frameAt >= frames.length - 1) {
-        frames = null; playStart = 0;
+        frames = null; playStart = 0; sounds = null;
         for (const b of bodies) { b.asleep = true; b.v = [0, 0, 0]; b.w = [0, 0, 0]; }
         for (const b of bodies) if (b.settled) { b.settled(b); b.settled = null; }
         render();
@@ -779,17 +870,23 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
   function hoverSlot() {
     const taken = bodies.filter((b) => b.hover).map((b) => b.hover.base);
     // Висящий куб ближе к камере — на экране он крупнее и дальше от центра: поля с запасом на перспективу.
-    const k = camH / (camH - 3.1), r = 0.95;
-    const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
-    const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+    // Много кубов в одном слое не помещается — следующие висят слоем выше, не внутри соседей (TASK-146).
+    const r = 0.95, gap = 2;
+    const k0 = camH / (camH - 3.1);
+    const cap = Math.max(2, Math.floor((2 * ((bounds.w / 2 - 0.25) / k0 - r)) / gap) * Math.floor(((bounds.d - bounds.top - bounds.bottom) / k0 - 2 * r) / gap) - 2);
+    const extra = gap * Math.floor(taken.length / cap);
     let best = null, bestD = -1;
-    for (let i = 0; i < 40; i++) {
-      const p = [(Math.random() * 2 - 1) * xr, 2.5 + Math.random() * 0.5, z0 + Math.random() * Math.max(0, z1 - z0)];
-      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6) continue; // кнопка «Бросить»
-      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[2] - p[2]))) : 9;
+    for (let i = 0; i < 60; i++) {
+      const y = 2.5 + Math.random() * (0.5 + extra);
+      const k = camH / (camH - y - 0.6);
+      const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
+      const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+      const p = [(Math.random() * 2 - 1) * xr, y, z0 + Math.random() * Math.max(0, z1 - z0)];
+      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6 && p[1] < 3.2) continue; // кнопка «Бросить»
+      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[1] - p[1], t[2] - p[2]))) : 9;
       if (d > bestD) { bestD = d; best = p; }
     }
-    return best || [0, 2.6, z0];
+    return best || [0, 2.6, (-bounds.d / 2 + bounds.top + 0.15) / k0 + r];
   }
   /**
    * Тряска: кубы плавно покачиваются в воздухе и медленно кувыркаются, а раз в две-три секунды все разом
@@ -873,17 +970,25 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     if (frames) { applyFrame(frames[Math.min(frameAt, frames.length - 1)]); for (const b of bodies) if (b.target != null && !b.done) b.asleep = false; frames = null; playStart = 0; }
     const pool = opts.fresh ? [] : bodies.filter((b) => b.target == null);
     const used = [];
-    const cols = Math.max(1, Math.floor((bounds.aw - 1.4) / 1.9));
+    // Новые кубы вылетают снизу сеткой с шагом STEP, которая помещается между стенками (не больше трёх рядов);
+    // не влезли — следующим слоем выше, как горсть, высыпанная из руки (TASK-146: раньше ряды уходили за верхнюю
+    // стенку и кубы начинали бросок друг в друге).
+    const STEP = 2;
+    const fresh = targets.filter((t) => !pool.some((b) => b.kind === t.kind)).length;
+    const cols = Math.max(1, Math.floor((bounds.aw - 1.2) / STEP));
+    const rows = Math.max(1, Math.min(3, Math.floor((bounds.d - bounds.top - bounds.bottom - 1.2) / STEP)));
     const lane = opts.lane ?? 0; // смещение ряда вылета по ширине (−0.5…0.5): у разных бросков — разные места
-    targets.forEach((t, i) => {
+    let ni = 0;
+    targets.forEach((t) => {
       const k = pool.findIndex((b) => b.kind === t.kind);
       let b;
       if (k >= 0) b = pool.splice(k, 1)[0];
       else {
-        // Новые кубы вылетают из-под нижнего края рядами, не налезая друг на друга.
-        const n = Math.min(targets.length, cols), col = i % cols, row = Math.floor(i / cols);
-        const x = bounds.cx + (col + 0.5 - n / 2) * 1.9 + lane * Math.max(0, bounds.aw - n * 1.9) + (Math.random() - 0.5) * 0.3;
-        b = makeBody(t.kind, { x: [x, 1.4 + Math.random() * 0.8 + row * 0.4, bounds.d / 2 - bounds.bottom - 1.3 - row * 1.9], skin: opts.skin });
+        const n = Math.min(fresh, cols), col = ni % cols, row = Math.floor(ni / cols) % rows, layer = Math.floor(ni / (cols * rows));
+        ni++;
+        const x = bounds.cx + (col + 0.5 - n / 2) * STEP + lane * Math.max(0, bounds.aw - 1.2 - n * STEP) + (Math.random() - 0.5) * 0.2;
+        const z = bounds.d / 2 - bounds.bottom - 1.1 - row * STEP;
+        b = makeBody(t.kind, { x: [x, 1.3 + layer * STEP + Math.random() * 0.3, z], skin: opts.skin });
         bodies.push(b);
       }
       b.skin = opts.skin || b.skin;
@@ -902,10 +1007,19 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     const sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
     const map = new Map(sim.map((s, i) => [s, bodies[i]]));
     const rec = [];
-    for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
-      stepWorld(sim, bounds);
-      rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
-    }
+    hitLog = { frame: 0, byKey: new Map() };
+    let hits;
+    try {
+      for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
+        hitLog.frame = f;
+        stepWorld(sim, bounds);
+        rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
+      }
+    } finally { hits = hitLog ? [...hitLog.byKey.values()] : []; hitLog = null; }
+    // Звук по кадрам: в одном кадре — не больше пяти самых сильных ударов.
+    const byFrame = new Map();
+    for (const h of hits) { const l = byFrame.get(h.f) || []; l.push(h); byFrame.set(h.f, l); }
+    for (const [f, l] of byFrame) byFrame.set(f, l.sort((a, b) => b.v - a.v).slice(0, 5));
     // Доводка — только у кубов, что лежат на дне сами по себе: ровно на грань и до дна. Куб на соседе или
     // впритык к нему остаётся как лёг: выравнивание вдавило бы его в соседа.
     const free = sim.map((s) => lowest(s) < 0.06 && !sim.some((o) => o !== s && touching(s, o, 0.12)));
@@ -914,7 +1028,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     const drop = sim.map((s, i) => { if (!free[i]) return 0; const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
     // Итоговые места: после выравнивания кубы, вошедшие друг в друга, разводятся — сквозь соседа не лежит никто.
     const fin = sim.map((s, i) => ({ g: s.g, x: [s.x[0], s.x[1] - drop[i], s.x[2]], q: finalQ[i] }));
-    separate(fin);
+    separate(fin, bounds);
     for (let k = 1; k <= 8; k++) {
       const t = k / 8;
       rec.push(last.map(([b, x, q], i) => [b, [x[0] + (fin[i].x[0] - x[0]) * t, x[1] + (fin[i].x[1] - x[1]) * t, x[2] + (fin[i].x[2] - x[2]) * t], qslerp(q, finalQ[i], t), [0, 0, 0], [0, 0, 0]]));
@@ -933,7 +1047,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLe
     // Текстуры с новыми метками готовим до старта: тяжёлый первый кадр не съедает начало полёта.
     for (const b of bodies) prepare(b);
     for (const b of used) b.settled = (x) => { x.done = true; if (x.target.dropped) x.alpha = 0.4; if (x.target.glow) x.glow = x.target.glow; };
-    frames = rec; frameAt = 0; playStart = 0;
+    frames = rec; frameAt = 0; playStart = 0; sounds = sound > 0 ? byFrame : null; soundAt = -1;
     return new Promise((resolve) => {
       pending.push(() => {
         const cx = used.reduce((a, b) => a + b.x[0], 0) / (used.length || 1), cz = used.reduce((a, b) => a + b.x[2], 0) / (used.length || 1);
