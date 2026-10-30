@@ -803,3 +803,31 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .atk-desc { margin: 6px 0 0; font: 400 12px/17px var(--font-text); color: var(--text-secondary); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .atk-desc[data-desc] { cursor: pointer; }
 .atk-desc.open { display: block; overflow: visible; }
+
+/* ——— Лоток с объёмными кубами (TASK-092) ———
+   Как в референсе: высокое тёмное сукно в деревянной рамке. Стоит под кнопкой «Кубы»,
+   а при открытом виджете — справа от него. */
+.dice-tray { position: absolute; z-index: calc(var(--z-chrome) + 1); top: calc(var(--edge) + 72px); left: calc(var(--edge) + 244px); width: 300px; height: min(520px, calc(100vh - 2 * var(--edge) - 72px - 96px)); animation: rise .18s ease-out; }
+.table:has(.ch-widget .dice-widget) .dice-tray { left: calc(var(--edge) + 244px + 340px + 12px); }
+.dice-tray.hidden { display: none; }
+.dt-frame { height: 100%; padding: 8px; border-radius: 22px; background: linear-gradient(150deg, var(--dice-frame), var(--dice-frame-dark) 85%); box-shadow: var(--shadow-panel), inset 0 1px 0 rgb(255 255 255 / .1), inset 0 -2px 6px rgb(0 0 0 / .4); }
+.dt-felt { position: relative; height: 100%; border-radius: 15px; overflow: hidden; background: radial-gradient(110% 80% at 50% 45%, #1c1d24, var(--dice-felt) 75%); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .7), inset 0 12px 28px rgb(0 0 0 / .75), inset 0 -8px 20px rgb(0 0 0 / .5); }
+.dt-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dt-head { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: grid; grid-template-columns: 36px 1fr 36px; align-items: start; padding: 8px; pointer-events: none; }
+.dt-head > * { pointer-events: auto; }
+.dt-head .icon-btn { background: rgb(0 0 0 / .35); }
+.dt-head .icon-btn:last-child { grid-column: 3; }
+.dt-total { grid-column: 2; text-align: center; padding-top: 2px; pointer-events: none; }
+.dt-total b { display: block; font: 600 32px/36px var(--font-display); color: var(--text-primary); text-shadow: 0 2px 12px rgb(0 0 0 / .9); animation: rise .2s ease-out; }
+.dt-total small { display: block; margin-top: 2px; font: 500 11px/14px var(--font-text); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 6px #000; }
+.dt-hint { position: absolute; left: 24px; right: 24px; top: 46%; margin: 0; text-align: center; font: 400 13px/18px var(--font-text); color: var(--text-tertiary); pointer-events: none; }
+.dt-roll { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 18px; background: var(--brand-500); color: var(--text-on-accent); font: 600 13px/1 var(--font-text); box-shadow: 0 6px 18px rgb(0 0 0 / .5); }
+.dt-roll:hover { filter: brightness(1.08); }
+.dt-roll:active { transform: translateX(-50%) scale(.96); }
+.dt-reroll.hidden, .dt-roll.hidden, .dt-hint.hidden { display: none; }
+/* Плоский лоток виджета заменён объёмным — в виджете остаются рельса, модификатор, режимы и журнал. */
+.tray.tray-3d { margin-top: 4px; }
+@media (max-width: 720px) {
+  .dice-tray, .table:has(.ch-widget .dice-widget) .dice-tray { top: auto; left: 8px; right: 8px; bottom: 84px; width: auto; height: min(46vh, 380px); }
+  .table:has(.dice-tray:not(.hidden)) .table-toasts { bottom: calc(92px + min(46vh, 380px)); }
+}

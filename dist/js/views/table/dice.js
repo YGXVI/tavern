@@ -7,6 +7,7 @@ import { updateCampaign, addLog, userById } from '../../core/campaign.js';
 import { roll as rollFormulaEngine } from '../../../engine.js';
 import { userAvatar } from '../../ui/kit.js';
 import { DICE } from '../../data/rules.js';
+import { diceTray } from './dice-tray.js';
 
 const SHAPES = {
   4: 'M50 8 94 86H6Z',
@@ -85,8 +86,12 @@ export function doRoll(ctx, opts) {
   const vis = opts.vis || (opts.hidden ? 'gm' : 'all');
   const entry = { id: uid('r-'), at: Date.now(), userId: ctx.userId, kind: opts.kind || 'roll', label: opts.label || 'Бросок', total: r.total, detail: describeRoll(r), hidden: vis !== 'all', vis, nat: r.results.length === 1 && r.results[0].sides === 20 ? r.results[0].value : null };
   updateCampaign(ctx.cid, (c) => addLog(c, entry));
-  bus.send('roll', { cid: ctx.cid, entry });
+  // Кубы для лотка у других (TASK-092) — только у открытого броска; в журнал они не пишутся.
+  bus.send('roll', { cid: ctx.cid, entry, ...(vis === 'all' ? { dice: r.results, dropped: r.dropped } : {}) });
   showRollToast(ctx, entry, true);
+  if (canSeeRoll(ctx, entry)) diceTray(ctx)?.roll({ entry, results: r.results, dropped: r.dropped, mine: true, reuse: !!opts.fromTray });
+  // Вслепую: кубы катятся, но на гранях «?», и сумма «?» — число увидит только мастер.
+  else diceTray(ctx)?.roll({ entry: { ...entry, total: '?' }, results: r.results.map((x) => ({ sides: x.sides, value: null })), mine: true, reuse: !!opts.fromTray });
   return { ...r, entry };
 }
 
@@ -115,12 +120,12 @@ export function diceWidget(ctx) {
   const log = ctx.c.log.filter((l) => l.kind === 'roll' || l.kind === 'save' || l.kind === 'attack').filter((l) => knowsRoll(ctx, l)).slice(0, 8);
   return `<div class="dice-widget panel">
     <div class="dice-rail">${DICE.map((s) => `<button class="rail-die" data-act="die-add" data-sides="${s}" data-tip="к${s} · правый клик — убрать">${dieSvg(s)}${pool.dice[s] ? `<span class="count">${pool.dice[s]}</span>` : ''}</button>`).join('')}</div>
-    <div class="tray">
-      <div class="tray-felt ${last && !count ? 'has-result' : ''}">
+    <div class="tray ${diceTray(ctx) ? 'tray-3d' : ''}">
+      ${diceTray(ctx) ? '' : `<div class="tray-felt ${last && !count ? 'has-result' : ''}">
         ${count ? `<div class="tray-dice">${Object.entries(pool.dice).flatMap(([s, n]) => Array.from({ length: n }, () => `<button class="tray-die" data-act="die-remove" data-sides="${s}">${dieSvg(Number(s))}</button>`)).join('')}</div>`
           : last ? `<div class="tray-dice result">${last.results.map((x) => `<span class="tray-die rolled ${!lastBlind && x.sides === 20 && x.value === 20 ? 'crit' : !lastBlind && x.sides === 20 && x.value === 1 ? 'fumble' : ''}">${dieSvg(x.sides, lastBlind ? '?' : x.value, 'tumble')}</span>`).join('')}${last.dropped && !lastBlind ? `<span class="tray-die dropped">${dieSvg(20, last.dropped.value)}</span>` : ''}</div><div class="tray-total"><span>${last.vis && last.vis !== 'all' ? `${ROLL_MODES.find((m) => m.id === last.vis)?.name.toLowerCase()} · ` : ''}${esc(last.label || '')}</span><b>${lastBlind ? '?' : last.total}</b></div>`
           : '<div class="tray-hint">Кликните куб слева, чтобы положить его в лоток</div>'}
-      </div>
+      </div>`}
       <div class="tray-foot">
         <div class="mod-ctl"><button class="icon-btn icon-btn-xs" data-act="mod-dec" aria-label="Минус">${icon('minus-sign', 14)}</button><span class="mod-val">${fmtMod(pool.mod)}</span><button class="icon-btn icon-btn-xs" data-act="mod-inc" aria-label="Плюс">${icon('plus-sign', 14)}</button></div>
         ${onlyD20 ? `<button class="chip ${pool.adv === 'adv' ? 'chip-success' : ''}" data-act="adv" data-v="adv">Преим.</button><button class="chip ${pool.adv === 'dis' ? 'chip-negative' : ''}" data-act="adv" data-v="dis">Помеха</button>` : ''}
@@ -147,14 +152,14 @@ export function diceAction(ctx, act, el, e) {
   else if (act === 'dice-reroll' && ctx.ui.lastRoll) {
     const l = ctx.ui.lastRoll;
     const dice = l.results.reduce((a, x) => { a[x.sides] = (a[x.sides] || 0) + 1; return a; }, {});
-    const r = doRoll(ctx, { label: l.label, dice, mod: l.mod, adv: l.adv, vis: l.vis || 'all' });
+    const r = doRoll(ctx, { label: l.label, dice, mod: l.mod, adv: l.adv, vis: l.vis || 'all', fromTray: true });
     ctx.ui.lastRoll = { ...r, label: l.label, vis: l.vis || 'all' };
   } else if (act === 'dice-roll') {
     const count = Object.values(pool.dice).reduce((a, b) => a + b, 0);
     if (!count) return;
     const label = Object.entries(pool.dice).map(([k, n]) => `${n}к${k}`).join(' + ') + (pool.mod ? ` ${fmtMod(pool.mod)}` : '');
     const vis = ctx.isMaster && pool.vis === 'blind' ? 'gm' : pool.vis || 'all';
-    const r = doRoll(ctx, { label, dice: { ...pool.dice }, mod: pool.mod, adv: pool.adv, vis });
+    const r = doRoll(ctx, { label, dice: { ...pool.dice }, mod: pool.mod, adv: pool.adv, vis, fromTray: true });
     ctx.ui.lastRoll = { ...r, label, vis };
     pool.dice = {}; pool.adv = null;
   }
