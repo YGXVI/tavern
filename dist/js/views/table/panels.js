@@ -509,6 +509,20 @@ export class Panels {
     this.nextTurn(1);
   }
 
+  /** Открыть виджет «Зрение» с настройкой света и тёмного зрения героя (TASK-046). */
+  openVisionFor(tokenId) {
+    this.ctx.ui.visionEdit = tokenId;
+    this.ctx.ui.widget = 'vision';
+    this.refreshWidget(true);
+    this.ctx.invalidate('chrome');
+  }
+
+  /** Свет и тёмное зрение правит мастер (любой токен) и игрок — своего героя. */
+  canSetVision(tokenId) {
+    const t = this.ctx.scene?.tokens.find((x) => x.id === tokenId);
+    return !!t && (this.ctx.isMaster || this.ctx.isMine(t));
+  }
+
   centerIfAway(t) {
     const v = this.ctx.camera.viewRect();
     const pad = Math.min(v.w, v.h) * 0.12;
@@ -621,6 +635,9 @@ export class Panels {
       case 'pause': D.pausePopover(ctx, b); break;
       case 'exit-viewas': ctx.setViewAs(null); break;
       case 'viewas': ctx.setViewAs(ctx.ui.viewAs === b.dataset.id ? null : b.dataset.id); break;
+      case 'vision-edit': ctx.ui.visionEdit = ctx.ui.visionEdit === b.dataset.id ? null : b.dataset.id; this.refreshWidget(true); break;
+      case 'v-light': if (this.canSetVision(b.dataset.id)) T.setTokenLight(ctx, b.dataset.id, b.dataset.v); break;
+      case 'v-dv': if (this.canSetVision(b.dataset.id)) T.setDarkvision(ctx, b.dataset.id, Number(b.dataset.v) || 0); break;
       case 'preview-players': ctx.ui.previewPlayers = !ctx.ui.previewPlayers; ctx.ui.viewAs = null; ctx.select([]); if (ctx.ui.previewPlayers && !['move', 'measure', 'draw'].includes(ctx.ui.tool)) ctx.setTool('move'); ctx.invalidate('all'); break;
       case 'exit-preview': ctx.ui.previewPlayers = false; ctx.invalidate('all'); break;
       case 'look-back': {

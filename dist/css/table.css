@@ -780,3 +780,13 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .ts-temp .ts-round { background: color-mix(in srgb, var(--green-500) 58%, black); }
 .ts-ac .ts-round { background: var(--blue-600, #2b6cb0); border-radius: 12px 12px 50% 50%; }
 .ts-cell.error .ts-in, .ts-cell.error .ts-hp-box { box-shadow: inset 0 0 0 2px var(--status-negative); }
+
+/* Виджет «Зрение» (TASK-046): у героя — «смотреть глазами» и настройка света и тёмного зрения. */
+.vision-hero { display: flex; flex-direction: column; border-radius: 14px; }
+.vision-hero.open { background: rgb(255 255 255 / .04); }
+.vh-row { display: flex; align-items: center; gap: 4px; }
+.vh-row .list-row { min-width: 0; }
+.vision-edit { display: flex; flex-direction: column; gap: 10px; padding: 4px 10px 12px; }
+.vision-edit .field { gap: 6px; }
+.vision-edit .field > label { font: 500 12px/16px var(--font-text); color: var(--text-secondary); }
+.vision-widget .panel-section > .vision-edit { padding: 0; }
