@@ -1,5 +1,7 @@
 # TASK-035: аудит синхронизации «Распутья»
 
+Исторический срез 30.10.2026. Актуальное продолжение после PR #126: [аудит 31.10](task-035-network-followup-2026-10-31.md).
+
 Дата: 2026-10-30, Asia/Dushanbe (+05:00). Автор: Яра + Codex (`codex/network`).
 Issue: [#57](https://github.com/YGXVI/tavern/issues/57). Draft PR: [#59](https://github.com/YGXVI/tavern/pull/59). Статус: аудит подготовлен; план дальнейшей работы `proposed`, согласование пересечений ожидается.
 
