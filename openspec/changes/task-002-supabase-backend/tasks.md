@@ -6,7 +6,7 @@
 
 - [ ] 1.1 Записать DEC-013 «Supabase для входа, данных и реального времени» в `docs/decisions.md` (DEC-008 — «закрыт DEC-013», история сохраняется); проверка: `npm run spec:validate` проходит, DEC-008 и DEC-013 ссылаются друг на друга
 - [ ] 1.2 Создать организацию Supabase `rasputye` и проект `tavern` (бесплатный тариф, регион Европа) — после явного «да» sol0139; проверка: в списке проектов `tavern` активен в `rasputye`, `dnd-novice` в своей организации без изменений (статус и дата обновления те же)
-- [ ] 1.3 Настроить проект: выключить публичный доступ Realtime, задать Site URL `https://rasputye.vercel.app` и адреса возврата `https://rasputye.vercel.app/**`, `http://localhost:4173/**`; проверка: снимок настроек приложен к Issue без ключей
+- [ ] 1.3 Настроить проект: выключить публичный доступ Realtime и вход по почте (остаётся только Discord), задать Site URL `https://rasputye.vercel.app` и адреса возврата `https://rasputye.vercel.app/**`, `http://localhost:4173/**`; проверка: снимок настроек приложен к Issue без ключей
 - [ ] 1.4 Создать `dist/js/server/config.js` с адресом проекта, publishable-ключом и `SERVER_ENABLED = false`; проверка: `node --check`, поиск по репозиторию не находит `service_role`/`sb_secret` и секретов Discord
 
 ## 2. Схема, права и проверки прав
