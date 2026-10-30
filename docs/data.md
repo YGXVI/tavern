@@ -79,6 +79,28 @@
 
 Карты и обложки: приватный бакет `maps`, путь `<campaign_id>/<uuid>.<ext>`, в данных ссылка `sb:<путь>`; браузер получает подписанную ссылку на 6 часов. Читают участники и ожидающие, загружает мастер, до 25 МБ, только картинки.
 
+## Личная библиотека Creature (TASK-122, TASK-125)
+
+Эта порция предоставляет модель и API; экран библиотеки, постановка на сцену и копирование изображений в кампанию — TASK-097 у Claude. Невлитый PR не означает наличие функции на сайте. Общая поставка содержит SRD и каталог метаданных; личные не-SRD статблоки не публикуются в Git или общем каталоге.
+
+`Creature = {id, ownerId, name, img, statblockImage?, size, type, alignment, ac, acNote, hp, hpFormula, speed{walk,fly,swim,climb,burrow}, stats{str,dex,con,int,wis,cha}, saves[{ability,bonus}], skills[{name,bonus}], senses, languages, cr, traits[], actions[], bonusActions[], reactions[], legendary{count,actions[]}, source:'manual'|'image', updatedAt}`.
+
+Возможность: `{name,text,attack?{bonus,reach,range{normal,long}},damage?[{dice,type}],save?{ability,dc,who:'target'|'self'},recharge?}`. Расстояния в футах. Неизвестные числа — `null`, включая неполный статблок картинкой; такая запись не становится автоматически пригодной к бою. Обязательны ID/владелец/имя; image требует statblockImage. `cr` — строка (`'1/4'`, `'2'`) либо null. Копия SRD сохраняет provenance (исходный ID, атрибуция CC BY 4.0), исходную прозу и дополнительные JSON-поля. Сырой saving_throw без известного субъекта не превращается в типизированный save. Несколько компонентов урона сохраняются отдельно.
+
+| Хранилище | Форма и границы | Кто читает/пишет |
+| --- | --- | --- |
+| Песочница, `rasputye-v2-db` | Необязательное `creatures:{[id]:Creature}` на верхнем уровне, версия 1 и campaigns сохраняются; до 500 на ownerId | Выбранный демо-пользователь через API; это локальные данные браузера, не защищённая авторизация |
+| `public.creatures` | `id text PK, owner_id uuid, data jsonb, updated_at`; data без id/ownerId/updatedAt | Только владелец; мастер кампании не получает чужую личную библиотеку |
+| `public.creature_library_quota` | Внутренний `owner_id,used` (0–500), AFTER INSERT/DELETE; upsert-update не расходует место | API доступа не имеет; атомарный счётчик выдерживает параллельные вставки |
+| `public.campaign_creatures` | PK `(campaign_id,id)`, `owner_id nullable,source_id nullable,data,updated_at`; самостоятельный снимок, без FK к личному шаблону | Мастер CRUD; активный игрок читает/добавляет только свои копии призывов; исключённый не читает |
+| Приватный bucket `library` | `<user UUID>/<file UUID>.<png/jpg/webp>`, до 5 MiB; в Creature ссылка `library:<path>` | Только владелец первого сегмента пути; обновление проверяет и новый путь |
+
+На клиенте максимум — 65536 байт нормализованного JSON в UTF-8. База отдельно ограничивает `data::text` (JSONB) тем же пределом; его пробелы и порядок сериализации могут отклонить пограничную запись раньше. Ошибка возвращается, данные не обрезаются. Размер/MIME ограничены bucket и клиентом; клиент проверяет сигнатуру, а не только расширение. Подписанные URL выдаются на 60 секунд и не сохраняются в статблоке; это временная ссылка, не мгновенно отзываемая сессия. `resolveLibraryImage` не является общим resolver картинок стола; подключение делает UI TASK-097.
+
+`dist/js/core/library.js`: `listCreatures()`, `saveCreature(value)`, `deleteCreature(id)`, `copySrdCreature(monster)`, `uploadLibraryImage(file)`, `resolveLibraryImage(ref)` — Promise. Новые ID создаёт клиент, ownerId берётся из текущего входа. Сохранение возвращает подтверждённую сервером строку либо ошибку; sandbox не скрывает ошибку localStorage. Серверная библиотека не входит в store, sync/model или Realtime кампании. Ответ от предыдущего пользователя/режима отклоняется; кэша личных записей между аккаунтами нет.
+
+`createLibrary` и `createServerLibrary` позволяют внедрять адаптеры для тестов. Проверка SQL: `python3 tests/postgres/library_harness.py` (локальные PostgreSQL binaries). Стенд создаёт отдельный временный кластер без TCP, применяет миграции и проверяет реальные RLS/триггеры/гонку; auth/storage/realtime моделируются минимальными схемами. Это не проверка работающего Supabase HTTP Storage API. На рабочий проект эти миграции до review/merge не применялись.
+
 ## Старый прототип (`dist/legacy/`)
 
 Источник — `dist/legacy/app.js`, `dist/access.js`, `dist/legacy/themes.js`. Данные привязаны к origin сайта и профилю браузера. Localhost и опубликованный сайт имеют независимые хранилища. Нет аккаунтов, сервера, синхронизации и безопасной границы между мастером и игроком.

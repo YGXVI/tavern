@@ -169,6 +169,62 @@ select pg_temp.login('00000000-0000-0000-0000-00000000000c');
 select pg_temp.err('ожидающий не просит переход', $q$insert into public.portal_requests (id, campaign_id, author, data) values ('q-c', 'c-rls', '00000000-0000-0000-0000-00000000000c', '{}')$q$);
 reset role;
 
+-- ——— TASK-125: личная библиотека (только этот блок принадлежит Codex библиотеки) ———
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('library: мастер создаёт личный шаблон', $q$insert into public.creatures(id,owner_id,data) values('lib-a','00000000-0000-0000-0000-00000000000a','{"name":"Страж A","source":"manual","hp":10}')$q$);
+select pg_temp.ok('library: мастер создаёт закрытую копию врага', $q$insert into public.campaign_creatures(campaign_id,id,data,source_id) values('c-rls','enemy','{"name":"Враг","source":"manual","hp":10}','lib-a')$q$);
+select pg_temp.ok('library: мастер загружает личную картинку', $q$insert into storage.objects(bucket_id,name) values('library','00000000-0000-0000-0000-00000000000a/stat.webp')$q$);
+reset role; -- bucket configuration is an administrator assertion, not permission to list buckets via API
+select pg_temp.cnt('library: bucket приватный, MIME/размер ограничены', $q$select 1 from storage.buckets where id='library' and not public and file_size_limit=5242880 and allowed_mime_types=array['image/png','image/jpeg','image/webp']$q$,1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.ok('library: игрок создаёт личный шаблон', $q$insert into public.creatures(id,owner_id,data) values('lib-b','00000000-0000-0000-0000-00000000000b','{"name":"Призыв B","source":"manual"}')$q$);
+select pg_temp.cnt('library: игрок не читает личный шаблон мастера', $q$select 1 from public.creatures where id='lib-a'$q$,0);
+select pg_temp.rows('library: игрок не правит чужой шаблон', $q$update public.creatures set data=data||'{"hp":1}' where id='lib-a'$q$,0);
+select pg_temp.rows('library: игрок не удаляет чужой шаблон', $q$delete from public.creatures where id='lib-a'$q$,0);
+select pg_temp.err('library: нельзя создать от чужого владельца', $q$insert into public.creatures(id,owner_id,data) values('lib-spoof','00000000-0000-0000-0000-00000000000a','{"name":"X","source":"manual"}')$q$);
+select pg_temp.err('library: нельзя сменить владельца', $q$update public.creatures set owner_id='00000000-0000-0000-0000-00000000000a' where id='lib-b'$q$);
+select pg_temp.err('library: нельзя сменить ID', $q$update public.creatures set id='lib-replaced' where id='lib-b'$q$);
+select pg_temp.err('library: обязательное имя проверяется на сервере', $q$insert into public.creatures(id,owner_id,data) values('lib-empty','00000000-0000-0000-0000-00000000000b','{"source":"manual"}')$q$);
+select pg_temp.err('library: image требует картинку статблока', $q$insert into public.creatures(id,owner_id,data) values('lib-image-empty','00000000-0000-0000-0000-00000000000b','{"name":"Image","source":"image"}')$q$);
+select pg_temp.err('library: ID/владелец не маскируются внутри data', $q$update public.creatures set data=data||'{"ownerId":"fake"}' where id='lib-b'$q$);
+select pg_temp.err('library: больше 64К UTF-8 не проходит', $q$insert into public.creatures(id,owner_id,data) values('lib-big','00000000-0000-0000-0000-00000000000b',jsonb_build_object('name','Большой','source','manual','notes',repeat('я',32768)))$q$);
+select pg_temp.ok('library: ровно 65536 байт принимается', $q$insert into public.creatures(id,owner_id,data) select 'lib-boundary','00000000-0000-0000-0000-00000000000b',jsonb_set(d,'{notes}',to_jsonb(repeat('a',65536-octet_length(convert_to(d::text,'UTF8'))))) from (select '{"name":"Edge","source":"manual","notes":""}'::jsonb d) x$q$);
+select pg_temp.ok('library: игрок ставит свою копию призыва', $q$insert into public.campaign_creatures(campaign_id,id,owner_id,data,source_id) values('c-rls','summon','00000000-0000-0000-0000-00000000000b','{"name":"Призыв B","source":"manual","hp":9}','lib-b')$q$);
+select pg_temp.cnt('library: игрок читает только свой призыв', $q$select 1 from public.campaign_creatures where campaign_id='c-rls'$q$,1);
+select pg_temp.err('library: игрок не создаёт чужую копию', $q$insert into public.campaign_creatures(campaign_id,id,owner_id,data) values('c-rls','spoof','00000000-0000-0000-0000-00000000000a','{"name":"X","source":"manual"}')$q$);
+select pg_temp.rows('library: игрок не меняет снимок', $q$update public.campaign_creatures set data=data||'{"hp":2}' where id='summon'$q$,0);
+select pg_temp.rows('library: игрок не удаляет снимок', $q$delete from public.campaign_creatures where id='summon'$q$,0);
+select pg_temp.ok('library: правка личного шаблона', $q$update public.creatures set data=data||'{"hp":1}' where id='lib-b'$q$);
+select pg_temp.cnt('library: правка шаблона не меняет копию', $q$select 1 from public.campaign_creatures where id='summon' and data->>'hp'='9'$q$,1);
+select pg_temp.rows('library: удаление личного шаблона', $q$delete from public.creatures where id='lib-b'$q$,1);
+select pg_temp.cnt('library: удаление шаблона не удаляет копию', $q$select 1 from public.campaign_creatures where id='summon'$q$,1);
+select pg_temp.err('library: нельзя читать квоту напрямую', $q$select * from public.creature_library_quota$q$);
+select pg_temp.cnt('library: чужую картинку не видно', $q$select 1 from storage.objects where bucket_id='library'$q$,0);
+select pg_temp.err('library: нельзя загрузить в чужую папку', $q$insert into storage.objects(bucket_id,name) values('library','00000000-0000-0000-0000-00000000000a/forged.png')$q$);
+select pg_temp.ok('library: своя картинка', $q$insert into storage.objects(bucket_id,name) values('library','00000000-0000-0000-0000-00000000000b/own.png')$q$);
+select pg_temp.err('library: нельзя перенести файл в чужую папку', $q$update storage.objects set name='00000000-0000-0000-0000-00000000000a/stolen.png' where bucket_id='library' and name='00000000-0000-0000-0000-00000000000b/own.png'$q$);
+select pg_temp.rows('library: нельзя удалить чужую картинку', $q$delete from storage.objects where bucket_id='library' and name='00000000-0000-0000-0000-00000000000a/stat.webp'$q$,0);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.cnt('library: мастер не читает личную библиотеку игрока', $q$select 1 from public.creatures where owner_id='00000000-0000-0000-0000-00000000000b'$q$,0);
+select pg_temp.cnt('library: мастер видит обе копии кампании', $q$select 1 from public.campaign_creatures where campaign_id='c-rls'$q$,2);
+select pg_temp.rows('library: мастер может править копию', $q$update public.campaign_creatures set data=data||'{"hp":8}' where id='summon'$q$,1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.cnt('library: ожидающий не читает копии', $q$select 1 from public.campaign_creatures$q$,0);
+select pg_temp.err('library: ожидающий не создаёт копию', $q$insert into public.campaign_creatures(campaign_id,id,owner_id,data) values('c-rls','pending','00000000-0000-0000-0000-00000000000c','{"name":"X","source":"manual"}')$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000d');
+select pg_temp.ok('library: 500 записей своего владельца', $q$insert into public.creatures(id,owner_id,data) select 'quota-'||g,'00000000-0000-0000-0000-00000000000d','{"name":"Квота","source":"manual"}' from generate_series(1,500) g$q$);
+select pg_temp.err('library: запись 501 запрещена', $q$insert into public.creatures(id,owner_id,data) values('quota-501','00000000-0000-0000-0000-00000000000d','{"name":"Лишняя","source":"manual"}')$q$);
+select pg_temp.ok('library: upsert не расходует квоту повторно', $q$insert into public.creatures(id,owner_id,data) values('quota-1','00000000-0000-0000-0000-00000000000d','{"name":"Обновлена","source":"manual"}') on conflict(id) do update set data=excluded.data$q$);
+select pg_temp.rows('library: удаление освобождает одно место', $q$delete from public.creatures where id='quota-1'$q$,1);
+select pg_temp.ok('library: новое место можно занять', $q$insert into public.creatures(id,owner_id,data) values('quota-new','00000000-0000-0000-0000-00000000000d','{"name":"Новая","source":"manual"}')$q$);
+select pg_temp.cnt('library: ровно 500 после отказа и upsert', $q$select 1 from public.creatures$q$,500);
+select pg_temp.cnt('library: посторонний не видит копии кампании', $q$select 1 from public.campaign_creatures$q$,0);
+reset role;
+
 -- ——— Исключение ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер исключает игрока', $q$delete from public.campaign_members where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000b'$q$, 1);
@@ -177,6 +233,8 @@ reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.cnt('исключённый не видит сцены', $q$select 1 from public.scenes$q$, 0);
 select pg_temp.rows('исключённый не двигает своего героя', $q$update public.tokens set data = data || '{"x":99}' where id = 't-p'$q$, 0);
+-- TASK-125: отдельная проверка отзыва доступа к снимкам.
+select pg_temp.cnt('library: исключённый не читает свой снимок кампании', $q$select 1 from public.campaign_creatures where id='summon'$q$,0);
 reset role;
 
 select test, ok, info from _r order by at;
