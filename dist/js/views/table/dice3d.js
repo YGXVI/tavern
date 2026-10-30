@@ -88,7 +88,7 @@ function hullFaces(verts) {
 }
 
 // Размер (радиус описанной сферы) в единицах лотка — на глаз, чтобы кубы были соразмерны.
-const SIZE = { 4: 0.92, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
+const SIZE = { 4: 1.04, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
 const GEO = {};
 function geometry(kind) {
   if (GEO[kind]) return GEO[kind];
@@ -352,7 +352,7 @@ function drawAtlas(b) {
     x.restore();
     // Цифры.
     const ink = b.ink || '#f2ead8';
-    const fs = Math.max(18, f.r * sc * (b.shape === 4 ? 0.78 : b.shape === 10 ? 0.95 : 1.12));
+    const fs = Math.max(18, f.r * sc * (b.shape === 4 ? 0.95 : b.shape === 10 ? 0.95 : 1.12));
     x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = `600 ${fs}px Unbounded, Inter, system-ui, sans-serif`;
     const put = (txt, cx, cy, ang, size = fs) => {
@@ -368,7 +368,7 @@ function drawAtlas(b) {
       f.idx.forEach((vi, k) => {
         const [px, py] = P[k];
         const cx = ox + CELL / 2, cy = oy + CELL / 2;
-        const tx = cx + (px - cx) * 0.56, ty = cy + (py - cy) * 0.56;
+        const tx = cx + (px - cx) * 0.6, ty = cy + (py - cy) * 0.6;
         const ang = Math.atan2(px - cx, -(py - cy));
         put(labelText(b.kind, b.labels[vi]), tx, ty, ang);
       });
