@@ -10,18 +10,19 @@ import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
 import { startCombat, rollInitiative } from './combat.js';
+import { initiativeDice } from './dice.js';
 import { closeSheet } from './sheet.js';
 
 // ——— Меню кампании (логотип) ———
 export function campaignMenu(ctx, anchor) {
   const c = ctx.c;
   const items = [
-    { icon: 'home-01', label: 'Все кампании', onClick: () => go('#/campaigns') },
+    { icon: 'home-01', label: 'Все кампании', href: '#/campaigns', onClick: () => go('#/campaigns') },
     'divider',
     ctx.isMaster ? { icon: 'maps', label: 'Сцены', onClick: () => ctx.panels.toggleSide('scenes') } : null,
     ctx.isMaster ? { icon: 'user-add-01', label: 'Пригласить игроков', onClick: () => inviteModal(ctx) } : null,
     ctx.isMaster ? { icon: 'settings-01', label: 'Настройки кампании', onClick: () => settingsModal(ctx) } : null,
-    !ctx.isMaster && ctx.myCharacterId ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor({ characterId: ctx.myCharacterId }) } : null,
+    !ctx.isMaster && ctx.myCharacterId ? { icon: 'book-open-01', label: 'Лист героя', href: `#/c/${ctx.cid}/sheet/${encodeURIComponent(ctx.myCharacterId)}`, onClick: () => ctx.panels.openSheetFor({ characterId: ctx.myCharacterId }) } : null,
     { icon: 'dice-faces-06', label: 'Журнал бросков', onClick: () => ctx.panels.openWidget('dice', true) },
     { icon: 'keyboard', label: 'Горячие клавиши', hint: '?', onClick: () => helpModal(ctx) },
     !ctx.isMaster ? 'divider' : null,
@@ -53,7 +54,7 @@ function memberMenu(ctx, userId, anchorEl, rerender, modalRef) {
   const r = anchorEl.getBoundingClientRect();
   const anchor = { x: r.left, y: r.bottom + 4 };
   menu([
-    ch ? { icon: 'book-open-01', label: 'Открыть лист героя', onClick: () => { modalRef.close(); ctx.panels.openSheetFor({ characterId: ch.id }); } } : null,
+    ch ? { icon: 'book-open-01', label: 'Открыть лист героя', href: `#/c/${ctx.cid}/sheet/${encodeURIComponent(ch.id)}`, onClick: () => { modalRef.close(); ctx.panels.openSheetFor({ characterId: ch.id }); } } : null,
     ch && free.length ? { icon: 'arrow-data-transfer-horizontal', label: 'Передать героя…', onClick: () => menu(free.map((f) => ({ icon: 'user', label: userById(f.userId)?.name || 'Игрок', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId), b = cc.members.find((x) => x.userId === f.userId); if (a && b) { b.characterId = a.characterId; a.characterId = null; const h = cc.characters.find((x) => x.id === b.characterId); if (h) h.ownerId = f.userId; addLog(cc, { kind: 'member', text: `${h?.name || 'Герой'} теперь у ${userById(f.userId)?.name || 'игрока'}` }); } }); rerender(); } })), anchor, { placement: 'bottom', className: 'over-modal' }) } : null,
     ch ? { icon: 'shuffle', label: 'Сменить героя', hint: 'игрок выберет заново', onClick: () => { updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = cc.characters.find((x) => x.id === a?.characterId); if (h) h.ownerId = null; if (a) a.characterId = null; addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} выбирает другого героя` }); }); rerender(); } } : null,
     'divider',
@@ -179,16 +180,26 @@ export function settingsModal(ctx) {
   });
 }
 
-// ——— Справка ———
+// ——— Справочник (TASK-094): кнопка «?» слева снизу. Пока заглушка; управление — по ссылке и на клавише «?» ———
+export function referenceModal(ctx) {
+  const parts = [['book-open-01', 'Правила', 'Действия в бою, укрытие, падение, отдых'], ['magic-wand-01', 'Заклинания', 'Круги, школы, концентрация, компоненты'], ['potion', 'Предметы', 'Оружие, доспехи, магические вещи'], ['monster', 'Существа', 'Статблоки бестиария'], ['sparkles', 'Состояния', 'Что делает «Сбит с ног», «Отравлен» и другие']];
+  const m = modal(`${panelHeader('Справочник', 'Скоро: правила D&D 5e 2014 с поиском прямо за столом')}
+    <div class="modal-body"><div class="panel-section ref-soon">${parts.map(([ic, t, s]) => `<div class="ref-row">${icon(ic, 18)}<span><b>${esc(t)}</b><small>${esc(s)}</small></span></div>`).join('')}</div></div>
+    <div class="panel-footer"><button class="btn btn-ghost" data-keys>${icon('keyboard', 16)}Управление и горячие клавиши</button><span class="spacer"></span><button class="btn btn-secondary" data-close>Понятно</button></div>`);
+  m.box.querySelector('[data-keys]').addEventListener('click', () => { m.close(); helpModal(ctx); });
+  return m;
+}
+
+// ——— Справка по управлению ———
 export function helpModal(ctx) {
   const k = (keys, text) => `<div class="hk-row"><span class="hk-keys">${keys.map((x) => `<kbd class="key">${esc(x)}</kbd>`).join('')}</span><span>${esc(text)}</span></div>`;
   const master = ctx.isMaster;
   const m = modal(`${panelHeader('Как управлять столом', master ? 'Вы мастер: видите всё и ведёте сцену' : 'Вы игрок: ведёте своего героя')}
     <div class="modal-body scroll"><div class="help-grid">
       <div class="panel-section"><div class="label">Карта</div>
-        ${k(['Колесо'], 'Приблизить к курсору')}
-        ${k(['Два пальца'], 'Тачпад: двигать карту, щипок — масштаб')}
+        ${k(['Колесо'], 'Приблизить или отдалить к курсору (на тачпаде — два пальца или щипок)')}
         ${k(['Пробел', 'тянуть'], 'Двигать карту')}
+        ${k(['Пробел', 'колесо'], 'Двигать карту; Shift + колесо — вбок')}
         ${k(['Правая кнопка'], 'Тянуть — двигать, клик — меню')}
         ${k(['Alt', 'клик'], 'Пинг: показать точку')}
         ${master ? k(['⇧', 'Alt', 'клик'], 'Все смотрят сюда') : ''}
@@ -208,7 +219,7 @@ export function helpModal(ctx) {
       </div>
       <div class="panel-section"><div class="label">Инструменты</div>
         ${k(['V'], 'Перемещение')}${k(['R'], 'Линейка и шаблоны')}${k(['D'], 'Рисование')}${master ? '' : k(['P'], 'Пинг')}
-        ${master ? `${k(['S'], 'Выделение рамкой')}${k(['W'], 'Стены и двери')}${k(['L'], 'Свет')}${k(['F'], 'Туман войны')}${k(['T'], 'Местность')}${k(['G'], 'Слой мастера')}${k(['⇧'], 'Стены и свет — по сетке')}` : ''}
+        ${master ? `${k(['S'], 'Выделение рамкой')}${k(['W'], 'Стены и двери')}${k(['L'], 'Свет')}${k(['F'], 'Туман войны')}${k(['T'], 'Местность')}${k(['G'], 'Слой мастера: настройка карты')}${k(['⇧'], 'Стены и свет — по сетке')}` : ''}
         ${k(['Ctrl', 'Z'], 'Отменить')}${k(['Ctrl', '⇧', 'Z'], 'Повторить')}
       </div>
     </div>
@@ -243,7 +254,8 @@ export function combatSetup(ctx, preselect = []) {
   const toks = sc.tokens.filter((t) => t.kind !== 'item');
   const pre = new Set(preselect);
   const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
-  ctx.ui.setup = { ids: new Set(on), rolls: Object.fromEntries(toks.map((t) => [t.id, rollInitiative(ctx.c, t).init])), self: true };
+  // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует. Мастер по умолчанию бросает за всех (TASK-111).
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false };
   ctx.panels.openWidget('initiative', true);
   ctx.panels.refreshWidget(true);
 }
@@ -256,16 +268,23 @@ export function setupAction(ctx, act, b) {
   const sc = ctx.scene;
   if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
   else if (act === 'setup-self') st.self = !st.self;
-  else if (act === 'setup-reroll') { for (const t of sc.tokens) if (t.kind === 'foe' && t.id in st.rolls) st.rolls[t.id] = rollInitiative(ctx.c, t).init; }
   else if (act === 'setup-cancel') ctx.ui.setup = null;
   else if (act === 'setup-start') {
     const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
     if (!ids.length) return;
-    const use = {};
-    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); use[id] = st.self && hasPlayerHero(ctx, t) ? null : st.rolls[id]; }
+    const use = {}, rolled = [];
+    // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
+    // Бросаем до записи: те же к20 падают на стол (TASK-106).
+    for (const id of ids) {
+      const t = sc.tokens.find((x) => x.id === id);
+      if (st.self && hasPlayerHero(ctx, t)) { use[id] = null; continue; }
+      const r = rollInitiative(ctx.c, t);
+      use[id] = r.init; rolled.push({ tokenId: id, ...r });
+    }
     const sid = ctx.sceneId;
     ctx.ui.setup = null;
     updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
+    initiativeDice(ctx, rolled);
     ctx.select([]);
   }
   ctx.panels.refreshWidget(true);

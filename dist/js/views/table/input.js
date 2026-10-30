@@ -1,6 +1,6 @@
 // Ввод на карте: мышь, тачпад, касания, клавиатура. Камера + инструменты.
-// Колесо мыши масштабирует к курсору, жест двумя пальцами на тачпаде двигает карту,
-// щипок — масштаб; средняя/правая кнопка или пробел + перетаскивание — панорама.
+// Колесо (мышь и два пальца тачпада) и щипок — масштаб к курсору; карту двигают пробел + перетаскивание
+// или колесо, Shift + колесо — вбок, правая или средняя кнопка.
 import { uid, clamp } from '../../core/dom.js';
 import { bus } from '../../core/store.js';
 import {
@@ -13,7 +13,7 @@ import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { renderChrome } from './chrome.js';
-import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape } from './drawings.js';
+import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape, aimShape } from './drawings.js';
 
 const DRAG_THRESHOLD = 4;
 export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
@@ -40,19 +40,21 @@ export function attachInput(ctx) {
     return { kind: 'empty' };
   }
 
-  // ——— Колесо: масштаб и прокрутка ———
+  // ——— Колесо: всегда масштаб (sol0139: «колесо — приближение, перемещение через пробел») ———
+  // Мышь от тачпада по числам не отличить: при масштабе экрана Windows 125–150 %, на Mac и у плавных колёс
+  // шаг дробный или мелкий, и прежняя проверка «целое и ≥ 40» принимала мышь за тачпад и двигала карту.
   vp.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (hasModal()) return;
-    const mouseWheel = e.deltaMode !== 0 || (Math.abs(e.deltaY) >= 40 && e.deltaX === 0 && Number.isInteger(e.deltaY));
-    if (e.ctrlKey || e.metaKey) {
-      // Щипок на тачпаде или Ctrl + колесо.
-      ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * (mouseWheel ? 0.0025 : 0.012)));
-    } else if (mouseWheel) {
-      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-      ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-dy * 0.0016));
+    const unit = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? vp.clientHeight : 1; // строки и страницы → пиксели
+    const dx = e.deltaX * unit, dy = e.deltaY * unit;
+    if (space || Math.abs(dx) > Math.abs(dy)) {
+      // Пробел + колесо — двигать карту; Shift + колесо и боковой жест тачпада — вбок.
+      ctx.camera.pan(-dx, -dy);
     } else {
-      ctx.camera.pan(-e.deltaX, -e.deltaY);
+      // Щипок тачпада приходит как Ctrl + колесо мелкими шагами — ему нужна чувствительность выше.
+      const pinch = (e.ctrlKey || e.metaKey) && Math.abs(dy) < 40;
+      ctx.camera.zoomAt(e.clientX, e.clientY, Math.exp(-clamp(dy, -240, 240) * (pinch ? 0.012 : 0.0016)));
     }
     closePopover();
     ctx.hoverWorld = W(e);
@@ -187,6 +189,7 @@ export function attachInput(ctx) {
       if (ctx.ui.selection.size) { ctx.select([]); return; }
       if (ctx.ui.viewAs) { ctx.setViewAs(null); return; }
       if (toolId() !== 'move') { ctx.setTool('move'); return; }
+      if (ctx.ui.layer && ctx.isMasterView) { ctx.setLayer(false); return; }
       if (ctx.ui.widget) { ctx.panels.action('w-close'); return; }
       if (ctx.ui.panel) { ctx.panels.action('side-close'); return; }
       return;
@@ -222,8 +225,10 @@ export function attachInput(ctx) {
     if (map[k]) { ctx.setTool(map[k]); return; }
     if ((k === 'p' || k === 'з')) { ctx.setTool(ctx.isMaster ? 'measure' : 'ping'); if (!ctx.isMaster) return; }
     if (ctx.isMasterView) {
-      const mm = { s: 'select', ы: 'select', f: 'fog', а: 'fog', w: 'walls', ц: 'walls', l: 'lights', д: 'lights', t: 'terrain', е: 'terrain', g: 'gm', п: 'gm' };
+      const mm = { s: 'select', ы: 'select', f: 'fog', а: 'fog', w: 'walls', ц: 'walls', l: 'lights', д: 'lights', t: 'terrain', е: 'terrain' };
       if (mm[k]) { ctx.setTool(mm[k]); return; }
+      // G — открыть или закрыть слой мастера (TASK-088).
+      if (k === 'g' || k === 'п') { ctx.setLayer(!ctx.ui.layer); return; }
       if ((k === 'h' || k === 'р') && ctx.ui.selection.size) { ctx.panels.toggleHidden([...ctx.ui.selection]); return; }
     }
     if (k === '=' || k === '+') ctx.camera.zoomStep(1);
@@ -255,6 +260,10 @@ export function attachInput(ctx) {
     const prev = ctx.ui.tool;
     ctx.ui.tool = tool;
     if (sub) ctx.ui.sub[tool] = sub;
+    // Слой мастера (TASK-088): настройка карты открывает слой; «Перемещение» оставляет его открытым (настройка закрыта),
+    // остальные инструменты главного бара его закрывают.
+    if (FOCUS_TOOLS.includes(tool)) ctx.ui.layer = true;
+    else if (tool !== 'move') ctx.ui.layer = false;
     if (prev !== tool) {
       ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.ui.brush = null; ctx.ui.selectedWall = null; ctx.ui.selectedLight = null; ctx.ui.trapCells = null;
       if (tool !== 'measure') { ctx.clearMeasure(false); }
@@ -268,6 +277,13 @@ export function attachInput(ctx) {
     vp.dataset.tool = tool;
     ctx.applyFocus();
     ctx.invalidate('all');
+  };
+  /** Открыть или закрыть слой мастера. Закрытие сбрасывает выбранную настройку; несохранённая сетка — как «Отмена». */
+  ctx.setLayer = (on) => {
+    if (on && !ctx.isMasterView) return;
+    if (!on && FOCUS_TOOLS.includes(ctx.ui.tool)) ctx.setTool('move');
+    ctx.ui.layer = !!on;
+    ctx.invalidate('chrome');
   };
   // Фокус редактора: в стенах, свете, тумане, местности, слое мастера и сетке лишнее приглушается.
   ctx.applyFocus = () => {
@@ -646,14 +662,15 @@ const measureTool = {
     } else {
       const def = TEMPLATES.find((t) => t.id === sub);
       const size = ctx.ui.sub.templateSize?.[sub] || def.size;
-      const origin = sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
+      // TASK-042: шаблон ставится свободно; Shift — к узлу сетки, как раньше.
+      const origin = !g.shift ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
       ctx.ui.template = { type: sub, origin, angle: ctx.ui.template?.angle || 0, size, owner: ctx.userId };
       closePopover();
       g.mode = 'template';
     }
     ctx.invalidate('overlay', 'areas');
   },
-  move(ctx, g, w) {
+  move(ctx, g, w, e) {
     if (g.mode === 'ruler') {
       const r = ctx.ui.ruler;
       r.pts[r.pts.length - 1] = g.alt ? w : snapToCellCenter(ctx, w);
@@ -662,8 +679,8 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
-      t.angle = Math.atan2(w.y - t.origin.y, w.x - t.origin.x);
-      if (t.type === 'cube') t.angle = Math.round(t.angle / (Math.PI / 2)) * (Math.PI / 2);
+      // Угол свободно, липнет к 45° (Shift — по 15°, Alt — без магнита), как у фигур рисования (TASK-042).
+      t.angle = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey }).angle;
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
       ctx.invalidate('areas');
     }
@@ -711,7 +728,7 @@ const drawTool = {
   },
   move(ctx, g, w, e) {
     if (g.erase) { eraseAt(ctx, w); return; }
-    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, e.shiftKey); ctx.invalidate('overlay'); return; }
+    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, { shift: e.shiftKey, alt: e.altKey }); ctx.invalidate('overlay'); return; }
     const s = ctx.ui.liveStroke; if (!s) return;
     const last = s.pts.at(-1);
     if (Math.hypot(w.x - last.x, w.y - last.y) * ctx.camera.z < 3) return;

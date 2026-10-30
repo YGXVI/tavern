@@ -1,0 +1,15 @@
+{
+  "README.md": "84637d21033e0d2e9177f87b4e5d69d2a5c3a4ae6d47a10118becb1136d4226a",
+  "basic-rules.json": "738197ea1995b3034c558709a827e4f9279a546329e9a0e6b04e99ebccbea99b",
+  "basic-rules.md": "b032e9fc9fc7bc2297c892e0ce1c672e95e64d9e80a3bf2f9fb47c1d7dc68ac0",
+  "dungeon-master-rules.json": "45ed8bda74a14503b4b59b75e51d0b646d1d6e378e224741df2d594b7c26eff5",
+  "dungeon-master-rules.md": "3f4a892adc9ceec1550a8d9885d085ce8f7d091ad737019cd3a1f87afacba067",
+  "extract_srd.py": "984bf54f782f8e869f477caad293332bab8593551347f9de44f67d8d9dd00b74",
+  "manifest.json": "4460defccbbd62f95449cf57cc4abdefc9f3a357c5a787b8a587d0038d4c8a36",
+  "player-rules.json": "248ac9678bd38bf0fa2a62999f4482b1d04d6a37a3e5d67c2097a488f1152747",
+  "player-rules.md": "ade8215529de72eb1a1d120c4f6725105c6ea532df0e0c21c997c032ed95fb9b",
+  "quality-report.json": "15ad252c6b4d09a7aab41f42d1d2c81453ebff1665b9026bb3bc7e551575ab0a",
+  "sources/srd-5.1-cc.pdf": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0",
+  "srd-5.1.json": "7ca37ee47e83dff852709ff79efe9401cb9974004ac6469280cd34a7c47d4a4c",
+  "srd-5.1.md": "a2822784cd8337d56e102256a94eede602870b2a0f13d251326c3e650652f7e5"
+}

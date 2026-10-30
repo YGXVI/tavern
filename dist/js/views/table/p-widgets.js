@@ -6,7 +6,8 @@ import { onlineUsers } from '../../core/store.js';
 import { characterOf, ownerOfCharacter, tokenStats, myCharacter } from '../../core/campaign.js';
 import { LIGHTS, conditionById, woundLabel } from '../../data/rules.js';
 import { diceWidget } from './dice.js';
-import { currentEntry } from './combat.js';
+import { visionFields } from './p-token.js';
+import { currentEntry, combatRound } from './combat.js';
 
 const close = `<button class="icon-btn icon-btn-sm" data-act="w-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button>`;
 const head = (title, sub) => `<div class="panel-header"><div class="titles"><div class="title">${esc(title)}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${close}</div>`;
@@ -48,7 +49,9 @@ function visionMaster(ctx) {
       <div class="w-list">${heroes.map((t) => {
         const st = tokenStats(c, t);
         const on = ctx.ui.viewAs === t.characterId;
-        return `<button class="list-row ${on ? 'current' : ''}" data-act="viewas" data-id="${esc(t.characterId)}">${avatarImg(t.img, 'hero')}<span class="grow col-tight"><span class="primary">${esc(st.name)}</span><span class="secondary">${st.darkvision ? `тёмное зрение ${st.darkvision} фт` : 'без тёмного зрения'}${t.light ? ` · ${esc(lightName(t.light))}` : ''}</span></span>${on ? '<span class="chip chip-accent">сейчас</span>' : icon('view', 18)}</button>`;
+        // TASK-046: рядом с «смотреть глазами» — настройка света и тёмного зрения героя.
+        const open = ctx.ui.visionEdit === t.id;
+        return `<div class="vision-hero ${open ? 'open' : ''}"><div class="vh-row"><button class="list-row grow ${on ? 'current' : ''}" data-act="viewas" data-id="${esc(t.characterId)}">${avatarImg(t.img, 'hero')}<span class="grow col-tight"><span class="primary">${esc(st.name)}</span><span class="secondary">${st.darkvision ? `тёмное зрение ${st.darkvision} фт` : 'без тёмного зрения'}${t.light ? ` · ${esc(lightName(t.light))}` : ''}</span></span>${on ? '<span class="chip chip-accent">сейчас</span>' : icon('view', 18)}</button><button class="icon-btn icon-btn-sm ${open ? 'active' : ''}" data-act="vision-edit" data-id="${esc(t.id)}" data-tip="Свет и тёмное зрение" aria-label="Свет и тёмное зрение ${esc(st.name)}" aria-expanded="${open}">${icon('settings-01', 18)}</button></div>${open ? visionFields(ctx, t) : ''}</div>`;
       }).join('') || '<p class="t-sm muted">На сцене нет героев</p>'}</div>
       <button class="btn btn-secondary btn-block" data-act="preview-players">${icon('view-off', 16)}Как видят игроки</button>
     </div>
@@ -64,12 +67,11 @@ function visionPlayer(ctx) {
   const dark = sc.lighting === 'dark';
   return `<div class="widget panel vision-widget">${head('Зрение', ch?.name || '')}
     <div class="panel-section">
-      <div class="setting-row">${icon('eye', 20)}<span class="titles"><span class="label-main">Тёмное зрение</span><span class="hint">${st?.darkvision ? `${st.darkvision} фт — в темноте как в сумерках, без цвета` : 'Нет — в темноте видно только освещённое'}</span></span></div>
-      <div class="setting-row">${icon('fire', 20)}<span class="titles"><span class="label-main">${light ? esc(lightName(light)) : 'Без источника света'}</span><span class="hint">${light ? 'Светит и вам, и отряду' : 'Зажгите факел, если в темноте ничего не видно'}</span></span><input type="checkbox" class="switch" data-act="my-light" ${light ? 'checked' : ''} ${tok ? '' : 'disabled'} aria-label="Факел"></div>
+      ${tok ? visionFields(ctx, tok) : `<div class="setting-row">${icon('eye', 20)}<span class="titles"><span class="label-main">Тёмное зрение</span><span class="hint">${ch?.darkvision ? `${ch.darkvision} фт` : 'Нет'} · героя нет на этой сцене</span></span></div>`}
       <div class="setting-row">${icon(dark ? 'moon-02' : 'sun-01', 20)}<span class="titles"><span class="label-main">${dark ? 'Здесь темно' : 'Здесь светло'}</span><span class="hint">${c.settings.sharedVision ? 'Вы видите то же, что и весь отряд' : 'Вы видите только глазами своего героя'}</span></span></div>
     </div>
-    ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — без цвета, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}
-    ${sc.fog.mode !== 'off' || dark ? `<hr class="panel-divider"><div class="panel-section"><p class="t-sm muted"><span class="legend fog-seen"></span>Серое — где вы уже были: карту помните, а кто там сейчас, не видно.</p><p class="t-sm muted"><span class="legend fog-dark"></span>Чёрное — ещё не исследовано.</p></div>` : ''}
+    ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — видно как при свете, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}
+    ${sc.fog.mode !== 'off' || dark ? `<hr class="panel-divider"><div class="panel-section"><p class="t-sm muted"><span class="legend fog-dark"></span>Чёрное — то, чего отряд сейчас не видит. Уже найденные двери и метки остаются на карте.</p></div>` : ''}
   </div>`;
 }
 
@@ -100,17 +102,17 @@ function party(ctx) {
 
 function setupPanel(ctx) {
   const c = ctx.c, sc = ctx.scene, st = ctx.ui.setup;
-  const toks = sc.tokens.filter((t) => t.kind !== 'item' && t.id in st.rolls);
+  const toks = sc.tokens.filter((t) => t.kind !== 'item' && st.pool.includes(t.id));
   const n = toks.filter((t) => st.ids.has(t.id)).length;
   const rows = toks.map((t) => {
     const s = tokenStats(c, t);
     const self = st.self && t.characterId && c.members.some((m) => m.characterId === t.characterId && m.status === 'active' && m.role === 'player');
-    return `<label class="list-row setup-row ${st.ids.has(t.id) ? '' : 'off'}"><input type="checkbox" class="check-input" data-act="setup-toggle" data-id="${esc(t.id)}" ${st.ids.has(t.id) ? 'checked' : ''}>${avatarImg(t.img, t.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, s))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span></span><span class="t-xs tertiary">ИНЦ ${fmtMod(s.initBonus || 0)}</span>${self ? '<span class="chip chip-accent">бросает игрок</span>' : `<span class="init-num">${st.rolls[t.id]}</span>`}</label>`;
+    return `<label class="list-row setup-row ${st.ids.has(t.id) ? '' : 'off'}"><input type="checkbox" class="check-input" data-act="setup-toggle" data-id="${esc(t.id)}" ${st.ids.has(t.id) ? 'checked' : ''}>${avatarImg(t.img, t.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, s))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span></span>${self ? '<span class="chip chip-accent">бросает игрок</span>' : `<span class="init-roll-hint" data-tip="Бросок при «Начать бой»">к20 ${fmtMod(s.initBonus || 0)}</span>`}</label>`;
   }).join('');
   return `<div class="widget panel init-widget setup-widget">${head('Начать бой', `Кто участвует · ${n} из ${toks.length}`)}
     <div class="w-list scroll init-list">${rows}</div>
     <label class="setting-row compact"><span class="titles"><span class="label-main">Игроки бросают сами</span></span><input type="checkbox" class="switch" data-act="setup-self" ${st.self ? 'checked' : ''} aria-label="Игроки бросают сами"></label>
-    <div class="panel-footer"><button class="btn btn-sm btn-secondary" data-act="setup-reroll">${icon('refresh', 14)}Перебросить врагов</button><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-act="setup-cancel">Отмена</button><button class="btn btn-sm btn-primary" data-act="setup-start" ${n ? '' : 'disabled'}>${icon('sword-03', 14)}Начать бой</button></div></div>`;
+    <div class="panel-footer"><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-act="setup-cancel">Отмена</button><button class="btn btn-sm btn-primary" data-act="setup-start" ${n ? '' : 'disabled'}>${icon('sword-03', 14)}Начать бой</button></div></div>`;
 }
 
 function initiative(ctx) {
@@ -143,7 +145,7 @@ function initiative(ctx) {
   }).join('');
   const myTurn = cur && ctx.isMine(cur.token);
   const curName = cur ? ctx.nameOf(cur.token, cur.stats) : '';
-  return `<div class="widget panel init-widget">${head(`Бой · раунд ${cb.round}`, cur ? `Ходит ${curName}` : '')}
+  return `<div class="widget panel init-widget">${head(`Бой · раунд ${combatRound(c, sc)}`, cur ? `Ходит ${curName}` : '')}
     <div class="w-list scroll init-list">${rows}</div>
     <div class="panel-footer">${ctx.isMaster
       ? `<button class="icon-btn icon-btn-sm" data-act="combat-prev" data-tip="Предыдущий ход">${icon('arrow-left-01', 18)}</button><button class="btn btn-primary grow" data-act="combat-next">Следующий ход${icon('arrow-right-01', 16)}</button><button class="icon-btn icon-btn-sm" data-act="combat-end" data-tip="Закончить бой">${icon('stop-circle', 18)}</button>`

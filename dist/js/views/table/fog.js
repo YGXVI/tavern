@@ -19,21 +19,44 @@ export function sceneLights(scene, positions = {}) {
   return out;
 }
 
+// Многоугольники обзора и света — из кэша (TASK-133): при перетаскивании каждый кадр пересчитываются только
+// движущиеся источники. Ключ — стены (концы, вид, открыта ли дверь), точка, радиус и размер карты.
+const polys = new Map();
+let polysWalls = null, wallsVer = 0;
+function wallsKey(walls) {
+  let k = '';
+  for (const w of walls) k += `${w.a.x},${w.a.y},${w.b.x},${w.b.y},${w.kind},${w.open ? 1 : 0};`;
+  return k;
+}
+function polyAt(p, walls, wk, bounds, radius = Infinity) {
+  if (wk !== polysWalls) { polys.clear(); polysWalls = wk; wallsVer++; }
+  const k = `${p.x},${p.y},${radius},${bounds.w},${bounds.h}`;
+  let poly = polys.get(k);
+  if (!poly) {
+    if (polys.size > 500) polys.clear();
+    poly = visibilityPolygon(p, walls, bounds, radius);
+    polys.set(k, poly);
+  }
+  return poly;
+}
+
 /**
  * Посчитать, что видно.
  * eyes — токены-наблюдатели; positions — временные координаты (при перетаскивании).
+ * moving у обзора и света — источник сейчас тащат: его слой тумана рисуется каждый кадр, остальное — из кэша.
  */
 export function computeVision(c, scene, eyes, positions = {}) {
   const bounds = { x: 0, y: 0, w: scene.map.width, h: scene.map.height };
   const dark = scene.lighting === 'dark';
+  const wk = wallsKey(scene.walls);
   const visions = eyes.map((t) => {
     const p = positions[t.id] || t;
     const st = tokenStats(c, t);
-    return { x: p.x, y: p.y, poly: visibilityPolygon(p, scene.walls, bounds), darkvision: st.darkvision ? ftToPx(scene, st.darkvision) : 0, tokenId: t.id };
+    return { x: p.x, y: p.y, poly: polyAt(p, scene.walls, wk, bounds), darkvision: st.darkvision ? ftToPx(scene, st.darkvision) : 0, tokenId: t.id, moving: !!positions[t.id] };
   });
   const lights = dark ? sceneLights(scene, positions).map((l) => {
     const radius = ftToPx(scene, (l.bright || 0) + (l.dim || 0));
-    return { ...l, radius, brightR: ftToPx(scene, l.bright || 0), poly: visibilityPolygon(l, scene.walls, bounds, radius) };
+    return { ...l, radius, brightR: ftToPx(scene, l.bright || 0), poly: polyAt(l, scene.walls, wk, bounds, radius), moving: !!(l.fromToken && positions[l.fromToken]) };
   }) : [];
   const ops = scene.fog.ops || [];
   const revealed = ops.length ? (p) => opsAt(ops, p) : null;
@@ -100,6 +123,8 @@ function drawOps(ctx, ops, type, color = '#000') {
 
 // Туман мягкий, поэтому считаем его в уменьшенном холсте и растягиваем CSS — так он дешевле при перетаскивании.
 const FOG_RES = 1100;
+/** Показывать ли исследованные клетки полутьмой (память тумана). TASK-041: нет. */
+const FOG_MEMORY = false;
 const FOG_RES_HI = 2400;
 const GLOW_RES = 800;
 const off = { a: null, b: null, c: null };
@@ -153,6 +178,46 @@ function scratch(name, w, h) {
   return { cv, ctx };
 }
 
+function lightSpot(ctx, l) {
+  ctx.save(); pathPoly(ctx, l.poly); ctx.clip();
+  const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, Math.max(1, l.radius));
+  const b = l.radius ? l.brightR / l.radius : 1;
+  g.addColorStop(0, 'rgba(0,0,0,1)');
+  g.addColorStop(Math.max(0, b - 0.04), 'rgba(0,0,0,1)');
+  g.addColorStop(Math.min(1, b + 0.02), 'rgba(0,0,0,.62)');
+  g.addColorStop(0.94, 'rgba(0,0,0,.5)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(l.x, l.y, l.radius, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function darkSpot(ctx, v) {
+  if (!v.darkvision) return;
+  ctx.save(); pathPoly(ctx, v.poly); ctx.clip();
+  // TASK-080: тёмное зрение видит как при ярком свете (без затемнения), край — мягкий. Свет источников — как прежде.
+  const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, v.darkvision);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.94, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(v.x, v.y, v.darkvision, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+// Слой неподвижных источников: перерисовывается, только когда меняются они сами или размер холста.
+const staticGlow = { key: '', cv: null };
+function staticGlowLayer(vis, w, h, k) {
+  let key = `${w}x${h}|${wallsVer}|`;
+  for (const l of vis.lights) if (!l.moving) key += `L${l.x},${l.y},${l.radius},${l.brightR};`;
+  for (const v of vis.visions) if (!v.moving && v.darkvision) key += `V${v.x},${v.y},${v.darkvision};`;
+  const cv = staticGlow.cv || (staticGlow.cv = document.createElement('canvas'));
+  if (staticGlow.key === key && cv.width === w && cv.height === h) return cv;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  for (const l of vis.lights) if (!l.moving) lightSpot(ctx, l);
+  for (const v of vis.visions) if (!v.moving) darkSpot(ctx, v);
+  staticGlow.key = key;
+  return cv;
+}
+
 /**
  * Нарисовать туман на холсте размером с карту.
  * view: 'player' — как у игроков; 'master' — полупрозрачная подсказка мастеру; 'none'.
@@ -176,26 +241,13 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
   L.ctx.setTransform(k, 0, 0, k, 0, 0);
   if (fogOff) { L.ctx.fillStyle = '#000'; L.ctx.fillRect(0, 0, W, H); }
   else if (vis.dark) {
-    for (const l of vis.lights) {
-      L.ctx.save(); pathPoly(L.ctx, l.poly); L.ctx.clip();
-      const g = L.ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, Math.max(1, l.radius));
-      const b = l.radius ? l.brightR / l.radius : 1;
-      g.addColorStop(0, 'rgba(0,0,0,1)');
-      g.addColorStop(Math.max(0, b - 0.04), 'rgba(0,0,0,1)');
-      g.addColorStop(Math.min(1, b + 0.02), 'rgba(0,0,0,.62)');
-      g.addColorStop(0.94, 'rgba(0,0,0,.5)');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      L.ctx.fillStyle = g; L.ctx.beginPath(); L.ctx.arc(l.x, l.y, l.radius, 0, Math.PI * 2); L.ctx.fill();
-      L.ctx.restore();
-    }
-    for (const v of vis.visions) {
-      if (!v.darkvision) continue;
-      L.ctx.save(); pathPoly(L.ctx, v.poly); L.ctx.clip();
-      const g = L.ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, v.darkvision);
-      g.addColorStop(0, 'rgba(0,0,0,.6)'); g.addColorStop(0.9, 'rgba(0,0,0,.52)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      L.ctx.fillStyle = g; L.ctx.beginPath(); L.ctx.arc(v.x, v.y, v.darkvision, 0, Math.PI * 2); L.ctx.fill();
-      L.ctx.restore();
-    }
+    // Свет и тёмное зрение неподвижных источников — готовым слоем (TASK-133), движущиеся — поверх каждый кадр.
+    // Чёрные пятна с прозрачностью складываются одинаково в любом порядке, итог тот же, что прежде.
+    L.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    L.ctx.drawImage(staticGlowLayer(vis, w, h, k), 0, 0);
+    L.ctx.setTransform(k, 0, 0, k, 0, 0);
+    for (const l of vis.lights) if (l.moving) lightSpot(L.ctx, l);
+    for (const v of vis.visions) if (v.moving) darkSpot(L.ctx, v);
     // Свет виден, только если он в поле зрения кого-то из героев.
     const V = scratch('b', w, h);
     V.ctx.setTransform(k, 0, 0, k, 0, 0);
@@ -219,8 +271,10 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
     L.ctx.globalCompositeOperation = 'source-over';
   }
 
-  // E — исследованные клетки (полутьма). Слой кэшируется: он меняется редко, а размытие дорогое.
-  const E = !fogOff && explored?.size ? exploredLayer(scene, explored, ops, w, h, k) : null;
+  // E — исследованные клетки полутьмой. Выключено (TASK-041, sol0139): у тумана две крайности — что отряд видит
+  // сейчас, то видно, остальное — полностью тёмное. Исследованные клетки по-прежнему копятся: по ним игрок
+  // помнит двери и метки, которые уже видел.
+  const E = FOG_MEMORY && !fogOff && explored?.size ? exploredLayer(scene, explored, ops, w, h, k) : null;
 
   if (view === 'master') {
     // Мастер видит карту, но понимает, что скрыто от отряда.
@@ -232,7 +286,8 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
     ctx.globalCompositeOperation = 'source-over';
     return;
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.94)';
+  // Игрок: что отряд не видит — сплошной чёрный, карта под туманом не просвечивает (TASK-160).
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
   ctx.globalCompositeOperation = 'destination-out';
   if (E) { ctx.globalAlpha = 0.42; ctx.drawImage(E, 0, 0); }

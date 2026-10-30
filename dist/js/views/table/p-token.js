@@ -79,7 +79,7 @@ export function tokenBarHTML(ctx) {
     const same = names.every((n) => n === names[0]);
     const title = same ? `${toks.length} ${plural(toks.length, names[0].toLowerCase(), names[0].toLowerCase(), names[0].toLowerCase())}` : `${toks.length} ${plural(toks.length, 'токен', 'токена', 'токенов')}`;
     return `<div class="toolbar token-bar">
-      <span class="tb-avatars">${toks.slice(0, 3).map((t) => `<span class="mini-tok ${t.kind}" style="background-image:url(${esc(srcOf(t.img))})"></span>`).join('')}</span>
+      <span class="tb-avatars">${toks.slice(0, 3).map((t) => `<span class="mini-tok ${t.kind}" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>`).join('')}</span>
       <span class="tb-titles"><b>${esc(same && toks.length > 1 ? `${toks.length} ${names[0].toLowerCase()}${toks.length > 4 ? 'ов' : 'а'}` : title)}</b><small>${allHidden ? 'скрыты от игроков' : 'выделено'}</small></span>${div}
       ${ib('combat-add', 'sword-03', c.combat.active ? 'Добавить в бой' : 'Начать бой с ними')}${ib('hp', 'first-aid-kit', 'Хиты всем (урон по области)')}${ib('conditions', 'sparkles', 'Состояния')}${ib('visibility', allHidden ? 'view-off' : 'view', allHidden ? 'Скрыты от игроков' : 'Видны игрокам', allHidden ? 'aria-pressed="true"' : '')}${ib('token-menu', 'more-vertical', 'Ещё')}${div}
       ${allHidden ? `<button class="btn btn-sm btn-secondary" data-act="reveal">${icon('view', 16)}Показать игрокам</button>` : ''}${ib('deselect', 'cancel-01', 'Снять выделение')}</div>`;
@@ -87,7 +87,7 @@ export function tokenBarHTML(ctx) {
   const t = toks[0];
   const st = tokenStats(c, t);
   if (t.kind === 'item') {
-    return `<div class="toolbar token-bar"><span class="tb-avatar item" style="background-image:url(${esc(srcOf(t.img))})"></span><span class="tb-titles"><b>${esc(t.name)}</b><small>Предмет${t.hidden ? ' · скрыт' : ''}</small></span>${div}
+    return `<div class="toolbar token-bar"><span class="tb-avatar item" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span><span class="tb-titles"><b>${esc(t.name)}</b><small>Предмет${t.hidden ? ' · скрыт' : ''}</small></span>${div}
       ${ctx.isMasterView ? `${ib('visibility', t.hidden ? 'view-off' : 'view', t.hidden ? 'Скрыт от игроков' : 'Виден игрокам', t.hidden ? 'aria-pressed="true"' : '')}${ib('token-settings', 'settings-01', 'Имя и размер')}${ib('token-delete', 'delete-02', 'Убрать')}${div}` : ib('ping-token', 'location-01', 'Пинг: показать отряду')}
       ${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
   }
@@ -95,7 +95,7 @@ export function tokenBarHTML(ctx) {
   const mine = ctx.isMine(t);
   const master = ctx.isMasterView;
   const down = st.hpMax > 0 && st.hp <= 0;
-  const avatar = `<button class="tb-avatar ${t.kind} ${mine ? 'mine' : ''}" data-act="focus" data-tip="Показать на карте" style="background-image:url(${esc(srcOf(t.img))})"></button>`;
+  const avatar = `<button class="tb-avatar ${t.kind} ${mine ? 'mine' : ''}" data-act="focus" data-tip="Показать на карте" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></button>`;
   if (master || mine) {
     const sub = mine ? `${st.subtitle} · ваш герой` : st.subtitle + (t.hidden ? ' · скрыт' : '');
     const left = movementLeft(ctx, t);
@@ -250,6 +250,35 @@ function auraEditor(a) {
   </div>`;
 }
 
+/** Свет на токене (и в листе героя) по пресету; 'none' — погасить. С отменой. Общий для настроек токена и виджета «Зрение». */
+export function setTokenLight(ctx, id, presetId) {
+  const p = LIGHTS.find((l) => l.id === presetId);
+  const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null;
+  let before;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; t.light = v ? { ...v } : null; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = v ? { ...v } : null; } };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); before = t?.light ? { ...t.light } : null; put(val)(s, c); },
+    { label: 'Свет', undo: (s, c) => put(before)(s, c), redo: put(val) });
+}
+
+/** Тёмное зрение героя (в листе) или существа (на токене), футы. С отменой. */
+export function setDarkvision(ctx, id, ft) {
+  let before = 0;
+  const put = (v) => (s, c) => { const t = s.tokens.find((x) => x.id === id); if (!t) return; const ch = t.characterId && c.characters.find((x) => x.id === t.characterId); if (ch) ch.darkvision = v; else t.darkvision = v; };
+  ctx.mutateScene((s, c) => { const t = s.tokens.find((x) => x.id === id); if (t) before = tokenStats(c, t).darkvision || 0; put(ft)(s, c); },
+    { label: 'Тёмное зрение', undo: (s, c) => put(before)(s, c), redo: put(ft) });
+}
+
+/** Блок «Несёт свет» и «Тёмное зрение» (виджет «Зрение», TASK-046). act — префикс data-act для кликов. */
+export function visionFields(ctx, t, act = 'v') {
+  const st = tokenStats(ctx.c, t);
+  const lightId = t.light?.preset || (t.light ? 'custom' : 'none');
+  const chip = (on, a, v, label) => `<button class="chip chip-md ${on ? 'chip-accent' : ''}" data-act="${act}-${a}" data-id="${esc(t.id)}" data-v="${v}">${esc(label)}</button>`;
+  return `<div class="vision-edit">
+    <div class="field"><label>Несёт свет</label><div class="chips-wrap">${chip(lightId === 'none', 'light', 'none', 'Нет')}${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => chip(lightId === l.id, 'light', l.id, l.name)).join('')}</div></div>
+    <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => chip((st.darkvision || 0) === d, 'dv', d, d ? `${d} фт` : 'нет')).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · в темноте видит как при свете` : 'В темноте видит только освещённое'}</div></div>
+  </div>`;
+}
+
 export function tokenSettings(ctx, id, anchor) {
   const t0 = ctx.scene.tokens.find((t) => t.id === id);
   if (!t0) return;
@@ -264,10 +293,10 @@ export function tokenSettings(ctx, id, anchor) {
         <div class="field"><label>Имя для игроков</label><div class="chips-wrap"><button class="chip chip-md ${!t.nameHidden ? 'chip-accent' : ''}" data-namehide="0">Показывать</button><button class="chip chip-md ${t.nameHidden ? 'chip-accent' : ''}" data-namehide="1">Скрыть — «Неизвестное существо»</button></div></div>` : ''}
         <div class="field"><label for="tk-elev">Высота над полом</label><div class="row"><div class="input" style="width:110px"><input id="tk-elev" type="number" step="5" data-elev value="${t.elevation || 0}"><span class="suffix">фт</span></div>${[0, 10, 30].map((v) => `<button class="chip chip-md ${(t.elevation || 0) === v ? 'chip-accent' : ''}" data-elev-q="${v}">${v ? `${v} фт` : 'на полу'}</button>`).join('')}</div></div>
         <div class="field"><label>Размер</label><div class="chips-wrap">${SIZES.map((s) => `<button class="chip chip-md ${t.size === s.id ? 'chip-accent' : ''}" data-size="${s.id}">${s.name}${s.cells > 1 ? ` · ${s.cells}×${s.cells}` : ''}</button>`).join('')}</div></div>
-        <div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
+        ${t.characterId ? `<div class="field"><label>Свет и тёмное зрение</label><button class="btn btn-sm btn-secondary" data-vision-open>${icon('view', 14)}Настроить в «Зрении»</button><span class="t-xs tertiary">${st.darkvision ? `Тёмное зрение ${st.darkvision} фт` : 'Без тёмного зрения'}${t.light ? ` · несёт свет` : ''}</span></div>` : `<div class="field"><label>Несёт свет</label><div class="chips-wrap"><button class="chip chip-md ${lightId === 'none' ? 'chip-accent' : ''}" data-light="none">Нет</button>${LIGHTS.filter((l) => l.id !== 'campfire').map((l) => `<button class="chip chip-md ${lightId === l.id ? 'chip-accent' : ''}" data-light="${l.id}">${esc(l.name)}</button>`).join('')}</div>
           ${t.light ? `<label class="aura-op"><span class="t-sm muted">Яркий свет</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.bright}" data-tl="bright" style="--fill:${(t.light.bright / 60) * 100}%" aria-label="Яркий свет"><b class="t-sm" data-tl-out="bright">${t.light.bright} фт</b></label>
           <label class="aura-op"><span class="t-sm muted">Тусклый ещё</span><input class="slider" type="range" min="0" max="60" step="5" value="${t.light.dim}" data-tl="dim" style="--fill:${(t.light.dim / 60) * 100}%" aria-label="Тусклый свет"><b class="t-sm" data-tl-out="dim">${t.light.dim} фт</b></label>` : ''}</div>
-        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · видит в темноте без цвета` : 'В темноте видит только освещённое'}</div></div>
+        <div class="field"><label>Тёмное зрение</label><div class="chips-wrap">${[0, 30, 60, 120].map((d) => `<button class="chip chip-md ${(st.darkvision || 0) === d ? 'chip-accent' : ''}" data-dv="${d}">${d ? `${d} фт` : 'нет'}</button>`).join('')}</div><div class="t-xs tertiary">${st.darkvision ? `${st.darkvision} фт · в темноте видит как при свете` : 'В темноте видит только освещённое'}</div></div>`}
         <div class="field"><label>Аура</label>${t.aura ? auraEditor(t.aura) : `<div class="row"><div class="input grow"><input data-aura-name placeholder="Например, Духовные стражи"></div><div class="input" style="width:84px"><input type="number" data-aura-r value="10" min="5" step="5"><span class="suffix">фт</span></div></div><button class="btn btn-sm btn-secondary" data-aura-add>${icon('plus-sign', 14)}Добавить ауру</button>`}</div>
       </div></div>`;
   };
@@ -284,6 +313,7 @@ export function tokenSettings(ctx, id, anchor) {
   box.addEventListener('click', (e) => {
     const sz = e.target.closest('[data-size]');
     if (sz) upd((t, c, s) => { const n1 = sizeById(sz.dataset.size).cells; const p = snapCenter(ctx.scene.grid, t.x, t.y, n1); t.x = p.x; t.y = p.y; t.size = sz.dataset.size; });
+    if (e.target.closest('[data-vision-open]')) { closePopover(); ctx.panels.openVisionFor(id); return; }
     const li = e.target.closest('[data-light]');
     if (li) upd((t, c) => { const p = LIGHTS.find((l) => l.id === li.dataset.light); const val = p ? { preset: p.id, bright: p.bright, dim: p.dim, color: p.color, flicker: p.flicker } : null; t.light = val; if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.light = val; } });
     const dv = e.target.closest('[data-dv]');
@@ -427,6 +457,79 @@ export function auraPopover(ctx, id, anchor) {
 }
 
 // ——— Контекстное меню ———
+// ——— Параметры в меню токена (TASK-039): хиты/максимум, временные, КД — правятся на месте ———
+/** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
+function canEditStats(ctx, t) {
+  if (!t || t.kind === 'item') return false;
+  return ctx.isMasterView || ctx.isMine(t);
+}
+
+function statsBlock(ctx, t) {
+  const st = tokenStats(ctx.c, t);
+  const num = (k, v, label, cls = '') => `<input class="ts-in ${cls}" data-st="${k}" value="${v}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="${label}">`;
+  return `<div class="tok-stats" data-stats="${esc(t.id)}">
+    <div class="ts-cell ts-hp"><span class="ts-cap">Хиты</span>
+      <div class="ts-hp-box" data-tip="Впишите, сколько осталось, или −урон / +лечение">${num('hp', st.hp, 'Хиты сейчас')}<i>/</i>${num('hpMax', st.hpMax, 'Максимум хитов')}</div>
+      <span class="ts-sub">сейчас · максимум</span></div>
+    <div class="ts-cell ts-temp"><span class="ts-cap">Временные</span>${num('tempHp', st.tempHp || 0, 'Временные хиты', 'ts-round')}</div>
+    <div class="ts-cell ts-ac"><span class="ts-cap">КД</span>${num('ac', st.ac ?? 10, 'Класс доспеха', 'ts-round ts-shield')}</div>
+  </div><hr>`;
+}
+
+/** Записать одно поле параметров (максимум, временные, КД) с отменой. */
+function setStat(ctx, id, field, value) {
+  const t = ctx.scene.tokens.find((x) => x.id === id); if (!t) return;
+  const st = tokenStats(ctx.c, t);
+  const cur = field === 'tempHp' ? st.tempHp || 0 : st[field];
+  if (cur === value) return;
+  const pick = (x) => ({ [field]: x[field], ...(field === 'hpMax' ? { hp: x.hp } : {}) });
+  let before = null, after = null;
+  ctx.mutateScene((s, c) => {
+    patchTokenStats(c, s, id, (x) => {
+      before = pick(x);
+      const out = { [field]: value, ...(field === 'hpMax' ? { hp: Math.min(x.hp ?? value, value) } : {}) };
+      after = { ...before, ...out };
+      return out;
+    });
+  }, {
+    label: { hpMax: 'Максимум хитов', tempHp: 'Временные хиты', ac: 'КД' }[field],
+    undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
+    redo: (s, c) => { if (after) patchTokenStats(c, s, id, () => structuredClone(after)); },
+  });
+}
+
+function bindStats(ctx, node) {
+  const box = node.querySelector('[data-stats]'); if (!box) return;
+  const id = box.dataset.stats;
+  // После записи поле показывает итог («−3» → новое число): повторного change при уходе с поля не будет.
+  const refresh = () => {
+    const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t) return;
+    const st = tokenStats(ctx.c, t);
+    const vals = { hp: st.hp, hpMax: st.hpMax, tempHp: st.tempHp || 0, ac: st.ac ?? 10 };
+    for (const inp of box.querySelectorAll('[data-st]')) { inp.value = vals[inp.dataset.st]; inp.closest('.ts-cell')?.classList.remove('error'); }
+  };
+  const commit = (inp) => {
+    const k = inp.dataset.st, raw = inp.value.trim();
+    const bad = () => inp.closest('.ts-cell').classList.add('error');
+    if (k === 'hp') { if (raw !== '' && !commitHpInput(ctx, id, raw)) { const t = ctx.scene?.tokens.find((x) => x.id === id); const now = t && tokenStats(ctx.c, t).hp; if (String(now) !== raw) return bad(); } }
+    else {
+      const n = Math.floor(Number(raw.replace(',', '.')));
+      if (!Number.isFinite(n) || raw === '') return bad();
+      const lim = { hpMax: [1, 999], tempHp: [0, 999], ac: [0, 40] }[k];
+      setStat(ctx, id, k, Math.max(lim[0], Math.min(lim[1], n)));
+    }
+    refresh();
+  };
+  box.addEventListener('focusin', (e) => { if (e.target.matches('[data-st]')) e.target.select(); });
+  box.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('[data-st]'); if (!inp) return;
+    e.stopPropagation(); // клавиши стола (Del, H, стрелки) не срабатывают, пока печатаем
+    if (e.key === 'Enter') { e.preventDefault(); commit(inp); inp.select(); }
+    if (e.key === 'Escape') closePopover();
+  });
+  box.addEventListener('change', (e) => { const inp = e.target.closest('[data-st]'); if (inp) commit(inp); });
+}
+
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
   if (target.kind === 'token') {
@@ -443,24 +546,26 @@ export function contextMenu(ctx, target, w, screen) {
         'divider',
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
-        { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', onClick: () => ctx.panels.openSheetFor(t) },
+        { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) },
         !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
         !t.characterId ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
         { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) },
         'divider',
         { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = ids.length === 1 && canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     } else {
       const items = [
-        ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', onClick: () => ctx.panels.openSheetFor(t) } : null,
+        ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
         !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,
         ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
         { icon: 'location-01', label: 'Пинг', onClick: () => ctx.ping(t.x, t.y) },
         { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); ctx.ui.ruler = { pts: [{ x: t.x, y: t.y }, { x: t.x, y: t.y }], label: '' }; } },
       ].filter(Boolean);
-      menu(items, anchor, { placement: 'right' });
+      const stats = canEditStats(ctx, t);
+      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     }
     return;
   }

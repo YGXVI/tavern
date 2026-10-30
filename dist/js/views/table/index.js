@@ -18,6 +18,8 @@ import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
+import { loadSrdBestiary } from '../../data/bestiary.js';
+import { refreshSheet } from './sheet.js';
 import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
@@ -46,7 +48,7 @@ export function mountTable(root, cid) {
     ui: {
       tool: 'move', sub: {}, selection: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
-      wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null,
+      wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
     },
     remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map() },
     dragging: null,
@@ -89,8 +91,15 @@ export function mountTable(root, cid) {
   };
 
   let visCache = null;
+  // Обзор и свет идут за токеном в том же кадре (TASK-133): и за своим перетаскиванием, и за чужим (drag по шине).
+  const movingNow = () => {
+    const pos = {};
+    for (const [id, d] of ctx.remote.drags) if (d.sceneId === ctx.sceneId) pos[id] = d;
+    for (const [id, p] of ctx.dragging || []) pos[id] = p;
+    return pos;
+  };
   ctx.vision = () => {
-    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), Object.fromEntries(ctx.dragging || []));
+    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), movingNow());
     return visCache;
   };
   ctx.invalidateVision = () => { visCache = null; };
@@ -167,7 +176,6 @@ export function mountTable(root, cid) {
   // ——— Отрисовка по кадрам ———
   const dirty = new Set();
   let raf = 0;
-  let lastFog = 0, fogTimer = 0;
   ctx.invalidate = (...what) => {
     for (const w of what.length ? what : ['all']) dirty.add(w);
     if (!raf) raf = requestAnimationFrame(flush);
@@ -183,14 +191,9 @@ export function mountTable(root, cid) {
     if (all || dirty.has('terrain')) renderTerrain(L, sc, { showBlocked: ctx.isMasterView && ctx.ui.tool === 'terrain' });
     if (all || dirty.has('drawings')) renderDrawings(L, sc, ctx);
     if (all || dirty.has('walls')) renderWalls(L, sc, { edit: ctx.isMasterView && ctx.ui.tool === 'walls', selectedWall: ctx.ui.selectedWall, hoverWall: ctx.ui.hoverWall });
-    if (all || dirty.has('fog') || dirty.has('tokens')) {
-      // При перетаскивании туман перерисовываем не чаще ~16 раз в секунду — остальное успевает за курсором.
-      const now = performance.now();
-      if (ctx.dragging?.size && !all && !dirty.has('fog') && now - lastFog < 60) {
-        clearTimeout(fogTimer);
-        fogTimer = setTimeout(() => { lastFog = performance.now(); ctx.invalidateVision(); if (ctx.scene) { renderFog(L, ctx); renderTokens(L, ctx); renderMarkers(L, ctx); } }, 60 - (now - lastFog));
-      } else { lastFog = now; renderFog(L, ctx); trackExplored(); }
-    }
+    // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
+    // каждый кадр пересчитываются только те, что сейчас тащат.
+    if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
     if (all || dirty.has('tokens')) renderTokens(L, ctx);
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
@@ -212,6 +215,8 @@ export function mountTable(root, cid) {
   function trackExplored() {
     const sc = ctx.scene;
     if (ctx.dragging?.size) return;
+    // Чужое перетаскивание ещё не ход: исследованное пополняется, когда токен отпустят.
+    for (const d of ctx.remote.drags.values()) if (d.sceneId === ctx.sceneId) return;
     if (sc.fog.mode === 'off' && sc.lighting !== 'dark') return;
     if (ctx.ui.viewAs) return;
     const known = new Set(sc.fog.explored || []);
@@ -315,7 +320,8 @@ export function mountTable(root, cid) {
       const mine = p.userId && p.userId !== ctx.userId && ctx.scene?.tokens.find((t) => (p.ids || []).includes(t.id) && ctx.isMine(t));
       if (mine && p.moved && ctx.inCombat()) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
     }
-    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null });
+    // by — кто тащит (TASK-162): у остальных токен в его цвете и с его именем; lead — ведущий токен группы.
+    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null, by: p.userId, lead: id === p.leader || Object.keys(p.positions).length === 1 });
     ctx.invalidate('tokens');
   });
   bus.on('ruler', (p) => {
@@ -398,17 +404,39 @@ export function mountTable(root, cid) {
   const offErr = bus.on('storage-error', (p) => ctx.toast({ title: 'Не сохранилось', body: p.message, icon: 'alert-circle' }));
 
   // ——— Старт ———
+  // Полный бестиарий SRD (TASK-083) — отдельным файлом после открытия стола: подписи, листы и список существ дорисуются.
+  let gone = false;
+  loadSrdBestiary().then(() => {
+    if (gone) return;
+    ctx.invalidate('all');
+    if (ctx.ui.panel === 'bestiary') ctx.panels.renderSide();
+    refreshSheet(ctx);
+  }, () => {
+    if (!gone && ctx.isMaster) ctx.toast({ title: 'Бестиарий не загрузился', body: 'Доступны только основные существа. Обновите страницу, когда появится сеть.', icon: 'alert-circle' });
+  });
   const c0 = ctx.c;
   ctx.switchScene(ctx.isMaster ? c0.activeSceneId || c0.scenes[0]?.id : sceneIdFor(c0, ctx.userId), { fit: true });
   renderChrome(ctx);
   ctx.panels.onEnter();
+  // Лист героя по адресу #/c/<кампания>/sheet/<герой>: его можно открыть в новой вкладке (TASK-094).
+  // Адрес сразу возвращается к столу, чтобы обновление страницы не открывало лист снова.
+  const sheetFromHash = () => {
+    const mm = location.hash.match(/^#\/c\/[^/]+\/sheet\/([^/?#]+)/);
+    if (!mm) return;
+    const chId = decodeURIComponent(mm[1]);
+    history.replaceState(null, '', `#/c/${ctx.cid}`);
+    if (characterOf(ctx.c, chId)) ctx.panels.openSheetFor({ characterId: chId });
+  };
+  sheetFromHash();
   setPresence({ userId: ctx.userId, campaignId: ctx.cid, sceneId: ctx.sceneId });
   const onResize = () => ctx.invalidate('chrome');
   addEventListener('resize', onResize);
   viewport.focus({ preventScroll: true });
 
   return {
+    update: sheetFromHash,
     unmount() {
+      gone = true;
       unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);

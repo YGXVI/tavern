@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "edition": "5e-2014",
+  "source": {
+    "id": "srd-5.1-cc",
+    "title": "System Reference Document 5.1",
+    "url": "https://media.dndbeyond.com/compendium-images/srd/5.1/SRD_CC_v5.1.pdf",
+    "local_path": "sources/srd-5.1-cc.pdf",
+    "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0",
+    "page_count": 403,
+    "edition": "5e-2014",
+    "language": "en",
+    "retrieved_on": "2026-10-29",
+    "date_timezone": "Asia/Dushanbe",
+    "license": "CC-BY-4.0",
+    "attribution": "This work includes material taken from the System Reference Document 5.1 (“SRD 5.1”) by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode."
+  },
+  "exports": [
+    {
+      "id": "srd-5.1",
+      "title_ru": "SRD 5.1 — полный корпус правил 2014",
+      "page_count": 403,
+      "markdown": "srd-5.1.md",
+      "json": "srd-5.1.json"
+    },
+    {
+      "id": "player-rules",
+      "title_ru": "Правила игрока — выборка SRD 5.1",
+      "page_count": 200,
+      "markdown": "player-rules.md",
+      "json": "player-rules.json"
+    },
+    {
+      "id": "dungeon-master-rules",
+      "title_ru": "Правила мастера — выборка SRD 5.1",
+      "page_count": 209,
+      "markdown": "dungeon-master-rules.md",
+      "json": "dungeon-master-rules.json"
+    },
+    {
+      "id": "basic-rules",
+      "title_ru": "Базовые механики — выборка SRD 5.1",
+      "page_count": 51,
+      "markdown": "basic-rules.md",
+      "json": "basic-rules.json"
+    }
+  ],
+  "limitations_ru": [
+    "Это SRD 5.1, а не полный Player’s Handbook, Dungeon Master’s Guide или официальный выпуск Basic Rules.",
+    "Английский текст источника. Русский перевод полного корпуса не выполнялся.",
+    "Структура JSON — разделы и страницы, не отдельные нормализованные механики или сущности.",
+    "layout_text сохраняет колонки и широкие таблицы; читать как моноширинный текст. search_text пригоден для поиска, но не задаёт порядок чтения колонок.",
+    "Переносы строк и слов исходного PDF сохранены; удалены повторяющиеся нижние колонтитулы и нормализованы артефакты дефисов.",
+    "Автоматическая проверка сохранности символов не подтверждает семантическую правильность таблиц. Значения правил не следует автоматически вычислять из раскладки.",
+    "Каталоги dnd.su в репозитории имеют другое покрытие и собственное происхождение. Они не заменены и не объединены с этим корпусом."
+  ],
+  "requested_books": [
+    {
+      "title": "Player’s Handbook (2014)",
+      "complete_text_included": false,
+      "alternative": "player-rules"
+    },
+    {
+      "title": "Dungeon Master’s Guide (2014)",
+      "complete_text_included": false,
+      "alternative": "dungeon-master-rules"
+    },
+    {
+      "title": "Basic Rules (2014 ruleset)",
+      "complete_text_included": false,
+      "alternative": "basic-rules"
+    }
+  ]
+}

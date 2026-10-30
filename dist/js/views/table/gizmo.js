@@ -10,6 +10,13 @@ import { deleteTokens, duplicateTokens, tokenSettings, contextMenu } from './p-t
 export const SCALE_MIN = 0.25, SCALE_MAX = 8;
 
 /** Базовый диаметр токена в футах (без свободного масштаба): средний — 5 фт, большой — 10 и т. д. */
+/** Магнит поворота (TASK-037): угол рядом с кратным 45° встаёт ровно на него. */
+export const ROT_SNAP = 45, ROT_MAGNET = 9;
+export function snapAngle(deg, step = ROT_SNAP, magnet = ROT_MAGNET) {
+  const near = Math.round(deg / step) * step;
+  return Math.abs(deg - near) <= magnet ? near : deg;
+}
+
 export function baseFeet(scene, t) {
   const size = sizeById(t.size);
   return size.cells * (scene.grid.feet || 5) * (size.scale || 1);
@@ -67,7 +74,7 @@ export function renderGizmo(L, ctx) {
   if (box.dataset.sig !== sig) {
     box.innerHTML = `<div class="gz">
       <div class="gz-ring"></div>
-      ${r.rot ? `<button class="gz-h gz-rot" data-gz="rot" aria-label="Повернуть" data-tip="Повернуть · Shift — по 15°">${icon('rotate-clockwise', 16)}</button>` : ''}
+      ${r.rot ? `<button class="gz-h gz-rot" data-gz="rot" aria-label="Повернуть" data-tip="Повернуть · липнет к 45°, Shift — по 15°, Alt — свободно">${icon('rotate-clockwise', 16)}</button>` : ''}
       ${r.size ? `<button class="gz-h gz-l" data-gz="size" aria-label="Размер" data-tip="Размер · Shift — по 5 фт">${icon('arrow-left-right', 16)}</button><button class="gz-h gz-r" data-gz="size" aria-label="Размер" data-tip="Размер · Shift — по 5 фт">${icon('arrow-left-right', 16)}</button>` : ''}
       <span class="gz-val"></span>
       <div class="gz-bar">${bar}</div>
@@ -109,6 +116,7 @@ export function attachGizmo(L, ctx) {
       if (mode === 'rot') {
         let rot = look.rot + ((Math.atan2(ev.clientY - c.y, ev.clientX - c.x) - a0) * 180) / Math.PI;
         if (ev.shiftKey) rot = Math.round(rot / 15) * 15;
+        else if (!ev.altKey) rot = snapAngle(rot); // TASK-037: липнет к 0/45/90…°, Alt — свободно
         gz.rot = ((Math.round(rot) % 360) + 360) % 360;
       } else {
         let ft = base * look.scale * (Math.hypot(ev.clientX - c.x, ev.clientY - c.y) / r0);

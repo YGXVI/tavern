@@ -8,10 +8,12 @@ import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myC
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
-import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll } from './dice.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
+import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
+import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
+import * as C from './chrome.js';
 import { widgetHTML } from './p-widgets.js';
 import * as T from './p-token.js';
 import * as M from './p-map.js';
@@ -20,7 +22,7 @@ import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 
-const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll']);
+const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
 
 /** Вкладка в фоне: «⚔ Ваш ход» в заголовке, пока игрок не вернётся. */
 let baseTitle = null;
@@ -56,7 +58,22 @@ export class Panels {
     });
     const mine = (p) => p?.cid === ctx.cid;
     this.offs = [
-      bus.on('roll', (p) => { if (!mine(p)) return; showRollToast(ctx, p.entry); if (ctx.ui.widget === 'dice') this.refreshWidget(true); }),
+      bus.on('roll', (p) => {
+        if (!mine(p)) return;
+        showRollToast(ctx, p.entry);
+        // Открытый бросок другого участника падает на наш стол — его кубы в его наборе (TASK-092/093).
+        if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceFloor(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped, skin: p.skin });
+        if (ctx.ui.widget === 'dice') this.refreshWidget(true);
+      }),
+      // Инициатива мастера: к20 видимых участников падают и на наш стол, у каждого — имя и итог.
+      bus.on('init-dice', (p) => {
+        if (!mine(p) || p.sceneId !== ctx.sceneId) return;
+        const items = (p.items || []).map((x) => {
+          const t = ctx.scene?.tokens.find((y) => y.id === x.tokenId);
+          return t && ctx.tokenShown(t) ? { name: ctx.nameOf(t), natural: x.natural, total: x.total } : null;
+        }).filter(Boolean);
+        diceFloor(ctx)?.rollGroup({ id: p.id, userId: p.userId, title: 'Инициатива', items, skin: p.skin });
+      }),
       bus.on('read-aloud', (p) => { if (mine(p) && p.sceneId === ctx.sceneId && !ctx.isMaster) this.readAloud({ title: p.title, text: p.text }); }),
       bus.on('lockpick', (p) => { if (mine(p)) M.lockpickResult(ctx, p); }),
       bus.on('door-ask', (p) => { if (mine(p) && ctx.isMaster) ctx.toast({ title: `${p.name} спрашивает про ключ`, body: 'Есть ли у отряда ключ от этой двери?', icon: 'key-01', timeout: 10000 }); }),
@@ -99,6 +116,8 @@ export class Panels {
     clearInterval(this.pauseTick);
     for (const off of this.offs) off();
     closeSheet();
+    diceTray(this.ctx)?.destroy();
+    diceFloor(this.ctx)?.destroy();
   }
 
   snapshot() {
@@ -106,7 +125,8 @@ export class Panels {
     const cur = ctx.scene ? currentEntry(c, ctx.scene) : null;
     return {
       combat: c.combat.active,
-      turnKey: c.combat.active ? `${c.combat.round}:${c.combat.turn}:${cur?.tokenId}` : null,
+      // Раунд и чей ход — как видно за столом (номер хода в записи может догонять current с задержкой).
+      turnKey: c.combat.active ? `${ctx.scene ? combatRound(c, ctx.scene) : c.combat.round}:${cur?.tokenId}` : null,
       curToken: cur?.tokenId || null,
       pending: new Set(c.members.filter((m) => m.status === 'pending').map((m) => m.userId)),
       portals: new Set((c.portalRequests || []).map((r) => r.id)),
@@ -135,7 +155,7 @@ export class Panels {
       const t = ctx.scene?.tokens.find((x) => x.id === now.curToken);
       const free = ['move', 'select'].includes(ctx.ui.tool) && !ctx.dragging?.size;
       if (t && !ctx.isMaster && ctx.isMine(t)) {
-        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${c.combat.round} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
+        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${combatRound(c, ctx.scene)} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
         flagTab(document.hidden ? `⚔ Ваш ход — ${tokenStats(c, t).name}` : null);
         if (free) { queueMicrotask(() => ctx.select([t.id])); this.centerIfAway(t); }
       } else if (t && ctx.isMasterView && t.kind === 'foe' && free) {
@@ -185,6 +205,11 @@ export class Panels {
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
       }
     }
+    // Лоток закрыли вместе с виджетом «Кубы» — преимущество и помеха сбрасываются.
+    if (this.diceOpen && this.ctx.ui.widget !== 'dice' && this.ctx.ui.dicePool) setAdv(this.ctx.ui.dicePool, null);
+    this.diceOpen = this.ctx.ui.widget === 'dice';
+    // Лоток с объёмными кубами стоит рядом с виджетом «Кубы» и держит выбранные кубы (TASK-092).
+    diceTray(this.ctx)?.syncPool(this.ctx.ui.dicePool);
   }
 
   openWidget(w, force = false) {
@@ -464,10 +489,16 @@ export class Panels {
     if (!c.combat.active) { D.combatSetup(ctx, ids); return; }
     const inCombat = new Set(c.combat.entries.map((e) => e.tokenId));
     const removeAll = ids.every((id) => inCombat.has(id));
-    this.keepTurn((cc, sc) => {
+    // Новых участников бросаем до записи — их к20 падают на стол.
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
+      const t = ctx.scene?.tokens.find((x) => x.id === id);
+      return t && t.kind !== 'item' ? { tokenId: id, ...rollInitiative(c, t) } : null;
+    }).filter(Boolean);
+    this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
-      else for (const id of ids) if (!inCombat.has(id)) { const t = sc.tokens.find((x) => x.id === id); if (t && t.kind !== 'item') cc.combat.entries.push({ tokenId: id, init: rollInitiative(cc, t).init }); }
+      else for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
     });
+    initiativeDice(ctx, rolled);
     ctx.toast({ title: removeAll ? 'Убраны из боя' : 'В бою', body: `${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}`, icon: 'sword-03' });
   }
 
@@ -476,7 +507,7 @@ export class Panels {
     const ctx = this.ctx, sid = ctx.sceneId;
     updateCampaign(ctx.cid, (c) => {
       const sc = c.scenes.find((s) => s.id === sid);
-      const before = currentEntry(c, sc)?.tokenId;
+      const before = currentEntry(c, sc, { raw: true })?.tokenId;
       fn(c, sc);
       if (!c.combat.entries.length) { endCombat(c); return; }
       const order = initiativeOrder(c, sc);
@@ -507,6 +538,20 @@ export class Panels {
     if (!cur) return;
     if (!ctx.isMaster && !ctx.playsFor(cur.token)) return;
     this.nextTurn(1);
+  }
+
+  /** Открыть виджет «Зрение» с настройкой света и тёмного зрения героя (TASK-046). */
+  openVisionFor(tokenId) {
+    this.ctx.ui.visionEdit = tokenId;
+    this.ctx.ui.widget = 'vision';
+    this.refreshWidget(true);
+    this.ctx.invalidate('chrome');
+  }
+
+  /** Свет и тёмное зрение правит мастер (любой токен) и игрок — своего героя. */
+  canSetVision(tokenId) {
+    const t = this.ctx.scene?.tokens.find((x) => x.id === tokenId);
+    return !!t && (this.ctx.isMaster || this.ctx.isMine(t));
   }
 
   centerIfAway(t) {
@@ -599,6 +644,16 @@ export class Panels {
     const ctx = this.ctx, c = ctx.c;
     if (!c) return;
     if (DICE_ACTS.has(act)) { diceAction(ctx, act, b, e); return; }
+    // Слой мастера (TASK-088): выбрать настройку карты; повторный клик закрывает её, слой остаётся.
+    if (act.startsWith('layer:')) {
+      const [, tool, sub] = act.split(':');
+      if (C.layerItemActive(ctx, act)) { ctx.setTool('move'); return; }
+      const cur = ctx.ui.sub.walls;
+      const door = (v) => v === 'door' || v === 'secret';
+      const s = tool !== 'walls' ? sub : sub === 'door' ? (door(cur) ? cur : 'door') : (cur && !door(cur) ? cur : 'wall');
+      ctx.setTool(tool, s);
+      return;
+    }
     if (act.startsWith('tool:')) { ctx.setTool(act.slice(5)); if (act === 'tool:measure') ctx.ui.sub.measure = ctx.ui.sub.measure || 'ruler'; return; }
     if (act.startsWith('sub:')) {
       const [, tool, v] = act.split(':');
@@ -621,6 +676,9 @@ export class Panels {
       case 'pause': D.pausePopover(ctx, b); break;
       case 'exit-viewas': ctx.setViewAs(null); break;
       case 'viewas': ctx.setViewAs(ctx.ui.viewAs === b.dataset.id ? null : b.dataset.id); break;
+      case 'vision-edit': ctx.ui.visionEdit = ctx.ui.visionEdit === b.dataset.id ? null : b.dataset.id; this.refreshWidget(true); break;
+      case 'v-light': if (this.canSetVision(b.dataset.id)) T.setTokenLight(ctx, b.dataset.id, b.dataset.v); break;
+      case 'v-dv': if (this.canSetVision(b.dataset.id)) T.setDarkvision(ctx, b.dataset.id, Number(b.dataset.v) || 0); break;
       case 'preview-players': ctx.ui.previewPlayers = !ctx.ui.previewPlayers; ctx.ui.viewAs = null; ctx.select([]); if (ctx.ui.previewPlayers && !['move', 'measure', 'draw'].includes(ctx.ui.tool)) ctx.setTool('move'); ctx.invalidate('all'); break;
       case 'exit-preview': ctx.ui.previewPlayers = false; ctx.invalidate('all'); break;
       case 'look-back': {
@@ -641,7 +699,20 @@ export class Panels {
       case 'statblock': if (one) this.openSheetFor(one); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
-      case 'done': ctx.setTool('move'); break;
+      case 'reference': D.referenceModal(this.ctx); break;
+      case 'layer': ctx.setLayer(!ctx.ui.layer); break;
+      // «Готово» слоя: подогнанная сетка сохраняется, а не теряется.
+      case 'done': case 'layer-close': {
+        // Сетку, которую подгоняли, «Готово» сохраняет; нетронутую не перезаписываем (токены не прыгают).
+        const b = ctx.ui.gridBefore;
+        if (ctx.ui.tool === 'grid' && b && ctx.ui.calib) {
+          applyCalibPreview(ctx);
+          const g = ctx.scene.grid, near = (x, y) => Math.abs((x || 0) - (y || 0)) < 0.01;
+          if (!near(g.size, b.size) || !near(g.offsetX, b.offsetX) || !near(g.offsetY, b.offsetY) || (g.feet || 5) !== (b.feet || 5) || (g.visible !== false) !== (b.visible !== false)) this.gridDone();
+        }
+        ctx.setLayer(false);
+        break;
+      }
       case 'focus-toggle': ctx.ui.focusOff = !ctx.ui.focusOff; ctx.applyFocus(); ctx.invalidate('chrome'); break;
       case 'toggle-dark': {
         const before = ctx.scene.lighting, after = before === 'dark' ? 'bright' : 'dark';
@@ -712,7 +783,7 @@ export class Panels {
         break;
       }
       case 'combat-start': D.combatSetup(ctx, sel); break;
-      case 'setup-toggle': case 'setup-self': case 'setup-reroll': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
+      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
       case 'combat-next': this.nextTurn(1); break;
       case 'combat-prev': this.nextTurn(-1); break;
       case 'combat-end': updateCampaign(ctx.cid, (cc) => endCombat(cc)); ctx.toast({ title: 'Бой окончен', icon: 'sword-03' }); break;
