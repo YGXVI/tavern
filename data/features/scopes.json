@@ -1,0 +1,37 @@
+{
+  "classes": {
+    "barbarian": {"ru":"Варвар","en":"Barbarian"}, "bard":{"ru":"Бард","en":"Bard"},
+    "cleric":{"ru":"Жрец","en":"Cleric"}, "druid":{"ru":"Друид","en":"Druid"},
+    "fighter":{"ru":"Воин","en":"Fighter"}, "monk":{"ru":"Монах","en":"Monk"},
+    "paladin":{"ru":"Паладин","en":"Paladin"}, "ranger":{"ru":"Следопыт","en":"Ranger"},
+    "rogue":{"ru":"Плут","en":"Rogue"}, "sorcerer":{"ru":"Чародей","en":"Sorcerer"},
+    "warlock":{"ru":"Колдун","en":"Warlock"}, "wizard":{"ru":"Волшебник","en":"Wizard"}
+  },
+  "races": {
+    "dwarf":{"ru":"Дварф","en":"Dwarf"}, "elf":{"ru":"Эльф","en":"Elf"},
+    "halfling":{"ru":"Полурослик","en":"Halfling"}, "human":{"ru":"Человек","en":"Human"},
+    "dragonborn":{"ru":"Драконорождённый","en":"Dragonborn"}, "gnome":{"ru":"Гном","en":"Gnome"},
+    "half-elf":{"ru":"Полуэльф","en":"Half-Elf"}, "half-orc":{"ru":"Полуорк","en":"Half-Orc"},
+    "tiefling":{"ru":"Тифлинг","en":"Tiefling"}
+  },
+  "subclasses": {
+    "barbarian:berserker":{"id":"berserker","classId":"barbarian","name":{"ru":"Путь берсерка","en":"Path of the Berserker"}},
+    "bard:lore":{"id":"lore","classId":"bard","name":{"ru":"Коллегия знаний","en":"College of Lore"}},
+    "cleric:life":{"id":"life","classId":"cleric","name":{"ru":"Домен жизни","en":"Life Domain"}},
+    "druid:land":{"id":"land","classId":"druid","name":{"ru":"Круг земли","en":"Circle of the Land"}},
+    "fighter:champion":{"id":"champion","classId":"fighter","name":{"ru":"Чемпион","en":"Champion"}},
+    "monk:open-hand":{"id":"open-hand","classId":"monk","name":{"ru":"Путь открытой ладони","en":"Way of the Open Hand"}},
+    "paladin:devotion":{"id":"devotion","classId":"paladin","name":{"ru":"Клятва преданности","en":"Oath of Devotion"}},
+    "ranger:hunter":{"id":"hunter","classId":"ranger","name":{"ru":"Охотник","en":"Hunter"}},
+    "rogue:thief":{"id":"thief","classId":"rogue","name":{"ru":"Вор","en":"Thief"}},
+    "sorcerer:draconic-bloodline":{"id":"draconic-bloodline","classId":"sorcerer","name":{"ru":"Драконья родословная","en":"Draconic Bloodline"}},
+    "warlock:fiend":{"id":"fiend","classId":"warlock","name":{"ru":"Исчадие","en":"The Fiend"}},
+    "wizard:evocation":{"id":"evocation","classId":"wizard","name":{"ru":"Школа воплощения","en":"School of Evocation"}}
+  },
+  "subraces": {
+    "dwarf:hill-dwarf":{"id":"hill-dwarf","raceId":"dwarf","name":{"ru":"Холмовой дварф","en":"Hill Dwarf"}},
+    "elf:high-elf":{"id":"high-elf","raceId":"elf","name":{"ru":"Высший эльф","en":"High Elf"}},
+    "halfling:lightfoot":{"id":"lightfoot","raceId":"halfling","name":{"ru":"Легконогий полурослик","en":"Lightfoot"}},
+    "gnome:rock-gnome":{"id":"rock-gnome","raceId":"gnome","name":{"ru":"Скальный гном","en":"Rock Gnome"}}
+  }
+}

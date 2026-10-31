@@ -454,4 +454,60 @@ select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('TASK-123: мастер удаляет кампанию с токенами игроков', $q$delete from public.campaigns where id = 'c-rls'$q$, 1);
 reset role;
 
+-- ——— TASK-129: личные каталоги (собственный блок Codex библиотеки) ———
+create function pg_temp.catalogue_feature() returns jsonb language sql immutable as $$
+ select '{"edition":"5e-2014","source":{"kind":"manual"},"name":{"ru":"Личное умение","en":null},"kind":"feat","text":{"ru":"Личная проза","en":null},"scope":{},"level":null,"prerequisiteText":null,"actionType":null}'::jsonb
+$$;
+create function pg_temp.catalogue_item() returns jsonb language sql immutable as $$
+ select '{"edition":"5e-2014","source":{"kind":"manual"},"name":{"ru":"Личный предмет","en":null},"description":{"ru":"Моя книга","en":[]},"attunement":{"required":null},"technical":{},"variants":[]}'::jsonb
+$$;
+grant execute on function pg_temp.catalogue_feature(),pg_temp.catalogue_item() to authenticated;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('catalogue: A создаёт свой шаблон через CAS RPC', $q$select public.save_catalogue_entry('same','feature',pg_temp.catalogue_feature(),0,auth.uid())$q$);
+select pg_temp.cnt('catalogue: новая запись имеет revision1 и manual source', $q$select 1 from public.user_catalogue_entries where id='same' and revision=1 and data->'source'->>'kind'='manual'$q$,1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('catalogue: чужой известный ID не раскрывает запись', $q$select 1 from public.user_catalogue_entries where id='same'$q$,0);
+select pg_temp.ok('catalogue: B создаёт тот же ID независимо', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),0,auth.uid())$q$);
+select pg_temp.cnt('catalogue: B читает только свой тип записи', $q$select 1 from public.user_catalogue_entries where id='same' and kind='magic_item'$q$,1);
+select pg_temp.err('catalogue: direct INSERT запрещён даже владельцу', $q$insert into public.user_catalogue_entries(owner_id,id,kind,data,revision) values('00000000-0000-0000-0000-00000000000b','direct','feature',pg_temp.catalogue_feature(),1)$q$);
+select pg_temp.err('catalogue: direct UPDATE не обходит CAS', $q$update public.user_catalogue_entries set data=pg_temp.catalogue_item() where id='same'$q$);
+select pg_temp.err('catalogue: direct DELETE не обходит CAS', $q$delete from public.user_catalogue_entries where id='same'$q$);
+select pg_temp.err('catalogue: дубликат создания не перезаписывает шаблон', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),0,auth.uid())$q$);
+select pg_temp.ok('catalogue: обновление с ожидаемой revision1', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item()||'{"notes":"Новая заметка"}',1,auth.uid())$q$);
+select pg_temp.cnt('catalogue: revision выросла ровно на1', $q$select 1 from public.user_catalogue_entries where id='same' and revision=2 and data->>'notes'='Новая заметка'$q$,1);
+select pg_temp.err('catalogue: смена аккаунта между getUser и save не пишет в новый аккаунт', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),2,'00000000-0000-0000-0000-00000000000a')$q$);
+select pg_temp.err('catalogue: смена аккаунта перед delete не удаляет запись нового аккаунта', $q$select public.delete_catalogue_entry('same',2,'00000000-0000-0000-0000-00000000000a')$q$);
+select pg_temp.cnt('catalogue: после отказов смены аккаунта B на месте', $q$select 1 from public.user_catalogue_entries where id='same' and revision=2 and data->>'notes'='Новая заметка'$q$,1);
+select pg_temp.err('catalogue: устаревшая запись не затирает новую', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),1,auth.uid())$q$);
+select pg_temp.err('catalogue: тип шаблона не меняется', $q$select public.save_catalogue_entry('same','feature',pg_temp.catalogue_feature(),2,auth.uid())$q$);
+select pg_temp.err('catalogue: удаление требует текущую revision', $q$select public.delete_catalogue_entry('same',1,auth.uid())$q$);
+select pg_temp.err('catalogue: сырой metadata source не выдаётся за manual', $q$select public.save_catalogue_entry('spoof','feature',jsonb_set(pg_temp.catalogue_feature(),'{source,kind}','"srd51"'),0,auth.uid())$q$);
+select pg_temp.err('catalogue: другая редакция не сохраняется', $q$select public.save_catalogue_entry('edition','feature',jsonb_set(pg_temp.catalogue_feature(),'{edition}','"5e-2024"'),0,auth.uid())$q$);
+select pg_temp.err('catalogue: имя обязательно и на сервере', $q$select public.save_catalogue_entry('empty','feature',pg_temp.catalogue_feature()||'{"name":{"ru":null,"en":null}}',0,auth.uid())$q$);
+select pg_temp.err('catalogue: текст обязателен', $q$select public.save_catalogue_entry('empty-text','feature',pg_temp.catalogue_feature()||'{"text":{"ru":null,"en":null}}',0,auth.uid())$q$);
+select pg_temp.err('catalogue: metadata полям нет места в data', $q$select public.save_catalogue_entry('meta','feature',pg_temp.catalogue_feature()||'{"ownerId":"foreign"}',0,auth.uid())$q$);
+select pg_temp.err('catalogue: более64К UTF-8 отвергается', $q$select public.save_catalogue_entry('large','feature',pg_temp.catalogue_feature()||jsonb_build_object('notes',repeat('я',32768)),0,auth.uid())$q$);
+select pg_temp.ok('catalogue: ровно65536 байт представления JSONB принимается', $q$select public.save_catalogue_entry('edge','feature',jsonb_set(d,'{notes}',to_jsonb(repeat('a',65536-octet_length(convert_to(d::text,'UTF8'))))),0,auth.uid()) from (select pg_temp.catalogue_feature()||'{"notes":""}' d) x$q$);
+select pg_temp.err('catalogue: внутренний счётчик не читается напрямую', $q$select * from public.catalogue_entry_quota$q$);
+select pg_temp.ok('catalogue: удалить можно с текущей revision', $q$select public.delete_catalogue_entry('same',2,auth.uid())$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.cnt('catalogue: чужие upsert/delete не меняли A', $q$select 1 from public.user_catalogue_entries where id='same' and revision=1 and kind='feature'$q$,1);
+select pg_temp.cnt('catalogue: мастер не читает личный edge B', $q$select 1 from public.user_catalogue_entries where id='edge'$q$,0);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000d');
+select pg_temp.ok('catalogue: 500 шаблонов двух типов вместе', $q$select public.save_catalogue_entry('quota-'||g,case when g%2=0 then 'feature' else 'magic_item' end,case when g%2=0 then pg_temp.catalogue_feature() else pg_temp.catalogue_item() end,0,auth.uid()) from generate_series(1,500) g$q$);
+select pg_temp.err('catalogue: 501й шаблон любого типа запрещён', $q$select public.save_catalogue_entry('quota-extra','feature',pg_temp.catalogue_feature(),0,auth.uid())$q$);
+select pg_temp.ok('catalogue: обновление при заполненной квоте', $q$select public.save_catalogue_entry('quota-2','feature',pg_temp.catalogue_feature(),1,auth.uid())$q$);
+select pg_temp.ok('catalogue: удаление освобождает место', $q$select public.delete_catalogue_entry('quota-1',1,auth.uid())$q$);
+select pg_temp.ok('catalogue: свободное место занимает другой тип', $q$select public.save_catalogue_entry('quota-extra','feature',pg_temp.catalogue_feature(),0,auth.uid())$q$);
+select pg_temp.cnt('catalogue: общий итог ровно500', $q$select 1 from public.user_catalogue_entries$q$,500);
+select pg_temp.cnt('catalogue: квота Creature отдельна и данные не затирались', $q$select 1 from public.creatures$q$,500);
+reset role;
+set local role anon;
+select pg_temp.err('catalogue: anon не читает шаблоны', $q$select * from public.user_catalogue_entries$q$);
+select pg_temp.err('catalogue: anon не вызывает save RPC', $q$select public.save_catalogue_entry('anon','feature','{}',0,auth.uid())$q$);
+reset role;
+
 select test, ok, info from _r order by at;
