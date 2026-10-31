@@ -12,6 +12,7 @@ import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
+import { expandRideMoves, ridersOf } from './riding.js';
 import { renderChrome } from './chrome.js';
 import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape, aimShape, canEditDrawing, drawingTouchesRect, drawingsShift, applyDrawingPos } from './drawings.js';
 
@@ -386,15 +387,18 @@ function nudge(ctx, k) {
 }
 
 /** Записать перемещение (с отменой) и расход движения в бою. */
-function commitMoves(ctx, moves, leaderCost, draw = null) {
+function commitMoves(ctx, moves0, leaderCost, draw = null) {
+  // Езда (TASK-187): с ездовым едут всадники; всадник, сдвинутый без ездового, спешивается.
+  const moves = expandRideMoves(ctx.scene, moves0);
   const leader = moves[0];
+  const rode = new Map(moves.filter((m) => m.dismount).map((m) => [m.id, ctx.scene.tokens.find((t) => t.id === m.id)?.riding]));
   // Рисунки группы из рамки (TASK-169) едут в той же записи: один шаг отмены.
   const dz = draw?.ids?.size && (draw.dx || draw.dy) ? drawingsShift(ctx.scene, draw.ids, draw.dx, draw.dy) : null;
   if (!moves.length && !dz) return;
   // Кого двигали последним — тот рисуется поверх остальных (порядок одинаковый у всех участников).
   const at = Date.now();
   ctx.mutateScene((s, c) => {
-    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; } }
+    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; if (m.dismount) delete t.riding; } }
     if (dz) applyDrawingPos(s, dz.after);
     if (leader && leaderCost != null && c.combat.active) {
       const cur = currentEntry(c, s);
@@ -402,8 +406,8 @@ function commitMoves(ctx, moves, leaderCost, draw = null) {
     }
   }, {
     label: moves.length ? 'Перемещение' : 'Сдвинуть рисунки',
-    undo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.from.x; t.y = m.from.y; } } if (dz) applyDrawingPos(s, dz.before); },
-    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); } } if (dz) applyDrawingPos(s, dz.after); },
+    undo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.from.x; t.y = m.from.y; if (rode.get(m.id)) t.riding = rode.get(m.id); } } if (dz) applyDrawingPos(s, dz.before); },
+    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); if (m.dismount) delete t.riding; } } if (dz) applyDrawingPos(s, dz.after); },
   });
 }
 export { commitMoves };
@@ -430,7 +434,11 @@ const tokenTool = {
       const group = [...ctx.ui.selection].map((id) => ctx.scene.tokens.find((x) => x.id === id)).filter((x) => x && ctx.canControl(x) && !x.locked);
       // Рисунки из той же группы едут за ведущим токеном (TASK-169).
       const draws = new Set([...ctx.ui.selDrawings].filter((id) => ctx.scene.drawings.some((d) => d.id === id)));
-      g.drag = { leader: t, items: group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })), draws: draws.size ? draws : null };
+      // Всадники ездовых из группы едут следом, в ту же точку (TASK-187).
+      const inGroup = new Set(group.map((x) => x.id));
+      for (const x of [...group]) for (const r of ridersOf(ctx.scene, x.id)) if (!inGroup.has(r.id)) { group.push(r); inGroup.add(r.id); }
+      const items = group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x), ride: x.riding && inGroup.has(x.riding) ? x.riding : null }));
+      g.drag = { leader: t.riding && inGroup.has(t.riding) ? group.find((x) => x.id === t.riding) : t, items, draws: draws.size ? draws : null };
       return;
     }
     if (tg.kind === 'drawing') {
@@ -594,6 +602,7 @@ function dragTokens(ctx, g, w, e) {
     g.lastF ||= new Map();
     for (const it of g.drag.items) {
       if (it.id === lead.id) { positions.set(it.id, target); continue; }
+      if (it.ride) continue; // всадник — в точке своего ездового, ниже
       const want = clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n);
       const tok = ctx.scene.tokens.find((t) => t.id === it.id);
       const leg = tok ? legPath(ctx, grid, { x: it.x0, y: it.y0 }, want, it.n, moveOpts(ctx, tok)) : null;
@@ -617,6 +626,7 @@ function dragTokens(ctx, g, w, e) {
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };
   }
+  for (const it of g.drag.items) if (it.ride && positions.has(it.ride)) positions.set(it.id, positions.get(it.ride));
   ctx.dragging = positions;
   ctx.ui.drag = { path };
   if (g.drag.draws) { const lp = positions.get(lead.id) || { x: lead.x0, y: lead.y0 }; ctx.ui.drawMove = { ids: g.drag.draws, dx: lp.x - lead.x0, dy: lp.y - lead.y0 }; ctx.invalidate('drawings'); }

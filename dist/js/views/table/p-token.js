@@ -6,6 +6,7 @@ import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userBy
 import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
+import { ridingItems } from './riding.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
@@ -396,11 +397,14 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
   const dropDraws = (s) => { if (dset.size) s.drawings = s.drawings.filter((d) => !dset.has(d.id)); };
   // Запись в бою с инициативой и позицией — чтобы отмена вернула и её (TASK-183, план TASK-097 п. 2.3).
   const entries = ctx.c.combat.entries.map((e, i) => ({ e: structuredClone(e), i })).filter((x) => ids.includes(x.e.tokenId));
-  // Призывы удаляемых остаются на месте без ссылки на призывателя (И5); отмена ссылку возвращает.
+  // Призывы удаляемых остаются на месте без ссылки на призывателя (И5); всадники удалённого ездового спешиваются
+  // и стоят на его клетке (TASK-187). Отмена связи возвращает.
   const orphans = ctx.scene.tokens.filter((t) => t.summonedBy && ids.includes(t.summonedBy) && !ids.includes(t.id)).map((t) => [t.id, t.summonedBy]);
+  const riders = ctx.scene.tokens.filter((t) => t.riding && ids.includes(t.riding) && !ids.includes(t.id)).map((t) => [t.id, t.riding]);
   const drop = (s, c) => {
     s.tokens = s.tokens.filter((t) => !ids.includes(t.id));
     for (const [id] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.summonedBy; }
+    for (const [id] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.riding; }
     c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId));
     dropDraws(s);
   };
@@ -409,6 +413,7 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
     undo: (s, c) => {
       s.tokens.push(...structuredClone(copies));
       for (const [id, by] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) t.summonedBy = by; }
+      for (const [id, on] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) t.riding = on; }
       if (c.combat.active) for (const { e, i } of entries) if (!c.combat.entries.some((x) => x.tokenId === e.tokenId)) c.combat.entries.splice(Math.min(i, c.combat.entries.length), 0, structuredClone(e));
       if (dcopies.length) s.drawings.push(...structuredClone(dcopies));
     },
@@ -658,6 +663,7 @@ export function contextMenu(ctx, target, w, screen) {
         { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, ids, anchor) },
         { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
         { icon: 'sword-03', label: ctx.c.combat.active ? (ctx.c.combat.entries.some((e) => e.tokenId === t.id) ? 'Убрать из боя' : 'Добавить в бой') : 'Начать бой с выделенными', onClick: () => ctx.panels.combatToggle(ids) },
+        ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
         'divider',
         t.ownerId ? { icon: 'user', label: `${t.summonedBy ? 'Призыв' : 'Токен'} игрока: ${userById(t.ownerId)?.name || 'вышел из кампании'}`, disabled: true } : null,
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
@@ -676,6 +682,7 @@ export function contextMenu(ctx, target, w, screen) {
       const items = [
         ...(own ? ownTokenItems(ctx, t, anchor) : []),
         own && t.monsterId ? { icon: 'book-open-01', label: 'Статблок', onClick: () => ctx.panels.openSheetFor(t) } : null,
+        ...ridingItems(ctx, t, anchor, menu),
         ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
         !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,

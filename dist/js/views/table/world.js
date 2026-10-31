@@ -3,6 +3,7 @@
 import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
+import { stackOrder } from './riding.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
 import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
@@ -249,14 +250,8 @@ function tokenMarkup(ctx, t, st, n, d, name = st.name) {
     <span class="tok-name">${esc(name)}</span>`;
 }
 
-/**
- * Порядок наложения токенов: кого двигали последним — выше; кого не двигали — по порядку на сцене.
- * Возвращает Map<id, z> (1…N).
- */
-export function stackOrder(tokens) {
-  const order = tokens.map((t, i) => ({ id: t.id, at: Number(t.movedAt) || 0, i })).sort((a, b) => a.at - b.at || a.i - b.i);
-  return new Map(order.map((o, k) => [o.id, k + 1]));
-}
+// Порядок наложения токенов — со слоями и ездой (TASK-187): riding.js.
+export { stackOrder };
 
 export function renderTokens(L, ctx) {
   const { scene, c } = ctx;

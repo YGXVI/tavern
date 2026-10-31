@@ -126,7 +126,8 @@ export function mountTable(root, cid) {
     if (ctx.isMasterView) return true;
     if (t.hidden) return false;
     if (ctx.fogView() !== 'player') return true;
-    if (t.kind === 'hero') return true;
+    // Герои, свои токены и призывы игроков видны всем, как герои (TASK-183): владелец не теряет их в тумане.
+    if (t.kind === 'hero' || t.ownerId) return true;
     return isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
   };
   // Имя для игроков: мастер может скрыть имя существа («Неизвестное существо»).

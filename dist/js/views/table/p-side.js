@@ -9,7 +9,7 @@ import { toMonster } from '../../rules/creature.js';
 import { BESTIARY, monsterById, srdLoaded } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
-import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
+import { gridDims, gridSize, freeSpots, moveBlocked, footprintAt, footprintCells, footprintCenter, key } from '../../rules/geometry.js';
 import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
@@ -478,6 +478,27 @@ export function placeHero(ctx, chId, at = null) {
 const OWN_SIZES = [['tiny', 'Крошечный'], ['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']];
 /** Свой герой игрока на этой сцене — рядом с ним встаёт свой токен, от него идёт призыв. */
 const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.hidden) || null;
+/**
+ * Свободное место вплотную к точке (по клеткам, не шагами размера токена), куда можно дойти по прямой — не за
+ * стеной (иначе игрок не вытащит токен сам). Нет такого — как раньше, ближайшее свободное.
+ */
+function spotNear(ctx, at, n) {
+  const sc = ctx.scene, g = sc.grid;
+  const { cols, rows } = gridDims(g, sc.map.width, sc.map.height);
+  const taken = new Set(sc.terrain?.blocked || []);
+  for (const t of sc.tokens) { const tn = sizeById(t.size).cells; const fp = footprintAt(g, t.x, t.y, tn); for (const x of footprintCells(fp.c, fp.r, tn)) taken.add(key(x.c, x.r)); }
+  const start = footprintAt(g, at.x, at.y, n);
+  let best = null, bestD = Infinity;
+  for (let dr = -n - 3; dr <= n + 3; dr++) for (let dc = -n - 3; dc <= n + 3; dc++) {
+    const c = start.c + dc, r = start.r + dr;
+    if (c < 0 || r < 0 || c + n > cols || r + n > rows) continue;
+    if (footprintCells(c, r, n).some((x) => taken.has(key(x.c, x.r)))) continue;
+    const p = footprintCenter(g, c, r, n);
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if (d < bestD && !moveBlocked(at, p, sc.walls || [])) { best = p; bestD = d; }
+  }
+  return best || freeSpots(sc, at, 1, n)[0] || at;
+}
 
 export function playerAddMenu(ctx, anchor) {
   if (!ctx.scene) return;
@@ -525,7 +546,7 @@ function ownTokenPicker(ctx, anchor) {
 export function placeOwnToken(ctx, { name, size = 'small', img = '' }, at = null) {
   if (!ctx.scene) return null;
   const hero = myHeroToken(ctx);
-  const p = freeSpots(ctx.scene, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), 1, sizeById(size).cells)[0];
+  const p = spotNear(ctx, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), sizeById(size).cells);
   const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
   ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
   ctx.select([t.id]);
@@ -587,7 +608,7 @@ export function placeSummon(ctx, pick, at = null) {
     if (!have) newCopy = { ...snapshotOf(tpl, copyId), ownerId: ctx.userId };
   }
   const n = sizeById(m.size).cells;
-  const p = freeSpots(ctx.scene, at || { x: hero.x, y: hero.y }, 1, n)[0];
+  const p = spotNear(ctx, at || { x: hero.x, y: hero.y }, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
   const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly' }, m);
