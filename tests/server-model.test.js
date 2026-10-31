@@ -221,10 +221,10 @@ test('groupTokenMoves: несколько перемещений сцены — 
   assert.deepEqual(mixed.map((o) => o.op), ['update', 'update']);
 });
 
-test('groupTokenMoves: не больше 50 токенов в одном вызове', () => {
+test('groupTokenMoves: группа одной сцены не делится — предел 50 проверяет отправка целиком', () => {
   const ops = Array.from({ length: 120 }, (_, i) => upd(tok(`t${i}`, { x: 0, y: 0 }), tok(`t${i}`, { x: 70, y: 0 })));
   const out = groupTokenMoves(ops);
-  assert.deepEqual(out.map((o) => o.moves.length), [50, 50, 20]);
+  assert.deepEqual(out.map((o) => o.moves.length), [120]);
 });
 
 test('правка токена в мастерском diffRows даёт prev — частичная правка возможна', () => {

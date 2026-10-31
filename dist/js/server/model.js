@@ -221,7 +221,8 @@ export function isTokenMove(o) {
 /**
  * Сгруппировать перемещения: два и больше токенов одной сцены, сдвинутых одним действием, — одна операция
  * `{op: 'move', scene, moves:[{id, x, y, …}], parts}` для `move_tokens`: при отказе по любому не двигается никто (B5).
- * До 50 токенов в вызове (ограничение функции сервера). Остальные операции — как были, порядок сохраняется.
+ * Группа не делится: больше 50 токенов (предел функции сервера) отправка отклоняет целиком (sync.js).
+ * Остальные операции — как были, порядок сохраняется.
  */
 export function groupTokenMoves(ops) {
   const out = [], groups = new Map();
@@ -229,7 +230,7 @@ export function groupTokenMoves(ops) {
     if (!isTokenMove(o)) { out.push(o); continue; }
     const scene = o.row.scene_id;
     let g = groups.get(scene);
-    if (!g || g.parts.length >= 50) { g = { table: 'tokens', op: 'move', key: `move:${scene}:${o.key}`, scene, moves: [], parts: [] }; groups.set(scene, g); out.push(g); }
+    if (!g) { g = { table: 'tokens', op: 'move', key: `move:${scene}:${o.key}`, scene, moves: [], parts: [] }; groups.set(scene, g); out.push(g); }
     const { set } = tokenPatch(o.prev, o.row);
     g.moves.push({ id: o.key, ...set });
     g.parts.push(o);

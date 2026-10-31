@@ -252,14 +252,21 @@ async function send(cid, ops) {
 
 /**
  * Токены частичной правкой (TASK-097 п. 2.5, TASK-173): функции patch_token и move_tokens из миграции own_tokens (#126).
- * Пока миграция не применена на сервере, функций нет — переходим на прежнюю отправку целой строки до перезагрузки.
+ * Пока миграция не применена на сервере, функций нет — вкладка переходит на прежнюю отправку целой строки (со старыми
+ * ограничениями B1/B5) до перезагрузки страницы: после применения миграции частичная правка включится с новой загрузкой.
  */
 let tokenRpc = true;
 const missingFn = (e) => e?.code === 'PGRST202' || e?.code === '42883' || /could not find the function/i.test(String(e?.message || ''));
 
-/** Группа перемещений одной сцены: все или никто. Повтор после обрыва безопасен — функция ставит то же место. */
+/**
+ * Группа перемещений одной сцены: все или никто. Функция сервера берёт до 50 токенов — большую группу отклоняем
+ * целиком до первой записи, иначе часть осталась бы на месте (review #174). Повтор после обрыва ставит то же место;
+ * если между попытками кто-то успел подвинуть тот же токен, повтор вернёт наше место — порядка команд пока нет.
+ */
+const MOVE_MAX = 50;
 async function sendMoves(cid, o, attempt) {
   if (tokenRpc) {
+    if (o.moves.length > MOVE_MAX) throw new Error(`за раз сервер двигает не больше ${MOVE_MAX} токенов — выделите меньше`);
     const { error } = await sb.rpc('move_tokens', { p_scene: o.scene, p_moves: o.moves });
     if (!error) return;
     if (!missingFn(error)) throw error;
@@ -269,15 +276,26 @@ async function sendMoves(cid, o, attempt) {
 }
 
 /**
- * Правка токена: только изменённые поля data через patch_token — двигающий не затирает хиты, правящий хиты — место.
- * Если меняются и колонки (скрыт, сцена, герой, владелец) — одной строкой, как раньше: обе части проходят проверку
- * сервера вместе, без половинчатого состояния. Хиты прибавкой (adjust_token) здесь не используются: повтор после
- * потери ответа применил бы дельту дважды (аудит #57).
+ * Правка токена — только то, что изменилось:
+ * - только колонки (скрыт, сцена, герой, владелец, порядок) — UPDATE только их, старое data не уходит (review #174);
+ * - только поля data — patch_token: двигающий не затирает хиты, правящий хиты — место;
+ * - колонки и data вместе (редко: например, переход на другую сцену) — одной строкой целиком, как раньше: обе части
+ *   проходят проверку сервера вместе, без половинчатого состояния; чужое поле data тут ещё может перезаписаться.
+ * Повтор после обрыва ставит те же значения: другие поля не трогает, но более новую чужую правку того же поля
+ * вернёт назад — версий и порядка команд пока нет. Хиты прибавкой (adjust_token) не используются: повтор применил
+ * бы дельту дважды (аудит #57).
  */
-async function sendTokenPatch(cid, o, attempt) {
+async function sendTokenPatch(cid, o) {
   const { cols, set, unset } = tokenPatch(o.prev, o.row);
-  if (Object.keys(cols).length) return updateRow(cid, o);
-  if (!Object.keys(set).length && !unset.length) return;
+  const hasCols = Object.keys(cols).length > 0, hasData = Object.keys(set).length > 0 || unset.length > 0;
+  if (!hasCols && !hasData) return;
+  if (!hasData) {
+    const res = await sb.from('tokens').update(cols).match({ id: o.key }).select('id');
+    if (res.error) throw res.error;
+    if (!res.data?.length) throw new Error('нет доступа к изменению');
+    return;
+  }
+  if (hasCols || !tokenRpc) return updateRow(cid, o);
   const { error } = await sb.rpc('patch_token', { p_id: o.key, p_set: set, p_unset: unset });
   if (!error) return;
   if (!missingFn(error)) throw error;
@@ -293,7 +311,7 @@ async function updateRow(cid, o) {
 
 async function sendOne(cid, o, attempt) {
   if (o.op === 'move') return sendMoves(cid, o, attempt);
-  if (o.table === 'tokens' && o.op === 'update' && o.prev && tokenRpc) return sendTokenPatch(cid, o, attempt);
+  if (o.table === 'tokens' && o.op === 'update' && o.prev) return sendTokenPatch(cid, o);
   const t = sb.from(o.table);
   let res;
   if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
