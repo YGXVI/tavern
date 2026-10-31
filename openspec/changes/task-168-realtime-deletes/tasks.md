@@ -11,7 +11,7 @@
 ## 2. Проверки
 
 - [x] 2.1 `npm ci`, `npm test`, `spec:validate`, `spec:validate:archive`, `node --check`
-- [ ] 2.2 Пробное слияние со свежим `main` и с `codex/rules5e` (общий `sync.js`)
+- [x] 2.2 Пробное слияние со свежим `main` и с `codex/rules5e` (общий `sync.js`) — main `bc0eade`: без конфликтов, npm test 87/87; `codex/rules5e` `cdaf587`: конфликты в `model.js` (2), `sync.js` (2: импорт и отправка токенов), `sheet.js` (5), `table.css` (1) — смысловые, обе стороны сохраняются при слиянии
 - [ ] 2.3 После деплоя — живая проверка двумя аккаунтами: рисунок, токен, герой
 
 ## 3. Выпуск
