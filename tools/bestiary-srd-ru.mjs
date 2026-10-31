@@ -42,7 +42,7 @@ export function translationFor(translations, id, section, entry) {
   return ru;
 }
 
-export function validateTranslations(catalogue, translations) {
+export function validateTranslations(catalogue, translations, { allowUnused = false } = {}) {
   if (translations.schema_version !== 1 || translations.language !== 'ru'
       || translations.source?.stat_block_source !== 'srd_api_2014') {
     throw new Error('Неверный формат русского слоя SRD');
@@ -53,7 +53,7 @@ export function validateTranslations(catalogue, translations) {
     translationFor(translations, e.id, e.section, { name_en: e.name, description_en: e.en });
     expected.add(JSON.stringify([e.id, e.section, e.name, hashEnglish(e.en)]));
   }
-  for (const [id, sections] of Object.entries(translations.monsters || {})) {
+  if (!allowUnused) for (const [id, sections] of Object.entries(translations.monsters || {})) {
     if (!entries.some((e) => e.id === id)) throw new Error(`Лишний ID перевода: ${id}`);
     for (const [section, names] of Object.entries(sections)) {
       if (!SECTIONS.includes(section) || !Object.keys(names).length) throw new Error(`Лишний раздел: ${id}/${section}`);
@@ -71,12 +71,19 @@ export function validateTranslations(catalogue, translations) {
 
 // Это контроль записи механики, не доказательство смысловой эквивалентности.
 export function mechanicalTokens(text) {
-  const normalized = text.replace(/(\d),(?=\d{3}\b)/g, '$1').replace(/(\d)[dк](\d)/gi, '$1d$2');
+  const normalized = text.replace(/(\d),(?=\d{3}\b)/g, '$1').replace(/−/g, '-').replace(/[dк](?=\d)/gi, 'd');
+  const measures = [...normalized.matchAll(/(\d+d\d+|\d+)(\s*\(\d*d\d+(?:\s*[+-]\s*\d+)?\))?\s*-?\s*(hours?|час(?:а|ов)?|minutes?|минут(?:а|у|ы)?|days?|день|дня|дней|rounds?|раунд(?:а|ов)?|miles?|мил(?:я|и|ь|ю)|inches|inch|дюйм(?:а|ов)?)(?![a-zа-яё])/gi)].map((m) => {
+    const unit = /^(hour|час)/i.test(m[3]) ? 'hour' : /^(minute|минут)/i.test(m[3]) ? 'minute'
+      : /^(day|день|дня|дней)/i.test(m[3]) ? 'day' : /^(round|раунд)/i.test(m[3]) ? 'round'
+        : /^(mile|мил)/i.test(m[3]) ? 'mile' : 'inch';
+    return `${(m[1] + (m[2] || '')).replace(/\s/g, '')}:${unit}`;
+  }).sort();
   return {
     numbers: (normalized.match(/\d+/g) || []).sort((a, b) => +a - +b),
-    dice: (normalized.match(/\d+d\d+(?:\s*[+−-]\s*\d+)?/g) || []).map((x) => x.replace(/\s/g, '').replace('−', '-')).sort(),
-    dc: [...normalized.matchAll(/(?:\bDC|Сл)\s+(\d+)/g)].map((m) => m[1]).sort(),
-    bonuses: (normalized.match(/[+]\d+(?!\d)/g) || []).sort(),
+    dice: (normalized.match(/\d*d\d+(?:\s*[+-]\s*\d+)?/g) || []).map((x) => x.replace(/\s/g, '')).sort(),
+    dc: [...normalized.matchAll(/(?:\bDC(?: of)?|Сл(?: высвобождения|, равной)?)\s+(\d+)/g)].map((m) => m[1]).sort(),
+    bonuses: (normalized.match(/[+-]\d+(?!\d)/g) || []).sort(),
     feet: [...normalized.matchAll(/(\d+(?:\/\d+)?)\s*(?:-?(?:foot|feet)|ft\.|фт\.)/gi)].map((m) => m[1]).sort(),
+    measures,
   };
 }

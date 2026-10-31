@@ -135,7 +135,11 @@
           "comparison_only": true
         }
       ],
-      "forbidden": []
+      "forbidden": [
+        "испытание",
+        "испытания",
+        "испытаний"
+      ]
     },
     {
       "en": "DC",
@@ -163,7 +167,9 @@
           "location": "dist/js/data/rules.js; tools/bestiary-srd.mjs; data/rules-2014/srd-5.1.md"
         }
       ],
-      "forbidden": []
+      "forbidden": [
+        "КБ"
+      ]
     },
     {
       "en": "hit points",
@@ -250,7 +256,10 @@
           "comparison_only": true
         }
       ],
-      "forbidden": []
+      "forbidden": [
+        "долгий отдых",
+        "долгого отдыха"
+      ]
     },
     {
       "en": "short rest",
@@ -464,7 +473,10 @@
           "comparison_only": true
         }
       ],
-      "forbidden": []
+      "forbidden": [
+        "ночное зрение",
+        "ночного зрения"
+      ]
     },
     {
       "en": "truesight",
@@ -647,6 +659,9 @@
         "недееспособно",
         "недееспособны",
         "недееспособным",
+        "недееспособного",
+        "недееспособное",
+        "недееспособной",
         "недееспособного"
       ],
       "sources": [
@@ -660,7 +675,10 @@
           "comparison_only": true
         }
       ],
-      "forbidden": []
+      "forbidden": [
+        "выведен из строя",
+        "выведено из строя"
+      ]
     },
     {
       "en": "invisible",
@@ -12421,6 +12439,80 @@
         }
       ],
       "forbidden": []
+    },
+    {
+      "en": "proficiencies",
+      "ru": "владения",
+      "forms": [
+        "владений",
+        "владениями"
+      ],
+      "sources": [
+        {
+          "id": "project",
+          "location": "data/rules-2014/srd-5.1.md: Proficiency Bonus"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "en": "phylactery",
+      "ru": "филактерий",
+      "forms": [
+        "филактерия",
+        "филактерием"
+      ],
+      "sources": [
+        {
+          "id": "project",
+          "location": "data/rules-2014/srd-5.1.md: Lich"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "en": "heartstone",
+      "ru": "сердечный камень",
+      "forms": [
+        "сердечного камня",
+        "сердечным камнем"
+      ],
+      "sources": [
+        {
+          "id": "project",
+          "location": "data/rules-2014/srd-5.1.md: Night Hag"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "en": "soul bag",
+      "ru": "сумка душ",
+      "forms": [
+        "сумки душ",
+        "сумку душ"
+      ],
+      "sources": [
+        {
+          "id": "project",
+          "location": "data/rules-2014/srd-5.1.md: Night Hag"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "en": "acid arrow",
+      "ru": "Мельфова кислотная стрела",
+      "forms": [
+        "Мельфовой кислотной стрелой"
+      ],
+      "sources": [
+        {
+          "id": "project",
+          "location": "data/spells/spells-2014.json: dndsu:spell:159"
+        }
+      ],
+      "forbidden": []
     }
   ],
   "allowed_latin": [],
@@ -12570,6 +12662,23 @@
       "chosen": "КД",
       "alternative": "КБ (docs/glossary.md)",
       "reason": "В описаниях статблока используем КД, как в действующем модуле стола и его проверках. Существующие механические поля не меняются."
+    },
+    {
+      "en": "acid arrow",
+      "chosen": "Мельфова кислотная стрела",
+      "reason": "Обезличенное название SRD относится к Melf’s acid arrow из каталога заклинаний; русское название сохраняем по каталогу."
+    },
+    {
+      "en": "Efreeti / Elemental Demise",
+      "chosen": "снаряжение ифрита",
+      "alternative": "equipment the djinni was wearing or carrying",
+      "reason": "В EN-описании ифрита очевидная ошибочная ссылка на джинна. В RU субъект исправлен по существу статблока; desc и оригинальный каталог сохранены. Место явно выносится на review."
+    },
+    {
+      "en": "psychic damage",
+      "chosen": "урон психической энергией",
+      "alternative": "психический урон",
+      "reason": "Единая форма описания видов урона по образцу пользовательского задания и смыслу psychic; не переименовывает механическое поле type."
     }
   ]
 }
