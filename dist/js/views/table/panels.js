@@ -20,6 +20,8 @@ import * as S from './p-side.js';
 import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
+import { DRAW_TEMPLATES } from './drawings.js';
+import { drawStyle, stylePopover } from './draw-style.js';
 
 const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
 
@@ -660,6 +662,7 @@ export class Panels {
       const [, tool, v] = act.split(':');
       if (tool === 'measure') { if ((ctx.ui.sub.measure || 'ruler') !== v) ctx.clearMeasure(false); ctx.setTool('measure', v); return; }
       ctx.ui.sub[tool] = v;
+      if (tool === 'draw') { ctx.ui.livePoly = null; ctx.ui.drawLabel = null; ctx.invalidate('drawings'); }
       ctx.invalidate('chrome', 'overlay', 'terrain');
       return;
     }
@@ -754,9 +757,22 @@ export class Panels {
       case 'grid-done': this.gridDone(); break;
       case 'share-ruler': ctx.ui.shareRuler = !ctx.ui.shareRuler; if (!ctx.ui.shareRuler) { ctx.sendRuler(null); ctx.sendTemplate(null); } ctx.invalidate('chrome'); break;
       case 'measure-clear': ctx.clearMeasure(); break;
+      case 'draw-fill': case 'draw-stroke':
+        stylePopover(b, act === 'draw-fill' ? 'fill' : 'stroke', drawStyle(ctx), (patch) => { Object.assign(drawStyle(ctx), patch); ctx.invalidate('chrome'); });
+        break;
+      case 'draw-tpl': {
+        // Шаблоны заклинаний под одной кнопкой: выбрать и сразу тянуть от точки.
+        const pop = popover(`<div class="menu" role="menu">${DRAW_TEMPLATES.map((t) => `<button class="menu-item" role="menuitem" data-tpl="${t.id}">${icon(t.icon, 18)}<span>${esc(t.name)}</span></button>`).join('')}</div>`, b, { placement: 'top' });
+        pop.node.addEventListener('click', (e) => {
+          const it = e.target.closest('[data-tpl]'); if (!it) return;
+          ctx.ui.lastDrawTpl = it.dataset.tpl; ctx.ui.sub.draw = it.dataset.tpl; ctx.ui.livePoly = null;
+          closePopover(); ctx.invalidate('chrome', 'overlay', 'drawings');
+        });
+        break;
+      }
       case 'draw-clear': {
         const mineOnly = !ctx.isMaster;
-        const removed = ctx.scene.drawings.filter((d) => !mineOnly || d.author === ctx.userId);
+        const removed = ctx.scene.drawings.filter((d) => !d.locked && (!mineOnly || d.author === ctx.userId));
         if (!removed.length) { ctx.toast({ title: 'Рисунков нет', icon: 'pencil-edit-02' }); break; }
         const ids = new Set(removed.map((d) => d.id));
         ctx.mutateScene((s) => { s.drawings = s.drawings.filter((d) => !ids.has(d.id)); }, { label: 'Стереть рисунки', undo: (s) => { s.drawings.push(...structuredClone(removed)); }, redo: (s) => { s.drawings = s.drawings.filter((d) => !ids.has(d.id)); } });

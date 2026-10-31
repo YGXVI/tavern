@@ -7,7 +7,8 @@ import { srcOf } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, myCharacter, sceneOf, membership } from '../../core/campaign.js';
 import { TEMPLATES, LIGHTS } from '../../data/rules.js';
 import { currentEntry, combatRound } from './combat.js';
-import { DRAW_SHAPES } from './drawings.js';
+import { DRAW_TOOLS, DRAW_TEMPLATES } from './drawings.js';
+import { drawStyle, fillSwatch, strokeSwatch } from './draw-style.js';
 import { movementLeft, FOCUS_TOOLS } from './input.js';
 import { pauseElapsed } from './panels.js';
 
@@ -175,8 +176,12 @@ function bottomCenter(ctx) {
     return `<div class="toolbar">${ib('sub:measure:ruler', 'ruler', 'Линейка', { active: s === 'ruler', kbd: 'R' })}${TEMPLATES.map((t) => ib(`sub:measure:${t.id}`, t.icon, `${t.name} · тяните от точки: направление и размер, Shift — по 5 фт`, { active: s === t.id })).join('')}${div}${ib('share-ruler', 'view', ctx.ui.shareRuler ? 'Видно всем за столом' : 'Видно только вам', { active: ctx.ui.shareRuler })}${ib('measure-clear', 'delete-02', 'Убрать')}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   if (tool === 'draw') {
+    // TASK-182 (как в Owlbear): инструменты, шаблон заклинания, заливка и обводка новых рисунков, ластик.
     const s = sub.draw || 'pen';
-    return `<div class="toolbar">${ib('sub:draw:pen', 'pencil-edit-02', 'Рисовать', { active: s === 'pen' })}${DRAW_SHAPES.map((x) => ib(`sub:draw:${x.id}`, x.icon, `${x.name} · тяните от точки, Shift — без шага 5 фт`, { active: s === x.id })).join('')}${ib('sub:draw:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки' : 'Стереть мои рисунки')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
+    const st = drawStyle(ctx);
+    const tplOn = DRAW_TEMPLATES.find((x) => x.id === s);
+    const tpl = tplOn || DRAW_TEMPLATES.find((x) => x.id === ctx.ui.lastDrawTpl) || DRAW_TEMPLATES[0];
+    return `<div class="toolbar">${DRAW_TOOLS.map((x) => ib(`sub:draw:${x.id}`, x.icon, x.name, { active: s === x.id })).join('')}${ib('draw-tpl', tpl.icon, `Шаблон заклинания: ${tpl.name} · тяните от точки`, { active: !!tplOn })}${div}<button class="icon-btn ds-tb" data-act="draw-fill" data-tip="Заливка новых фигур" aria-label="Заливка новых фигур">${fillSwatch(st.fill, st.fillOpacity)}</button><button class="icon-btn ds-tb" data-act="draw-stroke" data-tip="Обводка: цвет, толщина, пунктир" aria-label="Обводка новых рисунков">${strokeSwatch(st.color, st.width, st.dash)}</button>${div}${ib('sub:draw:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки, кроме закреплённых' : 'Стереть мои рисунки, кроме закреплённых')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   // Выделение → токен-бар
   if (ctx.ui.selection.size && (tool === 'move' || tool === 'select' || tool === 'ping')) {

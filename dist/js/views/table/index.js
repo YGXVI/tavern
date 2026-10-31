@@ -16,7 +16,7 @@ import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder } from './combat.js';
 import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
-import { attachDrawBar } from './drawings.js';
+import { attachDrawBar, fitDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
 import { loadSrdBestiary } from '../../data/bestiary.js';
 import { refreshSheet } from './sheet.js';
@@ -384,6 +384,7 @@ export function mountTable(root, cid) {
     const far = ctx.camera.z * gridSize(ctx.scene?.grid || {}) < 34;
     if (far) viewport.dataset.far = '1'; else delete viewport.dataset.far;
     updateEdges();
+    fitDrawBar(L, ctx);
     saveCam();
   });
 

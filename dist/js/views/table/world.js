@@ -9,7 +9,7 @@ import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
-import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing } from './drawings.js';
+import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing, drawingMarkup, drawingFrame, shapePoints, zOf } from './drawings.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -85,34 +85,48 @@ export function renderTerrain(L, scene, { showBlocked = false } = {}) {
 }
 
 export function renderDrawings(L, scene, ctx = null) {
-  // Рисунки — объекты (TASK-031): свои (мастеру — все) можно выделить и тянуть в «Перемещении» и «Выделении».
-  const mv = ctx?.ui.drawMove;
-  const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
+  // Рисунки — объекты (TASK-031): свои (мастеру — все) можно выделить и тянуть в «Перемещении», «Выделении»
+  // и в «Выделении» рисования (TASK-182: там рисунок берётся и за середину замкнутой фигуры).
+  const drawSel = ctx?.ui.tool === 'draw' && (ctx.ui.sub.draw || 'pen') === 'select';
+  const live = ctx && (['move', 'select', 'text'].includes(ctx.ui.tool) || drawSel) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
   const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
-  L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
+  // Порядок наложения: поле z (TASK-182), при равных — порядок списка.
+  const list = (scene.drawings || []).map((d, i) => [d, i]).sort((a, b) => zOf(a[0]) - zOf(b[0]) || a[1] - b[1]).map((x) => x[0]);
+  L.drawings.innerHTML = list.map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
     const ed = live && canEditDrawing(ctx, d);
     const attr = ed ? ` data-drawing="${d.id}"` : '';
     const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
     if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
-    if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
-    const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    return `<polyline points="${pts}" class="draw-line${cls}" stroke="${esc(d.color)}" data-did="${d.id}"/>${ed ? `<polyline points="${pts}" class="draw-hit"${attr}/>` : ''}`;
+    return drawingMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? drawingMarkup(scene.grid, d, drawSel ? ' fillhit' : '', attr, true) : '');
   }).join('');
+  const z = ctx?.camera?.z || 1, pad = 8 / z;
+  // Границы рисунка по его точкам (у повёрнутого круга getBBox не учитывает поворот), у надписи — по узлу.
+  const boundsOf = (id) => {
+    const d0 = scene.drawings?.find((x) => x.id === id); if (!d0) return null;
+    const d = ctx ? liveDrawing(ctx, d0) : d0;
+    if (d.type === 'text') { const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); return n ? n.getBBox() : null; }
+    const pts = d.type === 'shape' ? shapePoints(scene.grid, d) : d.pts || [];
+    if (!pts.length) return null;
+    const w = (d.width ?? 4) / 2;
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    return { x: Math.min(...xs) - w, y: Math.min(...ys) - w, width: Math.max(...xs) - Math.min(...xs) + 2 * w, height: Math.max(...ys) - Math.min(...ys) + 2 * w, d };
+  };
   let bbox = null;
-  const selNode = selId && L.drawings.querySelector(`[data-did="${CSS.escape(selId)}"]`);
-  if (selNode) {
-    const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
-    bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
-    L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  const sb = selId && boundsOf(selId);
+  if (sb) {
+    bbox = { x: sb.x - pad, y: sb.y - pad, width: sb.width + pad * 2, height: sb.height + pad * 2 };
+    // У фигуры по рамке — повёрнутая рамка, как ручки; у остальных — прямоугольник.
+    const f = sb.d ? drawingFrame(scene.grid, sb.d) : null;
+    L.drawings.insertAdjacentHTML('beforeend', f?.box
+      ? `<polygon class="draw-sel" points="${f.corners.map((p) => `${p.x},${p.y}`).join(' ')}"/>`
+      : `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
   }
   if (group?.size) {
-    const pad = 8 * (1 / (ctx.camera?.z || 1));
     let out = '';
     for (const id of group) {
-      const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); if (!n) continue;
-      const b = n.getBBox();
+      const b = boundsOf(id); if (!b) continue;
       out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
     }
     L.drawings.insertAdjacentHTML('beforeend', out);
@@ -381,7 +395,16 @@ export function renderOverlay(L, ctx) {
   // Размер и угол шаблона линейки, пока его тянут (TASK-178).
   const tl = ctx.ui.templateLabel;
   if (tl) lbl(tl.at.x, tl.at.y - s * 0.45, tl.text, 'accent');
-  if (ctx.ui.liveStroke) out.push(`<polyline class="draw-line live" stroke="${esc(ctx.ui.liveStroke.color)}" points="${ctx.ui.liveStroke.pts.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
+  // Живой штрих карандаша или кисти и недорисованный многоугольник (TASK-182) — в стиле нового рисунка.
+  if (ctx.ui.liveStroke) out.push(drawingMarkup(scene.grid, { type: 'line', ...ctx.ui.liveStroke }, ' live'));
+  const lp = ctx.ui.livePoly;
+  if (lp) {
+    const st = ctx.ui.drawStyle || {};
+    out.push(drawingMarkup(scene.grid, { type: 'shape', shape: 'poly', ...st, pts: [...lp.pts, lp.hover || lp.pts.at(-1)], closed: false }, ' live'));
+    for (const [i, p] of lp.pts.entries()) out.push(`<circle class="poly-dot ${i === 0 && lp.closing ? 'closing' : ''}" cx="${p.x}" cy="${p.y}" r="${s * 0.08}"/>`);
+  }
+  const dl = ctx.ui.drawLabel;
+  if (dl) lbl(dl.at.x, dl.at.y - s * 0.45, dl.text, 'accent');
   if (ctx.ui.calib) {
     const k = ctx.ui.calib;
     out.push(`<rect class="calib" x="${k.x}" y="${k.y}" width="${k.size}" height="${k.size}"/>`);

@@ -743,7 +743,7 @@ button.init-num:hover { background: var(--bg-control-off); }
 
 /* Панель выделенного рисунка (TASK-031) */
 .db { position: absolute; left: 0; top: 0; width: 0; height: 0; }
-.db .db-bar { top: calc(10px * var(--iz)); align-items: center; }
+.db .db-bar { top: calc(10px * var(--iz)); align-items: center; transform: scale(var(--iz)) translateX(calc(-50% + var(--dx, 0px))); } /* --dx: не за край стола (TASK-182) */
 .db-sw { width: 26px; height: 26px; margin: 0 3px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 2px rgb(0 0 0 / .25); }
 .db-sw.on { box-shadow: 0 0 0 2px #fff, inset 0 0 0 2px rgb(0 0 0 / .25); }
 .db-div { width: 1px; align-self: stretch; margin: 4px 4px; background: rgb(255 255 255 / .15); }
@@ -753,6 +753,42 @@ button.init-num:hover { background: var(--bg-control-off); }
   background: rgb(0 0 0 / .78); color: #fff; font: 600 13px/1.2 var(--font-text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
 .db-move { cursor: grab; touch-action: none; }
 .db-move:active { cursor: grabbing; }
+
+/* Рисование как в Owlbear (TASK-182): рамка с ручками, точки многоугольника, заливка и обводка. */
+.draw-hit.fillhit { pointer-events: all; fill: transparent; }
+.poly-dot { fill: #fff; stroke: rgb(0 0 0 / .6); stroke-width: calc(1.5px * var(--iz)); pointer-events: none; }
+.poly-dot.closing { fill: var(--brand-500); stroke: #fff; }
+.tf-h { position: absolute; width: 12px; height: 12px; border-radius: 3px; background: #fff; box-shadow: 0 0 0 1.5px #313847, 0 2px 6px rgb(0 0 0 / .45);
+  transform-origin: 0 0; transform: scale(var(--iz)) translate(-50%, -50%); pointer-events: auto; touch-action: none; cursor: nwse-resize; z-index: 1; }
+.tf-h[data-sh="k1"], .tf-h[data-sh="k3"] { cursor: nesw-resize; }
+.tf-rot { z-index: 1; }
+.ds-sw, .ds-ring { display: block; width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.ds-sw { background: var(--c); box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / .3), 0 0 0 1px rgb(255 255 255 / .25); }
+.ds-ring { border: 3.5px solid var(--c); box-shadow: 0 0 0 1px rgb(255 255 255 / .2); }
+.ds-ring.dash { border-style: dashed; }
+.ds-none { background: repeating-conic-gradient(#d9dbe0 0 25%, #8b8f99 0 50%) 50% / 10px 10px; border: 0; }
+.ds-tb { width: 44px; }
+.ds-popover { padding: 0; }
+.ds-pop { display: flex; gap: 14px; padding: 12px; }
+.ds-col { display: flex; flex-direction: column; gap: 10px; }
+.ds-pal { display: grid; grid-template-columns: repeat(4, 32px); gap: 8px; }
+.ds-c { position: relative; width: 32px; height: 32px; border-radius: 50%; background: var(--c, transparent); display: grid; place-items: center; color: #fff;
+  box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / .25), 0 0 0 1px rgb(255 255 255 / .12); cursor: pointer; }
+.ds-c.on { box-shadow: 0 0 0 2px var(--bg-panel, #1b1d24), 0 0 0 4px #fff; }
+.ds-custom { background: var(--c, rgb(255 255 255 / .06)); }
+.ds-custom input[type="color"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.ds-none-btn { background: rgb(255 255 255 / .06); }
+.ds-widths { display: grid; grid-template-columns: repeat(4, 32px); gap: 8px; }
+.ds-w { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: rgb(255 255 255 / .06); color: #fff; }
+.ds-w i { display: block; border-radius: 50%; background: currentColor; }
+.ds-w.on { box-shadow: inset 0 0 0 2px var(--brand-500); }
+.ds-dash { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: var(--r-full); background: rgb(255 255 255 / .06); }
+.ds-dash button { height: 30px; border-radius: var(--r-full); display: grid; place-items: center; color: #fff; }
+.ds-dash button.on { background: rgb(255 255 255 / .14); }
+.ds-dash i.solid { display: block; width: 18px; height: 2.5px; border-radius: 2px; background: currentColor; }
+.ds-op { display: flex; align-items: center; gap: 10px; }
+.ds-op .slider { flex: 1; }
+.ds-op span { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Перетаскивание существа из панели на карту (TASK-033) */
 .b-row { touch-action: pan-y; }
