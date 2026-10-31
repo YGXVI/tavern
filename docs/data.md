@@ -136,6 +136,30 @@ Supabase [рекомендует считать storage schema доступно�
 
 `createLibrary` и `createServerLibrary` позволяют внедрять адаптеры для тестов. Проверка SQL: `python3 tests/postgres/library_harness.py` (локальные PostgreSQL binaries). Стенд создаёт отдельный временный кластер без TCP, применяет миграции и проверяет реальные RLS/триггеры/гонку; auth/storage/realtime моделируются минимальными схемами. Это не проверка работающего Supabase HTTP Storage API. На рабочий проект эти миграции до review/merge не применялись.
 
+## Каталоги способностей и предметов (TASK-129 / TASK-151, A–B)
+
+Контракт этой ревизии, примеры и передача UI/листу — [catalogues.md](catalogues.md), [examples/catalogues.json](examples/catalogues.json). Это модули данных/API; C/D подключают интерфейс и запись листа отдельно. Публичные каталоги неизменяемы, личные записи в общий кэш не попадают.
+
+| Область | Форма / ключ | Владелец и граница |
+| --- | --- | --- |
+| `dist/js/data/features-2014.json` | Envelope v1: catalogueKind=feature, revision hash, entries371; исходные spans/hash — `data/features/manifest.json`,709 кандидатов | SRD5.1, текст EN; RU-названия проекта, level/actionType неизвестные null; без исполнения эффектов |
+| `dist/js/data/magic-items-2014.json` | Envelope v1: catalogueKind=magic_item;934 прежних ID,221 SRD/713 metadata,98 вложенных вариантов | Read-only проекция прежнего JSON, исходник/SQLite не меняются; metadata-only не содержит полного описания |
+| `public.user_catalogue_entries` | PK `(owner_id,id)`, kind feature/magic_item, data JSONB, revision>=1, updated_at | Только собственник читает; source.kind=manual, edition5e-2014; запись/удаление через CAS RPC, direct writes запрещены |
+| `public.catalogue_entry_quota` | Внутренний owner_id/used0–500, AFTER INSERT/DELETE | Общая квота двух видов, отдельная от Creature; API доступа нет |
+| Песочница `rasputye-v2-db` | Необязательный root `catalogueEntries:{[JSON.stringify([ownerId,id])]:{id,ownerId,kind,data,revision,updatedAt}}` | Сохраняет version1, campaigns/creatures/остальные поля; локальный режим не серверная авторизация |
+
+AbilityEntry: `{id,edition,kind,name{ru,en},text{en,ru},scope{classId?,subclassId?,raceId?,subraceId?,parentId?},level,prerequisiteText,actionType,source,review}`. Category kind отличается от kind оболочки личного шаблона. ID явно задан в manifest, не зависит от RU-названия или порядка массива. Source содержит PDF hash/страницы/колонки/спаны, CC BY 4.0 и ссылку; словарь scope в публичном envelope. MagicItemEntry сохраняет прежние имена/типы/редкости/настройку/technical/description/variants/sources/review/identity и добавляет source.kind. Выбор варианта только по существующему srd_index.
+
+Личный `data` не содержит id/ownerId/revision/updatedAt. Нормализатор дополняет пропущенные поля и проверяет JSON-типы; известные числа0 и false сохраняются, неизвестные — null. Дополнительные JSON-поля сохраняются. Клиент ограничивает data65536 байт UTF-8; база отдельно проверяет JSONB data::text, поэтому пограничное представление может быть отклонено раньше, с ошибкой без обрезки текста.
+
+`save_catalogue_entry(p_id,p_kind,p_data,p_revision,p_owner)` создаёт при revision0 и возвращает одну строку revision1; изменение требует текущую revision, увеличивает её на1. Kind существующей записи неизменяем. `delete_catalogue_entry(p_id,p_revision,p_owner)` удаляет только совпавшую личную ревизию. Собственник берётся из auth.uid; p_owner — ожидаемый аккаунт вызова, обязательно равный auth.uid, а не право доступа к другому владельцу. Это закрывает смену аккаунта между getUser и отправкой RPC. Устаревшая/исчезнувшая запись возвращает40001; клиентский code=CATALOGUE_CONFLICT. После конфликта перечитать/показать новое превью; автоматической перезаписи нет. Одинаковый ID двух владельцев не конфликтует. Прямая запись таблицы не обходит CAS.
+
+Core/server `catalogue-library.js` обслуживают только эту таблицу/RPC; серверные данные не идут в localStorage или Realtime кампании. Смена пользователя/режима отклоняет старый ответ. Песочница проверяет revision по последнему чтению localStorage; атомарность сервера между соединениями и защиту аккаунта это не заменяет. Ошибки storage не скрываются. Кэш public loader в `core/catalogues.js` не принимает личную библиотеку.
+
+`catalogueSnapshot` / `privateCatalogueSnapshot` создают только отделённое превью `{data,catalogueRef}`; публичная reference содержит kind/id/revision hash/variantId?, личная — kind/id user:<ownerId>:<id>/revision строкой. Это не instance ID листа. Подтверждение, видимость, новый instance ID, quantity/equipped/attuned и CAS/operationId Character обеспечивает D/TASK-004; собственное Character-хранилище не вводится. Шаблон и выбранная копия независимы.
+
+Новая миграция `20261031150000_catalogue_entries.sql` — предложенная в #153 версия после library/очереди Rules; применение и окончательный порядок отдельно согласуются до интеграции. Рабочая БД этой порцией не меняется. Локальная проверка `tests/postgres/library_harness.py` включает `catalogue_checks.py`: RLS, общий лимит, настоящий конкурентный CAS, удаление устаревшей ревизии, каскады. Это schema stubs, не живой HTTP Supabase. Изображения книг не добавляются; uploads Creature по-прежнему требуют отдельного живого Storage smoke.
+
 ## Старый прототип (`dist/legacy/`)
 
 Источник — `dist/legacy/app.js`, `dist/access.js`, `dist/legacy/themes.js`. Данные привязаны к origin сайта и профилю браузера. Localhost и опубликованный сайт имеют независимые хранилища. Нет аккаунтов, сервера, синхронизации и безопасной границы между мастером и игроком.

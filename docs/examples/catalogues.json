@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "publicFeaturePreview": {
+    "data": {
+      "id": "srd51:feature:elf:high-elf:cantrip",
+      "edition": "5e-2014",
+      "kind": "racial_trait",
+      "name": {
+        "en": "Cantrip",
+        "ru": "Заговор"
+      },
+      "text": {
+        "en": "You know one cantrip of your choice\nfrom the wizard spell list. Intelligence is your\nspellcasting ability for it.",
+        "ru": null
+      },
+      "scope": {
+        "raceId": "elf",
+        "subraceId": "high-elf"
+      },
+      "level": null,
+      "prerequisiteText": null,
+      "actionType": null,
+      "source": {
+        "kind": "srd51",
+        "documentId": "srd-5.1-cc",
+        "sha256": "2504d2a0abb0a4d491a939be4f17910a2dde0312570ab8d208080225ccf0a1f0",
+        "url": "https://media.dndbeyond.com/compendium-images/srd/5.1/SRD_CC_v5.1.pdf#page=4",
+        "spans": [
+          {
+            "page": 4,
+            "column": 1,
+            "top": 307.94,
+            "bottom": 331.46,
+            "role": "text"
+          }
+        ],
+        "license": "CC-BY-4.0"
+      },
+      "review": {
+        "required": false,
+        "reasons": []
+      }
+    },
+    "catalogueRef": {
+      "kind": "feature",
+      "id": "srd51:feature:elf:high-elf:cantrip",
+      "revision": "b027e43b26c842085094be82c05ac91595bbe8131fb4d98df237a33e3de50eb1"
+    }
+  },
+  "publicMetadataItem": {
+    "id": "dndsu:item:2",
+    "edition": "5e-2014",
+    "name": {
+      "ru": "Алхимический сосуд",
+      "en": "Alchemy Jug"
+    },
+    "type": {
+      "code": "wondrous_item",
+      "name_ru": "Чудесный предмет"
+    },
+    "rarity": {
+      "code": "uncommon",
+      "name_ru": "Необычный"
+    },
+    "attunement": {
+      "required": false,
+      "requirement_en": null,
+      "requirement_status": "not_available"
+    },
+    "technical": {
+      "status": "not_available",
+      "price": null,
+      "weight": null,
+      "capacity": null,
+      "range": null,
+      "duration": null,
+      "armor_class": null,
+      "weapon_damage": null,
+      "healing": null,
+      "charges": {
+        "maximum": null,
+        "recharge": null,
+        "description_en": null
+      },
+      "bonuses": [],
+      "ability_score_set": null,
+      "spellcasting": null,
+      "conditions_en": null,
+      "notes": [
+        "Unknown fields are null, not zero. Item effects are data, not automatic game mechanics."
+      ]
+    },
+    "description": {
+      "ru": null,
+      "en": null,
+      "status": "not_available"
+    },
+    "srd_details": null,
+    "variants": [],
+    "sources": {
+      "dndsu": "https://dnd.su/items/2-alchemy-jug/",
+      "srd_api": null,
+      "publications": [
+        {
+          "group": "Core",
+          "id": "dndsu:publication:101",
+          "name": "Dungeon Master's Guide",
+          "source_id": 101
+        }
+      ]
+    },
+    "review": {
+      "required": true,
+      "reasons": [
+        "no_verified_srd_match"
+      ]
+    },
+    "identity": {
+      "dndsu_id": 2,
+      "srd_index": null,
+      "match_status": "not_matched",
+      "candidate_srd_indices": []
+    },
+    "source": {
+      "kind": "metadata"
+    }
+  },
+  "manualInput": {
+    "kind": "feature",
+    "data": {
+      "name": {
+        "ru": "Личная находчивость"
+      },
+      "text": {
+        "ru": "Собственное описание мастера. Эффект применяется вручную."
+      }
+    }
+  },
+  "normalizedManualData": {
+    "kind": "feat",
+    "scope": {},
+    "level": null,
+    "prerequisiteText": null,
+    "actionType": null,
+    "name": {
+      "ru": "Личная находчивость",
+      "en": null
+    },
+    "text": {
+      "ru": "Собственное описание мастера. Эффект применяется вручную.",
+      "en": null
+    },
+    "edition": "5e-2014",
+    "source": {
+      "kind": "manual"
+    }
+  },
+  "acknowledgedManualRecord": {
+    "id": "cat-example",
+    "ownerId": "00000000-0000-0000-0000-00000000000a",
+    "kind": "feature",
+    "data": {
+      "kind": "feat",
+      "scope": {},
+      "level": null,
+      "prerequisiteText": null,
+      "actionType": null,
+      "name": {
+        "ru": "Личная находчивость",
+        "en": null
+      },
+      "text": {
+        "ru": "Собственное описание мастера. Эффект применяется вручную.",
+        "en": null
+      },
+      "edition": "5e-2014",
+      "source": {
+        "kind": "manual"
+      }
+    },
+    "revision": 1,
+    "updatedAt": 0
+  },
+  "privatePreview": {
+    "data": {
+      "kind": "feat",
+      "scope": {},
+      "level": null,
+      "prerequisiteText": null,
+      "actionType": null,
+      "name": {
+        "ru": "Личная находчивость",
+        "en": null
+      },
+      "text": {
+        "ru": "Собственное описание мастера. Эффект применяется вручную.",
+        "en": null
+      },
+      "edition": "5e-2014",
+      "source": {
+        "kind": "manual"
+      }
+    },
+    "catalogueRef": {
+      "kind": "feature",
+      "id": "user:00000000-0000-0000-0000-00000000000a:cat-example",
+      "revision": "1"
+    }
+  }
+}

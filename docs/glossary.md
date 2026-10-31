@@ -33,3 +33,17 @@
 | Локальный вход | `session`, `validSession()` | Сохранённый выбор роли/героя, без идентификации пользователя. |
 | Резервирование задачи | Issue с `TASK-ID` и ссылкой на OpenSpec change; старые TASK-006–009 — `docs/status.md` | Видимое соглашение команды, не программный lock. |
 | Публикация | Vercel deployment из GitHub Actions | Происходит сама после commit в `main` с зелёными тестами (DEC-010). Commit в ветке или PR — ещё не публикация. |
+
+## Каталоги TASK-129 (API A–B)
+
+| Слово | Имя в коде | Значение |
+| --- | --- | --- |
+| Способность каталога | AbilityEntry, catalogueKind `feature` | Классовая/подклассовая особенность, расовая черта, feat или option; не шесть характеристик персонажа и не атака существа |
+| Категория способности | entry.kind | class_feature/subclass_feature/racial_trait/feat/option; отличается от kind личной оболочки |
+| Магический предмет каталога | MagicItemEntry, catalogueKind `magic_item` | Прежний устойчивый ID и исходные технические поля; варианты вложены, не отдельные придуманные записи |
+| Вариант предмета | variants[].srd_index, catalogueRef.variantId | Явно выбранный существующий SRD-вариант; не имя на русском и не позиция массива |
+| Область способности | scope, scopes | Класс/подкласс/раса/подраса и parentId; одинаковые названия в разных областях не объединяются |
+| Личный шаблон | user_catalogue_entries / root catalogueEntries | Запись владельца kind feature/magic_item, source.kind=manual; не Creature и не весь лист |
+| Ревизия каталога | envelope.revision | Hash входов/генератора публичных данных для происхождения снимка |
+| Ревизия шаблона | private entry.revision | Число для CAS;0 запрос создания, в хранилище1 и выше; не версия Character |
+| Превью выбранной записи | catalogueSnapshot / privateCatalogueSnapshot | Отделённые data и catalogueRef; instance ID, подтверждение и запись в лист делает D/TASK-004 |
