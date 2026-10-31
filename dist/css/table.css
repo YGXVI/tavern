@@ -890,3 +890,33 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
   .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
   .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
+
+/* Лист героя (TASK-004) */
+.sheet-editor { display:flex; flex-direction:column; }
+.sheet-editor .sheet-body { flex:1; min-height:0; }
+.sheet-editor .sheet-tabs { flex-shrink:0; overflow-x:auto; }
+.sheet-editor .sheet-head { flex-shrink:0; }
+.sheet-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.sheet-field { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:12px; margin:8px 0; }
+.sheet-field>span { color:var(--text-secondary); }
+.sheet-field input,.sheet-field select,.sheet-field textarea { width:100%; min-width:0; box-sizing:border-box; padding:8px; border:1px solid var(--stroke-subtle); border-radius:6px; background:var(--bg-control); color:inherit; }
+.sheet-field input[type=checkbox] { width:auto; align-self:start; }
+.sheet-field input:disabled,.sheet-field textarea:disabled { opacity:.8; }
+.sheet-field [aria-invalid=true] { outline:2px solid #db6b63; }
+.sheet-wide { grid-column:1/-1; }
+.sheet-entry { min-width:0; padding:10px; border:1px solid var(--stroke-subtle); border-radius:8px; margin:12px 0; }
+.sheet-entry legend { max-width:100%; overflow-wrap:anywhere; font-weight:600; }
+.sheet-check { padding:8px 0; border-bottom:1px solid var(--stroke-subtle); }
+.sheet-check summary { cursor:pointer; }
+.sheet-editor h3 { font-size:14px; margin:14px 0 6px; }
+.sheet-editor-footer { display:flex; flex-wrap:wrap; gap:8px; padding:12px; border-top:1px solid var(--stroke-subtle); flex-shrink:0; }
+.sheet-editor-footer>span { flex-basis:100%; }
+.sheet-error { color:#d55b53; overflow-wrap:anywhere; }
+.sheet-conflicts { padding:10px; border:1px solid #d29248; border-radius:8px; }
+.sheet-conflicts p { overflow-wrap:anywhere; }
+@media(max-width:480px) { .sheet-editor { width:auto; max-width:none; } .sheet-form-grid { grid-template-columns:1fr; } .sheet-editor .sheet-head { padding:12px; } }
+.sheet-editor { background:rgb(12 14 22); }
+.sheet-actor-switch { padding:0 16px 10px; }
+.sheet-actor-switch select { width:100%; padding:6px; color:var(--text-primary); background:var(--bg-control); border:1px solid var(--stroke-subtle); border-radius:6px; }
+.sheet-actor-tools { padding:0 16px 8px; flex-shrink:0; }
+.sheet-source-image { display:block; max-width:100%; height:auto; margin:12px 0; }

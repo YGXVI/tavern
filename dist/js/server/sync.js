@@ -6,7 +6,9 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot } from './model.js';
+import { createCharacterSheetClient, SheetCommandError } from './character-sheet.js';
+import { commandFromCharacterChange, sameSheetValue, rebaseCharacterDraft } from './character-sheet-ops.js';
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
@@ -22,11 +24,69 @@ const cache = new Map();       // cid → rows
 const channels = new Map();    // cid → RealtimeChannel
 const presence = new Map();    // cid → Map<key, info>
 const queues = new Map();      // cid → Promise (очередь отправки)
+const confirmedSheets = new Map(); // cid → Map(id → подтверждённая строка)
+const pendingSheets = new Map(); // cid → Map(id → число отправляемых изменений)
 const reassembleTimers = new Map();
 let myPresence = null;
 let userChannel = null;
 
 export const serverUserId = () => me;
+export function characterSheetMeta(cid, id) {
+  const row = confirmedSheets.get(cid)?.get(id) || cache.get(cid)?.characters.get(id);
+  return row?.sheet_version === undefined ? null : { version: String(row.sheet_version), managed: !!row.sheet_managed, archivedAt: row.archived_at || null };
+}
+
+function rememberSheet(cid, row) {
+  if (row?.sheet_version === undefined) return;
+  if (!confirmedSheets.has(cid)) confirmedSheets.set(cid, new Map());
+  const old = confirmedSheets.get(cid).get(row.id);
+  if (!old || BigInt(row.sheet_version) >= BigInt(old.sheet_version)) confirmedSheets.get(cid).set(row.id, structuredClone(row));
+}
+
+const sheets = createCharacterSheetClient(async () => {
+  if (!sb || !me) throw new Error('Нет серверной сессии');
+  return sb;
+});
+
+/** Явный путь листа; optimistic commit не является подтверждением этого запроса. */
+export async function readCharacterSheet(cid, characterId) {
+  if (!sb || !me) throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  const snapshot = await sheets.read(cid, characterId);
+  const rows = cache.get(cid);
+  if (rows) { applyCharacterSnapshot(rows, snapshot); rememberSheet(cid, rows.characters.get(characterId)); scheduleAssemble(cid); }
+  return snapshot;
+}
+
+export async function submitCharacterCommand(request) {
+  if (!sb || !me) throw new SheetCommandError('forbidden', { request });
+  await whenSynced(request.campaignId);
+  const result = await sheets.execute(request);
+  const rows = cache.get(request.campaignId);
+  if (rows) applyCharacterSnapshot(rows, result.sheet);
+  // Архив затрагивает токены/бой; перечитываем транзакцию целиком, не показываем частичный ACK.
+  try { await loadCampaign(request.campaignId); }
+  catch (cause) {
+    const error = new SheetCommandError('network', { request, cause });
+    error.acknowledged = result; // запись уже подтверждена; ошибка относится к перечитыванию кампании
+    throw error;
+  }
+  return result;
+}
+
+/** Создание отдельного экземпляра; ID сохраняется вызывающим до ответа для безопасного повтора. */
+export async function createCharacterSheet(cid, character) {
+  if(!sb||!me)throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  const {id,ownerId,...data}=structuredClone(character);
+  const result=await sb.from('characters').insert({id,campaign_id:cid,owner_id:ownerId,data}).select('*').single();
+  if(result.error&&result.error.code!=='23505')throw result.error;
+  // Повтор после потери ответа не делает вторую копию. Существующую строку не перезаписываем.
+  const snapshot=await sheets.read(cid,id);
+  if(snapshot.ownerId!==ownerId)throw new SheetCommandError('conflict');
+  await loadCampaign(cid);
+  return snapshot;
+}
 
 /** Объект для store.useServerBackend: как хранилище говорит с сервером. */
 export const backend = {
@@ -134,6 +194,8 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   for (const e of ld.events) applyChange(rows, e.table, e.type, e.row);
   if (!ld.n) ld.events.length = 0;
   cache.set(cid, rows);
+  confirmedSheets.set(cid, new Map());
+  for (const row of rows.characters.values()) rememberSheet(cid, row);
   const db = store.getDB();
   const c = assemble(rows);
   if (c) db.campaigns[cid] = c; else delete db.campaigns[cid];
@@ -172,6 +234,20 @@ export function afterCommit(before, after) {
     if (!master) ops = playerCombatOps(ops, rows);
     ops = stamp(ops);
     if (!ops.length) continue;
+    const groupedMembers = new Set();
+    for (const op of ops) if (op.table === 'characters' && op.op === 'update' && op.prev?.sheet_version !== undefined) {
+      op.sheetCommand = true;
+      if (!pendingSheets.has(cid)) pendingSheets.set(cid, new Map());
+      const pending = pendingSheets.get(cid); pending.set(op.key, (pending.get(op.key) || 0) + 1);
+      if (op.prev.owner_id !== op.row.owner_id) {
+        op.membershipChanges = ops.filter((m) => m.table === 'campaign_members' && m.op === 'update'
+          && [op.prev.owner_id, op.row.owner_id].includes(m.row.user_id)
+          && ((m.prev.character_id === op.key && !m.row.character_id) || (!m.prev.character_id && m.row.character_id === op.key))
+          && sameSheetValue({ ...m.prev, character_id: null }, { ...m.row, character_id: null }))
+          .map((m) => { groupedMembers.add(m); return { userId: m.row.user_id, before: m.prev.character_id || null, after: m.row.character_id || null }; });
+      }
+    }
+    ops = ops.filter((o) => !groupedMembers.has(o));
     // Мастер скрыл токены — игрокам изменение не придёт (RLS), поэтому сообщаем id отдельно.
     const hiddenNow = ops.filter((o) => o.table === 'tokens' && o.op === 'update' && o.row.hidden && !o.prev?.hidden).map((o) => o.key);
     applyOps(rows, ops);
@@ -235,11 +311,11 @@ async function createCampaign(c) {
 
 /** Отправить операции по одной. Обрыв сети — ждём и повторяем ту же операцию; отказ сервера — ошибка. */
 async function send(cid, ops) {
-  for (const o of ops) {
+  for (const [index, o] of ops.entries()) {
     for (let attempt = 0; ; attempt++) {
       try { await sendOne(cid, o, attempt); break; }
       catch (err) {
-        if (!isNetwork(err) || attempt >= 8) throw err;
+        if (!isNetwork(err) || attempt >= 8) { err.sheetOperations = ops.slice(index).filter((op) => op.sheetCommand); throw err; }
         netState(cid, false);
         await new Promise((r) => setTimeout(r, Math.min(15000, 700 * 2 ** attempt)));
       }
@@ -249,12 +325,34 @@ async function send(cid, ops) {
 }
 
 async function sendOne(cid, o, attempt) {
+  if (o.sheetCommand || (o.table === 'characters' && o.op === 'update' && confirmedSheets.get(cid)?.has(o.key))) {
+    o.sheetCommand = true;
+    if (!o.sheetRequest) {
+      const confirmed = confirmedSheets.get(cid)?.get(o.key);
+      if (!confirmed) throw new SheetCommandError('conflict');
+      o.sheetRequest = commandFromCharacterChange(o, confirmed);
+    }
+    const result = await sheets.execute(o.sheetRequest);
+    const holder = { campaign: { id: cid }, characters: new Map() };
+    applyCharacterSnapshot(holder, result.sheet);
+    rememberSheet(cid, holder.characters.get(o.key));
+    const pending = pendingSheets.get(cid); pending?.set(o.key, Math.max(0, (pending.get(o.key) || 1) - 1));
+    const rows = cache.get(cid);
+    if (rows && !pending?.get(o.key)) rows.characters.set(o.key, structuredClone(confirmedSheets.get(cid).get(o.key)));
+    for (const m of o.membershipChanges || []) {
+      const row = rows?.members.get(m.userId);
+      if (row) rows.members.set(m.userId, { ...row, character_id: m.after });
+    }
+    scheduleAssemble(cid);
+    return;
+  }
   const t = sb.from(o.table);
   let res;
   if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
   else if (o.op === 'delete') res = await t.delete().match(pkOf(o.table, o.prev));
   else if (o.op === 'insert') {
-    res = await t.insert(o.row);
+    res = o.table === 'characters' ? await t.insert(o.row).select('*') : await t.insert(o.row);
+    if (!res.error && o.table === 'characters' && res.data?.[0]) rememberSheet(cid, res.data[0]);
     // Повтор после обрыва: строка уже успела записаться — это успех.
     if (attempt && res.error?.code === '23505') return;
   }
@@ -267,7 +365,7 @@ async function sendOne(cid, o, attempt) {
 }
 
 /** Ошибка сети (нет интернета, сервер не ответил), а не отказ базы. */
-const isNetwork = (e) => !e?.code && /fetch|network|load failed|timed? ?out|aborted/i.test(String(e?.message || e || ''));
+const isNetwork = (e) => e?.kind === 'network' || (!e?.code && /fetch|network|load failed|timed? ?out|aborted/i.test(String(e?.message || e || '')));
 
 /** Связь с сервером: стол показывает «нет связи», пока изменения ждут сети или канал переподключается. */
 const down = new Set();
@@ -281,6 +379,18 @@ async function failed(cid, err) {
   console.warn('Сервер отклонил изменение', err);
   const msg = String(err?.message || err || '').replace(/^.*?: /, '');
   store.emitLocal('storage-error', { message: `Сервер не принял изменение${msg ? `: ${msg}` : ''}. Показываем, как сейчас на сервере.` });
+  for (const op of err.sheetOperations || []) {
+    // Отклонённый ввод сохраняется и без открытого окна листа.
+    try {
+      const key = `rasputye:sheet-draft:server:${me}:${cid}:${op.key}`;
+      const existing = JSON.parse(sessionStorage.getItem(key) || 'null');
+      const draft = existing?.draft ? rebaseCharacterDraft(existing.base, existing.draft, op.row.data).data : op.row.data;
+      sessionStorage.setItem(key, JSON.stringify({ base: op.prev.data, draft, invalid: existing?.invalid || [],
+        pending: err.retryable && op.sheetRequest ? { request: op.sheetRequest, sent: op.row.data } : null }));
+    } catch { /* недоступное хранилище не мешает показать ошибку и откатить оптимистический кэш */ }
+    store.emitLocal('sheet-write-error', { cid, characterId: op.key, before: op.prev.data, after: op.row.data, kind: err.kind || 'server', request: op.sheetRequest });
+  }
+  pendingSheets.delete(cid);
   try { await loadCampaign(cid, { afterFailure: true }); } catch (e) { console.warn(e); }
 }
 
@@ -330,7 +440,12 @@ function onChange(cid, table, p) {
     if (table === 'campaign_members' && row.user_id === me) { removed(cid); return; }
   }
   loading.get(cid)?.events.push({ table, type: p.eventType, row });
-  applyChange(rows, table, p.eventType, row);
+  if (table === 'characters' && p.eventType !== 'DELETE') {
+    rememberSheet(cid, row);
+    if (pendingSheets.get(cid)?.get(row.id)) { scheduleAssemble(cid); return; }
+    const confirmed = confirmedSheets.get(cid)?.get(row.id);
+    applyChange(rows, table, p.eventType, confirmed || row);
+  } else applyChange(rows, table, p.eventType, row);
   if (table === 'campaign_members' && p.eventType !== 'DELETE' && !store.getDB().users[row.user_id]) loadProfiles().catch(() => {});
   scheduleAssemble(cid);
 }
