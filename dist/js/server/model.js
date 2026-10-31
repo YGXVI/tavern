@@ -192,6 +192,52 @@ export function diffRows(a, b, { isMaster = false } = {}) {
   return ops.sort((x, y) => rank(x) - rank(y));
 }
 
+// ——— Частичная правка токенов (TASK-097 п. 2.5, TASK-173) ———
+const TOKEN_COLS = ['scene_id', 'character_id', 'hidden', 'ord', 'owner_id'];
+const MOVE_KEYS = new Set(['x', 'y', 'movedAt', 'rot']);
+
+/**
+ * Что изменилось в строке токена: cols — изменённые колонки (обычный UPDATE только их), set/unset — поля data
+ * для `patch_token`. Двое правят разные поля одного токена — второй не затирает первого (аудит #57, B1).
+ */
+export function tokenPatch(prev, row) {
+  const cols = {};
+  for (const k of TOKEN_COLS) if (k in row && !same(prev?.[k] ?? null, row[k] ?? null)) cols[k] = row[k];
+  const a = prev?.data || {}, b = row.data || {};
+  const set = {}, unset = [];
+  for (const [k, v] of Object.entries(b)) if (!same(a[k], v)) set[k] = v;
+  for (const k of Object.keys(a)) if (!(k in b)) unset.push(k);
+  return { cols, set, unset };
+}
+
+/** Правка токена — только место и поворот (x, y, movedAt, rot), без колонок и удалённых полей. */
+export function isTokenMove(o) {
+  if (o.table !== 'tokens' || o.op !== 'update' || !o.prev) return false;
+  const { cols, set, unset } = tokenPatch(o.prev, o.row);
+  const keys = Object.keys(set);
+  return !Object.keys(cols).length && !unset.length && keys.length > 0 && keys.every((k) => MOVE_KEYS.has(k));
+}
+
+/**
+ * Сгруппировать перемещения: два и больше токенов одной сцены, сдвинутых одним действием, — одна операция
+ * `{op: 'move', scene, moves:[{id, x, y, …}], parts}` для `move_tokens`: при отказе по любому не двигается никто (B5).
+ * До 50 токенов в вызове (ограничение функции сервера). Остальные операции — как были, порядок сохраняется.
+ */
+export function groupTokenMoves(ops) {
+  const out = [], groups = new Map();
+  for (const o of ops) {
+    if (!isTokenMove(o)) { out.push(o); continue; }
+    const scene = o.row.scene_id;
+    let g = groups.get(scene);
+    if (!g || g.parts.length >= 50) { g = { table: 'tokens', op: 'move', key: `move:${scene}:${o.key}`, scene, moves: [], parts: [] }; groups.set(scene, g); out.push(g); }
+    const { set } = tokenPatch(o.prev, o.row);
+    g.moves.push({ id: o.key, ...set });
+    g.parts.push(o);
+  }
+  // Один токен — обычная частичная правка, без лишнего вызова.
+  return out.map((o) => (o.op === 'move' && o.parts.length === 1 ? o.parts[0] : o));
+}
+
 /** Применить операции к кэшу строк (оптимистично — до ответа сервера). */
 export function applyOps(rows, ops0) {
   // Копии: строки операций собраны из живой кампании, и её дальнейшие правки не должны менять кэш.
