@@ -74,7 +74,7 @@ test('Генератор: в каталог стола идут только с�
   const { execFileSync } = await import('node:child_process');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
-  const { pathToFileURL } = await import('node:url');
+  const { pathToFileURL, fileURLToPath } = await import('node:url');
   const root = new URL('../', import.meta.url);
   const data = JSON.parse(readFileSync(new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
   const srd = data.monsters.find((m) => m.stat_block?.source === 'srd_api_2014' && !['cultist', 'goblin'].includes(m.identity?.srd_index));
@@ -85,7 +85,8 @@ test('Генератор: в каталог стола идут только с�
   const dir = mkdtempSync(join(tmpdir(), 'bestiary-'));
   const inFile = join(dir, 'in.json'), outFile = join(dir, 'out.js');
   writeFileSync(inFile, JSON.stringify({ ...data, monsters: [srd, other] }));
-  execFileSync(process.execPath, [new URL('tools/bestiary-srd.mjs', root).pathname, inFile, outFile], { stdio: 'pipe' });
+  // fileURLToPath, а не .pathname: на Windows .pathname даёт «/C:/…», и Node ищет «C:\C:\…» (TASK-171).
+  execFileSync(process.execPath, [fileURLToPath(new URL('tools/bestiary-srd.mjs', root)), inFile, outFile], { stdio: 'pipe' });
   const { default: list } = await import(pathToFileURL(outFile).href);
   assert.deepEqual(list.map((m) => m.id), [`srd:${srd.identity.srd_index || srd.identity.slug}`]);
 });
