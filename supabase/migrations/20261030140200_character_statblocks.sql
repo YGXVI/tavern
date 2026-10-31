@@ -47,6 +47,9 @@ begin
   end if;
   if 'sidekick'=any(fields) and jsonb_typeof(d->'sidekick')='object' then
     s:=d->'sidekick';
+    if s ? 'canSpeakLanguage' and jsonb_typeof(s->'canSpeakLanguage') not in ('boolean','null') then raise exception 'Говоримый язык: boolean или null' using errcode='22023'; end if;
+    if s ? 'eligibilityNote' and jsonb_typeof(s->'eligibilityNote') not in ('string','null') then raise exception 'Основание исключения: текст' using errcode='22023'; end if;
+
     if s->'class' is not null and s->'class'<>'null'::jsonb and s->>'class' not in('warrior','expert','spellcaster') then raise exception 'Неизвестный класс Sidekick' using errcode='22023'; end if;
     foreach k in array array['level','baseLevel'] loop
       if s->k is not null and s->k<>'null'::jsonb then perform public.character_sheet_int(s->k,'sidekick.'||k,1,20); end if;

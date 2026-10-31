@@ -443,6 +443,7 @@ grant execute on function pg_temp.code(text,text,text) to authenticated,anon;
 create temp table _sheet_replies(name text primary key, expected bigint, reply jsonb);
 grant select,insert,update on _sheet_replies to authenticated;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('лист: независимая исходная роль ожидающего', $q$update public.campaign_members set status='pending' where campaign_id='c-rls' and user_id='00000000-0000-0000-0000-00000000000c'$q$);
 select pg_temp.ok('лист: мастер готовит ресурсы', $q$update public.characters set data = data || '{"hp":10,"hpMax":20,"tempHp":5,"level":5,"profile":"pc","conditions":[],"slots":{"1":{"max":4,"used":0}},"resources":[{"id":"rage","max":3,"spent":0}],"hitDicePools":[{"id":"wizard","die":6,"total":5,"spent":2}],"customLegacy":{"keep":true}}' where id = 'ch-p'$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000c');
@@ -498,7 +499,7 @@ select pg_temp.ok('лист: лечение с нуля', $q$select public.chara
 select pg_temp.cnt('лист: лечение снимает структурированное бессознательное и счётчики', $q$select 1 from public.characters where id = 'ch-p' and data -> 'conditions' = '["poisoned"]' and data -> 'deathSaves' = '{"s":0,"f":0}'$q$,1);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
-select pg_temp.ok('лист: мастер готовит текущий ход архивируемого героя', $q$update public.combats set data = data || '{"current":"t-p","turn":1,"ended":"t-p","round":2,"moved":{"t-p":10,"t-q2":5}}' where campaign_id = 'c-rls'$q$);
+select pg_temp.ok('лист: мастер готовит текущий ход архивируемого героя', $q$update public.combats set data = '{"active":true,"sceneId":"s-1","entries":[{"tokenId":"t-gob","init":15},{"tokenId":"t-p","init":10},{"tokenId":"t-q2","init":5}],"current":"t-p","turn":1,"ended":"t-p","round":2,"moved":{"t-p":10,"t-q2":5}}' where campaign_id = 'c-rls'$q$);
 select pg_temp.code('лист: мастер тоже не удаляет управляемый лист мимо архива', $q$delete from public.characters where id = 'ch-sk'$q$,'42501');
 reset role;
 select pg_temp.cnt('лист: удаление последнего хода увеличивает раунд один раз', $q$select 1 where public.character_remove_combat_tokens('{"active":true,"round":2,"turn":1,"current":"b","ended":"b","entries":[{"tokenId":"a"},{"tokenId":"b"}],"moved":{}}',array['b']) @> '{"round":3,"current":"a","turn":0}'$q$,1);
@@ -577,7 +578,7 @@ select pg_temp.ok('поля: неизвестный ресурс не стано
 select pg_temp.cnt('поля: неизвестный расход сохраняется', $q$select 1 from public.characters where id='ch-edit' and data#>'{resources,0,spent}'='null'::jsonb$q$,1);
 select pg_temp.ok('поля: корректный мультикласс', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000006','patch','{"level":5,"classes":[{"id":"f","name":"Воин","levels":1},{"id":"w","name":"Волшебник","levels":4}]}') from public.characters where id='ch-edit'$q$);
 select pg_temp.code('поля: общий уровень нельзя оторвать от классов', $q$select public.character_command('c-rls','ch-edit',sheet_version,'80000000-0000-0000-0000-000000000007','patch','{"level":6}') from public.characters where id='ch-edit'$q$,'22023');
-select pg_temp.ok('архив: три участника с несортированными entries', $q$insert into public.tokens(id,campaign_id,scene_id,character_id,data) values('t-order-low','c-rls','s-1','ch-q','{"name":"Низкий","kind":"hero"}'),('t-order-high','c-rls','s-1','ch-edit','{"name":"Высокий","kind":"hero"}'),('t-order-mid','c-rls','s-1','ch-sk','{"name":"Средний","kind":"hero"}')$q$);
+select pg_temp.ok('архив: три участника с несортированными entries', $q$insert into public.tokens(id,campaign_id,scene_id,character_id,data) values('t-order-low','c-rls','s-1',null,'{"name":"Низкий","kind":"monster"}'),('t-order-high','c-rls','s-1','ch-edit','{"name":"Высокий","kind":"hero"}'),('t-order-mid','c-rls','s-1','ch-sk','{"name":"Средний","kind":"hero"}')$q$);
 select pg_temp.ok('архив: очередь по добавлению отличается от инициативы', $q$update public.combats set data='{"active":true,"sceneId":"s-1","round":7,"turn":0,"current":"t-order-high","ended":"t-order-high","moved":{},"entries":[{"tokenId":"t-order-low","init":5},{"tokenId":"t-order-high","init":20},{"tokenId":"t-order-mid","init":15}]}' where campaign_id='c-rls'$q$);
 select pg_temp.ok('архив: текущий по инициативе снимается', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000009','archive') from public.characters where id='ch-edit'$q$);
 select pg_temp.cnt('архив: следующим ходит средняя инициатива без лишнего раунда', $q$select 1 from public.combats where campaign_id='c-rls' and data->>'current'='t-order-mid' and data->'round'='7' and not (data ? 'ended')$q$,1);
@@ -595,6 +596,9 @@ select pg_temp.code('статблок: размер UTF8 ограничен', $q
 select pg_temp.code('override: булев итог не число', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000008','patch','{"overrides":{"initiative":{"value":true,"reason":""}}}') from public.characters where id='ch-edit'$q$,'22023');
 select pg_temp.ok('override: явный ноль допустим', $q$select public.character_command('c-rls','ch-edit',sheet_version,'90000000-0000-0000-0000-000000000009','patch','{"overrides":{"initiative":{"value":0,"reason":"Исключение"}}}') from public.characters where id='ch-edit'$q$);
 select pg_temp.code('Sidekick: класс только из трёх', $q$select public.character_command('c-rls','ch-sk',sheet_version,'90000000-0000-0000-0000-000000000010','patch','{"sidekick":{"class":"wizard"}}') from public.characters where id='ch-sk'$q$,'22023');
+select pg_temp.code('Sidekick: строка вместо boolean речи запрещена', $q$select public.character_command('c-rls','ch-sk',sheet_version,'a2000000-0000-0000-0000-000000000001','patch','{"sidekick":{"canSpeakLanguage":"true"}}') from public.characters where id='ch-sk'$q$,'22023');
+select pg_temp.code('Sidekick: основание исключения должно быть текстом', $q$select public.character_command('c-rls','ch-sk',sheet_version,'a2000000-0000-0000-0000-000000000002','patch','{"sidekick":{"eligibilityNote":true}}') from public.characters where id='ch-sk'$q$,'22023');
+select pg_temp.ok('Sidekick: явная речь и основание сохраняются', $q$select public.character_command('c-rls','ch-sk',sheet_version,'a2000000-0000-0000-0000-000000000003','patch','{"sidekick":{"canSpeakLanguage":false,"eligibilityNote":"Ручное исключение"}}') from public.characters where id='ch-sk'$q$);
 select pg_temp.ok('Sidekick: подтверждённая базовая точка', $q$select public.character_command('c-rls','ch-sk',sheet_version,'90000000-0000-0000-0000-000000000011','patch','{"sidekick":{"class":"warrior","baseLevel":5,"hitDie":8,"partyIds":["ch-q"]}}') from public.characters where id='ch-sk'$q$);
 reset role;
 
@@ -605,6 +609,24 @@ select pg_temp.cnt('Sidekick: повтор роста возвращает ACK',
 select pg_temp.cnt('Sidekick: повтор не добавляет HP или кости, раны остаются', $q$select 1 from public.characters where id='ch-sk' and data->'level'='6' and data->'hpMax'='38' and data->'hp'='20' and jsonb_array_length(data->'hitDicePools')=1 and data#>'{hitDicePools,0,total}'='1'$q$,1);
 select pg_temp.cnt('Sidekick: одна запись серверной истории на развитие', $q$select 1 from public.character_history where operation_id='a1000000-0000-0000-0000-000000000001'$q$,1);
 select pg_temp.code('Sidekick: устаревшая новая команда не применяет рост', $q$select public.character_command('c-rls','ch-sk',expected,'a1000000-0000-0000-0000-000000000002','growth','{"patch":{"level":6,"hpMax":38,"hitDicePools":[{"id":"growth-die-1","source":"sidekick-growth","operationId":"a1000000-0000-0000-0000-000000000001","die":8,"total":1,"spent":0}],"sidekick":{"growthHistory":[{"id":"a1000000-0000-0000-0000-000000000001","operationId":"a1000000-0000-0000-0000-000000000001","from":5,"to":6}]}}}') from _sheet_replies where name='growth-repeat'$q$,'40001');
+reset role;
+
+-- TASK-004 × TASK-123: архив общего листа не удаляет всадника и призыв.
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('архив связей: общий NPC и его токен', $q$insert into public.characters(id,campaign_id,owner_id,data) values('ch-mount','c-rls','00000000-0000-0000-0000-00000000000b','{"profile":"creature","name":"Ездовое","hp":10,"hpMax":10}'); insert into public.tokens(id,campaign_id,scene_id,character_id,data) values('t-mount','c-rls','s-1','ch-mount','{"kind":"hero","name":"Ездовое","mount":true,"x":70,"y":70}')$q$);
+select pg_temp.ok('архив связей: чужой всадник и призыв связаны с NPC', $q$update public.tokens set data=data||'{"riding":"t-mount"}' where id='t-q2'; update public.tokens set data=data||'{"summonedBy":"t-mount"}' where id='t-wolf'$q$);
+create temp table _archive_rider_before as select data from public.tokens where id='t-q2';
+grant select on _archive_rider_before to authenticated;
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select set_config('rasputye.sheet_archive','c-rls',true);
+select pg_temp.code('архив связей: GUC не разрешает прямое удаление своего листа', $q$delete from public.tokens where id='t-mount'$q$,'42501');
+select pg_temp.ok('архив связей: владелец архивирует NPC со связями', $q$select public.character_command('c-rls','ch-mount',sheet_version,'a3000000-0000-0000-0000-000000000001','archive') from public.characters where id='ch-mount'$q$);
+select pg_temp.cnt('архив связей: всадник сохранён, спешен и не перемещён', $q$select 1 from public.tokens t cross join _archive_rider_before b where t.id='t-q2' and not t.data ? 'riding' and t.data = b.data - 'riding'$q$,1);
+select pg_temp.cnt('архив связей: призыв сохранён без призывателя', $q$select 1 from public.tokens where id='t-wolf' and not data ? 'summonedBy'$q$,1);
+select pg_temp.ok('архив связей: NPC восстанавливается', $q$select public.character_command('c-rls','ch-mount',sheet_version,'a3000000-0000-0000-0000-000000000002','restore') from public.characters where id='ch-mount'$q$);
+select pg_temp.cnt('архив связей: восстановление не воскрешает токен или связи', $q$select 1 from public.characters where id='ch-mount' and archived_at is null and not exists(select 1 from public.tokens where character_id='ch-mount')$q$,1);
+select pg_temp.code('архив связей: завершённая операция не разрешает удалять другого героя', $q$delete from public.tokens where id='t-q2'$q$,'42501');
 reset role;
 
 -- ——— Исключение ———

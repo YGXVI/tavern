@@ -433,11 +433,11 @@ begin
   return result_json;
 end $$;
 
--- Сохраняем guard_combat TASK-002; добавлена только capability атомарного архива листа.
+-- TASK-123 actors + закрытая capability атомарного архива TASK-004.
 create or replace function public.guard_combat()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
-  heroes text[] := public.hero_token_ids(old.campaign_id);
+  actors text[] := public.hero_token_ids(old.campaign_id) || public.owned_token_ids(old.campaign_id);
   visible text[] := public.visible_token_ids(old.campaign_id);
   n int; i int; o jsonb; nw jsonb; k text;
   fixed text[] := array['entries', 'moved', 'ended'];
@@ -450,8 +450,8 @@ begin
   for i in 0 .. n - 1 loop
     o := old.data -> 'entries' -> i; nw := new.data -> 'entries' -> i;
     continue when o = nw;
-    if (o - 'init') <> (nw - 'init') or (o -> 'init') <> 'null'::jsonb or not ((o ->> 'tokenId') = any (heroes)) then
-      raise exception 'Инициативу героя бросают один раз; монстров — мастер' using errcode = '42501';
+    if (o - 'init') <> (nw - 'init') or (o -> 'init') <> 'null'::jsonb or not ((o ->> 'tokenId') = any (actors)) then
+      raise exception 'Инициативу героя и своего призыва бросают один раз; монстров — мастер' using errcode = '42501';
     end if;
   end loop;
   for k in select jsonb_object_keys(coalesce(old.data -> 'moved', '{}')) union select jsonb_object_keys(coalesce(new.data -> 'moved', '{}')) loop
@@ -460,8 +460,8 @@ begin
     end if;
   end loop;
   if (old.data -> 'ended') is distinct from (new.data -> 'ended') then
-    if not ((old.data ->> 'current') = any (heroes)) or (new.data ->> 'ended') is distinct from (old.data ->> 'current') then
-      raise exception 'Закончить можно ход героя, ход монстра — мастер' using errcode = '42501';
+    if not ((old.data ->> 'current') = any (actors)) or (new.data ->> 'ended') is distinct from (old.data ->> 'current') then
+      raise exception 'Закончить можно ход героя или своего призыва, ход монстра — мастер' using errcode = '42501';
     end if;
   end if;
   return new;
@@ -474,3 +474,19 @@ revoke execute on function public.character_sheet_int(jsonb,text,bigint,bigint),
   public.character_command(text,text,bigint,uuid,text,jsonb), public.guard_combat() from public,anon,authenticated;
 grant execute on function public.validate_character_sheet(jsonb,text[]), public.can_control_character(text,text),
   public.read_character_sheet(text,text), public.character_command(text,text,bigint,uuid,text,jsonb) to authenticated;
+
+-- Исключение только для токенов конкретного архивируемого листа. Прямой DELETE
+-- и подмена клиентского GUC не создают закрытую операцию текущей транзакции.
+create or replace function public.guard_token_delete()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if (select auth.uid()) is null or public.is_master(old.campaign_id) then return old; end if;
+  if not exists (select 1 from public.scenes s where s.id = old.scene_id) or not exists (select 1 from public.campaigns c where c.id = old.campaign_id) then return old; end if;
+  if old.character_id is not null and exists (
+    select 1 from public.character_operations o where o.campaign_id = old.campaign_id
+      and o.character_id = old.character_id and o.caller_id = auth.uid()
+      and o.kind = 'archive' and o.transaction_id = txid_current() and o.response is null
+  ) then return old; end if;
+  if old.character_id is not null or not public.owns_token(old) then raise exception 'Удаляет мастер' using errcode = '42501'; end if;
+  return old;
+end $$;
