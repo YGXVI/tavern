@@ -245,3 +245,25 @@ test('мигрированный Sidekick не получает прежние �
   assert.equal(next.hpMax,24);assert.equal(next.hp,4);assert.equal(next.sidekick.baseLevel,5);assert.equal(next.hitDicePools[0].total,2);
   assert.equal(ch.sidekick.baseLevel,undefined);
 });
+
+test('условия Sidekick: неизвестный CR не ноль, а текст языков не подтверждает речь',async()=>{
+  const {sidekickEligibility}=await import('../dist/js/views/table/sheet-growth.js');
+  const sk=(cr,kind='warrior',speaks=null,note='')=>({profile:'sidekick',statblock:{baseSnapshot:{cr},languages:'Understands Common but cannot speak'},sidekick:{class:kind,canSpeakLanguage:speaks,eligibilityNote:note}});
+  assert.equal(sidekickEligibility(sk('0')).eligible,true);assert.equal(sidekickEligibility(sk(0)).eligible,true);
+  for(const value of [null,undefined,'','  ','?','NaN']){const r=sidekickEligibility(sk(value));assert.equal(r.eligible,false);assert.equal(r.canProceed,false);assert.equal(r.checks.find(c=>c.id==='cr').state,'unknown');}
+  assert.equal(sidekickEligibility(sk('1/2')).eligible,true);assert.equal(sidekickEligibility(sk('1')).eligible,false);
+  assert.equal(sidekickEligibility(sk('1/4','expert')).canProceed,false);
+  assert.equal(sidekickEligibility(sk('1/4','spellcaster',false)).canProceed,false);
+  assert.equal(sidekickEligibility(sk('1/4','expert',true)).eligible,true);
+  const manual=sidekickEligibility(sk('2','spellcaster',false,'Домашнее исключение мастера'));
+  assert.equal(manual.eligible,false);assert.equal(manual.hasException,true);assert.equal(manual.canProceed,true);
+  assert.equal(sidekickEligibility(sk(null,'warrior',null,'  ')).canProceed,false);
+  assert.equal(sidekickEligibility(sk('0','wizard',true,'Исключение')).canProceed,false);
+});
+
+test('проверка Sidekick использует сохранённую основу и не меняет лист',async()=>{
+ const {sidekickEligibility}=await import('../dist/js/views/table/sheet-growth.js');
+ const ch={statblock:{cr:'0',baseSnapshot:{cr:'2'}},sidekick:{class:'warrior'}};const original=structuredClone(ch);
+ assert.equal(sidekickEligibility(ch).eligible,false);assert.deepEqual(ch,original);
+ assert.equal(sidekickEligibility({statblock:{cr:'1/4'},sidekick:{class:'warrior'}}).eligible,true);
+});

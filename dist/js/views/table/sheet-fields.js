@@ -52,3 +52,10 @@ export function attackBonus(ch,attack) {
   if(attack.bonus!==null&&attack.bonus!==undefined)return Number.isSafeInteger(attack.bonus)?attack.bonus:null;
   return checkBonus({score:ch.stats?.[attack.ability],proficiency:proficiencyValue(ch).value,multiplier:attack.proficient?1:0}).value;
 }
+
+/** В старом runtime 0 означал и «нет атаки». Только явная attack.bonus разрешает нулевую атаку. */
+export function catalogueAttackBonus(action) {
+  const value = Object.hasOwn(action || {}, 'attack') ? action.attack?.bonus : action?.bonus;
+  if (!Number.isSafeInteger(value)) return null;
+  return Object.hasOwn(action || {}, 'attack') || value !== 0 ? value : null;
+}

@@ -21,10 +21,12 @@ try {
     updateCampaign('c-crypt', c => {
       const ch = emptySheet({ id: 'growth-sk', ownerId: 'u-sol', name: 'Напарник', profile: 'sidekick' });
       Object.assign(ch, { level: 4, hp: 6, hpMax: 20, tempHp: 3 });
-      ch.stats.con = 14;
-      ch.sidekick = { class: 'warrior', hitDie: 8, baseLevel: 4, baseSnapshot: { hp: 11 }, growthHistory: [] };
+      ch.stats.con = 14; ch.stats.str = 16;
+      ch.proficiencies={skills:{athletics:1}};ch.overrides={saves:{wis:{value:0,reason:'Ручное значение основы'}}};
+      ch.sidekick = { class: 'warrior', hitDie: 8, baseLevel: 4, baseSnapshot: { hp: 11, cr: '1/4' }, growthHistory: [] };
       ch.hitDicePools = [{ id: 'base', name: 'Базовые', die: 8, total: 2, spent: 1 }];
       c.characters.push(ch);
+      const unknown=emptySheet({id:'unknown-sk',ownerId:'u-sol',name:'Неполная основа',profile:'sidekick'});Object.assign(unknown,{hp:6,hpMax:6});unknown.stats.con=10;unknown.sidekick={class:'warrior',hitDie:6,growthHistory:[]};c.characters.push(unknown);
       for (const [id, level] of [['chosen-5', 5], ['chosen-6', 6], ['chosen-unknown', null]]) {
         const hero = emptySheet({ id, ownerId: 'u-sol', name: id }); hero.level = level; c.characters.push(hero);
       }
@@ -55,6 +57,10 @@ try {
   assert.equal(current.level, 5); assert.equal(current.hpMax, 26); assert.equal(current.hp, 6);
   assert.deepEqual(current.sidekick.baseSnapshot, initial.sidekick.baseSnapshot);
   assert.equal(current.hitDicePools[1].operationId, current.sidekick.growthHistory[0].operationId);
+  await page.click('[data-tab="skills"]');
+  assert.equal(await page.locator('[data-check="skills"][data-id="athletics"]').innerText(),'+6');
+  assert.equal(await page.locator('[data-check="saves"][data-id="wis"]').innerText(),'+0');
+  await page.click('[data-tab="creature"]');
 
   await preview(6, '1');
   await page.evaluate(async () => {
@@ -84,6 +90,25 @@ try {
   await page.click('[data-save]');
   assert.deepEqual((await actor()).sidekick.partyIds,[]);
   assert.equal((await actor()).level, 6, 'подсказка не меняет уровень');
+  await page.locator('[data-field="sidekick.class"]').selectOption('expert');
+  assert.equal(await page.locator('[data-qualification="speech"]').getAttribute('data-state'),'unknown');
+  await page.click('[data-save]');await page.click('[data-growth]');
+  assert.equal(await page.locator('[data-target-level]').count(),0,'текст языков не подтверждает речь');
+  await page.locator('[data-field="sidekick.canSpeakLanguage"]').selectOption('false');
+  assert.equal(await page.locator('[data-qualification="speech"]').getAttribute('data-state'),'fail');
+  await page.locator('[data-field="sidekick.eligibilityNote"]').fill('Домашнее исключение: напарник общается жестами');
+  await page.click('[data-save]');assert.equal((await actor()).sidekick.canSpeakLanguage,false);
+  await page.click('[data-growth]');await page.locator('.modal [data-close]').click();
+  assert.equal((await actor()).level,6);
+  await page.locator('[data-field="sidekick.canSpeakLanguage"]').selectOption('true');
+  await page.locator('[data-field="sidekick.eligibilityNote"]').fill('');await page.click('[data-save]');
+  assert.equal((await actor()).sidekick.canSpeakLanguage,true);
+  await page.locator('[data-open-actor]').selectOption('unknown-sk');await page.click('[data-tab="creature"]');
+  assert.equal(await page.locator('[data-qualification="cr"]').getAttribute('data-state'),'unknown');
+  await page.click('[data-growth]');assert.equal(await page.locator('[data-target-level]').count(),0);
+  await page.locator('[data-field="statblock.cr"]').fill('0');
+  assert.equal(await page.locator('[data-qualification="cr"]').getAttribute('data-state'),'pass');
+  await page.click('[data-save]');await page.click('[data-growth]');await page.locator('.modal [data-close]').click();
   assert.deepEqual(errors, []);
   console.log('growth browser OK: cancel, changed roll, stale CON/recalculate, operation pools, explicit group/fraction/unknown');
 } finally { await browser.close(); }

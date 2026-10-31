@@ -74,3 +74,14 @@ test('все runtime SRD проходят валидацию статблока 
  const {sheetFromSrd,validateSheetStatblock}=await import('../dist/js/views/table/sheet-creature.js');const list=(await import('../dist/js/data/bestiary-srd.js')).default;
  for(const template of list){const ch=sheetFromSrd(template,{id:'check',ownerId:null,name:template.name});assert.deepEqual(validateSheetStatblock(ch),[],template.id);assert.equal(ch.statblock.hp,undefined);assert.equal(ch.hpMax,template.hp);}
 });
+
+test('атака каталога различает явный ноль, неизвестное и legacy sentinel',async()=>{
+ const {catalogueAttackBonus}=await import('../dist/js/views/table/sheet-fields.js');
+ assert.equal(catalogueAttackBonus({attack:{bonus:0},bonus:0}),0);
+ assert.equal(catalogueAttackBonus({attack:{bonus:null},bonus:0}),null);
+ assert.equal(catalogueAttackBonus({attack:null,bonus:4}),null);
+ assert.equal(catalogueAttackBonus({bonus:4}),4);
+ assert.equal(catalogueAttackBonus({bonus:0}),null);
+ assert.equal(catalogueAttackBonus({}),null);
+ assert.equal(catalogueAttackBonus({attack:{bonus:'0'}}),null);
+});

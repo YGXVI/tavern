@@ -63,3 +63,32 @@ export function applySidekickGrowthPreview(character, preview, { operationId, po
     hpFrom: hp.from, hpTo: hp.to, note: 'Классовые выборы и неописанные зависимости вручную' });
   return next;
 }
+
+/** Только начальные условия согласованного варианта Sidekick; не проверка всей D&D-сборки. */
+export function sidekickEligibility(character) {
+  const sidekick = character?.sidekick || {}, block = character?.statblock || {};
+  const base = Object.hasOwn(block.baseSnapshot || {}, 'cr') ? block.baseSnapshot
+    : Object.hasOwn(sidekick.baseSnapshot || {}, 'cr') ? sidekick.baseSnapshot : block;
+  const raw = base.cr;
+  let cr = null;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) cr = raw;
+  else if (typeof raw === 'string') {
+    const value = raw.trim(), fractions = { '1/8': 0.125, '1/4': 0.25, '1/2': 0.5 };
+    if (Object.hasOwn(fractions, value)) cr = fractions[value];
+    else if (/^\d+$/.test(value) && Number.isSafeInteger(Number(value))) cr = Number(value);
+  }
+  const supportedClass = ['warrior', 'expert', 'spellcaster'].includes(sidekick.class);
+  const checks = [
+    { id: 'class', state: supportedClass ? 'pass' : 'unknown', message: supportedClass ? 'Класс Sidekick выбран' : 'Выберите класс Sidekick' },
+    { id: 'cr', state: cr === null ? 'unknown' : cr <= 0.5 ? 'pass' : 'fail',
+      message: cr === null ? 'CR основы неизвестен: уточните его вручную' : cr <= 0.5 ? 'CR основы не выше 1/2' : 'CR основы выше 1/2' },
+  ];
+  if (['expert', 'spellcaster'].includes(sidekick.class)) {
+    const speaks = sidekick.canSpeakLanguage;
+    checks.push({ id: 'speech', state: speaks === true ? 'pass' : speaks === false ? 'fail' : 'unknown',
+      message: speaks === true ? 'Говоримый язык подтверждён' : speaks === false ? 'Говоримого языка нет' : 'Подтвердите говоримый язык: текст языков сам это не доказывает' });
+  }
+  const eligible = checks.every(c => c.state === 'pass');
+  const hasException = typeof sidekick.eligibilityNote === 'string' && sidekick.eligibilityNote.trim().length > 0;
+  return { checks, eligible, hasException, canProceed: supportedClass && (eligible || hasException) };
+}
