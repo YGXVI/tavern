@@ -285,6 +285,20 @@ export function applyChange(rows, table, type, row) {
   return rows;
 }
 
+/**
+ * Удаления без фильтра по кампании (TASK-168). Realtime не фильтрует DELETE и присылает в событии только первичный
+ * ключ, поэтому по подписке с campaign_id=eq.<id> удаления этих таблиц не доходят. Клиент слушает их без фильтра
+ * и применяет только своё: ключ удалённой строки уже есть в кэше этой кампании.
+ */
+export const UNFILTERED_DELETES = ['characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests'];
+const DELETE_MAP = { characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals' };
+const DELETE_KEY = { scene_secrets: 'scene_id', scene_explored: 'scene_id' };
+export function ownsDeleted(rows, table, row) {
+  const m = rows?.[DELETE_MAP[table]];
+  const k = row?.[DELETE_KEY[table] || 'id'];
+  return !!m && k != null && m.has(k);
+}
+
 /** Разложить строки, которые вернул сервер при загрузке, по кэшу одной кампании. */
 export function rowsFrom(server) {
   const rows = emptyRows();

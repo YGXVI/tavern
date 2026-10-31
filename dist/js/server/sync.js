@@ -6,7 +6,7 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves, UNFILTERED_DELETES, ownsDeleted } from './model.js';
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
@@ -367,6 +367,11 @@ function subscribe(cid) {
   const ch = sb.channel(`campaign:${cid}`, { config: { private: true, broadcast: { self: false }, presence: { key: `${me}:${Math.random().toString(36).slice(2, 8)}` } } });
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `id=eq.${cid}` }, (p) => onChange(cid, 'campaigns', p));
   for (const t of CAMPAIGN_TABLES) ch.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, t, p));
+  // Удаления этих таблиц по фильтру не приходят (TASK-168): слушаем без фильтра, применяем только ключи своей кампании.
+  // Пока кампания грузится, событие копится и применяется к свежим строкам — чужой ключ там ничего не удалит.
+  for (const t of UNFILTERED_DELETES) ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: t }, (p) => {
+    if (loading.has(cid) || ownsDeleted(cache.get(cid), t, p.old)) onChange(cid, t, p);
+  });
   ch.on('broadcast', { event: 'bus' }, ({ payload }) => onBus(cid, payload));
   ch.on('presence', { event: 'sync' }, () => {
     const map = new Map();

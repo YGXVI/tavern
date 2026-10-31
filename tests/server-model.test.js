@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedDB } from '../dist/js/data/demo.js';
-import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves } from '../dist/js/server/model.js';
+import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves, ownsDeleted, UNFILTERED_DELETES } from '../dist/js/server/model.js';
 
 const clone = (x) => structuredClone(x);
 const demo = () => clone(seedDB().campaigns['c-crypt']);
@@ -274,3 +274,26 @@ test('снимки существ: постановка — вставка ко�
   assert.ok(!rows.creatures.has('cc-1'));
 });
 
+
+// TASK-168: удаления приходят без фильтра по кампании — применяем только ключи своей.
+test('ownsDeleted: своё удаление — да, чужая кампания — нет, ключи scene_id', () => {
+  const db = seedDB();
+  const c = db.campaigns['c-crypt'];
+  const rows = explode(c);
+  const sc = c.scenes[0], tok = sc.tokens[0], ch = c.characters[0];
+  assert.equal(ownsDeleted(rows, 'tokens', { id: tok.id }), true);
+  assert.equal(ownsDeleted(rows, 'characters', { id: ch.id }), true);
+  assert.equal(ownsDeleted(rows, 'scenes', { id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { scene_id: sc.id }), true, 'ключ секретов сцены — scene_id');
+  assert.equal(ownsDeleted(rows, 'scene_explored', { scene_id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { id: sc.id }), false, 'без scene_id — не наше');
+  assert.equal(ownsDeleted(rows, 'tokens', { id: 't-чужой' }), false);
+  assert.equal(ownsDeleted(rows, 'drawings', { id: tok.id }), false, 'id токена в таблице рисунков — не рисунок');
+  assert.equal(ownsDeleted(rows, 'tokens', {}), false);
+  assert.equal(ownsDeleted(undefined, 'tokens', { id: tok.id }), false, 'кампания ещё не загружена');
+  assert.equal(ownsDeleted(rows, 'campaign_members', { campaign_id: c.id, user_id: 'u-asya' }), false, 'эти — по фильтру, как раньше');
+  for (const t of UNFILTERED_DELETES) assert.equal(ownsDeleted(rows, t, { id: 'нет', scene_id: 'нет' }), false, t);
+  // Применение: удаление токена убирает его из кампании.
+  applyChange(rows, 'tokens', 'DELETE', { id: tok.id });
+  assert.equal(assemble(rows).scenes[0].tokens.some((t) => t.id === tok.id), false);
+});
