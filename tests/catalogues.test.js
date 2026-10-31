@@ -12,15 +12,15 @@ const manifest = JSON.parse(read('data/features/manifest.json'));
 const sourceItems = JSON.parse(read('data/magic-items/magic-items-2014.json'));
 const hash = (...parts) => parts.reduce((h, part) => h.update(part), createHash('sha256')).digest('hex');
 
-test('SRD manifest accounts for 709 candidates and all scoped records, with pinned provenance', () => {
+test('SRD manifest accounts for 709 headings +20 table choices and all scoped records', () => {
   validatePublicCatalogue('feature', features);
-  assert.equal(features.entries.length, 371);
-  assert.equal(manifest.candidates.length, 709);
-  assert.equal(new Set(manifest.candidates.map(c => c.n)).size, 709);
+  assert.equal(features.entries.length, 391);
+  assert.equal(manifest.candidates.length, 729);
+  assert.equal(new Set(manifest.candidates.map(c => c.n)).size, 729);
   assert.deepEqual(features.coverage, manifest.coverage);
-  assert.deepEqual(features.coverage.byKind, { racial_trait: 92, option: 95, class_feature: 123, subclass_feature: 60, feat: 1 });
+  assert.deepEqual(features.coverage.byKind, { racial_trait: 92, option: 115, class_feature: 123, subclass_feature: 60, feat: 1 });
   assert.equal(hash(read('data/rules-2014/sources/srd-5.1-cc.pdf')), manifest.source.sha256);
-  assert.equal(features.revision, hash(read('data/features/manifest.json'), read('data/features/generate.py'), read('data/features/extract_columns.py'), read('data/features/scopes.json')));
+  assert.equal(features.revision, hash(read('data/features/manifest.json'), read('data/features/generate.py'), read('data/features/extract_columns.py'), read('data/features/scopes.json'), read('data/features/names-ru.json')));
   const ids = new Set(features.entries.map(e => e.id));
   for (const candidate of manifest.candidates) {
     assert.ok(candidate.reason, candidate.name);
@@ -47,6 +47,12 @@ test('same-name features, subraces and options have independent stable IDs and p
   assert.notEqual(scores[0].id, scores[1].id);
   const toys = features.entries.filter(e => e.scope.parentId === 'srd51:feature:gnome:rock-gnome:tinker');
   assert.deepEqual(toys.map(e => e.name.en), ['Clockwork Toy', 'Fire Starter', 'Music Box']);
+  for (const parentId of ['srd51:feature:dragonborn:draconic-ancestry','srd51:feature:sorcerer:draconic-bloodline:dragon-ancestor']) {
+    const choices = features.entries.filter(e => e.scope.parentId === parentId);
+    assert.equal(choices.length, 10);
+    assert.equal(new Set(choices.map(e => e.id)).size, 10);
+    assert.ok(choices.some(e => e.name.en === 'Black' && e.text.en.includes('Acid')));
+  }
   const modified = structuredClone(features);
   modified.entries.reverse(); modified.entries.forEach(e => { e.name.ru = 'Другое имя'; });
   validatePublicCatalogue('feature', modified);
@@ -131,7 +137,7 @@ test('search and combined filters support RU/EN/ё without modifying names or un
   assert.equal(queryCatalogue(items, { source: 'metadata', hasDescription: false }).length, 713);
   assert.equal(queryCatalogue(items, { source: 'srd2014', hasDescription: true }).length, 221);
   assert.ok(queryCatalogue(items, { type: 'armor', rarity: 'uncommon', attunement: false }).some(e => e.id === 'dndsu:item:1'));
-  assert.equal(queryCatalogue(features).length, 371);
+  assert.equal(queryCatalogue(features).length, 391);
 });
 
 test('snapshots are detached, require exact variants and never execute or mutate a sheet', () => {
@@ -175,6 +181,7 @@ test('typed private validation preserves JSON/null/zero and reports invalid fiel
 test('published handoff examples stay aligned with real envelopes and typed manual data', () => {
   const example = JSON.parse(read('docs/examples/catalogues.json'));
   assert.deepEqual(example.publicFeaturePreview, catalogueSnapshot(features, example.publicFeaturePreview.catalogueRef.id));
+  assert.deepEqual(example.publicOptionPreview, catalogueSnapshot(features, example.publicOptionPreview.catalogueRef.id));
   assert.deepEqual(example.normalizedManualData, normalizeManualCatalogueData(example.manualInput.kind, example.manualInput.data));
   assert.equal(validatePrivateCatalogueEntry(example.acknowledgedManualRecord).valid, true);
   assert.equal(example.privatePreview.catalogueRef.revision, '1');

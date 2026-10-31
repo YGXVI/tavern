@@ -11,6 +11,7 @@ const saved = { id: 'cat-example', ownerId: '00000000-0000-0000-0000-00000000000
 const examples = {
   schemaVersion: 1,
   publicFeaturePreview: catalogueSnapshot(features, 'srd51:feature:elf:high-elf:cantrip'),
+  publicOptionPreview: catalogueSnapshot(features, 'srd51:feature:dragonborn:draconic-ancestry:black'),
   publicMetadataItem: items.entries.find(e => e.source.kind === 'metadata'),
   manualInput: input, normalizedManualData: data, acknowledgedManualRecord: saved,
   privatePreview: privateCatalogueSnapshot(saved),

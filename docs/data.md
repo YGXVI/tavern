@@ -142,7 +142,7 @@ Supabase [рекомендует считать storage schema доступно�
 
 | Область | Форма / ключ | Владелец и граница |
 | --- | --- | --- |
-| `dist/js/data/features-2014.json` | Envelope v1: catalogueKind=feature, revision hash, entries371; исходные spans/hash — `data/features/manifest.json`,709 кандидатов | SRD5.1, текст EN; RU-названия проекта, level/actionType неизвестные null; без исполнения эффектов |
+| `dist/js/data/features-2014.json` | Envelope v1: catalogueKind=feature, revision hash, entries391; исходные spans/hash — `data/features/manifest.json`,729 кандидатов | SRD5.1, текст EN; RU-названия проекта, level/actionType неизвестные null; без исполнения эффектов |
 | `dist/js/data/magic-items-2014.json` | Envelope v1: catalogueKind=magic_item;934 прежних ID,221 SRD/713 metadata,98 вложенных вариантов | Read-only проекция прежнего JSON, исходник/SQLite не меняются; metadata-only не содержит полного описания |
 | `public.user_catalogue_entries` | PK `(owner_id,id)`, kind feature/magic_item, data JSONB, revision>=1, updated_at | Только собственник читает; source.kind=manual, edition5e-2014; запись/удаление через CAS RPC, direct writes запрещены |
 | `public.catalogue_entry_quota` | Внутренний owner_id/used0–500, AFTER INSERT/DELETE | Общая квота двух видов, отдельная от Creature; API доступа нет |
@@ -158,7 +158,7 @@ Core/server `catalogue-library.js` обслуживают только эту т
 
 `catalogueSnapshot` / `privateCatalogueSnapshot` создают только отделённое превью `{data,catalogueRef}`; публичная reference содержит kind/id/revision hash/variantId?, личная — kind/id user:<ownerId>:<id>/revision строкой. Это не instance ID листа. Подтверждение, видимость, новый instance ID, quantity/equipped/attuned и CAS/operationId Character обеспечивает D/TASK-004; собственное Character-хранилище не вводится. Шаблон и выбранная копия независимы.
 
-Новая миграция `20261031150000_catalogue_entries.sql` — предложенная в #153 версия после library/очереди Rules; применение и окончательный порядок отдельно согласуются до интеграции. Рабочая БД этой порцией не меняется. Локальная проверка `tests/postgres/library_harness.py` включает `catalogue_checks.py`: RLS, общий лимит, настоящий конкурентный CAS, удаление устаревшей ревизии, каскады. Это schema stubs, не живой HTTP Supabase. Изображения книг не добавляются; uploads Creature по-прежнему требуют отдельного живого Storage smoke.
+Новая миграция `20261031150000_catalogue_entries.sql`: координатор подтвердил свободность/порядок после library130000 и Rules140xxx в #153 (6540677615); повторная проверка60 опубликованных refs не выявила коллизий. Это техническая координация, не human review результата и не разрешение применять SQL; применение и окончательный порядок отдельно решает Яра. Рабочая БД этой порцией не меняется. Локальная проверка `tests/postgres/library_harness.py` включает `catalogue_checks.py`: RLS, общий лимит, настоящий конкурентный CAS, удаление устаревшей ревизии, каскады. Это schema stubs, не живой HTTP Supabase. Изображения книг не добавляются; uploads Creature по-прежнему требуют отдельного живого Storage smoke.
 
 ## Старый прототип (`dist/legacy/`)
 

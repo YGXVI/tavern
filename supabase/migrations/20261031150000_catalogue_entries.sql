@@ -1,5 +1,5 @@
 -- TASK-129 B: private manual feature/item templates. No campaign sync/Character.
--- Proposed version; ACK requested in #153. Never apply to production here.
+-- Version/order checked in #153 (6540677615) and all published refs. No production apply here.
 create function public.catalogue_manual_data_valid(k text,v jsonb) returns boolean
 language plpgsql immutable set search_path='' as $$
 declare field text; value jsonb;
