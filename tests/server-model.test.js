@@ -135,3 +135,45 @@ test('приглашение без даты создания не шлёт crea
   const m = { ...c.members[0] }; delete m.joinedAt; c.members[0] = m;
   assert.ok(!('joined_at' in explode(c).members.get(m.userId)));
 });
+
+test('TASK-123: владелец своего токена — колонка owner_id, туда и обратно', () => {
+  const c = demo(), s = c.scenes[0];
+  s.tokens.push({ id: 't-owl', kind: 'custom', ownerId: 'u-ася', name: 'Сова', x: 10, y: 10, hidden: false });
+  const rows = explode(c);
+  const row = rows.tokens.get('t-owl');
+  assert.equal(row.owner_id, 'u-ася');
+  assert.equal('ownerId' in row.data, false, 'владелец не дублируется в data');
+  const back = assemble(rows).scenes[0].tokens.find((t) => t.id === 't-owl');
+  assert.equal(back.ownerId, 'u-ася');
+});
+
+test('TASK-123: токен без владельца отправляется без owner_id, снятый владелец — null', () => {
+  const before = demo();
+  const plain = before.scenes[0].tokens[0];
+  assert.equal('owner_id' in explode(before).tokens.get(plain.id), false);
+  before.scenes[0].tokens.push({ id: 't-owl', kind: 'custom', ownerId: 'u-ася', name: 'Сова', x: 10, y: 10, hidden: false });
+  const a = explode(before);
+  const after = clone(before);
+  delete after.scenes[0].tokens.find((t) => t.id === 't-owl').ownerId;
+  const ops = diffRows(a, explode(after, a), { isMaster: true });
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].row.owner_id, null);
+  assert.ok('owner_id' in ops[0].row);
+});
+
+test('TASK-123 (review #126): строки SELECT после миграции с owner_id: null — без лишних UPDATE', () => {
+  // После миграции сервер отдаёт owner_id: null у каждого токена (колонка — последняя, как в SELECT *).
+  const rows = explode(demo());
+  for (const [id, t] of rows.tokens) rows.tokens.set(id, { ...t, owner_id: t.owner_id ?? null });
+  assert.equal(diffRows(rows, explode(assemble(rows), rows), { isMaster: true }).length, 0, 'без изменений — ни одной операции');
+  // Изменился один токен — одна операция, и колонка owner_id в ней осталась null.
+  const c = assemble(rows);
+  c.scenes[0].tokens[0].x += 5;
+  const ops = diffRows(rows, explode(c, rows), { isMaster: true });
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].row.owner_id, null);
+  // Свой токен со строки сервера — туда и обратно без операций.
+  const own = rows.tokens.get(c.scenes[0].tokens[1].id);
+  rows.tokens.set(own.id, { ...own, owner_id: 'u-ася' });
+  assert.equal(diffRows(rows, explode(assemble(rows), rows), { isMaster: true }).length, 0);
+});

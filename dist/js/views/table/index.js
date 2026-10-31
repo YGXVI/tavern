@@ -46,11 +46,12 @@ export function mountTable(root, cid) {
     edgeLayer: table.querySelector('.edge-layer'),
     sceneId: null,
     ui: {
-      tool: 'move', sub: {}, selection: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
+      // selDrawings — рисунки, выделенные рамкой вместе с токенами (TASK-169); одиночный рисунок с панелью — selDrawing.
+      tool: 'move', sub: {}, selection: new Set(), selDrawings: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
       wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
     },
-    remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map() },
+    remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map(), selects: new Map() },
     dragging: null,
     history: new History(),
     get c() { return getCampaign(this.cid); },
@@ -91,8 +92,15 @@ export function mountTable(root, cid) {
   };
 
   let visCache = null;
+  // Обзор и свет идут за токеном в том же кадре (TASK-133): и за своим перетаскиванием, и за чужим (drag по шине).
+  const movingNow = () => {
+    const pos = {};
+    for (const [id, d] of ctx.remote.drags) if (d.sceneId === ctx.sceneId) pos[id] = d;
+    for (const [id, p] of ctx.dragging || []) pos[id] = p;
+    return pos;
+  };
   ctx.vision = () => {
-    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), Object.fromEntries(ctx.dragging || []));
+    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), movingNow());
     return visCache;
   };
   ctx.invalidateVision = () => { visCache = null; };
@@ -169,7 +177,6 @@ export function mountTable(root, cid) {
   // ——— Отрисовка по кадрам ———
   const dirty = new Set();
   let raf = 0;
-  let lastFog = 0, fogTimer = 0;
   ctx.invalidate = (...what) => {
     for (const w of what.length ? what : ['all']) dirty.add(w);
     if (!raf) raf = requestAnimationFrame(flush);
@@ -185,15 +192,10 @@ export function mountTable(root, cid) {
     if (all || dirty.has('terrain')) renderTerrain(L, sc, { showBlocked: ctx.isMasterView && ctx.ui.tool === 'terrain' });
     if (all || dirty.has('drawings')) renderDrawings(L, sc, ctx);
     if (all || dirty.has('walls')) renderWalls(L, sc, { edit: ctx.isMasterView && ctx.ui.tool === 'walls', selectedWall: ctx.ui.selectedWall, hoverWall: ctx.ui.hoverWall });
-    if (all || dirty.has('fog') || dirty.has('tokens')) {
-      // При перетаскивании туман перерисовываем не чаще ~16 раз в секунду — остальное успевает за курсором.
-      const now = performance.now();
-      if (ctx.dragging?.size && !all && !dirty.has('fog') && now - lastFog < 60) {
-        clearTimeout(fogTimer);
-        fogTimer = setTimeout(() => { lastFog = performance.now(); ctx.invalidateVision(); if (ctx.scene) { renderFog(L, ctx); renderTokens(L, ctx); renderMarkers(L, ctx); } }, 60 - (now - lastFog));
-      } else { lastFog = now; renderFog(L, ctx); trackExplored(); }
-    }
-    if (all || dirty.has('tokens')) renderTokens(L, ctx);
+    // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
+    // каждый кадр пересчитываются только те, что сейчас тащат.
+    if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
+    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); }
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);
@@ -214,6 +216,8 @@ export function mountTable(root, cid) {
   function trackExplored() {
     const sc = ctx.scene;
     if (ctx.dragging?.size) return;
+    // Чужое перетаскивание ещё не ход: исследованное пополняется, когда токен отпустят.
+    for (const d of ctx.remote.drags.values()) if (d.sceneId === ctx.sceneId) return;
     if (sc.fog.mode === 'off' && sc.lighting !== 'dark') return;
     if (ctx.ui.viewAs) return;
     const known = new Set(sc.fog.explored || []);
@@ -229,7 +233,7 @@ export function mountTable(root, cid) {
     ctx.sceneId = sid;
     hideNoScene();
     if (changed) {
-      ctx.ui.selection.clear(); ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null; ctx.ui.setup = null;
+      ctx.ui.selection.clear(); ctx.ui.selDrawings = new Set(); ctx.ui.selDrawing = null; ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null; ctx.ui.setup = null;
       ctx.dragging = null; ctx.remote.drags.clear();
       closePopover();
       L.map.dataset.ref = '';
@@ -317,7 +321,8 @@ export function mountTable(root, cid) {
       const mine = p.userId && p.userId !== ctx.userId && ctx.scene?.tokens.find((t) => (p.ids || []).includes(t.id) && ctx.isMine(t));
       if (mine && p.moved && ctx.inCombat()) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
     }
-    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null });
+    // by — кто тащит (TASK-162): у остальных токен в его цвете и с его именем; lead — ведущий токен группы.
+    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null, by: p.userId, lead: id === p.leader || Object.keys(p.positions).length === 1 });
     ctx.invalidate('tokens');
   });
   bus.on('ruler', (p) => {
@@ -343,6 +348,29 @@ export function mountTable(root, cid) {
     ctx.invalidate('areas');
   });
   ctx.sendDrag = throttle((payload) => bus.send('drag', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...payload }), 40);
+  // ——— Чужое выделение (TASK-164): кто какие токены выделил ———
+  bus.on('select', (p) => {
+    if (p.cid !== ctx.cid || !p.userId || p.userId === ctx.userId) return;
+    if (!p.ids?.length) ctx.remote.selects.delete(p.userId); else ctx.remote.selects.set(p.userId, { sceneId: p.sceneId, ids: new Set(p.ids) });
+    ctx.invalidate('tokens');
+  });
+  // Кто, кроме меня, выделил токен (в этой сцене).
+  ctx.selectorsOf = (id) => {
+    const out = [];
+    for (const [uid2, v] of ctx.remote.selects) if (v.sceneId === ctx.sceneId && v.ids.has(id)) { const u = userById(uid2); if (u) out.push(u); }
+    return out;
+  };
+  const sendSelect = throttle((ids) => bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids }), 80);
+  let selSig = null;
+  // Своё выделение — остальным; скрытые токены мастера не уходят. Шлём только при изменении.
+  ctx.syncSelection = (force = false) => {
+    const sc = ctx.scene;
+    const ids = sc ? [...ctx.ui.selection].filter((id) => { const t = sc.tokens.find((x) => x.id === id); return t && !t.hidden; }).sort() : [];
+    const sig = `${ctx.sceneId}|${ids.join(',')}`;
+    if (!force && sig === selSig) return;
+    if (selSig === null && !ids.length && !force) { selSig = sig; return; }
+    selSig = sig; sendSelect(ids);
+  };
   ctx.sendRuler = throttle((r) => bus.send('ruler', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...(r || {}), pts: r?.pts || null }), 50);
   ctx.sendTemplate = throttle((tpl) => bus.send('template', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, tpl }), 60);
 
@@ -389,7 +417,14 @@ export function mountTable(root, cid) {
   });
 
   // Присутствие: обновляем «в сети» в чипах.
-  const offPresence = bus.on('presence-change', () => ctx.invalidate('chrome', 'panels'));
+  const offPresence = bus.on('presence-change', () => {
+    // Ушедшие — их выделение снимаем; пришедшим — повторяем своё (TASK-164).
+    const on = onlineUsers(ctx.cid);
+    let gone2 = false;
+    for (const id of [...ctx.remote.selects.keys()]) if (!on.has(id)) { ctx.remote.selects.delete(id); gone2 = true; }
+    if (ctx.ui.selection.size) ctx.syncSelection(true);
+    ctx.invalidate('chrome', 'panels', ...(gone2 ? ['tokens'] : []));
+  });
   // Сервер: обрыв связи. Ходы ждут сети в очереди и уйдут сами; после переподключения кампания перечитывается.
   const offNet = bus.on('connection', (p) => {
     if (p.cid !== ctx.cid) return;
@@ -433,6 +468,7 @@ export function mountTable(root, cid) {
     update: sheetFromHash,
     unmount() {
       gone = true;
+      if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
       unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);

@@ -4,7 +4,7 @@ import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
-import { tokenStats } from '../../core/campaign.js';
+import { tokenStats, userById, isMasterOf } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
@@ -24,6 +24,8 @@ export function buildWorld(viewport) {
     drawings: svg('drawings-layer'),
     areas: svg('areas-layer'),
     auras: svg('auras-layer'),
+    // Досягаемость и угроза — «поле» под токенами (TASK-130): клетки не ложатся на токены, подписи и рамку.
+    ground: svg('ground-layer'),
     walls: svg('walls-layer'),
     markers: el('<div class="layer markers-layer"></div>'),
     tokens: el('<div class="layer tokens-layer"></div>'),
@@ -35,14 +37,14 @@ export function buildWorld(viewport) {
     drawUi: el('<div class="layer gizmo-layer draw-ui"></div>'),
   };
   L.terrain.innerHTML = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)"><rect width="12" height="12" fill="rgba(0,0,0,.28)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(255,255,255,.42)" stroke-width="3"/></pattern><pattern id="hatch-red" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-45)"><rect width="12" height="12" fill="rgba(229,88,79,.18)"/><line x1="0" y1="0" x2="0" y2="12" stroke="rgba(229,88,79,.5)" stroke-width="3"/></pattern></defs><g class="t"></g>`;
-  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo, L.drawUi);
+  world.append(L.map, L.glow, L.grid, L.terrain, L.drawings, L.walls, L.auras, L.ground, L.markers, L.tokens, L.auraLabels, L.fog, L.areas, L.overlay, L.labels, L.gizmo, L.drawUi);
   viewport.append(world);
   return L;
 }
 
 export function sizeLayers(L, scene) {
   const { width: W, height: H } = scene.map;
-  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'auras', 'walls', 'overlay']) {
+  for (const k of ['grid', 'terrain', 'drawings', 'areas', 'auras', 'ground', 'walls', 'overlay']) {
     L[k].setAttribute('viewBox', `0 0 ${W} ${H}`);
     L[k].setAttribute('width', W); L[k].setAttribute('height', H);
   }
@@ -86,11 +88,12 @@ export function renderDrawings(L, scene, ctx = null) {
   const mv = ctx?.ui.drawMove;
   const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
+  const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
   L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
     const ed = live && canEditDrawing(ctx, d);
     const attr = ed ? ` data-drawing="${d.id}"` : '';
-    const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;
+    const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
     if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
     if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
     const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -102,6 +105,16 @@ export function renderDrawings(L, scene, ctx = null) {
     const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
     bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
     L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  }
+  if (group?.size) {
+    const pad = 8 * (1 / (ctx.camera?.z || 1));
+    let out = '';
+    for (const id of group) {
+      const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); if (!n) continue;
+      const b = n.getBBox();
+      out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
+    }
+    L.drawings.insertAdjacentHTML('beforeend', out);
   }
   if (ctx) renderDrawBar(L, ctx, bbox);
 }
@@ -168,14 +181,14 @@ export function renderMarkers(L, ctx) {
   L.markers.innerHTML = out.join('');
 }
 
-/** Области: ауры, радиусы света, досягаемость, шаблоны, выделение. */
+/** Области: радиусы света, шаблоны, клетки ловушки — над токенами; досягаемость и угроза — под ними (слой ground). */
 export function renderAreas(L, ctx) {
   const { scene } = ctx;
   const s = gridSize(scene.grid), ox = scene.grid.offsetX || 0, oy = scene.grid.offsetY || 0;
-  const out = [];
-  // Досягаемость движения
+  const out = [], ground = [];
+  // Досягаемость движения — под токенами (слой ground)
   if (ctx.ui.reach?.size) {
-    for (const [k] of ctx.ui.reach) { const { c, r } = unkey(k); out.push(`<rect class="cell reach" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
+    for (const [k] of ctx.ui.reach) { const { c, r } = unkey(k); ground.push(`<rect class="cell reach" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   }
   // Радиусы света в режиме «Свет»
   if (ctx.isMasterView && ctx.ui.tool === 'lights') {
@@ -194,10 +207,11 @@ export function renderAreas(L, ctx) {
     out.push(`<circle class="template-origin" cx="${tpl.origin.x}" cy="${tpl.origin.y}" r="${s * 0.12}"/>`);
   }
   // Угроза (атака по возможности)
-  for (const k of ctx.ui.threat || []) { const { c, r } = unkey(k); out.push(`<rect class="cell threat" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
+  for (const k of ctx.ui.threat || []) { const { c, r } = unkey(k); ground.push(`<rect class="cell threat" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   // Выделенные клетки ловушки
   if (ctx.ui.trapCells?.length) for (const k of ctx.ui.trapCells) { const { c, r } = unkey(k); out.push(`<rect class="cell template" x="${ox + c * s}" y="${oy + r * s}" width="${s}" height="${s}"/>`); }
   L.areas.innerHTML = out.join('');
+  L.ground.innerHTML = ground.join('');
 }
 
 /** Ауры — отдельным слоем под всеми токенами, со своим цветом и прозрачностью. */
@@ -266,7 +280,7 @@ export function renderTokens(L, ctx) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
     }
-    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; }
+    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; node.dataset.by = ''; }
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
@@ -286,6 +300,27 @@ export function renderTokens(L, ctx) {
       if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
       node.dataset.tg = tgSig;
     }
+    // Кто тащит (TASK-162) или выделил (TASK-164) токен: кольцо цвета участника и плашка с именем.
+    // Перетаскивание ярче и важнее выделения; свои действия не помечаем.
+    const rd = ctx.remote.drags.get(t.id);
+    const byId = rd && rd.sceneId === ctx.sceneId && rd.by && rd.by !== ctx.userId ? rd.by : '';
+    const sels = byId ? [] : ctx.selectorsOf?.(t.id) || [];
+    const colorOf = (id, u) => (isMasterOf(c, id) ? '#e9b052' : `hsl(${u?.hue ?? 32} 80% 62%)`);
+    const bySig = byId ? `d|${byId}|${rd.lead ? 1 : 0}` : sels.length ? `s|${sels.map((u) => u.id).join(',')}` : '';
+    if (node.dataset.by !== bySig) {
+      node.querySelector('.tok-by')?.remove();
+      if (byId) {
+        const u = userById(byId);
+        node.style.setProperty('--dc', colorOf(byId, u));
+        if (rd.lead) node.insertAdjacentHTML('beforeend', `<span class="tok-by">${icon('cursor-hold-01', 12)}${esc(u?.name || 'Кто-то')}</span>`);
+      } else if (sels.length) {
+        node.style.setProperty('--dc', colorOf(sels[0].id, sels[0]));
+        const names = sels.slice(0, 2).map((u) => esc(u.name)).join(', ') + (sels.length > 2 ? ` +${sels.length - 2}` : '');
+        node.insertAdjacentHTML('beforeend', `<span class="tok-by sel" title="Выделили: ${esc(sels.map((u) => u.name).join(', '))}">${icon('cursor-01', 12)}${names}</span>`);
+      } else node.style.removeProperty('--dc');
+      node.dataset.by = bySig;
+    }
+    if (byId) node.classList.add('remote-drag'); else if (sels.length) node.classList.add('remote-sel');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
     const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
@@ -310,7 +345,10 @@ export function renderTokens(L, ctx) {
 export function renderFog(L, ctx) {
   const view = ctx.fogView();
   const vis = ctx.vision();
-  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog', hi: !ctx.dragging?.size && !ctx.ui.liveFogOp });
+  // Пока токен тащат (сам или кто-то другой) — туман грубее и быстрее, чтобы успевать каждый кадр.
+  let moving = !!ctx.dragging?.size;
+  for (const d of ctx.remote.drags.values()) if (d.sceneId === ctx.sceneId) moving = true;
+  drawFog(L.fog, ctx.scene, vis, ctx.exploredSet(), view, { strong: ctx.ui.tool === 'fog', hi: !moving && !ctx.ui.liveFogOp });
   if (view === 'player' || (ctx.isMasterView && ctx.scene.lighting === 'dark')) drawLightGlow(L.glow, ctx.scene, vis);
   else drawLightGlow(L.glow, ctx.scene, { dark: false });
 }

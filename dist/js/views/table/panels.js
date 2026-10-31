@@ -563,7 +563,7 @@ export class Panels {
   // ——— Мосты для ввода и токенов ———
   tokenBar() { return T.tokenBarHTML(this.ctx); }
   contextMenu(target, w, screen) { T.contextMenu(this.ctx, target, w, screen); }
-  deleteTokens(ids) { T.deleteTokens(this.ctx, ids); }
+  deleteTokens(ids, drawIds) { T.deleteTokens(this.ctx, ids, drawIds); }
   toggleHidden(ids, force) { T.toggleHidden(this.ctx, ids, force); }
   deleteWall(id) { M.deleteWall(this.ctx, id); }
   deleteLight(id) { M.deleteLight(this.ctx, id); }
@@ -625,6 +625,8 @@ export class Panels {
     const after = { ...structuredClone(ctx.scene.grid), calibrated: true };
     const moved = {};
     ctx.ui.gridBefore = null;
+    // Подгонка показывалась вживую в самой сцене. Вернуть «до», иначе запись не увидит разницы (TASK-166).
+    Object.assign(ctx.scene.grid, structuredClone(before));
     ctx.mutateScene((s) => {
       Object.assign(s.grid, after);
       // Токены встают в центры новых клеток; исследованное по старой сетке сбрасываем.
