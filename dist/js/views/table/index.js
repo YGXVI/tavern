@@ -46,7 +46,8 @@ export function mountTable(root, cid) {
     edgeLayer: table.querySelector('.edge-layer'),
     sceneId: null,
     ui: {
-      tool: 'move', sub: {}, selection: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
+      // selDrawings — рисунки, выделенные рамкой вместе с токенами (TASK-169); одиночный рисунок с панелью — selDrawing.
+      tool: 'move', sub: {}, selection: new Set(), selDrawings: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
       wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
     },
@@ -232,7 +233,7 @@ export function mountTable(root, cid) {
     ctx.sceneId = sid;
     hideNoScene();
     if (changed) {
-      ctx.ui.selection.clear(); ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null; ctx.ui.setup = null;
+      ctx.ui.selection.clear(); ctx.ui.selDrawings = new Set(); ctx.ui.selDrawing = null; ctx.ui.template = null; ctx.ui.ruler = null; ctx.ui.reach = null; ctx.ui.drag = null; ctx.ui.setup = null;
       ctx.dragging = null; ctx.remote.drags.clear();
       closePopover();
       L.map.dataset.ref = '';
