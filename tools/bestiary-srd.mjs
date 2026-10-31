@@ -1,12 +1,15 @@
 // TASK-083: бестиарий SRD 2014 для стола.
 // Читает data/bestiary/bestiary-2014.json (каталог Яры, TASK-011) и пишет dist/js/data/bestiary-srd.js —
-// существа со статблоками SRD в форме стола (как в dist/js/data/bestiary.js). Запуск: node tools/bestiary-srd.mjs
+// существа со статблоками SRD в форме стола (как в dist/js/data/bestiary.js). Запуск: node tools/bestiary-srd.mjs [вход.json] [выход.js]
+// (без аргументов — пути по умолчанию; аргументы нужны тесту). Берёт ТОЛЬКО статблоки SRD (source = srd_api_2014):
+// не-SRD существа в общий каталог сайта не попадают — только через личную библиотеку мастера (TASK-119, решение #116).
 // Названия действий и особенностей — по-русски по словарю ниже (неизвестное осталось бы английским; сейчас переведено всё),
 // описания — английский текст SRD 5.1 как есть. Переведённые вручную существа стола не дублируются.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
-const src = JSON.parse(readFileSync(new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
+const [inArg, outArg] = process.argv.slice(2);
+const src = JSON.parse(readFileSync(inArg || new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
 const HAND = new Set(['cultist', 'cult-fanatic', 'acolyte', 'goblin', 'hobgoblin', 'skeleton', 'zombie', 'wolf', 'bandit', 'giant-rat', 'ogre', 'gnoll']);
 
 const TYPE = { beast: 'Зверь', humanoid: 'Гуманоид', dragon: 'Дракон', monstrosity: 'Чудовище', fiend: 'Исчадие', undead: 'Нежить', elemental: 'Элементаль', giant: 'Великан', 'swarm of Tiny beasts': 'Рой', construct: 'Конструкт', fey: 'Фея', plant: 'Растение', celestial: 'Небожитель', aberration: 'Аберрация', ooze: 'Слизь' };
@@ -134,7 +137,7 @@ function action(a) {
 
 const list = [];
 for (const m of src.monsters) {
-  const s = m.stat_block; if (!s) continue;
+  const s = m.stat_block; if (!s || s.source !== 'srd_api_2014') continue; // только SRD 5.1
   const slug = m.identity?.srd_index || m.identity?.slug;
   if (!slug || HAND.has(slug)) continue;
   const id = `srd:${slug}`;
@@ -173,6 +176,6 @@ const head = `// СГЕНЕРИРОВАНО tools/bestiary-srd.mjs из data/bes
 // Адаптация: числа и английские описания SRD; русские имена существ — из открытого индекса dnd.su (каталог TASK-011),
 // русские названия действий и особенностей — свои. ${list.length} существ.
 `;
-writeFileSync(new URL('dist/js/data/bestiary-srd.js', root), `${head}export default ${JSON.stringify(list)};\n`);
+writeFileSync(outArg || new URL('dist/js/data/bestiary-srd.js', root), `${head}export default ${JSON.stringify(list)};\n`);
 const named = list.flatMap((m) => [...m.actions, ...m.traits, ...(m.reactions || []), ...(m.legendary || [])]);
 console.log('существ:', list.length, 'названий по-русски:', named.filter((a) => /[а-яё]/i.test(a.name)).length, '/', named.length);
