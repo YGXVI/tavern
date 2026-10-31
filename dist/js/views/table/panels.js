@@ -4,9 +4,8 @@ import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter } from '../../core/campaign.js';
+import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
@@ -374,7 +373,7 @@ export class Panels {
       const ch = characterOf(c, t.characterId);
       if (ch) return mod(ch.stats[ability]) + (ch.saves.includes(ability) ? profBonus(ch.level) : 0);
     }
-    const m = monsterById(t.monsterId);
+    const m = monsterOf(c, t.monsterId);
     return m ? (m.saves?.[ability] ?? mod(m.stats[ability])) : 0;
   }
 

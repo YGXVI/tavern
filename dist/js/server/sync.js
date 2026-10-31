@@ -10,7 +10,7 @@ import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
-const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'] };
+const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'], campaign_creatures: ['campaign_id', 'id'] };
 const pkOf = (table, row) => Object.fromEntries((PK[table] || ['id']).map((k) => [k, row[k]]));
 const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
 const AUTHORED = new Set(['log_entries', 'log_secrets', 'portal_requests']);
@@ -112,12 +112,13 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   let rows;
   try {
     const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat] = await Promise.all([
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures] = await Promise.all([
       sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
       q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
       q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
       sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
       q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
+      q('campaign_creatures'),
     ]);
     const logRows = must(log);
     const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
@@ -126,6 +127,8 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
       campaign: must(campaign), members: must(members), invite: must(invite), characters: must(characters), scenes: must(scenes),
       secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
       saves: must(saves), portals: must(portals), combat: must(combat),
+      // Снимки существ (TASK-179): таблицы ещё нет на живой базе (миграция #150 не применена) — кампания грузится без них.
+      creatures: noTable(creatures.error) ? null : must(creatures),
     });
   } finally {
     ld.n -= 1;
@@ -325,6 +328,9 @@ async function sendOne(cid, o, attempt) {
   else return updateRow(cid, o);
   if (res.error) throw res.error;
 }
+
+/** Таблицы нет на сервере (миграция не применена): PostgREST PGRST205 / Postgres 42P01. */
+const noTable = (e) => !!e && (e.code === 'PGRST205' || e.code === '42P01' || /could not find the table|does not exist/i.test(String(e.message || '')));
 
 /** Ошибка сети (нет интернета, сервер не ответил), а не отказ базы. */
 const isNetwork = (e) => !e?.code && /fetch|network|load failed|timed? ?out|aborted/i.test(String(e?.message || e || ''));

@@ -890,3 +890,7 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
   .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
   .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
+
+/* Существа: вкладки «Бестиарий» / «Мои» (TASK-179) */
+.b-search .b-src { align-self: stretch; }
+.b-search .b-src .tab { flex: 1; }

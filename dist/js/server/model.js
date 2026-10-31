@@ -9,7 +9,7 @@ const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
 // Поля записи журнала, которые для скрытого броска уходят в log_secrets.
 const SECRET_LOG_KEYS = ['label', 'text', 'total', 'detail', 'nat', 'dice', 'results'];
 // Поля кампании, которые живут отдельными таблицами или не сохраняются на сервере.
-const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'scenes', 'combat', 'log', 'saveRequests', 'portalRequests', 'doorAttempt']);
+const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'scenes', 'combat', 'log', 'saveRequests', 'portalRequests', 'doorAttempt', 'creatures']);
 
 const ms = (t) => (t ? Date.parse(t) || null : null);
 const iso = (n) => (n ? new Date(n).toISOString() : null);
@@ -17,12 +17,14 @@ const omit = (o, keys) => { const r = {}; for (const k of Object.keys(o || {})) 
 export const EMPTY_COMBAT = () => ({ active: false, round: 0, turn: 0, entries: [], moved: {} });
 
 /** Пустой кэш строк одной кампании. */
-export function emptyRows() {
+export function emptyRows(withCreatures = false) {
   return {
     campaign: null, invite: null,
     members: new Map(), characters: new Map(), scenes: new Map(), secrets: new Map(), explored: new Map(),
     tokens: new Map(), drawings: new Map(), log: new Map(), logSecrets: new Map(), saves: new Map(), portals: new Map(),
     combat: null,
+    // Снимки личных существ в кампании (TASK-179): Map — таблица campaign_creatures есть; null — её ещё нет на сервере.
+    creatures: withCreatures ? new Map() : null,
   };
 }
 
@@ -52,6 +54,7 @@ export function assemble(rows0) {
   c.invite = inv ? { code: inv.code, createdAt: ms(inv.created_at), expiresAt: ms(inv.expires_at), manual: !!inv.manual, ...(inv.revoked ? { revoked: true } : {}) } : { code: null, manual: true, expiresAt: null };
   c.characters = [...rows.characters.values()].map((ch) => ({ ...ch.data, id: ch.id, ownerId: ch.owner_id || null }))
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+  if (rows.creatures) c.creatures = Object.fromEntries([...rows.creatures.values()].map((x) => [x.id, { ...x.data, id: x.id, ownerId: x.owner_id || null, sourceId: x.source_id || null }]));
 
   const byScene = (map) => {
     const g = new Map();
@@ -90,7 +93,7 @@ export function assemble(rows0) {
  * Кампания → строки таблиц (те же формы, что в rows). ord токенов и рисунков берётся из прежних строк
  * (индекс в массиве у игрока и мастера разный — игрок не видит скрытого), у новых — время создания.
  */
-export function explode(c, prev = emptyRows(), now = Date.now()) {
+export function explode(c, prev = emptyRows(true), now = Date.now()) {
   const rows = emptyRows();
   const data = omit(c, CAMPAIGN_SKIP);
   rows.campaign = { id: c.id, owner_id: c.ownerId, name: c.name, data };
@@ -101,6 +104,14 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
   for (const ch of c.characters || []) {
     const { id, ownerId, ...rest } = ch;
     rows.characters.set(id, { id, campaign_id: c.id, owner_id: ownerId || null, data: rest });
+  }
+  // Снимки существ — только если таблица есть на сервере (prev.creatures — Map); нет таблицы — null, без операций.
+  if (prev.creatures) {
+    rows.creatures = new Map();
+    for (const [key, x] of Object.entries(c.creatures || {})) {
+      const { id = key, ownerId, sourceId, updatedAt, ...data } = x;
+      rows.creatures.set(id, { campaign_id: c.id, id, owner_id: ownerId || null, source_id: sourceId || null, data });
+    }
   }
   (c.scenes || []).forEach((s, i) => {
     const { id, tokens = [], drawings = [], traps = [], pins = [], fog = {}, ...rest } = s;
@@ -179,6 +190,8 @@ export function diffRows(a, b, { isMaster = false } = {}) {
     const add = row.cells.filter((x) => !had.has(x));
     if (add.length) ops.push({ table: 'scene_explored', op: 'rpc', key: sid, row: { p_scene: sid, p_cells: add } });
   }
+  // Снимки существ (TASK-179): добавляет мастер или владелец призыва, правит и удаляет мастер. До токенов — токен ссылается на снимок.
+  if (a.creatures && b.creatures) cmpMap('campaign_creatures', a.creatures, b.creatures, { update: isMaster, del: isMaster });
   cmpMap('tokens', a.tokens, b.tokens);
   cmpMap('drawings', a.drawings, b.drawings);
   cmpMap('log_entries', a.log, b.log, { update: false, del: false });
@@ -187,7 +200,7 @@ export function diffRows(a, b, { isMaster = false } = {}) {
   cmpMap('portal_requests', a.portals, b.portals, { update: false });
   if (!same(a.combat, b.combat)) ops.push({ table: 'combats', op: a.combat ? 'update' : 'insert', key: b.combat.campaign_id, row: b.combat, prev: a.combat });
   // Порядок: сначала родители, удаления детей — до удаления родителей.
-  const order = ['campaigns', 'campaign_invites', 'campaign_members', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
+  const order = ['campaigns', 'campaign_invites', 'campaign_members', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'campaign_creatures', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
   const rank = (o) => (o.op === 'delete' ? 100 - order.indexOf(o.table) : order.indexOf(o.table));
   return ops.sort((x, y) => rank(x) - rank(y));
 }
@@ -243,7 +256,7 @@ export function groupTokenMoves(ops) {
 export function applyOps(rows, ops0) {
   // Копии: строки операций собраны из живой кампании, и её дальнейшие правки не должны менять кэш.
   const ops = structuredClone(ops0);
-  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals' };
+  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', campaign_creatures: 'creatures' };
   for (const o of ops) {
     if (o.table === 'campaigns') { rows.campaign = o.row; continue; }
     if (o.table === 'campaign_invites') { rows.invite = o.row; continue; }
@@ -262,7 +275,7 @@ export function applyOps(rows, ops0) {
 /** Строка из события реального времени → в кэш. table — имя таблицы, row — новая строка (или старая при удалении). */
 export function applyChange(rows, table, type, row) {
   const keyOf = { campaign_members: (r) => r.user_id, scene_secrets: (r) => r.scene_id, scene_explored: (r) => r.scene_id };
-  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals' };
+  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', campaign_creatures: 'creatures' };
   if (table === 'campaigns') { if (type === 'DELETE') rows.campaign = null; else rows.campaign = row; return rows; }
   if (table === 'campaign_invites') { rows.invite = type === 'DELETE' ? null : row; return rows; }
   if (table === 'combats') { rows.combat = type === 'DELETE' ? null : row; return rows; }
@@ -290,6 +303,8 @@ export function rowsFrom(server) {
   put(rows.logSecrets, server.logSecrets);
   put(rows.saves, server.saves);
   put(rows.portals, server.portals);
+  // Таблицы снимков ещё нет на сервере — null: кампания грузится без них, вкладка «Мои» за столом недоступна.
+  if (server.creatures) { rows.creatures = new Map(); put(rows.creatures, server.creatures); }
   return rows;
 }
 

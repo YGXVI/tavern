@@ -19,7 +19,8 @@
 
 - `users: {[id]: {id, name, handle, hue, provider: 'discord-demo', createdAt}}` — заглушки «входа через Discord», без токенов и почты.
 - `campaigns: {[id]: Campaign}`.
-- `Campaign = {id, name, description, cover, level, seats, createdAt, ownerId, status, members, invite, characters, scenes, activeSceneId, combat, paused, log, settings, saveRequests?, portalRequests?}`.
+- `Campaign = {id, name, description, cover, level, seats, createdAt, ownerId, status, members, invite, characters, scenes, activeSceneId, combat, paused, log, settings, saveRequests?, portalRequests?, creatures?}`.
+- `creatures?: {[id]: CreatureCopy}` (TASK-179, необязательное) — снимки своих существ, поставленных на карту из личной библиотеки: поля `Creature` (раздел «Личная библиотека» ниже) без `updatedAt` и `statblockImage`, с `id` копии (`cc-…`), `sourceId` — id шаблона в библиотеке (только происхождение), `ownerId: null` — копия мастера. Токен такого существа — `monsterId: 'lib:<id копии>'`. Одна копия на шаблон: повторная постановка берёт её же; правка или удаление шаблона копию и токены не меняет. Картинки `library:` в копию не попадают. Нет поля — своих существ в кампании нет.
 - `Member = {userId, role: 'master'|'player', status: 'active'|'pending', characterId, joinedAt, lastSeen?, sceneId?}`. `sceneId` — личная сцена игрока, если отряд разделился.
 - `invite = {code: 'RSP-XXXX', createdAt?, expiresAt|null, manual}`.
 - `Character` — базовый шаблон листа (`makeCharacter` в `dist/js/data/demo.js`): `id, ownerId, name, portrait, classId/className, raceId/raceName, level, stats{str…cha}, saves[], skills[], ac, hp, hpMax, tempHp, speed, darkvision, deathSaves{s,f}, conditions[], attacks[], slots{}, spells, inventory, features, notes, initBonus, light, aura`. Детали листа — TASK-004.
@@ -75,6 +76,7 @@
 | `save_requests` | `id` | `data` — запрос спасброска с `results` | участники | мастер; игрок — один раз результат любого героя |
 | `portal_requests` | `id` | `author`, `data` — герой просит переход | мастер и автор | автор; мастер удаляет |
 | `combats` | `campaign_id` | `data` — `combat` + `current` (чей ход по данным мастера) и `ended` (игрок закончил ход героя) | участники | мастер; игрок — инициативу героя один раз, `moved` видимых токенов, `ended` для хода героя |
+| `campaign_creatures` | `campaign_id, id` | `owner_id`, `source_id`, `data` — `CreatureCopy` без `id`, `ownerId`, `sourceId` (TASK-179; таблица и права — #150). Клиент грузит её вместе с кампанией; пока таблицы нет на сервере, кампания грузится без неё, а ставить свои существа нельзя. В Realtime пока не входит — чужие вставки видны после перезагрузки | мастер; игрок — свои копии | мастер; игрок — свои копии (призывы) |
 
 Функции: `invite_preview(code)`, `join_campaign(code)`, `claim_character(campaign, character)`, `add_explored(scene, cells[])`; помощники прав `is_member`, `is_master`, `is_applicant`, `my_character`, `is_my_character`, `shares_campaign`, `visible_token_ids`. Списки `hero_token_ids` и `owned_token_ids` — только для охранников, снаружи не вызываются: по ним были бы видны id скрытых токенов (И7).
 

@@ -3,6 +3,9 @@ import { el, esc, uid, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc, storeImage, BUILTIN_MAP_LIST } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, sceneOf, tokenStats, updateCampaign, addLog, nextTokenName } from '../../core/campaign.js';
+import { isServerMode } from '../../core/store.js';
+import { listCreatures } from '../../core/library.js';
+import { toMonster } from '../../rules/creature.js';
 import { BESTIARY, monsterById, srdLoaded } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
@@ -107,15 +110,67 @@ function bestiaryList(ctx) {
   }).join('');
 }
 
-function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false }); }
+function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false, src: 'srd' }); }
+
+// ——— Свои существа (TASK-179, TASK-097 п. 4.3): вкладка «Мои» — личная библиотека мастера ———
+// Шаблон из библиотеки выбирают по «libsrc:<id>»; на карту встаёт копия в кампании (`c.creatures`), токен — «lib:<copyId>».
+function libState(ctx) { return ctx.ui.myLib || (ctx.ui.myLib = { list: null, error: null, loading: false }); }
+async function loadLib(ctx) {
+  const L = libState(ctx);
+  L.loading = true;
+  try { L.list = await listCreatures(); L.error = null; } catch (err) { L.error = err; }
+  L.loading = false;
+  ctx.panels.renderSide?.(true);
+}
+const safeMonster = (x) => { try { return toMonster(x); } catch { return null; } };
+const libTemplate = (ctx, pick) => (pick?.startsWith('libsrc:') ? libState(ctx).list?.find((x) => x.id === pick.slice(7)) || null : null);
+/** Статблок выбранного в панели: бестиарий или шаблон библиотеки. */
+export function pickMonster(ctx, pick) {
+  if (!pick) return null;
+  if (!pick.startsWith('libsrc:')) return monsterById(pick);
+  const tpl = libTemplate(ctx, pick);
+  return tpl ? safeMonster(tpl) : null;
+}
+/** Копия шаблона для кампании: без владельца и приватных картинок библиотеки. */
+function snapshotOf(tpl, id) {
+  const { ownerId, updatedAt, statblockImage, ...rest } = structuredClone(tpl);
+  if (String(rest.img || '').startsWith('library:')) rest.img = '';
+  if (rest.source === 'image') rest.source = 'manual';
+  return { ...rest, id, sourceId: tpl.id, ownerId: null };
+}
+/** В серверном режиме снимки живут в таблице campaign_creatures — без неё (#153) ставить свои существа нельзя. */
+const libOffline = (ctx) => isServerMode() && ctx.c.creatures === undefined;
+
+function libList(ctx) {
+  if (libOffline(ctx)) return '<p class="t-sm muted b-empty">Свои существа на сервере появятся после обновления базы: таблицы для копий в кампании ещё нет.</p>';
+  const L = libState(ctx);
+  if (!L.list && !L.error) { if (!L.loading) loadLib(ctx); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
+  if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
+  if (!L.list.length) return '<p class="t-sm muted b-empty">В библиотеке пусто. Соберите существо на главной во вкладке «Существа».</p>';
+  const st = bState(ctx), q = st.q.trim().toLowerCase();
+  const copies = Object.values(ctx.c.creatures || {});
+  const list = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
+  if (!list.length) return '<p class="t-sm muted b-empty">Никого не нашлось.</p>';
+  return list.map((x) => {
+    const ids = new Set(copies.filter((k) => k.sourceId === x.id).map((k) => `lib:${k.id}`));
+    const n = ctx.scene?.tokens.filter((t) => ids.has(t.monsterId)).length || 0;
+    const pick = `libsrc:${x.id}`;
+    const sub = [x.type, x.cr != null ? `КО ${x.cr}` : '', x.ac != null ? `КД ${x.ac}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · ');
+    return `<button class="list-row b-row ${st.pick === pick ? 'current' : ''}" data-act="b-pick" data-id="${esc(pick)}"><span class="avatar sm foe"><img src="${esc(srcOf(x.img && !String(x.img).startsWith('library:') ? x.img : `ini:${x.name}`))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(x.name)}</span><span class="secondary ellipsis">${esc(sub || 'Своё существо')}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
+  }).join('');
+}
 
 function bestiaryHTML(ctx) {
   const st = bState(ctx);
-  const m = st.pick ? monsterById(st.pick) : null;
-  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${srdLoaded() ? '' : ' · догружаем остальных…'}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
-    <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, dragon, КО 5…" aria-label="Поиск существ"></div>
-      <div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div></div>
-    <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
+  const mine = st.src === 'lib';
+  const m = pickMonster(ctx, st.pick);
+  const where = ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана';
+  const sub = mine ? `Ваша библиотека · копия встанет в кампанию${where}` : `SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${srdLoaded() ? '' : ' · догружаем остальных…'}${where}`;
+  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">${sub}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-act="b-src" data-v="srd" aria-selected="${!mine}">Бестиарий</button><button class="tab" role="tab" data-act="b-src" data-v="lib" aria-selected="${mine}">Мои</button></div>
+      <div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="${mine ? 'Найти своё существо' : 'Гоблин, dragon, КО 5…'}" aria-label="Поиск существ"></div>
+      ${mine ? '' : `<div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div>`}</div>
+    <div class="side-body scroll b-list">${mine ? libList(ctx) : bestiaryList(ctx)}</div>
     ${m ? `<div class="panel-footer b-foot"><div class="col grow" style="gap:8px">
       <div class="row"><b class="grow ellipsis">${esc(m.name)}</b><div class="stepper"><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="-1" aria-label="Меньше">${icon('minus-sign', 14)}</button><span>${st.count}</span><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="1" aria-label="Больше">${icon('plus-sign', 14)}</button></div></div>
       <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Бросить хиты (${esc(m.hpDice)})</label></div>
@@ -132,7 +187,7 @@ export function sideInput(ctx, e) {
   if (e.target.matches('[data-bsearch]')) {
     bState(ctx).q = e.target.value;
     const list = e.target.closest('.side-panel').querySelector('.b-list');
-    if (list) list.innerHTML = bestiaryList(ctx);
+    if (list) list.innerHTML = bState(ctx).src === 'lib' ? libList(ctx) : bestiaryList(ctx);
   }
 }
 
@@ -146,6 +201,11 @@ export function sideAction(ctx, act, b, e) {
     case 'scene-new': newSceneModal(ctx); return true;
     case 'scene-activate': activateScene(ctx, b.dataset.id); return true;
     case 'b-filter': st.type = b.dataset.v; ctx.panels.renderSide(true); return true;
+    case 'b-src': {
+      st.src = b.dataset.v === 'lib' ? 'lib' : 'srd'; st.pick = null; st.q = '';
+      if (st.src === 'lib') { const L = libState(ctx); L.list = null; L.error = null; } // свежий список при каждом открытии
+      ctx.panels.renderSide(true); return true;
+    }
     case 'b-pick': {
       const now = performance.now();
       if (st.pick === b.dataset.id && now - (st.pickAt || 0) < 350) { placeCreatures(ctx, st.pick); return true; }
@@ -332,8 +392,18 @@ export function newSceneModal(ctx) {
 
 // ——— Существа ———
 export function placeCreatures(ctx, monsterId) {
-  const m = monsterById(monsterId);
+  const tpl = libTemplate(ctx, monsterId);
+  const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
   if (!m || !ctx.scene) return;
+  if (tpl && libOffline(ctx)) return;
+  // Своё существо: копия шаблона в кампании (одна на шаблон — правки библиотеки её не меняют), токен ссылается на неё.
+  let copyId = null, newCopy = null;
+  if (tpl) {
+    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && !x.ownerId);
+    copyId = have ? have.id : uid('cc-');
+    if (!have) newCopy = snapshotOf(tpl, copyId);
+  }
+  const tokenMonsterId = tpl ? `lib:${copyId}` : m.id;
   const st = bState(ctx);
   const n = sizeById(m.size).cells;
   const at = ctx.ui.placeAt || viewCenter(ctx);
@@ -341,17 +411,22 @@ export function placeCreatures(ctx, monsterId) {
   const spots = freeSpots(ctx.scene, at, st.count, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const made = [];
-  ctx.mutateScene((sc) => {
+  ctx.mutateScene((sc, c) => {
+    if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy);
     for (const p of spots) {
       const name = nextTokenName(sc, m.name);
       let hp = m.hp;
       if (st.rollHp) { try { hp = Math.max(1, roll(m.hpDice.replace(/\s/g, '')).total); } catch { /* среднее */ } }
       const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-      const t = monsterToken(m.id, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp });
+      const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp }, m);
       sc.tokens.push(t);
       made.push(t);
     }
-  }, { label: 'Существа', undo: (sc) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); }, redo: (sc) => { for (const t of made) sc.tokens.push(structuredClone(t)); } });
+  }, {
+    label: 'Существа',
+    undo: (sc, c) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); if (newCopy && c.creatures) delete c.creatures[copyId]; },
+    redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); for (const t of made) sc.tokens.push(structuredClone(t)); },
+  });
   ctx.select(made.map((t) => t.id));
   if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;

@@ -1,8 +1,7 @@
 // Перетаскивание на карту: существо из панели «Существа» (TASK-033) и предмет из окна «Предмет на карте» (TASK-095).
 import { esc } from '../../core/dom.js';
 import { srcOf } from '../../core/assets.js';
-import { monsterById } from '../../data/bestiary.js';
-import { placeCreatures, placeItem } from './p-side.js';
+import { placeCreatures, placeItem, pickMonster } from './p-side.js';
 
 const THRESHOLD = 6;
 
@@ -77,8 +76,8 @@ export function attachCreatureDrag(ctx) {
     } else {
       const row = e.target.closest?.('.side-panel [data-act="b-pick"]');
       if (!row) return;
-      const m = monsterById(row.dataset.id); if (!m) return;
-      d = { ...base, kind: 'creature', id: m.id, m };
+      const m = pickMonster(ctx, row.dataset.id); if (!m) return;
+      d = { ...base, kind: 'creature', id: row.dataset.id, m }; // id из строки: «libsrc:…» для своих (TASK-179)
     }
     addEventListener('pointermove', move, { capture: true, passive: false });
     addEventListener('pointerup', up, true);

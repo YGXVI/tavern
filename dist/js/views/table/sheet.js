@@ -2,9 +2,8 @@
 import { esc, fmtMod, debounce, el } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { characterOf, updateCampaign, ownerOfCharacter, isMasterOf, tokenStats } from '../../core/campaign.js';
+import { characterOf, updateCampaign, ownerOfCharacter, isMasterOf, tokenStats, monsterOf } from '../../core/campaign.js';
 import { ABILITIES, SKILLS, mod, profBonus, CONDITIONS, conditionById } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { doRoll, parseFormula } from './dice.js';
 
 let drawer = null;
@@ -111,7 +110,7 @@ function characterHTML(ctx, ch) {
 }
 
 // Статблок существа. Ручные существа: особенности — строки; SRD (TASK-083): { name, en, desc } с английским текстом SRD.
-const MLISTS = { actions: 'Действия', reactions: 'Реакции', legendary: 'Легендарные действия' };
+const MLISTS = { actions: 'Действия', bonusActions: 'Бонусные действия', reactions: 'Реакции', legendary: 'Легендарные действия' };
 const openDesc = new Set(); // раскрытые описания: «monsterId:list:i» — переживают перерисовку листа
 
 function traitHTML(x) {
@@ -119,8 +118,16 @@ function traitHTML(x) {
   return `<p class="t-para trait"><b>${esc(x.name)}.</b> <span lang="en">${esc(x.desc)}</span></p>`;
 }
 
+// Подпись способности своего существа (TASK-179): урон и спасбросок по-русски, а не служебной строкой копии.
+const AB_NAMES = { str: 'Силы', dex: 'Ловкости', con: 'Телосложения', int: 'Интеллекта', wis: 'Мудрости', cha: 'Харизмы' };
+function libMeta(a) {
+  const dmg = (a.damageComponents || []).filter((d) => d.dice || d.type).map((d) => [d.dice, d.type].filter(Boolean).join(' '));
+  const sv = a.save ? `Спасбросок ${AB_NAMES[a.save.ability] || a.save.ability}${a.save.dc != null ? ` СЛ ${a.save.dc}` : ''}${a.save.who === 'self' ? ', бросает само существо' : ''}` : '';
+  return [...dmg, sv, a.recharge ? `перезарядка ${a.recharge}` : ''].filter(Boolean).join(' · ');
+}
+
 function actionHTML(m, list, a, i) {
-  const meta = [a.type, a.note].filter(Boolean).join(' · ');
+  const meta = String(m.id).startsWith('lib:') ? libMeta(a) : [a.type, a.note].filter(Boolean).join(' · ');
   const rolls = (a.bonus ? `<button class="btn btn-sm btn-secondary" data-roll="mattack" data-list="${list}" data-i="${i}" aria-label="Атака: ${esc(a.name)}">${fmtMod(a.bonus)}</button>` : '')
     + (a.damage ? parseFormula(a.damage) ? `<button class="btn btn-sm btn-secondary" data-roll="mdamage" data-list="${list}" data-i="${i}" aria-label="Урон: ${esc(a.name)}">${esc(a.damage)}</button>`
       : `<span class="chip" title="Урон без броска">${esc(a.damage)} урон</span>` : '');
@@ -132,29 +139,30 @@ function actionHTML(m, list, a, i) {
 
 function monsterHTML(ctx, t) {
   const st = tokenStats(ctx.c, t);
-  const m = monsterById(t.monsterId);
+  const m = monsterOf(ctx.c, t.monsterId);
   const isM = ctx.isMaster;
+  const lib = String(t.monsterId || '').startsWith('lib:');
   if (!m) return `<header class="sheet-head"><div class="titles grow"><b>${esc(t.name)}</b>${t.monsterId?.startsWith('srd:') ? '<div class="t-sm muted">Бестиарий загружается…</div>' : ''}</div><button class="icon-btn icon-btn-sm" data-close-sheet>${icon('cancel-01', 18)}</button></header>`;
   const saves = m.saves ? ABILITIES.filter((a) => m.saves[a.id] != null).map((a) => `${a.short} ${fmtMod(m.saves[a.id])}`).join(', ') : '';
   return `<header class="sheet-head">
       <span class="sheet-portrait foe" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>
-      <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''} · ${esc(m.type)} · КО ${esc(m.cr)}</div></div>
+      <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''}${m.type ? ` · ${esc(m.type)}` : ''}${m.cr != null ? ` · КО ${esc(m.cr)}` : ''}</div></div>
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
       <div class="vital hp"><small>Хиты</small><b>${isM ? `${st.hp}<span>/${st.hpMax}</span>` : '?'}</b><small class="tertiary">${esc(m.hpDice)}</small></div>
       <div class="vital"><small>КД</small><b>${isM ? m.ac : '?'}</b></div>
-      <div class="vital"><small>Скорость</small><b>${m.speed}<span> фт</span></b></div>
-      <div class="vital"><small>Иниц.</small><b>${fmtMod(m.init)}</b></div>
+      <div class="vital"><small>Скорость</small><b>${m.speed ?? '—'}<span> фт</span></b></div>
+      <div class="vital"><small>Иниц.</small><b>${fmtMod(m.init ?? 0)}</b></div>
     </div>
     <div class="sheet-body scroll">
-      ${isM ? `<div class="abilities">${ABILITIES.map((a) => `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="mcheck" data-ab="${a.id}">${fmtMod(mod(m.stats[a.id]))}</button><span class="ab-score">${m.stats[a.id]}</span></div>`).join('')}</div>
+      ${isM ? `<div class="abilities">${ABILITIES.map((a) => `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="mcheck" data-ab="${a.id}">${fmtMod(mod(m.stats[a.id]))}</button><span class="ab-score">${m.stats[a.id] ?? '—'}</span></div>`).join('')}</div>
       ${saves ? `<p class="t-sm muted" style="margin:12px 0 0">Спасброски: ${saves}</p>` : ''}
-      <p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>
+      ${m.senses ? `<p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>` : ''}
       ${m.traits.map(traitHTML).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
       ${list === 'reactions' ? m.reactions.map(traitHTML).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
-      <p class="t-xs tertiary" style="margin-top:16px">${m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
+      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из библиотеки мастера в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
 
@@ -212,7 +220,7 @@ function sheetRoll(ctx, b) {
   const kind = b.dataset.roll;
   if (state.kind === 'monster') {
     const t = ctx.scene.tokens.find((x) => x.id === state.id);
-    const m = monsterById(t?.monsterId);
+    const m = monsterOf(ctx.c, t?.monsterId);
     if (!m) return;
     const hidden = !!ctx.ui.dicePool?.hidden;
     if (kind === 'mcheck') { const ab = ABILITIES.find((a) => a.id === b.dataset.ab); doRoll(ctx, { label: `${t.name}: проверка ${ab.name}`, dice: { 20: 1 }, mod: mod(m.stats[ab.id]), hidden }); }

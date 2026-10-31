@@ -2,6 +2,7 @@
 // В демо проверка роли только в интерфейсе; настоящая проверка — задача сервера (TASK-002/003).
 import { getDB, commit } from './store.js';
 import { monsterById } from '../data/bestiary.js';
+import { toMonster } from '../rules/creature.js';
 import { sizeById } from '../data/rules.js';
 import { uid } from './dom.js';
 
@@ -60,7 +61,7 @@ export function tokenStats(c, t) {
       };
     }
   }
-  const m = t.monsterId ? monsterById(t.monsterId) : null;
+  const m = t.monsterId ? monsterOf(c, t.monsterId) : null;
   return {
     name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: t.ac ?? 10, speed: t.speed ?? 30,
     initBonus: t.initBonus ?? 0, darkvision: t.darkvision || 0, conditions: t.conditions || [],
@@ -114,4 +115,23 @@ export function nextTokenName(scene, base) {
   let max = 0;
   for (const t of scene.tokens) { const m = t.name.match(re); if (m) max = Math.max(max, Number(m[1] || 1)); }
   return `${base} ${max + 1}`;
+}
+
+/**
+ * Статблок существа токена (TASK-179, TASK-097 п. 4.3): «srd:…» и ручные — из бестиария, «lib:<id>» — из копии
+ * личного существа в кампании `c.creatures[id]` (её видит мастер и владелец призыва; у остальных — null).
+ * Копия не связана с библиотекой: правка шаблона не меняет поставленных существ.
+ */
+const libMonsters = new WeakMap();
+export function monsterOf(c, id) {
+  if (!id) return null;
+  if (!String(id).startsWith('lib:')) return monsterById(id);
+  const x = c?.creatures?.[id.slice(4)];
+  if (!x) return null;
+  if (!libMonsters.has(x)) {
+    let m = null;
+    try { m = toMonster(x); } catch { /* повреждённая копия — как неизвестное существо */ }
+    libMonsters.set(x, m);
+  }
+  return libMonsters.get(x);
 }

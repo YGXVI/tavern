@@ -3,9 +3,8 @@ import { esc, uid, fmtMod, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { bus } from '../../core/store.js';
-import { tokenStats, characterOf, addLog, sceneOf, updateCampaign } from '../../core/campaign.js';
+import { tokenStats, characterOf, addLog, sceneOf, updateCampaign, monsterOf } from '../../core/campaign.js';
 import { LIGHTS, LIGHT_COLORS, ABILITIES, mod, profBonus, TEMPLATES } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { WALL_KINDS, cellOf, footprintAt, gridSize, gridDims, templateCells, footprintCells, key, cellCenter } from '../../rules/geometry.js';
 import { popover, closePopover, confirmDialog } from '../../ui/kit.js';
 import { doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
@@ -476,7 +475,7 @@ export function opportunityForMaster(ctx, p) {
     const f = sc.tokens.find((x) => x.id === fid);
     if (!f) continue;
     const fs = tokenStats(ctx.c, f);
-    const m = monsterById(f.monsterId);
+    const m = monsterOf(ctx.c, f.monsterId);
     const a = m?.actions.find((x) => x.bonus);
     ctx.toast({
       title: `${st.name} выходит из досягаемости`, body: `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,
