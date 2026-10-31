@@ -140,8 +140,9 @@ function actionHTML(m, list, a, i) {
 function monsterHTML(ctx, t) {
   const st = tokenStats(ctx.c, t);
   const m = monsterOf(ctx.c, t.monsterId);
-  const isM = ctx.isMaster;
+  const isM = ctx.isMaster || ctx.owns(t); // свой призыв владелец видит целиком (TASK-183)
   const lib = String(t.monsterId || '').startsWith('lib:');
+  const copyOwner = lib ? ctx.c.creatures?.[t.monsterId.slice(4)]?.ownerId : null;
   if (!m) return `<header class="sheet-head"><div class="titles grow"><b>${esc(t.name)}</b>${t.monsterId?.startsWith('srd:') ? '<div class="t-sm muted">Бестиарий загружается…</div>' : ''}</div><button class="icon-btn icon-btn-sm" data-close-sheet>${icon('cancel-01', 18)}</button></header>`;
   const saves = m.saves ? ABILITIES.filter((a) => m.saves[a.id] != null).map((a) => `${a.short} ${fmtMod(m.saves[a.id])}`).join(', ') : '';
   return `<header class="sheet-head">
@@ -162,7 +163,7 @@ function monsterHTML(ctx, t) {
       ${m.traits.map(traitHTML).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
       ${list === 'reactions' ? m.reactions.map(traitHTML).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
-      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из библиотеки мастера в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
+      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
 

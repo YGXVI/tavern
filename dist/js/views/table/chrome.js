@@ -189,7 +189,9 @@ function bottomCenter(ctx) {
       <div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V' })}${ib('tool:select', 'cursor-rectangle-selection-01', 'Выделение рамкой', { active: tool === 'select', kbd: 'S' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('layer', 'layers-01', 'Слой мастера: стены, двери, свет, туман, ловушки, сетка', { kbd: 'G' })}${ib('tool:text', 'text-font', 'Текст', { active: tool === 'text' })}${div}${undoRedo(ctx, false)}</div>`;
   }
   const lock = ctx.c.paused;
-  return `<div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
+  // «Добавить» у игрока (TASK-183): свой токен или призыв своего героя.
+  const add = ctx.member?.status === 'active' ? `${ib('add:own', 'plus-sign', 'Добавить: свой токен или призыв', { disabled: lock })}${div}` : '';
+  return `<div class="toolbar tools-bar">${add}${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
 }
 
 // ——— Слой мастера (TASK-088) ———

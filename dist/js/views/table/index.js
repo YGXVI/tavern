@@ -3,7 +3,7 @@ import { el, throttle, debounce, uid } from '../../core/dom.js';
 import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMode } from '../../core/store.js';
 import { currentUser } from '../../core/auth.js';
 import {
-  getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, updateCampaign, updateScene,
+  getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, ownsToken, updateCampaign, updateScene,
   tokenStats, userById,
 } from '../../core/campaign.js';
 import { Camera } from './camera.js';
@@ -68,6 +68,8 @@ export function mountTable(root, cid) {
   // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
   ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;
+  // Свой токен или призыв игрока (TASK-183): правит владелец — активный участник.
+  ctx.owns = (t) => !!t && ownsToken(ctx.c, ctx.userId, t);
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.

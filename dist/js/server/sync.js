@@ -411,6 +411,7 @@ function scheduleAssemble(cid) {
     if (!c) { delete db.campaigns[cid]; store.setDB(db, { remote: true }); return; }
     db.campaigns[cid] = c;
     store.setDB(db, { remote: true });
+    prefetchAssets(c); // новая картинка своего токена у собеседника (TASK-183)
     masterDuties(cid, c);
   }, 30));
 }
@@ -515,10 +516,15 @@ export function signedUrl(ref) {
   return s && s.until > Date.now() ? s.url : '';
 }
 
+// 'sb:<путь>' — бакет карт; 'sb:@tokens/<путь>' — картинки своих токенов игроков (бакет tokens, TASK-183).
+const TOKEN_REF = 'sb:@tokens/';
+const bucketOf = (ref) => (ref.startsWith(TOKEN_REF) ? ['tokens', ref.slice(TOKEN_REF.length)] : ['maps', ref.slice(3)]);
+
 export async function resolveSigned(ref) {
   const hit = signedUrl(ref); if (hit) return hit;
   if (!sb) return '';
-  const { data, error } = await sb.storage.from('maps').createSignedUrl(ref.slice(3), 3600 * 6);
+  const [bucket, path] = bucketOf(ref);
+  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 3600 * 6);
   if (error || !data?.signedUrl) return '';
   signed.set(ref, { url: data.signedUrl, until: Date.now() + 3600 * 6 * 1000 - 60000 });
   return data.signedUrl;
@@ -535,9 +541,32 @@ export async function uploadImage(cid, blob) {
   return ref;
 }
 
+/**
+ * Картинка своего токена игрока (TASK-183): PNG, JPEG или WebP до 5 МБ в бакет tokens, путь <кампания>/<игрок>/<файл>.
+ * Возвращает ссылку 'sb:@tokens/<путь>'. Читают её участники кампании (RLS бакета).
+ */
+export async function uploadTokenImage(cid, blob) {
+  const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' })[blob?.type];
+  if (!ext || blob.size > 5 * 1024 * 1024) throw new Error('Нужна картинка PNG, JPEG или WebP до 5 МБ');
+  if (!sb || !me) throw new Error('Нет связи с сервером');
+  const path = `${cid}/${me}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await sb.storage.from('tokens').upload(path, blob, { contentType: blob.type, upsert: false });
+  if (error) {
+    const msg = String(error.message || '');
+    throw new Error(/bucket not found/i.test(msg) ? 'Картинки своих токенов появятся после обновления базы' : /row-level/i.test(msg) ? 'Картинку можно загрузить только в свою кампанию' : msg);
+  }
+  const ref = `${TOKEN_REF}${path}`;
+  signed.set(ref, { url: URL.createObjectURL(blob), until: Date.now() + 3600 * 1000 });
+  return ref;
+}
+
+const asked = new Map(); // ссылка → время последней попытки: недоступную картинку не спрашиваем на каждое событие
 function prefetchAssets(c) {
   if (!c) return;
-  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src)].filter((r) => r?.startsWith('sb:') && !signedUrl(r)));
+  const toks = c.scenes.flatMap((s) => (s.tokens || []).map((t) => t.img));
+  const now = Date.now();
+  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src), ...toks].filter((r) => r?.startsWith('sb:') && !signedUrl(r) && now - (asked.get(r) || 0) > 60000));
   if (!refs.size) return;
+  for (const r of refs) asked.set(r, now);
   Promise.all([...refs].map(resolveSigned)).then(() => store.setDB(store.getDB(), { remote: true, assets: true }));
 }

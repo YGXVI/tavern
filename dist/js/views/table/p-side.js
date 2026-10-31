@@ -13,6 +13,7 @@ import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
 import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
+import { pickTokenImage } from './p-token.js';
 import { roll } from '../../../engine.js';
 
 // ——— Общее ———
@@ -471,6 +472,133 @@ export function placeHero(ctx, chId, at = null) {
     if (m) { if (sid === cc.activeSceneId) delete m.sceneId; else m.sceneId = sid; }
   });
   ctx.toast({ title: `${ch.name} на сцене`, body: sid === c.activeSceneId ? '' : 'Игрок теперь видит эту сцену — отряд разделился', icon: 'chess-pawn' });
+}
+
+// ——— «Добавить» у игрока (TASK-183, план TASK-097 п. 3.1–3.3): свой токен и призыв ———
+const OWN_SIZES = [['tiny', 'Крошечный'], ['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']];
+/** Свой герой игрока на этой сцене — рядом с ним встаёт свой токен, от него идёт призыв. */
+const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.hidden) || null;
+
+export function playerAddMenu(ctx, anchor) {
+  if (!ctx.scene) return;
+  menu([
+    { icon: 'user-add-01', label: 'Свой токен…', onClick: () => ownTokenPicker(ctx, anchor) },
+    { icon: 'monster', label: 'Призыв…', onClick: () => summonPicker(ctx, anchor) },
+  ], anchor, { placement: 'top' });
+}
+
+function ownTokenPicker(ctx, anchor) {
+  const st = { name: '', size: 'small', img: '', busy: false };
+  const face = () => { const ref = st.img || `ini:${st.name.trim() || '?'}`; return `<span class="avatar lg own-face"><img alt="" data-ref="${esc(ref)}" src="${esc(srcOf(ref))}"></span>`; };
+  const pop = popover(`<div class="pick-pop own-pop"><div class="panel-header"><div class="titles"><div class="title">Свой токен</div><div class="subtitle">Фамильяр, иллюзия, метка — встанет рядом с вашим героем</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section">
+      <div class="row own-row"><span data-face>${face()}</span><div class="col grow" style="gap:6px">
+        <div class="field"><label>Имя</label><div class="input"><input data-name maxlength="40" placeholder="Сова" aria-label="Имя токена"></div></div>
+        <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-img>${icon('upload-01', 16)}Картинка</button><button class="btn btn-sm btn-ghost" data-noimg style="display:none">Без картинки</button></div>
+        <span class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ; без картинки — инициалы</span>
+      </div></div>
+      <div class="field"><label>Размер</label><div class="chips-wrap">${OWN_SIZES.map(([v, l]) => `<button class="chip chip-md ${st.size === v ? 'chip-accent' : ''}" data-size="${v}">${l}</button>`).join('')}</div></div>
+      <span class="t-xs tertiary">Без статов — картинка без плашек и вне боя. Хиты и КД задаются потом: ПКМ → «Статы…».</span>
+      <button class="btn btn-primary btn-block" data-ok>${icon('plus-sign', 16)}Поставить на карту</button>
+    </div></div>`, anchor, { placement: 'top' });
+  const n = pop.node, nameIn = n.querySelector('[data-name]');
+  const redraw = () => { n.querySelector('[data-face]').innerHTML = face(); hydrateImages(n); n.querySelector('[data-noimg]').style.display = st.img ? '' : 'none'; };
+  nameIn.focus();
+  nameIn.addEventListener('input', () => { st.name = nameIn.value; if (!st.img) redraw(); });
+  nameIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') place(); if (e.key === 'Escape') closePopover(); });
+  n.addEventListener('click', (e) => {
+    const sz = e.target.closest('[data-size]');
+    if (sz) { st.size = sz.dataset.size; for (const b of n.querySelectorAll('[data-size]')) b.classList.toggle('chip-accent', b === sz); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref) => { st.img = ref; redraw(); }); return; }
+    if (e.target.closest('[data-noimg]')) { st.img = ''; redraw(); return; }
+    if (e.target.closest('[data-ok]')) place();
+  });
+  function place() {
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.closest('.field').classList.add('error'); nameIn.focus(); return; }
+    placeOwnToken(ctx, { name, size: st.size, img: st.img });
+    closePopover();
+  }
+}
+
+/** Свой токен игрока: вид «custom», владелец — игрок, без хитов (план TASK-097, «Свой токен игрока»). */
+export function placeOwnToken(ctx, { name, size = 'small', img = '' }, at = null) {
+  if (!ctx.scene) return null;
+  const hero = myHeroToken(ctx);
+  const p = freeSpots(ctx.scene, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), 1, sizeById(size).cells)[0];
+  const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
+  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
+  ctx.select([t.id]);
+  return t;
+}
+
+function summonPicker(ctx, anchor) {
+  const st = { q: '', src: 'srd' };
+  const L = libState(ctx);
+  const hero = myHeroToken(ctx);
+  const rows = () => {
+    if (!hero) return '<p class="t-sm muted b-empty">Призыв встаёт рядом с вашим героем — попросите мастера поставить героя на эту сцену.</p>';
+    const q = st.q.trim().toLowerCase();
+    if (st.src === 'lib') {
+      if (libOffline(ctx)) return '<p class="t-sm muted b-empty">Свои существа на сервере появятся после обновления базы.</p>';
+      if (!L.list && !L.error) { if (!L.loading) loadLib(ctx).then(() => { if (n.isConnected) list(); }); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
+      if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
+      const mine = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
+      if (!mine.length) return `<p class="t-sm muted b-empty">${L.list.length ? 'Никого не нашлось.' : 'В библиотеке пусто — соберите существо на главной, во вкладке «Существа».'}</p>`;
+      return mine.slice(0, 40).map((x) => row(`libsrc:${x.id}`, x.name, [x.type, x.cr != null ? `КО ${x.cr}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · '), x.img && !String(x.img).startsWith('library:') ? x.img : `ini:${x.name}`)).join('');
+    }
+    const found = BESTIARY.filter((m) => bMatch(m, q)).slice(0, 40);
+    if (!found.length) return '<p class="t-sm muted b-empty">Никого не нашлось.</p>';
+    return found.map((m) => row(m.id, m.name, `${m.type} · КО ${m.cr} · ${m.hp} хп`, m.img)).join('');
+  };
+  const row = (id, name, sub, img) => `<button class="list-row b-row" data-summon="${esc(id)}"><span class="avatar sm foe"><img src="${esc(srcOf(img))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(name)}</span><span class="secondary ellipsis">${esc(sub)}</span></span></button>`;
+  const pop = popover(`<div class="pick-pop summon-pop"><div class="panel-header"><div class="titles"><div class="title">Призыв</div><div class="subtitle">${hero ? `Встанет союзником рядом с вашим героем (${esc(hero.name)}); в бой его добавляет мастер` : 'Нужен ваш герой на сцене'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-src="srd" aria-selected="true">Бестиарий</button><button class="tab" role="tab" data-src="lib" aria-selected="false">Мои</button></div>
+      <div class="input">${icon('search-01', 18)}<input data-q placeholder="Боевой конь, wolf, КО 1…" aria-label="Поиск существ"></div></div>
+    <div class="w-list scroll summon-list" data-list>${rows()}</div></div>`, anchor, { placement: 'top' });
+  const n = pop.node;
+  const list = () => { n.querySelector('[data-list]').innerHTML = rows(); };
+  const qIn = n.querySelector('[data-q]');
+  qIn.focus();
+  qIn.addEventListener('input', () => { st.q = qIn.value; list(); });
+  qIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') closePopover(); });
+  n.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-src]');
+    if (tab) { st.src = tab.dataset.src; for (const b of n.querySelectorAll('[data-src]')) b.setAttribute('aria-selected', String(b === tab)); qIn.placeholder = st.src === 'lib' ? 'Найти своё существо' : 'Боевой конь, wolf, КО 1…'; list(); return; }
+    const b = e.target.closest('[data-summon]');
+    if (b && placeSummon(ctx, b.dataset.summon)) closePopover();
+  });
+}
+
+/**
+ * Призыв игрока (план TASK-097, «Призывы игрока»): существо из бестиария или своей библиотеки рядом с героем —
+ * дружественное, со ссылкой на призывателя и владельцем-игроком. В бой само не попадает.
+ */
+export function placeSummon(ctx, pick, at = null) {
+  const hero = myHeroToken(ctx);
+  if (!hero || !ctx.scene) { ctx.toast({ title: 'Нужен ваш герой на сцене', body: 'Призыв встаёт рядом с ним — попросите мастера поставить героя', icon: 'alert-circle' }); return false; }
+  const tpl = libTemplate(ctx, pick);
+  const m = tpl ? safeMonster(tpl) : monsterById(pick);
+  if (!m || (tpl && libOffline(ctx))) return false;
+  let copyId = null, newCopy = null;
+  if (tpl) {
+    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && x.ownerId === ctx.userId);
+    copyId = have ? have.id : uid('cc-');
+    if (!have) newCopy = { ...snapshotOf(tpl, copyId), ownerId: ctx.userId };
+  }
+  const n = sizeById(m.size).cells;
+  const p = freeSpots(ctx.scene, at || { x: hero.x, y: hero.y }, 1, n)[0];
+  const g = ctx.scene.grid, s = gridSize(g);
+  const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
+  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly' }, m);
+  ctx.mutateScene((sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(t); }, {
+    label: 'Призыв',
+    undo: (sc, c) => { sc.tokens = sc.tokens.filter((x) => x.id !== t.id); if (newCopy && c.creatures) delete c.creatures[copyId]; },
+    redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(structuredClone(t)); },
+  });
+  ctx.select([t.id]);
+  ctx.toast({ title: `Призыв: ${t.name}`, body: 'Стоит рядом с вашим героем. В бой его добавляет мастер', icon: 'monster' });
+  return true;
 }
 
 // ——— Предметы ———

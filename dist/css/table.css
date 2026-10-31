@@ -424,6 +424,9 @@ button.init-num:hover { background: var(--bg-control-off); }
 
 /* ——— Поповеры стола ——— */
 .door-pop, .wall-pop, .light-pop, .pin-pop, .portal-pop, .trap-pop, .warn-pop, .pause-pop, .pick-pop { width: 320px; max-width: 100%; }
+/* Свой токен и призыв игрока (TASK-183) */
+.summon-pop .summon-list { max-height: min(46vh, 360px); }
+.own-pop .own-row { gap: 12px; align-items: center; }
 .tpl-pop { width: 300px; }
 .hp-editor { width: 300px; }
 .cond-picker { width: 340px; }

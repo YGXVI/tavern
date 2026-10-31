@@ -4,7 +4,7 @@ import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf } from '../../core/campaign.js';
+import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf, canFight } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
@@ -473,7 +473,7 @@ export class Panels {
       n.classList.remove('flash-dmg', 'flash-heal'); void n.offsetWidth;
       n.classList.add(delta < 0 ? 'flash-dmg' : 'flash-heal');
       setTimeout(() => n.classList.remove('flash-dmg', 'flash-heal'), 800);
-      const showNum = ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact';
+      const showNum = ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || ctx.c.settings.playersSeeHp === 'exact';
       if (!showNum) continue;
       const g = ctx.scene.grid.size * sizeById(t.size).cells;
       const f = el(`<span class="hp-float ${delta < 0 ? 'dmg' : 'heal'}" style="left:${t.x}px;top:${t.y - g * 0.45}px">${delta < 0 ? '−' : '+'}${Math.abs(delta)}</span>`);
@@ -491,7 +491,7 @@ export class Panels {
     // Новых участников бросаем до записи — их к20 падают на стол.
     const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
       const t = ctx.scene?.tokens.find((x) => x.id === id);
-      return t && t.kind !== 'item' ? { tokenId: id, ...rollInitiative(c, t) } : null;
+      return canFight(t) ? { tokenId: id, ...rollInitiative(c, t) } : null;
     }).filter(Boolean);
     this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
@@ -811,6 +811,7 @@ export class Panels {
       }
       case 'token-settings': if (one) T.tokenSettings(ctx, one.id, b); break;
       case 'token-delete': T.deleteTokens(ctx, sel); break;
+      case 'own-stats': if (one) T.statsPrompt(ctx, one.id); break;
       case 'deselect': ctx.select([]); break;
       case 'ping-token': if (one) ctx.ping(one.x, one.y); break;
       case 'copy-code': copyText(ctx.c.invite?.code || '').then(() => ctx.toast({ title: 'Код скопирован', body: ctx.c.invite?.code, icon: 'copy-01' })); break;
@@ -846,6 +847,7 @@ export class Panels {
       case 'creature': this.toggleSide('bestiary'); break;
       case 'hero': S.heroPicker(ctx, b); break;
       case 'item': S.itemPicker(ctx, b); break;
+      case 'own': S.playerAddMenu(ctx, b); break;
       case 'environment': ctx.setTool('lights'); break;
       case 'note': ctx.setTool('gm', 'note'); break;
       case 'map': S.newSceneModal(ctx); break;

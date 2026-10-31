@@ -199,6 +199,11 @@ export function attachInput(ctx) {
     const grpDraws = [...ctx.ui.selDrawings].filter((id) => ctx.scene?.drawings.some((d) => d.id === id));
     if ((e.key === 'Delete' || e.key === 'Backspace') && grpDraws.length) { ctx.panels.deleteTokens(ctx.isMasterView ? [...ctx.ui.selection] : [], grpDraws); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) { deleteDrawing(ctx, ctx.ui.selDrawing); ctx.invalidate('drawings'); return; }
+    // Игрок удаляет свои токены и призывы (TASK-183); чужие и героев — мастер.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !ctx.isMasterView && ctx.ui.selection.size) {
+      const own = [...ctx.ui.selection].filter((id) => ctx.owns(ctx.scene?.tokens.find((t) => t.id === id)));
+      if (own.length) { ctx.panels.deleteTokens(own); return; }
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.isMasterView) {
       if (ctx.ui.selectedWall) { ctx.panels.deleteWall(ctx.ui.selectedWall); return; }
       if (ctx.ui.selectedLight) { ctx.panels.deleteLight(ctx.ui.selectedLight); return; }

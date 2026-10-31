@@ -4,7 +4,7 @@ import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
-import { tokenStats, userById, isMasterOf } from '../../core/campaign.js';
+import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
@@ -322,14 +322,15 @@ export function renderTokens(L, ctx) {
     }
     if (byId) node.classList.add('remote-drag'); else if (sels.length) node.classList.add('remote-sel');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
-    const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
+    const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
     const hb = node.querySelector('.tok-badge.hp-b'), ab = node.querySelector('.tok-badge.ac-b');
     const tmp = st.tempHp > 0 ? `<i>+${st.tempHp}</i>` : '';
     const hpHtml = showHp ? `${Math.max(0, st.hp)}${tmp}` : '';
     if (hb.dataset.v !== hpHtml) { hb.innerHTML = hpHtml; hb.dataset.v = hpHtml; hb.title = st.tempHp > 0 ? `Хиты ${st.hp} из ${st.hpMax}, временные ${st.tempHp}` : `Хиты ${st.hp} из ${st.hpMax}`; }
     hb.style.display = showHp ? '' : 'none';
-    const showAc = st.ac != null && (ctx.isMasterView || t.kind === 'hero');
+    // Свой токен без хитов — картинка без плашек (TASK-183); у своих токенов и призывов КД видят все, как хиты.
+    const showAc = st.ac != null && canFight(t) && (ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy);
     const acTxt = showAc ? String(st.ac) : '';
     if (ab.textContent !== acTxt) { ab.textContent = acTxt; ab.title = `Класс доспеха ${st.ac}`; }
     ab.style.display = showAc ? '' : 'none';
