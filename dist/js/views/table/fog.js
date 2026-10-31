@@ -286,7 +286,8 @@ export function drawFog(canvas, scene, vis, explored, view, opts = {}) {
     ctx.globalCompositeOperation = 'source-over';
     return;
   }
-  ctx.fillStyle = 'rgba(0,0,0,0.94)';
+  // Игрок: что отряд не видит — сплошной чёрный, карта под туманом не просвечивает (TASK-160).
+  ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
   ctx.globalCompositeOperation = 'destination-out';
   if (E) { ctx.globalAlpha = 0.42; ctx.drawImage(E, 0, 0); }

@@ -4,7 +4,7 @@ import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
-import { tokenStats } from '../../core/campaign.js';
+import { tokenStats, userById, isMasterOf } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
@@ -88,11 +88,12 @@ export function renderDrawings(L, scene, ctx = null) {
   const mv = ctx?.ui.drawMove;
   const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
+  const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
   L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
     const ed = live && canEditDrawing(ctx, d);
     const attr = ed ? ` data-drawing="${d.id}"` : '';
-    const cls = `${ed ? ' ed' : ''}${selId === d.id ? ' sel' : ''}`;
+    const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
     if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
     if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
     const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -104,6 +105,16 @@ export function renderDrawings(L, scene, ctx = null) {
     const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
     bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
     L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  }
+  if (group?.size) {
+    const pad = 8 * (1 / (ctx.camera?.z || 1));
+    let out = '';
+    for (const id of group) {
+      const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); if (!n) continue;
+      const b = n.getBBox();
+      out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
+    }
+    L.drawings.insertAdjacentHTML('beforeend', out);
   }
   if (ctx) renderDrawBar(L, ctx, bbox);
 }
@@ -269,7 +280,7 @@ export function renderTokens(L, ctx) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
     }
-    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; }
+    if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; node.dataset.by = ''; }
     const p = ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
@@ -289,6 +300,27 @@ export function renderTokens(L, ctx) {
       if (tg.length) node.insertAdjacentHTML('beforeend', `<span class="tok-tg" title="Цель: ${esc(tg.map((u) => u.name).join(', '))}">${tg.map((u) => `<i style="--pc:hsl(${u.hue ?? 32} 80% 62%)">${icon('target-02', 12)}</i>`).join('')}</span>`);
       node.dataset.tg = tgSig;
     }
+    // Кто тащит (TASK-162) или выделил (TASK-164) токен: кольцо цвета участника и плашка с именем.
+    // Перетаскивание ярче и важнее выделения; свои действия не помечаем.
+    const rd = ctx.remote.drags.get(t.id);
+    const byId = rd && rd.sceneId === ctx.sceneId && rd.by && rd.by !== ctx.userId ? rd.by : '';
+    const sels = byId ? [] : ctx.selectorsOf?.(t.id) || [];
+    const colorOf = (id, u) => (isMasterOf(c, id) ? '#e9b052' : `hsl(${u?.hue ?? 32} 80% 62%)`);
+    const bySig = byId ? `d|${byId}|${rd.lead ? 1 : 0}` : sels.length ? `s|${sels.map((u) => u.id).join(',')}` : '';
+    if (node.dataset.by !== bySig) {
+      node.querySelector('.tok-by')?.remove();
+      if (byId) {
+        const u = userById(byId);
+        node.style.setProperty('--dc', colorOf(byId, u));
+        if (rd.lead) node.insertAdjacentHTML('beforeend', `<span class="tok-by">${icon('cursor-hold-01', 12)}${esc(u?.name || 'Кто-то')}</span>`);
+      } else if (sels.length) {
+        node.style.setProperty('--dc', colorOf(sels[0].id, sels[0]));
+        const names = sels.slice(0, 2).map((u) => esc(u.name)).join(', ') + (sels.length > 2 ? ` +${sels.length - 2}` : '');
+        node.insertAdjacentHTML('beforeend', `<span class="tok-by sel" title="Выделили: ${esc(sels.map((u) => u.name).join(', '))}">${icon('cursor-01', 12)}${names}</span>`);
+      } else node.style.removeProperty('--dc');
+      node.dataset.by = bySig;
+    }
+    if (byId) node.classList.add('remote-drag'); else if (sels.length) node.classList.add('remote-sel');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
     const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
