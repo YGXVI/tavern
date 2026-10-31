@@ -1,0 +1,237 @@
+From a31ce58dba623fc14e90c751ec3966e3490cf169 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 30 Oct 2026 14:38:12 +0500
+Subject: [PATCH] =?UTF-8?q?TASK-115:=20=D0=BF=D0=BB=D0=B0=D0=BD=20?=
+ =?UTF-8?q?=E2=80=94=20=D1=82=D0=BE=D0=BB=D1=8C=D0=BA=D0=BE=20=D0=B2=D1=85?=
+ =?UTF-8?q?=D0=BE=D0=B4=20=D1=87=D0=B5=D1=80=D0=B5=D0=B7=20Discord,=20?=
+ =?UTF-8?q?=D0=B1=D0=B5=D0=B7=20=D0=BF=D0=B5=D1=81=D0=BE=D1=87=D0=BD=D0=B8?=
+ =?UTF-8?q?=D1=86=D1=8B,=20=D0=B4=D0=B5=D0=BC=D0=BE=20=D0=B8=20/legacy/=20?=
+ =?UTF-8?q?(L2,=20=D0=BD=D0=B0=20=D0=BF=D0=BE=D0=B4=D1=82=D0=B2=D0=B5?=
+ =?UTF-8?q?=D1=80=D0=B6=D0=B4=D0=B5=D0=BD=D0=B8=D0=B5=20=D0=AF=D1=80=D1=8B?=
+ =?UTF-8?q?)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Только планирующие артефакты OpenSpec; код не меняется до подтверждения плана.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_013qF6ZBGuYw2TfFgKSXNC5n
+---
+ .../changes/task-115-auth-only/.openspec.yaml |  2 +
+ openspec/changes/task-115-auth-only/design.md | 28 +++++++++++++
+ .../changes/task-115-auth-only/proposal.md    | 40 +++++++++++++++++++
+ .../task-115-auth-only/specs/auth/spec.md     | 23 +++++++++++
+ .../specs/campaigns/spec.md                   | 23 +++++++++++
+ .../task-115-auth-only/specs/themes/spec.md   |  7 ++++
+ openspec/changes/task-115-auth-only/tasks.md  | 33 +++++++++++++++
+ 7 files changed, 156 insertions(+)
+ create mode 100644 openspec/changes/task-115-auth-only/.openspec.yaml
+ create mode 100644 openspec/changes/task-115-auth-only/design.md
+ create mode 100644 openspec/changes/task-115-auth-only/proposal.md
+ create mode 100644 openspec/changes/task-115-auth-only/specs/auth/spec.md
+ create mode 100644 openspec/changes/task-115-auth-only/specs/campaigns/spec.md
+ create mode 100644 openspec/changes/task-115-auth-only/specs/themes/spec.md
+ create mode 100644 openspec/changes/task-115-auth-only/tasks.md
+
+diff --git a/openspec/changes/task-115-auth-only/.openspec.yaml b/openspec/changes/task-115-auth-only/.openspec.yaml
+new file mode 100644
+index 0000000..4bfa670
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/.openspec.yaml
+@@ -0,0 +1,2 @@
++schema: spec-driven
++created: 2026-10-30
+diff --git a/openspec/changes/task-115-auth-only/design.md b/openspec/changes/task-115-auth-only/design.md
+new file mode 100644
+index 0000000..b7112fe
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/design.md
+@@ -0,0 +1,28 @@
++# Design
++
++## Context
++
++Серверный режим — TASK-002/DEC-014: Supabase (вход Discord, RLS, Realtime, бакет карт), включается флагом `SERVER_ENABLED` или ссылкой `?server=1`. В серверном режиме `store.js` уже работает как хранилище в памяти с `backend` (`useServerBackend`, `setDB`, `afterCommit`, `deliver`); песочница — та же модель, но с `localStorage` и `BroadcastChannel`. Интерфейс различает режимы через `isServerMode()`. См. proposal.md — Why.
++
++## Goals / Non-Goals
++
++**Goals:** один режим — сервер; меньше кода и проверок; ссылки-приглашения без параметров; честный экран при недоступном сервере.
++
++**Non-Goals:** изменения схемы/RLS; новый онбординг или пробная кампания на сервере (sol0139: демо убрать совсем); стирание старых данных в браузерах; серверное хранение личных настроек (TASK-104).
++
++## Decisions
++
++1. **Порядок.** Сначала шаг 8 TASK-002 (флаг для всех, проверка двумя аккаунтами, `rls.sql`, советник безопасности), затем удаление песочницы — в одном PR, но отдельными коммитами: (а) флаг и предпросмотр, (б) вход и экраны, (в) хранилище и демо, (г) `/legacy/`, (д) документы и specs. Ревью и откат по частям проще.
++2. **`isServerMode()`** остаётся на переходный период как `true`-константа и удаляется вместе с ветками «не сервер» в том же PR; поиск по коду — проверка, что веток песочницы не осталось.
++3. **Хранилище.** `store.js`: `initStore` без чтения `localStorage`, без `storage`-события и `BroadcastChannel`; `bus.send` всегда через `backend`; присутствие только через `backend.setPresence`. Камера вкладки (`rasputye-v2-cam:*`, sessionStorage) остаётся — это удобство вкладки, не песочница.
++4. **Конструкторы.** `demo.js` → `factory.js` без `seedDB`/`DEMO_USERS`/«Склепа культа»; импорты в `screens.js`, `p-side.js`, `p-dialogs.js` переносятся. Картинки, которые нужны только демо-кампании, удаляются из `dist/assets`, если их больше никто не использует (проверка поиском).
++5. **Тесты интерфейса.** Сценарии агентов (Playwright) идут на стенде `tests/browser/server-e2e/harness.mjs` — Supabase в памяти с той же схемой; фикстура кампании для стенда и `server-model.test.js` — в `tests/fixtures/`.
++6. **Сервер спит.** Бесплатный проект Supabase останавливается после недели без активности, и без песочницы сайт в это время недоступен (экран «Сервер недоступен»). Восстановить проект может только владелец в панели Supabase. Вариант подстраховки — плановый «пинг» из GitHub Actions — это изменение CI (L2) и **в этот план не входит**; решение — за Ярой.
++7. **Старые данные в браузерах** не удаляются: код их просто не читает. Если понадобится выгрузка локальных кампаний на сервер — отдельная задача.
++
++## Risks / Trade-offs
++
++- Нет офлайн-режима и «попробовать без входа»: новый человек без Discord стол не увидит.
++- Простой бесплатного проекта (см. п. 6) делает сайт недоступным до ручного восстановления.
++- Локальные кампании, созданные в песочнице, у людей остаются в браузере, но в приложении больше не видны.
++- Большое удаление кода: риск задеть общие пути стола; снижается пошаговыми коммитами и прогоном сценариев на стенде.
+diff --git a/openspec/changes/task-115-auth-only/proposal.md b/openspec/changes/task-115-auth-only/proposal.md
+new file mode 100644
+index 0000000..8dc1896
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/proposal.md
+@@ -0,0 +1,40 @@
++# Proposal
++
++## Задача и участники
++
++- TASK-ID: TASK-115 · Issue [#115](https://github.com/YGXVI/tavern/issues/115). Уровень **L2**: серверный флаг и вход (`dist/js/server/config.js`, `dist/js/core/store.js`, `auth.js`, `dist/js/main.js`), ключи хранилища и `docs/data.md`, отмена пункта DEC-014 «Песочница остаётся», упоминания `/legacy/` в AGENTS.md, удаление capability `themes`.
++- Автор: sol0139 + Claude Code (облачная сессия sol0139). Проверяющий плана и результата — **Яра (YGXVI)**; интегратор — Яра или согласованный ею участник, не автор PR.
++- Ветка плана и реализации `claude/task-115-auth-only` от `main` `1945eed2f0e212488fdf13df53b44e2411cd0ddd`. Реализация — только после явного подтверждения Ярой ревизии этого плана.
++
++## Why
++
++sol0139 (30.10 14:25 +05:00): «давай грузить основную ветку, убираем песочницу целиком, всё через авторизацию». Уточнения 14:27: демо-кампанию «Склеп культа» — убрать совсем; старый прототип `/legacy/` — убрать тоже.
++
++Серверный режим (TASK-002, DEC-014) работает за флагом: его включают ссылкой `?server=1`, остальные по-прежнему попадают в локальную песочницу. 30.10 sol0139 с другом сыграли бой на сервере; найденный «прыжок» очереди исправлен (TASK-113). Две параллельные модели данных (песочница в браузере и сервер) удваивают проверки и путают игроков: ссылка без `?server=1` открывает песочницу.
++
++## What Changes
++
++- **Сервер для всех.** `SERVER_ENABLED = true` (шаг 8.1 TASK-002) и удаление предпросмотра: `?server=1/0`, ключ `rasputye-server-preview`, режим вкладки `rasputye-v2-mode`. Ссылка-приглашение — без `?server=1`; старые ссылки с ним продолжают работать (параметр просто не нужен).
++- **Только вход через Discord.** Экран входа — одна кнопка «Войти через Discord»; нет «Попробовать без входа», выбора демо-аккаунта и «Сменить аккаунт» на демо-пользователей. Экран «Сервер недоступен» — только «Попробовать снова».
++- **Без песочницы.** Удаляются локальная база `rasputye-v2-db` (чтение/запись, событие `storage`), обмен между вкладками через `BroadcastChannel('rasputye-v2')`, демо-вход (`rasputye-v2-session`, `rasputye-v2-last-user`), ветки «не сервер» в экранах и столе, «Сбросить демо-данные». `store.js` остаётся хранилищем в памяти поверх сервера (`setDB`, `commit` → `afterCommit`, `deliver`).
++- **Без демо-кампании.** Из `dist/js/data/demo.js` уходят `seedDB`, `DEMO_USERS` и содержимое «Склепа культа»; конструкторы, которыми пользуется приложение (`newCampaign`, `makeCharacter`, `makeScene`, `monsterToken`, `makeInviteCode`, `CHARACTER_TEMPLATES`), остаются (файл переименовывается в `factory.js`). Новый пользователь начинает с пустого списка и кнопки «Создать кампанию».
++- **Без `/legacy/`.** Удаляются `dist/legacy/**`, `dist/access.js` и `tests/access.test.js`; capability `themes` (темы прототипа) удаляется; в specs, `docs/status.md`, `README.md` и AGENTS.md убираются ссылки на прототип (в AGENTS — пункты «четыре темы только в /legacy/» и «прототип dist/legacy/**»).
++- **Решение.** Новая запись DEC-017 «Только вход через Discord» отменяет пункты DEC-014 «Песочница остаётся» и «Флаг»; `docs/data.md` описывает один (серверный) режим.
++- **Данные в браузерах не трогаем.** Старые ключи (`rasputye-v2-db`, `tavern-campaign-v1` и др.) остаются у людей нетронутыми и просто не читаются — молча стирать чужие локальные кампании нельзя.
++
++## Capabilities
++
++### New Capabilities
++
++### Modified Capabilities
++- `auth`: только вход через Discord, демо-вход удалён.
++- `campaigns`: локальные кампании удалены, кампании только серверные.
++- `themes`: capability удаляется вместе с `/legacy/`.
++
++## Impact
++
++- Код: `dist/js/server/config.js`, `dist/js/core/{store,auth}.js`, `dist/js/main.js`, `dist/js/views/screens.js`, `dist/js/views/table/{index,panels,p-dialogs,p-side}.js` (ветки песочницы и импорт конструкторов), `dist/js/data/demo.js` → `factory.js`, удаление `dist/legacy/**`, `dist/access.js`.
++- Тесты: `tests/access.test.js` удаляется; `tests/server-model.test.js` получает свою фикстуру кампании вместо `seedDB`; `tests/browser/server-e2e/e2e.mjs` — без `[data-sandbox]`. Проверки интерфейса агентов переезжают на стенд «Supabase в памяти» (`tests/browser/server-e2e/harness.mjs`).
++- Документы: `docs/data.md`, `docs/decisions.md` (DEC-017), `docs/status.md`, `README.md`, AGENTS.md, specs `auth`, `campaigns`, `themes` и разделы «Контекст» остальных specs со ссылками на `/legacy/`.
++- Supabase: схема, SQL, RLS и настройки не меняются.
++- Откат: revert merge-коммита возвращает песочницу и прототип; данные на сервере не затрагиваются.
+diff --git a/openspec/changes/task-115-auth-only/specs/auth/spec.md b/openspec/changes/task-115-auth-only/specs/auth/spec.md
+new file mode 100644
+index 0000000..d426d37
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/specs/auth/spec.md
+@@ -0,0 +1,23 @@
++## REMOVED Requirements
++
++### Requirement: Локальный демонстрационный вход
++
++**Reason**: Сайт работает только с настоящим входом через Discord (TASK-115, решение sol0139 30.10); песочница удалена.
++
++**Migration**: Вход через Discord (Supabase Auth, DEC-014). Старые демо-пользователи в браузерах не переносятся.
++
++## ADDED Requirements
++
++### Requirement: Только вход через Discord
++
++Приложение SHALL открывать кампании и стол только после входа через Discord. Экран входа MUST NOT предлагать вход без аккаунта, выбор демо-пользователя или локальный режим.
++
++#### Scenario: Первый визит
++
++- **WHEN** человек без входа открывает сайт или ссылку на кампанию
++- **THEN** он видит экран входа с одной кнопкой «Войти через Discord»; после входа открывается то, что он открывал
++
++#### Scenario: Сервер недоступен
++
++- **WHEN** сервер не отвечает при входе
++- **THEN** приложение показывает «Сервер недоступен» и кнопку «Попробовать снова»; локального режима нет
+diff --git a/openspec/changes/task-115-auth-only/specs/campaigns/spec.md b/openspec/changes/task-115-auth-only/specs/campaigns/spec.md
+new file mode 100644
+index 0000000..e0b07ec
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/specs/campaigns/spec.md
+@@ -0,0 +1,23 @@
++## REMOVED Requirements
++
++### Requirement: Локальные кампании
++
++**Reason**: Кампании хранятся только на сервере (TASK-115); песочница и демо-кампания удалены.
++
++**Migration**: Серверные кампании (TASK-002). Локальные кампании, созданные в песочнице, остаются в браузере пользователя нетронутыми, но приложение их не читает.
++
++## ADDED Requirements
++
++### Requirement: Только серверные кампании
++
++Приложение SHALL показывать и создавать кампании только на сервере; новый пользователь SHALL начинать с пустого списка и кнопки «Создать кампанию». Ссылка-приглашение MUST NOT требовать дополнительных параметров адреса.
++
++#### Scenario: Новый пользователь
++
++- **WHEN** человек впервые входит через Discord
++- **THEN** список кампаний пуст, демо-кампании нет, доступно «Создать кампанию»
++
++#### Scenario: Приглашение
++
++- **WHEN** мастер копирует ссылку-приглашение
++- **THEN** ссылка вида `…/#/join/RSP-XXXX` без `?server=1` открывает вход и вступление в эту кампанию
+diff --git a/openspec/changes/task-115-auth-only/specs/themes/spec.md b/openspec/changes/task-115-auth-only/specs/themes/spec.md
+new file mode 100644
+index 0000000..ef4b7fe
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/specs/themes/spec.md
+@@ -0,0 +1,7 @@
++## REMOVED Requirements
++
++### Requirement: Темы прежнего прототипа
++
++**Reason**: Прототип `/legacy/` удаляется (решение sol0139 30.10, TASK-115); новый стол использует одну тёмную тему.
++
++**Migration**: Нет — четыре темы прототипа не переносятся; ключ `rasputye-theme-v1` в браузерах не читается.
+diff --git a/openspec/changes/task-115-auth-only/tasks.md b/openspec/changes/task-115-auth-only/tasks.md
+new file mode 100644
+index 0000000..62a4d38
+--- /dev/null
++++ b/openspec/changes/task-115-auth-only/tasks.md
+@@ -0,0 +1,33 @@
++# Tasks
++
++## 0. Согласование
++
++- [ ] 0.1 Яра подтверждает ревизию этого плана в Issue #115 (L2); проверка: комментарий с SHA плана
++
++## 1. Сервер для всех (шаг 8 TASK-002)
++
++- [ ] 1.1 `SERVER_ENABLED = true`, удалить предпросмотр `?server=1/0`, ключи `rasputye-server-preview` и `rasputye-v2-mode`, `joinUrl` без `?server=1`; проверка: стенд — вход, кампания, приглашение по ссылке без параметра; старая ссылка с `?server=1` открывает то же
++- [ ] 1.2 Повторить `supabase/tests/rls.sql` и советник безопасности; проверка: без регрессий, отчёт в Issue
++
++## 2. Вход и экраны
++
++- [ ] 2.1 Экран входа — только «Войти через Discord»; «Сервер недоступен» — только «Попробовать снова»; убрать «Сбросить демо-данные», демо-аккаунты и подсказки песочницы; проверка: стенд, 1440 и 390 px
++
++## 3. Хранилище и демо
++
++- [ ] 3.1 `store.js` и `auth.js` без локальной базы, вкладочного обмена и демо-входа; `main.js` без `seedDB`; ветки `isServerMode()` в экранах и столе — только серверные; проверка: поиск `localStorage`/`BroadcastChannel`/`isServerMode` по `dist/js` — остаются только камера и настройки вкладки; `npm test`
++- [ ] 3.2 `demo.js` → `factory.js` без демо-кампании, перенос импортов; удалить неиспользуемые картинки демо; проверка: создание кампании, сцены, героя и монстра на стенде
++
++## 4. Прототип
++
++- [ ] 4.1 Удалить `dist/legacy/**`, `dist/access.js`, `tests/access.test.js`; проверка: `/legacy/` отдаёт 404 на превью Vercel, `npm test`
++
++## 5. Документы и specs
++
++- [ ] 5.1 DEC-017, `docs/data.md`, `docs/status.md`, `README.md`, AGENTS.md (упоминания `/legacy/`); specs `auth`, `campaigns`, `themes` (удаление), контекст остальных specs; проверка: `spec:validate`, `spec:validate:archive`, поиск «песочниц», «legacy», «Попробовать без входа», «демо» по репозиторию
++
++## 6. Проверки и приёмка
++
++- [ ] 6.1 `npm ci`, `npm run spec:validate`, `npm run spec:validate:archive`, `npm test`, `node --check` изменённых JS; e2e на стенде (`tests/browser/server-e2e`)
++- [ ] 6.2 Превью Vercel PR: вход двумя настоящими аккаунтами Discord на двух устройствах — кампания, приглашение, бой, броски (sol0139 + игрок)
++- [ ] 6.3 Человеческое review результата (Яра) и merge интегратором; после деплоя — проверка сайта
+-- 
+2.50.1 (Apple Git-155)
+
