@@ -446,7 +446,7 @@ export function templatePopover(ctx, anchor) {
   const def = TEMPLATES.find((t) => t.id === tpl.type);
   ctx.ui.templateTargets = targets.map((t) => t.id);
   const list = targets.map((t) => { const st = tokenStats(ctx.c, t); return `<div class="list-row"><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="primary grow">${esc(st.name)}</span></div>`; }).join('');
-  const pop = popover(`<div class="tpl-pop">${head(`${def.name} · ${tpl.size} фт`, `В области: ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`)}
+  const pop = popover(`<div class="tpl-pop">${head(`${def.name} · ${String(tpl.size).replace('.', ',')} фт`, `В области: ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`)}
     <div class="tpl-list scroll">${list || '<p class="t-sm muted" style="padding:0 16px">Никого не задевает</p>'}</div>
     <div class="panel-section">${ctx.isMaster
       ? `<p class="t-xs tertiary">Спасброски героев попросим у игроков, за существ бросите вы.</p>`
@@ -460,7 +460,7 @@ export function templatePopover(ctx, anchor) {
     if (e.target.closest('[data-saves]')) { closePopover(); ctx.panels.saveRequestPanel(targets.map((t) => t.id), { label: def.name }); }
     if (e.target.closest('[data-send]')) {
       bus.send('template-share', { cid: ctx.cid, sceneId: ctx.sceneId, tpl, targets: targets.map((t) => t.id), userId: ctx.userId, name: characterOf(ctx.c, ctx.myCharacterId)?.name || ctx.user.name });
-      ctx.toast({ title: 'Отправлено мастеру', body: `${def.name} ${tpl.size} фт · ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`, icon: 'arrow-right-02' });
+      ctx.toast({ title: 'Отправлено мастеру', body: `${def.name} ${String(tpl.size).replace('.', ',')} фт · ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`, icon: 'arrow-right-02' });
       closePopover();
     }
   });

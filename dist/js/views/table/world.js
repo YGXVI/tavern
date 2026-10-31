@@ -378,6 +378,9 @@ export function renderOverlay(L, ctx) {
   const brush = ctx.ui.brush;
   if (brush) out.push(`<circle class="brush ${brush.mode}" cx="${brush.x}" cy="${brush.y}" r="${brush.r}"/>`);
   if (ctx.ui.liveShape) out.push(shapeMarkup(scene.grid, ctx.ui.liveShape, ' live'));
+  // Размер и угол шаблона линейки, пока его тянут (TASK-178).
+  const tl = ctx.ui.templateLabel;
+  if (tl) lbl(tl.at.x, tl.at.y - s * 0.45, tl.text, 'accent');
   if (ctx.ui.liveStroke) out.push(`<polyline class="draw-line live" stroke="${esc(ctx.ui.liveStroke.color)}" points="${ctx.ui.liveStroke.pts.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
   if (ctx.ui.calib) {
     const k = ctx.ui.calib;

@@ -748,6 +748,7 @@ const measureTool = {
       g.mode = 'ruler';
     } else {
       const def = TEMPLATES.find((t) => t.id === sub);
+      // Клик без протягивания ставит шаблон прежнего размера (последний вытянутый или по умолчанию).
       const size = ctx.ui.sub.templateSize?.[sub] || def.size;
       // TASK-042: шаблон ставится свободно; Shift — к узлу сетки, как раньше.
       const origin = !g.shift ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
@@ -766,10 +767,15 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
-      // Угол свободно, липнет к 45° (Shift — по 15°, Alt — без магнита), как у фигур рисования (TASK-042).
-      t.angle = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey }).angle;
+      // TASK-178: тянешь от точки — направление и размер одним движением, как у фигур рисования (TASK-042):
+      // размер по 0,5 фт, угол липнет к 45°; Shift — по 5 фт и 15°; Alt — угол свободно. Размер и угол — у курсора.
+      const aim = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey });
+      t.angle = aim.angle;
+      if (Math.hypot(w.x - t.origin.x, w.y - t.origin.y) * ctx.camera.z > 8) t.size = aim.size;
+      const ft = String(t.size).replace('.', ',');
+      ctx.ui.templateLabel = { at: w, text: t.type === 'sphere' ? `радиус ${ft} фт` : `${ft} фт · ${aim.deg}°` };
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
-      ctx.invalidate('areas');
+      ctx.invalidate('areas', 'overlay');
     }
   },
   up(ctx, g, w, e) {
@@ -781,12 +787,15 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
+      ctx.ui.templateLabel = null;
+      (ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {}))[t.type] = t.size;
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
-      ctx.invalidate('areas');
+      ctx.invalidate('areas', 'overlay');
       const sc = ctx.camera.toScreen(t.origin.x, t.origin.y);
       ctx.panels.templatePopover({ x: e.clientX, y: e.clientY }, sc);
     }
   },
+  cancel(ctx) { if (ctx.ui.templateLabel) { ctx.ui.templateLabel = null; ctx.invalidate('overlay'); } },
 };
 
 export function rulerLabel(ctx, pts) {
