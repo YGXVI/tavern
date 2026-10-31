@@ -1,15 +1,23 @@
 // TASK-083: бестиарий SRD 2014 для стола.
 // Читает data/bestiary/bestiary-2014.json (каталог Яры, TASK-011) и пишет dist/js/data/bestiary-srd.js —
-// существа со статблоками SRD в форме стола (как в dist/js/data/bestiary.js). Запуск: node tools/bestiary-srd.mjs [вход.json] [выход.js]
+// существа со статблоками SRD в форме стола (как в dist/js/data/bestiary.js).
+// Запуск: node tools/bestiary-srd.mjs [вход.json] [выход.js] [переводы.json]
 // (без аргументов — пути по умолчанию; аргументы нужны тесту). Берёт ТОЛЬКО статблоки SRD (source = srd_api_2014):
 // не-SRD существа в общий каталог сайта не попадают — только через личную библиотеку мастера (TASK-119, решение #116).
 // Названия действий и особенностей — по-русски по словарю ниже (неизвестное осталось бы английским; сейчас переведено всё),
-// описания — английский текст SRD 5.1 как есть. Переведённые вручную существа стола не дублируются.
+// desc — английский текст SRD 5.1 как есть; ru — самостоятельный перевод из srd-ru.json (TASK-117).
+// Переведённые вручную существа стола не дублируются.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { validateTranslations, translationFor } from './bestiary-srd-ru.mjs';
 
 const root = new URL('../', import.meta.url);
-const [inArg, outArg] = process.argv.slice(2);
+const [inArg, outArg, ruArg] = process.argv.slice(2);
 const src = JSON.parse(readFileSync(inArg || new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
+const translations = JSON.parse(readFileSync(ruArg || new URL('data/bestiary/srd-ru.json', root), 'utf8'));
+// Сначала проверяется весь канонический слой, включая HAND. Для тестового среза дополнительно
+// проверяются все его SRD-описания; неиспользованные записи канонического перевода допустимы в срезе.
+validateTranslations(inArg ? JSON.parse(readFileSync(new URL('data/bestiary/bestiary-2014.json', root), 'utf8')) : src, translations);
+if (inArg) validateTranslations(src, translations, { allowUnused: true });
 const HAND = new Set(['cultist', 'cult-fanatic', 'acolyte', 'goblin', 'hobgoblin', 'skeleton', 'zombie', 'wolf', 'bandit', 'giant-rat', 'ogre', 'gnoll']);
 
 const TYPE = { beast: 'Зверь', humanoid: 'Гуманоид', dragon: 'Дракон', monstrosity: 'Чудовище', fiend: 'Исчадие', undead: 'Нежить', elemental: 'Элементаль', giant: 'Великан', 'swarm of Tiny beasts': 'Рой', construct: 'Конструкт', fey: 'Фея', plant: 'Растение', celestial: 'Небожитель', aberration: 'Аберрация', ooze: 'Слизь' };
@@ -120,7 +128,7 @@ const cr = (s, cat) => cat?.challenge_rating?.text || ({ 0.125: '1/8', 0.25: '1/
 const ft = (x) => x?.distance?.value ?? null;
 const shortAb = (idx) => AB[String(idx || '').slice(0, 3)] || String(idx || '').toUpperCase();
 
-function action(a) {
+function action(a, monsterId, section) {
   const dmg = (a.damage || []).filter((d) => d.formula);
   const first = dmg[0];
   const parts = [];
@@ -132,6 +140,7 @@ function action(a) {
   else if (a.usage?.times) parts.push(`${a.usage.times}/${a.usage.type === 'per day' ? 'день' : 'отдых'}`);
   const out = { name: ru(a.name_en), bonus: a.attack?.bonus ?? 0, damage: first ? first.formula : '', type: first ? (DMG[first.type] || first.type || '') : '', note: parts.join(' · ') };
   if (a.description_en) out.desc = a.description_en;
+  out.ru = translationFor(translations, monsterId, section, a);
   return out;
 }
 
@@ -153,19 +162,19 @@ for (const m of src.monsters) {
   if (s.senses?.passive_perception != null) senses.push(`пассивное Восприятие ${s.senses.passive_perception}`);
   const other = Object.entries(s.speed || {}).filter(([k]) => k !== 'walk' && ft(s.speed[k])).map(([k, v]) => `${{ fly: 'летая', swim: 'плавая', climb: 'лазая', burrow: 'копая' }[k] || k} ${ft(v)} фт`);
   // Особенность/реакция: { name — по-русски, en — как в SRD, desc — английский текст SRD }.
-  const trait = (a) => ({ name: ru(a.name_en), en: a.name_en, desc: a.description_en || '' });
+  const trait = (a, section) => ({ name: ru(a.name_en), en: a.name_en, desc: a.description_en || '', ru: translationFor(translations, m.id, section, a) });
   const out = {
     id, name: m.name?.ru || MONSTER_RU[slug] || s.name_en, en: s.name_en, type: TYPE[s.type] || s.type, size: s.size, cr: cr(s, m.catalogue),
     ac: s.armor_class?.[0]?.value ?? 10, hp: s.hit_points?.average ?? 1, hpDice: s.hit_points?.formula || s.hit_points?.hit_dice || '',
     speed: ft(s.speed?.walk) ?? 0, stats, img: `ini:${m.name?.ru || MONSTER_RU[slug] || s.name_en}`, init: Math.floor((stats.dex - 10) / 2),
     darkvision: ft(s.senses?.darkvision) || 0, senses: [...(other.length ? [`скорость: ${other.join(', ')}`] : []), ...senses].join(', '),
-    traits: (s.special_abilities || []).map(trait),
-    actions: (s.actions || []).map(action),
+    traits: (s.special_abilities || []).map((a) => trait(a, 'special_abilities')),
+    actions: (s.actions || []).map((a) => action(a, m.id, 'actions')),
     srd: true,
   };
   if (Object.keys(saves).length) out.saves = saves;
-  if (s.reactions?.length) out.reactions = s.reactions.map(trait);
-  if (s.legendary_actions?.length) out.legendary = s.legendary_actions.map(action);
+  if (s.reactions?.length) out.reactions = s.reactions.map((a) => trait(a, 'reactions'));
+  if (s.legendary_actions?.length) out.legendary = s.legendary_actions.map((a) => action(a, m.id, 'legendary_actions'));
   list.push(out);
 }
 list.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -174,7 +183,8 @@ const head = `// СГЕНЕРИРОВАНО tools/bestiary-srd.mjs из data/bes
 // Существа со статблоками SRD 5.1. This work includes material taken from the System Reference Document 5.1
 // ("SRD 5.1") by Wizards of the Coast LLC, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode).
 // Адаптация: числа и английские описания SRD; русские имена существ — из открытого индекса dnd.su (каталог TASK-011),
-// русские названия действий и особенностей — свои. ${list.length} существ.
+// русские названия действий и особенностей — свои; ru — самостоятельный перевод английского SRD (TASK-117).
+// Английский desc сохранён. ${list.length} существ.
 `;
 writeFileSync(outArg || new URL('dist/js/data/bestiary-srd.js', root), `${head}export default ${JSON.stringify(list)};\n`);
 const named = list.flatMap((m) => [...m.actions, ...m.traits, ...(m.reactions || []), ...(m.legendary || [])]);
