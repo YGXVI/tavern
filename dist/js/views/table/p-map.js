@@ -3,12 +3,12 @@ import { esc, uid, fmtMod, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { bus } from '../../core/store.js';
-import { tokenStats, characterOf, addLog, sceneOf, updateCampaign } from '../../core/campaign.js';
+import { tokenStats, characterOf, addLog, sceneOf, updateCampaign, monsterOf } from '../../core/campaign.js';
 import { LIGHTS, LIGHT_COLORS, ABILITIES, mod, profBonus, TEMPLATES } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { WALL_KINDS, cellOf, footprintAt, gridSize, gridDims, templateCells, footprintCells, key, cellCenter } from '../../rules/geometry.js';
 import { popover, closePopover, confirmDialog } from '../../ui/kit.js';
 import { doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
+import { ridersOf } from './riding.js';
 import { sizeById } from '../../data/rules.js';
 import { hpEditor } from './p-token.js';
 
@@ -327,6 +327,14 @@ export function transferTokens(ctx, tokenIds, portal, fromSceneId = ctx.sceneId)
     const from = c.scenes.find((s) => s.id === fromSceneId);
     const to = c.scenes.find((s) => s.id === portal.targetSceneId);
     if (!from || !to) return;
+    // Всадники уходят вместе с ездовым (TASK-187). Игрок уводит только тех, кем управляет сам; чужого всадника
+    // он спешивает — тот остаётся на этой сцене (сменить сцену чужому токену сервер не даст).
+    const mine = (t) => ctx.isMasterView || ctx.isMine(t) || ctx.owns(t);
+    const carried = [];
+    for (const id of tokenIds) for (const r of ridersOf(from, id)) {
+      if (tokenIds.includes(r.id)) continue;
+      if (mine(r)) carried.push({ r, mount: id }); else delete r.riding;
+    }
     const g = gridSize(to.grid);
     const base = portal.target || { x: to.map.width / 2, y: to.map.height / 2 };
     tokenIds.forEach((id, i) => {
@@ -339,6 +347,13 @@ export function transferTokens(ctx, tokenIds, portal, fromSceneId = ctx.sceneId)
       to.tokens.push(t);
       if (t.characterId) { const m = c.members.find((mm) => mm.characterId === t.characterId); if (m) m.sceneId = to.id; }
     });
+    for (const { r, mount } of carried) {
+      const m = to.tokens.find((x) => x.id === mount); if (!m) continue;
+      from.tokens = from.tokens.filter((x) => x.id !== r.id);
+      r.x = m.x; r.y = m.y;
+      to.tokens.push(r);
+      if (r.characterId) { const mm = c.members.find((q) => q.characterId === r.characterId); if (mm) mm.sceneId = to.id; }
+    }
     c.portalRequests = (c.portalRequests || []).filter((r) => !tokenIds.includes(r.tokenId));
     // Если на исходной сцене не осталось героев, весь отряд теперь на новой.
     const heroesLeft = from.tokens.some((t) => t.kind === 'hero' && c.members.some((m) => m.characterId === t.characterId && m.status === 'active'));
@@ -476,7 +491,7 @@ export function opportunityForMaster(ctx, p) {
     const f = sc.tokens.find((x) => x.id === fid);
     if (!f) continue;
     const fs = tokenStats(ctx.c, f);
-    const m = monsterById(f.monsterId);
+    const m = monsterOf(ctx.c, f.monsterId);
     const a = m?.actions.find((x) => x.bonus);
     ctx.toast({
       title: `${st.name} выходит из досягаемости`, body: `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,

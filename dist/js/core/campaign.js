@@ -2,6 +2,7 @@
 // В демо проверка роли только в интерфейсе; настоящая проверка — задача сервера (TASK-002/003).
 import { getDB, commit } from './store.js';
 import { monsterById } from '../data/bestiary.js';
+import { toMonster } from '../rules/creature.js';
 import { sizeById } from '../data/rules.js';
 import { uid } from './dom.js';
 
@@ -60,15 +61,18 @@ export function tokenStats(c, t) {
       };
     }
   }
-  const m = t.monsterId ? monsterById(t.monsterId) : null;
+  const m = t.monsterId ? monsterOf(c, t.monsterId) : null;
   return {
     name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: t.ac ?? 10, speed: t.speed ?? 30,
     initBonus: t.initBonus ?? 0, darkvision: t.darkvision || 0, conditions: t.conditions || [],
-    subtitle: m ? `${m.type} · КО ${m.cr}` : t.kind === 'hero' ? 'Герой' : 'Существо', monster: m,
+    subtitle: m ? [m.type, m.cr != null && m.cr !== '' ? `КО ${m.cr}` : ''].filter(Boolean).join(' · ') || 'Существо' : t.kind === 'hero' ? 'Герой' : 'Существо', monster: m,
   };
 }
 
 export const tokenCells = (t) => sizeById(t.size).cells;
+
+/** Может ли токен участвовать в бою: предмет — нет; свой токен игрока — только со статами (план TASK-097, TASK-183). */
+export const canFight = (t) => !!t && t.kind !== 'item' && !(t.kind === 'custom' && !(t.hpMax > 0));
 
 /**
  * Может ли пользователь двигать токен (интерфейсная проверка демо).
@@ -81,7 +85,18 @@ export function canControlToken(c, userId, t) {
   const m = membership(c, userId);
   if (!m || m.status !== 'active') return false;
   if (t.characterId && t.characterId === m.characterId) return true;
+  if (t.ownerId && t.ownerId === userId) return true; // свой токен и призыв (TASK-183)
   return openMovement(c) && !t.hidden;
+}
+
+/**
+ * Свой токен или призыв игрока (TASK-183, план TASK-097, матрица раздела 3): владелец — активный участник с `ownerId`.
+ * Владелец меняет статы, хиты, состояния, имя, картинку, союзность и удаляет его; вышедший или исключённый — нет (И4).
+ */
+export function ownsToken(c, userId, t) {
+  if (!t?.ownerId || t.ownerId !== userId) return false;
+  const m = membership(c, userId);
+  return m?.status === 'active';
 }
 
 /** Открытое перемещение: игроки двигают любые видимые токены (настройка кампании, по умолчанию включена). */
@@ -114,4 +129,23 @@ export function nextTokenName(scene, base) {
   let max = 0;
   for (const t of scene.tokens) { const m = t.name.match(re); if (m) max = Math.max(max, Number(m[1] || 1)); }
   return `${base} ${max + 1}`;
+}
+
+/**
+ * Статблок существа токена (TASK-179, TASK-097 п. 4.3): «srd:…» и ручные — из бестиария, «lib:<id>» — из копии
+ * личного существа в кампании `c.creatures[id]` (её видит мастер и владелец призыва; у остальных — null).
+ * Копия не связана с библиотекой: правка шаблона не меняет поставленных существ.
+ */
+const libMonsters = new WeakMap();
+export function monsterOf(c, id) {
+  if (!id) return null;
+  if (!String(id).startsWith('lib:')) return monsterById(id);
+  const x = c?.creatures?.[id.slice(4)];
+  if (!x) return null;
+  if (!libMonsters.has(x)) {
+    let m = null;
+    try { m = toMonster(x); } catch { /* повреждённая копия — как неизвестное существо */ }
+    libMonsters.set(x, m);
+  }
+  return libMonsters.get(x);
 }

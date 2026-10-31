@@ -1,13 +1,14 @@
 // Токен-бар снизу, редактор хитов, состояния, настройки токена, контекстные меню.
 import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
-import { srcOf } from '../../core/assets.js';
-import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName } from '../../core/campaign.js';
+import { srcOf, storeImage } from '../../core/assets.js';
+import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById } from '../../core/campaign.js';
 import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
+import { ridingItems } from './riding.js';
 import { movementLeft } from './input.js';
-import { bus, emitLocal } from '../../core/store.js';
+import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
 import { parseHpInput } from '../../rules/hp.js';
 
@@ -93,14 +94,20 @@ export function tokenBarHTML(ctx) {
   }
   const can = ctx.canControl(t);
   const mine = ctx.isMine(t);
+  const own = ctx.owns(t); // свой токен или призыв игрока (TASK-183)
   const master = ctx.isMasterView;
+  const ownerName = t.ownerId ? (userById(t.ownerId)?.name || 'игрок') : '';
   const down = st.hpMax > 0 && st.hp <= 0;
   const avatar = `<button class="tb-avatar ${t.kind} ${mine ? 'mine' : ''}" data-act="focus" data-tip="Показать на карте" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></button>`;
-  if (master || mine) {
-    const sub = mine ? `${st.subtitle} · ваш герой` : st.subtitle + (t.hidden ? ' · скрыт' : '');
+  if (master || mine || own) {
+    const kindLabel = t.summonedBy ? 'призыв' : 'токен';
+    const sub = mine ? `${st.subtitle} · ваш герой` : own ? (t.kind === 'custom' ? `Ваш ${kindLabel}` : `${st.subtitle} · ваш ${kindLabel}`) : (t.kind === 'custom' ? 'Свой токен' : st.subtitle) + (t.ownerId ? ` · ${kindLabel} игрока ${ownerName}` : '') + (t.hidden ? ' · скрыт' : '');
     const left = movementLeft(ctx, t);
     let middle = hpCell(st, can, t.id);
-    if (down && t.kind === 'hero') {
+    if (statless(t)) {
+      // Свой токен без статов (TASK-183): ни хитов, ни КД — только кнопка «Статы…».
+      middle = `<button class="btn btn-sm btn-secondary" data-act="own-stats">${icon('first-aid-kit', 16)}Статы…</button>`;
+    } else if (down && t.kind === 'hero') {
       const ds = st.deathSaves || { s: 0, f: 0 };
       middle += `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
     } else {
@@ -108,18 +115,18 @@ export function tokenBarHTML(ctx) {
     }
     return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${esc(down ? `Без сознания${mine ? ' · ваш ход' : ''}` : sub)}</small></span>${div}${middle}${div}
       ${ib('conditions', 'sparkles', `Состояния${st.conditions.length ? ` · ${st.conditions.length}` : ''}`)}${master ? ib('visibility', t.hidden ? 'view-off' : 'view', t.hidden ? 'Скрыт от игроков' : 'Виден игрокам', t.hidden ? 'aria-pressed="true"' : '') : ''}
-      ${t.characterId ? ib('sheet', 'book-open-01', 'Лист героя') : ib('statblock', 'book-open-01', 'Статблок')}
+      ${t.characterId ? ib('sheet', 'book-open-01', 'Лист героя') : t.monsterId || master ? ib('statblock', 'book-open-01', 'Статблок') : ''}
       ${mine ? ib('quick-roll', 'dice-faces-06', 'Кубы') : ''}
-      ${master ? ib('token-menu', 'more-vertical', 'Ещё') : ''}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
+      ${master || own ? ib('token-menu', 'more-vertical', 'Ещё') : ''}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
   }
   // Игрок смотрит на чужой токен
-  const ally = t.kind === 'hero';
+  const ally = t.kind === 'hero' || !!t.ownerId || !!t.summonedBy; // хиты героев и призывов видят все (TASK-183)
   const exact = c.settings.playersSeeHp === 'exact';
   const status = st.hpMax ? woundLabel(st.hp, st.hpMax) : '';
   const disp = ctx.dispositionOf(t);
-  const who = ally ? esc(st.subtitle) : disp === 'friendly' ? 'Союзник' : disp === 'neutral' ? 'Нейтральное существо' : 'Противник';
+  const who = t.kind === 'hero' ? esc(st.subtitle) : t.ownerId ? `${t.summonedBy ? 'Призыв' : 'Токен'} · ${esc(ownerName)}` : disp === 'friendly' ? 'Союзник' : disp === 'neutral' ? 'Нейтральное существо' : 'Противник';
   return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(ctx.nameOf(t, st))}</b><small>${who}${t.elevation ? ` · высота ${t.elevation} фт` : ''}</small></span>${div}
-    ${ally || exact ? hpCell(st, false) : status ? `<span class="chip chip-md ${st.hp / st.hpMax <= 0.5 ? 'chip-negative' : 'chip-accent'}">${esc(status[0].toUpperCase() + status.slice(1))}</span>` : ''}
+    ${(ally || exact) && st.hpMax > 0 ? hpCell(st, false) : status ? `<span class="chip chip-md ${st.hp / st.hpMax <= 0.5 ? 'chip-negative' : 'chip-accent'}">${esc(status[0].toUpperCase() + status.slice(1))}</span>` : ''}
     ${st.conditions.length ? `<span class="tb-conds">${st.conditions.map((id) => { const cc = conditionById(id); return cc ? `<span class="status-badge" data-tip="${esc(cc.name)}">${icon(cc.icon, 13)}</span>` : ''; }).join('')}</span>` : ''}${div}
     ${ally && t.characterId ? ib('sheet', 'book-open-01', 'Лист героя (просмотр)') : ''}${ib('target', 'target-02', ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью — увидят все', ctx.ui.targets?.has(t.id) ? 'aria-pressed="true"' : '')}${ib('ping-token', 'location-01', 'Пинг: показать отряду')}${div}${ib('deselect', 'cancel-01', 'Закрыть')}</div>`;
 }
@@ -370,6 +377,14 @@ function setAura(t, c, a) {
 
 /** Удалить токены; drawIds — рисунки группы из рамки (TASK-169), в той же записи — один шаг отмены. */
 export async function deleteTokens(ctx, ids, drawIds = []) {
+  // Игрок удаляет только свои токены и призывы (TASK-183); очередь боя меняет мастер — токен из боя убирает он.
+  if (!ctx.isMasterView) {
+    ids = ids.filter((id) => ctx.owns(ctx.scene.tokens.find((t) => t.id === id)));
+    if (ids.some((id) => ctx.c.combat.entries.some((e) => e.tokenId === id))) {
+      ctx.toast({ title: 'Этот токен в бою', body: 'Убрать его из очереди и со сцены может мастер', icon: 'alert-circle' });
+      return;
+    }
+  }
   const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter(Boolean);
   const draws = drawIds.map((id) => ctx.scene.drawings.find((d) => d.id === id)).filter(Boolean);
   if (!toks.length && !draws.length) return;
@@ -380,8 +395,30 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
   const copies = structuredClone(toks), dcopies = structuredClone(draws);
   const dset = new Set(draws.map((d) => d.id));
   const dropDraws = (s) => { if (dset.size) s.drawings = s.drawings.filter((d) => !dset.has(d.id)); };
-  ctx.mutateScene((s, c) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId)); dropDraws(s); },
-    { label: 'Удаление', undo: (s) => { s.tokens.push(...structuredClone(copies)); if (dcopies.length) s.drawings.push(...structuredClone(dcopies)); }, redo: (s) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); dropDraws(s); } });
+  // Запись в бою с инициативой и позицией — чтобы отмена вернула и её (TASK-183, план TASK-097 п. 2.3).
+  const entries = ctx.c.combat.entries.map((e, i) => ({ e: structuredClone(e), i })).filter((x) => ids.includes(x.e.tokenId));
+  // Призывы удаляемых остаются на месте без ссылки на призывателя (И5); всадники удалённого ездового спешиваются
+  // и стоят на его клетке (TASK-187). Отмена связи возвращает.
+  const orphans = ctx.scene.tokens.filter((t) => t.summonedBy && ids.includes(t.summonedBy) && !ids.includes(t.id)).map((t) => [t.id, t.summonedBy]);
+  const riders = ctx.scene.tokens.filter((t) => t.riding && ids.includes(t.riding) && !ids.includes(t.id)).map((t) => [t.id, t.riding]);
+  const drop = (s, c) => {
+    s.tokens = s.tokens.filter((t) => !ids.includes(t.id));
+    for (const [id] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.summonedBy; }
+    for (const [id] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.riding; }
+    c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId));
+    dropDraws(s);
+  };
+  ctx.mutateScene(drop, {
+    label: 'Удаление',
+    undo: (s, c) => {
+      s.tokens.push(...structuredClone(copies));
+      for (const [id, by] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) t.summonedBy = by; }
+      for (const [id, on] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) t.riding = on; }
+      if (c.combat.active) for (const { e, i } of entries) if (!c.combat.entries.some((x) => x.tokenId === e.tokenId)) c.combat.entries.splice(Math.min(i, c.combat.entries.length), 0, structuredClone(e));
+      if (dcopies.length) s.drawings.push(...structuredClone(dcopies));
+    },
+    redo: drop,
+  });
   ctx.select([]);
 }
 
@@ -465,7 +502,8 @@ export function auraPopover(ctx, id, anchor) {
 /** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
 function canEditStats(ctx, t) {
   if (!t || t.kind === 'item') return false;
-  return ctx.isMasterView || ctx.isMine(t);
+  if (!ctx.isMasterView && statless(t)) return false; // сначала «Статы…»
+  return ctx.isMasterView || ctx.isMine(t) || ctx.owns(t);
 }
 
 function statsBlock(ctx, t) {
@@ -534,6 +572,84 @@ function bindStats(ctx, node) {
   box.addEventListener('change', (e) => { const inp = e.target.closest('[data-st]'); if (inp) commit(inp); });
 }
 
+// ——— Свой токен и призыв игрока (TASK-183, план TASK-097 п. 3.2): пункты меню владельца ———
+const DISPOSITIONS = [['friendly', 'Союзник'], ['neutral', 'Нейтрал'], ['hostile', 'Враг']];
+/** Правка своего токена с отменой: fn меняет поля токена в сцене. */
+function updOwn(ctx, id, label, fn) {
+  const before = structuredClone(ctx.scene.tokens.find((x) => x.id === id));
+  if (!before) return;
+  ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === id); if (x) fn(x); },
+    { label, undo: (s) => { const i = s.tokens.findIndex((q) => q.id === id); if (i >= 0) s.tokens[i] = structuredClone(before); }, redo: (s) => { const x = s.tokens.find((q) => q.id === id); if (x) fn(x); } });
+}
+export function renameOwn(ctx, id) {
+  const t = ctx.scene?.tokens.find((x) => x.id === id);
+  if (t) renameToken(ctx, t, (name) => updOwn(ctx, id, 'Имя', (x) => { x.name = name; }));
+}
+/** Свой токен без хитов — только картинка: без плашек и вне боя, пока владелец не задаст статы. */
+const statless = (t) => t.kind === 'custom' && !(t.hpMax > 0);
+
+function ownTokenItems(ctx, t, anchor) {
+  const upd = (label, fn) => updOwn(ctx, t.id, label, fn);
+  return [
+    statless(t) ? { icon: 'first-aid-kit', label: 'Статы…', onClick: () => statsPrompt(ctx, t.id) } : null,
+    { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) },
+    { icon: 'flag-02', label: 'Союзность…', onClick: () => menu(DISPOSITIONS.map(([v, l]) => ({ icon: (t.disposition || 'friendly') === v ? 'tick-02' : 'circle', label: l, onClick: () => upd('Союзность', (x) => { x.disposition = v; }) })), anchor, { placement: 'right' }) },
+    { icon: 'image-01', label: 'Картинка…', onClick: () => pickTokenImage(ctx, (ref) => upd('Картинка', (x) => { x.img = ref; })) },
+    { icon: 'edit-02', label: 'Имя…', onClick: () => renameOwn(ctx, t.id) },
+    { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, [t.id]) },
+    'divider',
+  ].filter(Boolean);
+}
+
+/** Статы своего токена (план TASK-097, «Статы своего токена через ПКМ»): хиты, КД, скорость, бонус инициативы. */
+export function statsPrompt(ctx, id) {
+  const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t) return;
+  const f = (k, label, v, min, max) => `<div class="field"><label>${label}</label><div class="input"><input data-k="${k}" inputmode="numeric" value="${esc(v)}" data-min="${min}" data-max="${max}"></div></div>`;
+  const box = popover(`<div class="pick-pop stats-pop"><div class="panel-header"><div class="titles"><div class="title">Статы · ${esc(t.name)}</div><div class="subtitle">Со статами появятся плашки и бой</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section"><div class="grid-2">${f('hpMax', 'Хиты', t.hpMax || '', 1, 999)}${f('ac', 'КД', t.ac ?? 10, 0, 40)}${f('speed', 'Скорость, фт', t.speed ?? 30, 0, 300)}${f('initBonus', 'Бонус инициативы', t.initBonus ?? 0, -10, 20)}</div>
+    <div class="row"><span class="spacer"></span><button class="btn btn-sm btn-primary" data-ok>Сохранить</button></div></div></div>`, { x: innerWidth / 2, y: innerHeight / 2 }, { placement: 'top' });
+  const n = box.node;
+  n.querySelector('[data-k]')?.focus();
+  const ok = () => {
+    const vals = {};
+    for (const inp of n.querySelectorAll('[data-k]')) {
+      const v = Math.round(Number(inp.value.trim().replace(',', '.').replace('−', '-')));
+      const bad = inp.value.trim() === '' || !Number.isFinite(v) || v < Number(inp.dataset.min) || v > Number(inp.dataset.max);
+      inp.closest('.field').classList.toggle('error', bad);
+      if (bad) return;
+      vals[inp.dataset.k] = v;
+    }
+    updOwn(ctx, id, 'Статы', (x) => { Object.assign(x, vals); x.hp = Math.min(x.hp > 0 ? x.hp : vals.hpMax, vals.hpMax); });
+    closePopover();
+  };
+  n.querySelector('[data-ok]').addEventListener('click', ok);
+  n.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') closePopover(); });
+}
+
+function renameToken(ctx, t, done) {
+  const box = popover(`<div class="pick-pop rename-pop"><div class="panel-section"><div class="field"><label>Имя</label><div class="input"><input data-name maxlength="40" value="${esc(t.name)}"></div></div>
+    <div class="row"><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-close>Отмена</button><button class="btn btn-sm btn-primary" data-ok>Сохранить</button></div></div></div>`, { x: innerWidth / 2, y: innerHeight / 2 }, { placement: 'top' });
+  const inp = box.node.querySelector('[data-name]'); inp.focus(); inp.select();
+  const ok = () => { const v = inp.value.trim(); if (v) { done(v); closePopover(); } };
+  box.node.querySelector('[data-ok]').addEventListener('click', ok);
+  inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') closePopover(); });
+}
+
+/** Выбрать картинку своего токена: PNG, JPEG или WebP до 5 МБ; в песочнице — в браузер, на сервере — в бакет tokens. */
+export function pickTokenImage(ctx, done) {
+  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp' });
+  input.addEventListener('change', async () => {
+    const f = input.files?.[0]; if (!f) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type) || f.size > 5 * 1024 * 1024) { ctx.toast({ title: 'Нужна картинка PNG, JPEG или WebP до 5 МБ', icon: 'alert-circle' }); return; }
+    try { done(await storeTokenImage(ctx, f)); } catch (err) { ctx.toast({ title: 'Картинка не загрузилась', body: err.message, icon: 'alert-circle' }); }
+  });
+  input.click();
+}
+export async function storeTokenImage(ctx, file) {
+  if (isServerMode()) return (await import('../../server/sync.js')).uploadTokenImage(ctx.cid, file);
+  return (await storeImage(file)).ref;
+}
+
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
   if (target.kind === 'token') {
@@ -547,7 +663,9 @@ export function contextMenu(ctx, target, w, screen) {
         { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, ids, anchor) },
         { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
         { icon: 'sword-03', label: ctx.c.combat.active ? (ctx.c.combat.entries.some((e) => e.tokenId === t.id) ? 'Убрать из боя' : 'Добавить в бой') : 'Начать бой с выделенными', onClick: () => ctx.panels.combatToggle(ids) },
+        ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
         'divider',
+        t.ownerId ? { icon: 'user', label: `${t.summonedBy ? 'Призыв' : 'Токен'} игрока: ${userById(t.ownerId)?.name || 'вышел из кампании'}`, disabled: true } : null,
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
         { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) },
@@ -560,7 +678,11 @@ export function contextMenu(ctx, target, w, screen) {
       const stats = ids.length === 1 && canEditStats(ctx, t);
       menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
     } else {
+      const own = ctx.owns(t);
       const items = [
+        ...(own ? ownTokenItems(ctx, t, anchor) : []),
+        own && t.monsterId ? { icon: 'book-open-01', label: 'Статблок', onClick: () => ctx.panels.openSheetFor(t) } : null,
+        ...ridingItems(ctx, t, anchor, menu),
         ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) } : null,
         ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
         !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,

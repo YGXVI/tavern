@@ -130,7 +130,7 @@ function initiative(ctx) {
     const t = e.token, st = e.stats;
     const isCur = cur?.tokenId === e.tokenId;
     const mine = ctx.isMine(t);
-    const showExact = ctx.isMasterView || t.kind === 'hero' || c.settings.playersSeeHp === 'exact';
+    const showExact = ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || c.settings.playersSeeHp === 'exact';
     const hp = st.hpMax ? (showExact ? `${st.hp}/${st.hpMax}` : woundLabel(st.hp, st.hpMax)) : '';
     const down = st.hpMax > 0 && st.hp <= 0;
     const initCell = ctx.isMaster

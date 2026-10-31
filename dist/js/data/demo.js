@@ -125,8 +125,8 @@ function heroToken(ch, c, r, grid) {
   };
 }
 
-export function monsterToken(monsterId, name, c, r, grid, extra = {}) {
-  const m = monsterById(monsterId);
+/** m — статблок, если существо не из бестиария (своё из библиотеки, TASK-179); по умолчанию — по monsterId. */
+export function monsterToken(monsterId, name, c, r, grid, extra = {}, m = monsterById(monsterId)) {
   const n = { tiny: 1, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 }[m.size] || 1;
   return {
     id: uid('t-'), kind: 'foe', monsterId, name, img: m.img, size: m.size,
