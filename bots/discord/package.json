@@ -9,8 +9,9 @@
     "start": "node src/index.js",
     "register": "node scripts/register-commands.js",
     "export": "node scripts/export-session.js",
+    "doctor": "node scripts/doctor.js",
     "test": "node --test tests/*.test.js",
-    "check": "node --check src/index.js && node --check scripts/register-commands.js && node --check scripts/export-session.js"
+    "check": "node --check src/index.js && node --check scripts/register-commands.js && node --check scripts/export-session.js && node --check scripts/doctor.js"
   },
   "engines": {
     "node": ">=22.12.0"
