@@ -1,10 +1,10 @@
 import { CATALOGUE_KINDS, validateCatalogueEntry, cloneCatalogueData } from '../rules/catalogue.js';
 import { validateCharacterOption } from '../rules/character-options.js';
-import { validateEquipmentEntry } from '../rules/equipment.js';
+import { validateEquipmentEntry, validateSpellProjectionEntry } from '../rules/equipment.js';
 
 // Public-only kinds. CATALOGUE_KINDS stays the private-template whitelist (TASK-186 plan r1 D2).
-export const PUBLIC_CATALOGUE_KINDS = Object.freeze([...CATALOGUE_KINDS, 'character_option', 'equipment']);
-const PUBLIC_VALIDATORS = { character_option: validateCharacterOption, equipment: validateEquipmentEntry };
+export const PUBLIC_CATALOGUE_KINDS = Object.freeze([...CATALOGUE_KINDS, 'character_option', 'equipment', 'spell']);
+const PUBLIC_VALIDATORS = { character_option: validateCharacterOption, equipment: validateEquipmentEntry, spell: validateSpellProjectionEntry };
 
 export const normalizeCatalogueSearch = value => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
 function freeze(value) {
@@ -58,6 +58,7 @@ export function createCatalogueLoader({ fetcher = globalThis.fetch, urls = {
   magic_item: new URL('../data/magic-items-2014.json', import.meta.url),
   character_option: new URL('../data/character-options-2014.json', import.meta.url),
   equipment: new URL('../data/equipment-2014.json', import.meta.url),
+  spell: new URL('../data/spells-2014.json', import.meta.url),
 } } = {}) {
   const cache = new Map(), pending = new Map(), generations = new Map();
   const checkKind = kind => { if (!PUBLIC_CATALOGUE_KINDS.includes(kind)) throw new TypeError('Неизвестный вид каталога.'); };

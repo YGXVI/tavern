@@ -84,6 +84,13 @@ function choiceErrors(choice, path, errors) {
   if (hasOptions && choice.count > choice.options.length) errors.push({ path: `${path}.count`, message: 'Вариантов меньше, чем нужно выбрать.' });
   if (choice.featureRef !== undefined && !FEATURE_ID.test(choice.featureRef)) errors.push({ path: `${path}.featureRef`, message: 'featureRef должен быть ID способности.' });
   if (choice.prerequisites !== undefined) predicateErrors(choice.prerequisites, `${path}.prerequisites`, errors);
+  if (choice.optionPrerequisites !== undefined) {
+    if (!isObject(choice.optionPrerequisites)) errors.push({ path: `${path}.optionPrerequisites`, message: 'Нужен объект {option: условие}.' });
+    else for (const [option, p] of Object.entries(choice.optionPrerequisites)) {
+      if (!(choice.options || []).includes(option)) errors.push({ path: `${path}.optionPrerequisites`, message: `Условие для отсутствующего варианта ${option}.` });
+      predicateErrors(p, `${path}.optionPrerequisites.${option}`, errors);
+    }
+  }
   if (!['none', 'one_per_level'].includes(choice.replacementPolicy ?? 'none')) errors.push({ path: `${path}.replacementPolicy`, message: 'Неизвестная политика замены.' });
 }
 
@@ -160,6 +167,7 @@ export function resolveCharacterOptionRefs(options, { featureIds, spellIds, equi
     if (c.kind === 'subclass' || c.kind === 'subrace') (c.options || []).forEach(ref => check(ref, 'definition', at));
     if (c.kind === 'equipment') c.alternatives.forEach(alt => alt.items.forEach(item => { if (item.ref) check(item.ref, 'equipment', at); }));
     if (c.prerequisites) visitPredicate(c.prerequisites, at);
+    for (const p of Object.values(c.optionPrerequisites || {})) visitPredicate(p, at);
   };
   for (const e of options.entries) {
     e.featureRefs.forEach(ref => check(ref, 'feature', e.id));

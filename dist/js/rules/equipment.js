@@ -39,3 +39,16 @@ export function validateEquipmentEntry(value) {
   if (value.kind === 'pack' && (!Array.isArray(value.contents) || !value.contents.length || value.contents.some(c => !EQUIPMENT_ID.test(c.ref || '') || !Number.isInteger(c.quantity) || c.quantity < 1))) add('contents', 'Набор содержит {ref,quantity}.');
   return { valid: errors.length === 0, errors };
 }
+
+// TASK-186 P2: metadata-only spell projection (dist/js/data/spells-2014.json); IDs are the existing dndsu:spell:*.
+export function validateSpellProjectionEntry(value) {
+  const errors = jsonErrors(value), add = (path, message) => errors.push({ path, message });
+  if (errors.length) return { valid: false, errors };
+  if (!isObject(value) || !/^dndsu:spell:\d+$/.test(value.id || '')) add('id', 'ID заклинания dndsu:spell:N.');
+  if (!isObject(value?.name) || !(value.name.ru || value.name.en)) add('name', 'Нужно имя.');
+  if (!Number.isInteger(value?.level) || value.level < 0 || value.level > 9) add('level', 'Круг 0–9.');
+  if (typeof value?.ritual !== 'boolean' || ![true, false, null].includes(value?.concentration)) add('flags', 'ritual — boolean, concentration — boolean/null.');
+  if (!isObject(value?.classes) || !Array.isArray(value.classes.base) || !Array.isArray(value.classes.tceOptional)) add('classes', 'Списки base/tceOptional раздельно.');
+  if (value?.srd !== null && (!isObject(value?.srd) || !/^[a-z0-9-]+$/.test(value.srd.index || '') || !['srd_api', 'alias'].includes(value.srd.via))) add('srd', 'srd {index,via} либо null.');
+  return { valid: errors.length === 0, errors };
+}

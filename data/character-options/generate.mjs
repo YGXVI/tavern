@@ -61,11 +61,28 @@ export function buildCharacterOptions() {
     : Object.keys(vocab.tools[category]);
   const allLanguages = [...Object.keys(vocab.languages.standard), ...Object.keys(vocab.languages.exotic)];
   const optionsOf = parent => features.entries.filter(e => e.kind === 'option' && e.scope.parentId === feature(parent)).map(e => e.id).sort();
+  // #176 keeps option prerequisites as text; only this closed grammar is converted, anything else stops the build.
+  function optionPrerequisites(ids, classId) {
+    const out = {};
+    for (const id of ids) {
+      const text = features.entries.find(e => e.id === id).prerequisiteText;
+      if (!text) continue;
+      const parts = text.split(/,\s*/).map(part => {
+        let m;
+        if ((m = part.match(/^(\d+)(?:st|nd|rd|th) level$/))) return { classLevel: { class: `srd51:class:${classId}`, min: Number(m[1]) } };
+        if ((m = part.match(/^Pact of the (\w+) feature$/))) return { hasFeature: feature(`${classId}:pact-of-the-${m[1].toLowerCase()}`) };
+        if (part === 'eldritch blast cantrip') return { hasSpell: spellRef('eldritch-blast') };
+        throw new Error(`Unsupported prerequisite "${part}" of ${id}`);
+      });
+      out[id] = parts.length === 1 ? parts[0] : { all: parts };
+    }
+    return out;
+  }
   const classId = c => `srd51:class:${c}`;
 
   function choice(owner, spec, extra = {}) {
     const c = { id: `${owner}:${spec.slug}`, kind: spec.kind, count: spec.count };
-    if (spec.parent) c.options = optionsOf(spec.parent);
+    if (spec.parent) { c.options = optionsOf(spec.parent); const pre = optionPrerequisites(c.options, spec.parent.split(':')[0]); if (Object.keys(pre).length) c.optionPrerequisites = pre; }
     else if (spec.options) c.options = [...spec.options];
     else if (spec.kind === 'skill') c.options = spec.any ? [...allSkills] : [...spec.from];
     else if (spec.kind === 'tool') c.options = toolsOf(spec.category);
@@ -107,7 +124,7 @@ export function buildCharacterOptions() {
       (c.choicesAt?.[level] || []).forEach(spec => choices.push(choice(owner, spec)));
       if (c.invocationsFromColumn) {
         const known = values[c.invocationsFromColumn] ?? 0;
-        if (known > previousInvocations) choices.push({ id: `${owner}:eldritch-invocations`, kind: 'feature_option', count: known - previousInvocations, options: optionsOf('warlock:eldritch-invocations'), featureRef: feature('warlock:eldritch-invocations'), distinct: true, replacementPolicy: 'one_per_level' });
+        if (known > previousInvocations) { const options = optionsOf('warlock:eldritch-invocations'); choices.push({ id: `${owner}:eldritch-invocations`, kind: 'feature_option', count: known - previousInvocations, options, optionPrerequisites: optionPrerequisites(options, 'warlock'), featureRef: feature('warlock:eldritch-invocations'), distinct: true, replacementPolicy: 'one_per_level' }); }
         previousInvocations = known;
       }
       const row = { level, proficiencyBonus: Math.ceil(level / 4) + 1, values, spellSlots: slots ? [...slots[level - 1], ...Array(9 - slots[level - 1].length).fill(0)] : null, subclassFeature: levelsWithSubclassFeature.has(level) && level !== c.subclass.level, grants, choices };
@@ -239,7 +256,7 @@ export function buildCharacterOptions() {
       'Starting equipment covers the class and background packages only; the optional starting-wealth rule (gold instead of packages) is not encoded.',
       'Values are build inputs; HP/AC/attack formulas belong to TASK-004 sheet rules and are not repeated here.',
     ],
-    vocabularies: src.vocabularies, abilityMethods: src.abilityMethods,
+    skills: src.skills, vocabularies: src.vocabularies, abilityMethods: src.abilityMethods,
     entries,
   };
 }
