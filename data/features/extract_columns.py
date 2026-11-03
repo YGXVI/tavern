@@ -5,7 +5,7 @@ No runtime/npm dependency. Page/column coordinates refer to the pinned PDF.
 """
 import pdfplumber
 
-PAGES = [*range(3, 56), 75]
+PAGES = [*range(3, 56), 61, 75]  # 61: Acolyte background feature (TASK-186 P1b)
 
 
 def read_rows(pdf_path):

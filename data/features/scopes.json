@@ -33,5 +33,8 @@
     "elf:high-elf":{"id":"high-elf","raceId":"elf","name":{"ru":"Высший эльф","en":"High Elf"}},
     "halfling:lightfoot":{"id":"lightfoot","raceId":"halfling","name":{"ru":"Легконогий полурослик","en":"Lightfoot"}},
     "gnome:rock-gnome":{"id":"rock-gnome","raceId":"gnome","name":{"ru":"Скальный гном","en":"Rock Gnome"}}
+  },
+  "backgrounds": {
+    "acolyte":{"ru":"Прислужник","en":"Acolyte"}
   }
 }

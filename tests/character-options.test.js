@@ -83,7 +83,10 @@ test('declared SRD package only: 12 classes × 20 rows, 12 subclasses, 9 races, 
   assert.equal(c.entries, options.entries.length);
   assert.match(options.scope, /Not the full PHB/);
   for (const e of options.entries) assert.equal(validateCharacterOption(e).valid, true, e.id);
-  assert.deepEqual(resolveCharacterOptionRefs(options, { featureIds: new Set(features.entries.map(e => e.id)), spellIds: new Set(spells.map(s => s.id)) }), []);
+  const equipmentIds = new Set(json('dist/js/data/equipment-2014.json').entries.map(e => e.id));
+  assert.deepEqual(resolveCharacterOptionRefs(options, { featureIds: new Set(features.entries.map(e => e.id)), spellIds: new Set(spells.map(s => s.id)), equipmentIds }), []);
+  assert.equal(options.coverage.reviewRequired, 0);
+  for (const e of options.entries.filter(x => x.kind === 'class' || x.kind === 'background')) assert.ok(e.startingEquipment.grants.length + e.startingEquipment.choices.length > 0, e.id);
   assert.ok(!JSON.stringify(options).includes('2024'), 'no 2024 material');
 });
 
@@ -235,7 +238,10 @@ test('Acolyte, Grappler, vocabularies and Basic Rules facts', () => {
   assert.match(bg, /Skill Proficiencies: Insight, Religion/);
   assert.match(bg, /Languages: Two of your choice/);
   const acolyte = byId.get('srd51:background:acolyte');
-  assert.equal(acolyte.review.required, true, 'pending Shelter of the Faithful/equipment are visible');
+  assert.equal(acolyte.review.required, false);
+  assert.deepEqual(acolyte.featureRefs, ['srd51:feature:background:acolyte:shelter-of-the-faithful']);
+  assert.ok(acolyte.grants.some(g => g.kind === 'feature' && g.ref === acolyte.featureRefs[0]));
+  assert.match(bg, /Feature: Shelter of the Faithful/);
   assert.equal(acolyte.choices[0].count, 2);
   const grappler = byId.get('srd51:feat:grappler');
   assert.equal(features.entries.find(e => e.id === 'srd51:feature:feats:grappler').prerequisiteText, 'Strength 13 or higher');
@@ -276,6 +282,9 @@ test('validator rejects unknown operators/kinds, executable-looking input, gaps 
   assert.equal(bad(v => { v.grants.push(structuredClone(v.grants[0])); }), false, 'duplicate grant id');
   assert.equal(bad(v => { v.class.multiclass.prerequisites = { js: 'return true' }; v.prerequisites = { js: 'return true' }; }), false, 'no code predicates');
   assert.equal(bad(v => { v.progression[0].proficiencyBonus = null; }), false, 'null is not a number');
+  assert.equal(bad(v => { v.startingEquipment.choices[0].alternatives.pop(); }), false, 'one alternative is not a choice');
+  assert.equal(bad(v => { v.startingEquipment.grants.push({ id: 'z', kind: 'item', ref: 'srd51:equipment:x', filter: { kind: 'weapon' }, quantity: 1 }); }), false, 'ref and filter together');
+  assert.equal(bad(v => { v.startingEquipment.grants.push({ id: 'z', kind: 'item', filter: { price: 'cheap' }, quantity: 1 }); }), false, 'closed filter keys');
   assert.ok(predicateErrors({ eval: 'x' }).length);
   assert.ok(predicateErrors({ all: [] }).length);
   assert.ok(predicateErrors({ abilityMinimum: { ability: 'luck', min: 13 } }).length);

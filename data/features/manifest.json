@@ -70,6 +70,7 @@
       53,
       54,
       55,
+      61,
       75
     ],
     "columns": [
@@ -95,26 +96,27 @@
     "independentHumanResultReview": false
   },
   "coverage": {
-    "entries": 391,
-    "candidateHeadings": 709,
+    "entries": 392,
+    "candidateHeadings": 711,
     "tableOptionRows": 20,
     "byKind": {
       "racial_trait": 92,
       "option": 115,
       "class_feature": 123,
       "subclass_feature": 60,
-      "feat": 1
+      "feat": 1,
+      "background_feature": 1
     },
     "candidateDecisions": {
       "context": 179,
-      "entry": 391,
+      "entry": 392,
       "supplement": 12,
-      "excluded": 58,
+      "excluded": 59,
       "body": 89
     }
   },
   "limitations": [
-    "SRD5.1 only; not full PHB or other books.",
+    "SRD5.1 only; not full PHB or other books. Backgrounds: only the SRD feature of Acolyte (page 61); background setup, proficiencies and personality tables stay in the corpus.",
     "Russian names are project translations; original English prose is preserved.",
     "Class setup/progression and general race/feat introductions remain in the source corpus; they are not selectable entries.",
     "Tables retain source text/row order; no automatic execution of effects.",
@@ -11039,6 +11041,32 @@
         }
       ],
       "tableChoice": true
+    },
+    {
+      "id": "srd51:feature:background:acolyte:shelter-of-the-faithful",
+      "kind": "background_feature",
+      "scope": {
+        "backgroundId": "acolyte"
+      },
+      "candidate": 729,
+      "name": {
+        "en": "Shelter of the Faithful"
+      },
+      "heading": {
+        "page": 61,
+        "column": 0,
+        "y": 300.12,
+        "label": "Feature: Shelter of the Faithful"
+      },
+      "spans": [
+        {
+          "page": 61,
+          "column": 0,
+          "top": 300.12,
+          "bottom": 513.37,
+          "role": "text"
+        }
+      ]
     }
   ],
   "candidates": [
@@ -19060,6 +19088,28 @@
       "role": "entry",
       "reason": "explicit choice row in ancestry table",
       "entryId": "srd51:feature:sorcerer:draconic-bloodline:dragon-ancestor:white"
+    },
+    {
+      "n": 729,
+      "page": 61,
+      "col": 0,
+      "y": 300.12,
+      "name": "Feature: Shelter of the Faithful",
+      "size": 12.0,
+      "role": "entry",
+      "reason": "SRD background feature (TASK-186 P1b, plan r1 D2)",
+      "entryId": "srd51:feature:background:acolyte:shelter-of-the-faithful"
+    },
+    {
+      "n": 730,
+      "page": 61,
+      "col": 0,
+      "y": 534.6,
+      "name": "Suggested Characteristics",
+      "size": 12.0,
+      "role": "excluded",
+      "reason": "background personality tables (roleplaying, not a selectable mechanic)",
+      "entryId": null
     }
   ]
 }

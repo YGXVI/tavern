@@ -12,13 +12,14 @@ const manifest = JSON.parse(read('data/features/manifest.json'));
 const sourceItems = JSON.parse(read('data/magic-items/magic-items-2014.json'));
 const hash = (...parts) => parts.reduce((h, part) => h.update(part), createHash('sha256')).digest('hex');
 
-test('SRD manifest accounts for 709 headings +20 table choices and all scoped records', () => {
+test('SRD manifest accounts for 711 headings +20 table choices and all scoped records', () => {
   validatePublicCatalogue('feature', features);
-  assert.equal(features.entries.length, 391);
-  assert.equal(manifest.candidates.length, 729);
-  assert.equal(new Set(manifest.candidates.map(c => c.n)).size, 729);
+  // 391 TASK-129 records + Acolyte Shelter of the Faithful (TASK-186 P1b, page 61).
+  assert.equal(features.entries.length, 392);
+  assert.equal(manifest.candidates.length, 731);
+  assert.equal(new Set(manifest.candidates.map(c => c.n)).size, 731);
   assert.deepEqual(features.coverage, manifest.coverage);
-  assert.deepEqual(features.coverage.byKind, { racial_trait: 92, option: 115, class_feature: 123, subclass_feature: 60, feat: 1 });
+  assert.deepEqual(features.coverage.byKind, { racial_trait: 92, option: 115, class_feature: 123, subclass_feature: 60, feat: 1, background_feature: 1 });
   assert.equal(hash(read('data/rules-2014/sources/srd-5.1-cc.pdf')), manifest.source.sha256);
   assert.equal(features.revision, hash(read('data/features/manifest.json'), read('data/features/generate.py'), read('data/features/extract_columns.py'), read('data/features/scopes.json'), read('data/features/names-ru.json')));
   const ids = new Set(features.entries.map(e => e.id));
@@ -137,7 +138,8 @@ test('search and combined filters support RU/EN/ё without modifying names or un
   assert.equal(queryCatalogue(items, { source: 'metadata', hasDescription: false }).length, 713);
   assert.equal(queryCatalogue(items, { source: 'srd2014', hasDescription: true }).length, 221);
   assert.ok(queryCatalogue(items, { type: 'armor', rarity: 'uncommon', attunement: false }).some(e => e.id === 'dndsu:item:1'));
-  assert.equal(queryCatalogue(features).length, 391);
+  assert.equal(queryCatalogue(features).length, 392);
+  assert.deepEqual(queryCatalogue(features, { backgroundId: 'acolyte' }).map(e => e.id), ['srd51:feature:background:acolyte:shelter-of-the-faithful']);
 });
 
 test('snapshots are detached, require exact variants and never execute or mutate a sheet', () => {
@@ -186,4 +188,17 @@ test('published handoff examples stay aligned with real envelopes and typed manu
   assert.equal(validatePrivateCatalogueEntry(example.acknowledgedManualRecord).valid, true);
   assert.equal(example.privatePreview.catalogueRef.revision, '1');
   assert.equal(example.publicMetadataItem.source.kind, 'metadata');
+});
+
+test('background_feature is public-only: Shelter of the Faithful has its SRD span; private templates keep the old kinds', () => {
+  const shelter = features.entries.find(e => e.id === 'srd51:feature:background:acolyte:shelter-of-the-faithful');
+  assert.deepEqual(shelter.scope, { backgroundId: 'acolyte' });
+  assert.equal(shelter.source.spans[0].page, 61);
+  assert.match(shelter.text.en, /^As an acolyte, you command the respect/);
+  assert.match(shelter.text.en, /remain in good standing with your temple\.$/);
+  assert.equal(validateCatalogueEntry('feature', shelter).valid, true);
+  const manual = normalizeManualCatalogueData('feature', { kind: 'background_feature', name: { ru: 'Моё' }, text: { ru: 'Текст' } });
+  assert.equal(validatePrivateCatalogueEntry({ id: 'x', ownerId: 'u', kind: 'feature', revision: 0, data: manual, updatedAt: 1 }).valid, false);
+  const broken = structuredClone(features); broken.entries.find(e => e.id === shelter.id).scope.backgroundId = 'sage';
+  assert.throws(() => validatePublicCatalogue('feature', broken), /Неизвестная группа/);
 });

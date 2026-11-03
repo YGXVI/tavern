@@ -1,6 +1,8 @@
 // TASK-129 / TASK-151: data only. No character effects, DOM or persistence.
 export const CATALOGUE_KINDS = Object.freeze(['feature', 'magic_item']);
 export const FEATURE_KINDS = Object.freeze(['class_feature', 'subclass_feature', 'racial_trait', 'feat', 'option']);
+// Public SRD records only (TASK-186 P1b); private templates and SQL keep FEATURE_KINDS.
+export const PUBLIC_FEATURE_KINDS = Object.freeze([...FEATURE_KINDS, 'background_feature']);
 export const CATALOGUE_MAX_BYTES = 65536;
 export const cloneCatalogueData = value => structuredClone(value);
 
@@ -44,7 +46,7 @@ export function validateCatalogueEntry(kind, value, { manual = false } = {}) {
   if (!object(value.source) || (manual && value.source.kind !== 'manual')) add('source', 'Укажите происхождение; личный шаблон имеет source.kind=manual.');
   if (manual && ['id', 'ownerId', 'revision', 'updatedAt'].some(key => Object.hasOwn(value, key))) add('$', 'Метаданные записи хранятся отдельно от data.');
   if (kind === 'feature') {
-    if (!FEATURE_KINDS.includes(value.kind)) add('kind', 'Неизвестная категория способности.');
+    if (!(manual ? FEATURE_KINDS : PUBLIC_FEATURE_KINDS).includes(value.kind)) add('kind', 'Неизвестная категория способности.');
     if (!object(value.text) || !nullableText(value.text.ru) || !nullableText(value.text.en) || (!nonempty(value.text.ru) && !nonempty(value.text.en))) add('text', 'Нужен текст способности.');
     if (!object(value.scope) || Object.values(value.scope).some(v => !nonempty(v))) add('scope', 'Scope содержит только непустые идентификаторы.');
     if (value.level !== null && (!Number.isInteger(value.level) || value.level < 1 || value.level > 20)) add('level', 'Уровень 1–20 либо null.');

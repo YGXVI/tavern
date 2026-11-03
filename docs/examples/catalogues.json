@@ -44,7 +44,7 @@
     "catalogueRef": {
       "kind": "feature",
       "id": "srd51:feature:elf:high-elf:cantrip",
-      "revision": "ae6f90926b2ef6989ed9cc28479d5110250b14ac7e644062b25bb6e4eb375299"
+      "revision": "06294f5c23954c38ba14d8df31890332a9f2bb66ae282610d80ce02fe5a53923"
     }
   },
   "publicOptionPreview": {
@@ -98,7 +98,7 @@
     "catalogueRef": {
       "kind": "feature",
       "id": "srd51:feature:dragonborn:draconic-ancestry:black",
-      "revision": "ae6f90926b2ef6989ed9cc28479d5110250b14ac7e644062b25bb6e4eb375299"
+      "revision": "06294f5c23954c38ba14d8df31890332a9f2bb66ae282610d80ce02fe5a53923"
     }
   },
   "publicMetadataItem": {

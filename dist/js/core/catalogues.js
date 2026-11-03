@@ -1,8 +1,10 @@
 import { CATALOGUE_KINDS, validateCatalogueEntry, cloneCatalogueData } from '../rules/catalogue.js';
 import { validateCharacterOption } from '../rules/character-options.js';
+import { validateEquipmentEntry } from '../rules/equipment.js';
 
 // Public-only kinds. CATALOGUE_KINDS stays the private-template whitelist (TASK-186 plan r1 D2).
-export const PUBLIC_CATALOGUE_KINDS = Object.freeze([...CATALOGUE_KINDS, 'character_option']);
+export const PUBLIC_CATALOGUE_KINDS = Object.freeze([...CATALOGUE_KINDS, 'character_option', 'equipment']);
+const PUBLIC_VALIDATORS = { character_option: validateCharacterOption, equipment: validateEquipmentEntry };
 
 export const normalizeCatalogueSearch = value => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
 function freeze(value) {
@@ -14,7 +16,7 @@ export function validatePublicCatalogue(kind, value) {
     || !/^[a-f0-9]{64}$/.test(value.revision) || !Array.isArray(value.entries) || value.coverage?.entries !== value.entries.length) throw new Error('Неподдерживаемый формат каталога.');
   const ids = new Set();
   for (const entry of value.entries) {
-    const result = kind === 'character_option' ? validateCharacterOption(entry) : validateCatalogueEntry(kind, entry);
+    const result = PUBLIC_VALIDATORS[kind] ? PUBLIC_VALIDATORS[kind](entry) : validateCatalogueEntry(kind, entry);
     if (!result.valid || ids.has(entry.id)) { const error = new Error(`Некорректная запись каталога: ${entry.id || '?'}`); error.errors = result.errors; throw error; }
     ids.add(entry.id);
   }
@@ -23,7 +25,8 @@ export function validatePublicCatalogue(kind, value) {
     for (const e of value.entries) {
       if ((e.scope.classId && !value.scopes?.classes?.[e.scope.classId]) || (e.scope.raceId && !value.scopes?.races?.[e.scope.raceId])
         || (e.scope.subclassId && !value.scopes?.subclasses?.[`${e.scope.classId}:${e.scope.subclassId}`])
-        || (e.scope.subraceId && !value.scopes?.subraces?.[`${e.scope.raceId}:${e.scope.subraceId}`])) throw new Error('Неизвестная группа способности.');
+        || (e.scope.subraceId && !value.scopes?.subraces?.[`${e.scope.raceId}:${e.scope.subraceId}`])
+        || (e.scope.backgroundId && !value.scopes?.backgrounds?.[e.scope.backgroundId])) throw new Error('Неизвестная группа способности.');
       const chain = new Set([e.id]); let parent = e;
       while (parent.scope.parentId) {
         const id = parent.scope.parentId;
@@ -32,6 +35,9 @@ export function validatePublicCatalogue(kind, value) {
         for (const field of ['classId', 'raceId']) if (parent.scope[field] && e.scope[field] !== parent.scope[field]) throw new Error('Вариант относится к другой группе.');
       }
     }
+  }
+  if (kind === 'equipment') {
+    for (const e of value.entries) for (const c of e.contents || []) if (!ids.has(c.ref)) throw new Error(`Неверная ссылка набора: ${c.ref}`);
   }
   if (kind === 'character_option') {
     const kinds = new Map(value.entries.map(e => [e.id, e.kind]));
@@ -51,6 +57,7 @@ export function createCatalogueLoader({ fetcher = globalThis.fetch, urls = {
   feature: new URL('../data/features-2014.json', import.meta.url),
   magic_item: new URL('../data/magic-items-2014.json', import.meta.url),
   character_option: new URL('../data/character-options-2014.json', import.meta.url),
+  equipment: new URL('../data/equipment-2014.json', import.meta.url),
 } } = {}) {
   const cache = new Map(), pending = new Map(), generations = new Map();
   const checkKind = kind => { if (!PUBLIC_CATALOGUE_KINDS.includes(kind)) throw new TypeError('Неизвестный вид каталога.'); };
@@ -80,7 +87,7 @@ export function queryCatalogue(catalogue, filters = {}) {
   const query = normalizeCatalogueSearch(filters.query);
   return catalogue.entries.filter(entry => {
     if (query && !normalizeCatalogueSearch([entry.name.ru, entry.name.en, entry.text?.ru, entry.text?.en, entry.description?.ru, ...(entry.description?.en || [])].filter(Boolean).join(' ')).includes(query)) return false;
-    for (const key of ['classId', 'subclassId', 'raceId', 'subraceId']) if (filters[key] && entry.scope?.[key] !== filters[key]) return false;
+    for (const key of ['classId', 'subclassId', 'raceId', 'subraceId', 'backgroundId']) if (filters[key] && entry.scope?.[key] !== filters[key]) return false;
     if (filters.kind && entry.kind !== filters.kind) return false;
     if (Object.hasOwn(filters, 'level') && entry.level !== filters.level) return false;
     if (filters.type && entry.type?.code !== filters.type) return false;

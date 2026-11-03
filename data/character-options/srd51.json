@@ -23,11 +23,12 @@
       "features": {"1": ["rage", "unarmored-defense"], "2": ["reckless-attack", "danger-sense"], "3": ["primal-path"], "5": ["extra-attack", "fast-movement"], "7": ["feral-instinct"], "9": ["brutal-critical"], "11": ["relentless-rage"], "13": ["brutal-critical"], "15": ["persistent-rage"], "17": ["brutal-critical"], "18": ["indomitable-might"], "20": ["primal-champion"]},
       "asi": [4, 8, 12, 16, 19],
       "grantsAt": {"20": [{"kind": "ability_increase", "ability": "str", "value": 4, "maximum": 24}, {"kind": "ability_increase", "ability": "con", "value": 4, "maximum": 24}]},
+      "equipment": {"choices": [[["greataxe"], ["any:weapon:martial:melee"]], [["2 handaxe"], ["any:weapon:simple"]]], "fixed": ["explorers-pack", "4 javelin"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "str", "min": 13}}, "armor": ["shield"], "weapons": ["simple", "martial"]}
     },
     "bard": {
       "pages": [11, 14], "hitDie": 8, "savingThrows": ["dex", "cha"],
-      "armor": ["light"], "weapons": ["simple", "hand-crossbow", "longsword", "rapier", "shortsword"], "tools": [],
+      "armor": ["light"], "weapons": ["simple", "crossbow-hand", "longsword", "rapier", "shortsword"], "tools": [],
       "toolChoices": [{"slug": "instruments", "kind": "tool", "count": 3, "category": "musical_instrument"}],
       "skills": {"count": 3, "any": true},
       "spellcasting": {"ability": "cha", "mode": "known", "list": "bard", "ritual": true, "focus": "musical_instrument", "slots": "full", "startLevel": 1},
@@ -42,6 +43,7 @@
         "14": [{"slug": "magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:magical-secrets"}],
         "18": [{"slug": "magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:magical-secrets"}]
       },
+      "equipment": {"choices": [[["rapier"], ["longsword"], ["any:weapon:simple"]], [["diplomats-pack"], ["entertainers-pack"]], [["lute"], ["any:tool:musical-instrument~lute"]]], "fixed": ["leather", "dagger"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}, "armor": ["light"], "skillCount": 1, "skillsAny": true, "toolCount": 1, "toolCategory": "musical_instrument"}
     },
     "cleric": {
@@ -54,6 +56,7 @@
       "values": [[3],[3],[3],[4],[4],[4],[4],[4],[4],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5]],
       "features": {"1": ["spellcasting", "divine-domain"], "2": ["channel-divinity"], "5": ["destroy-undead"], "6": ["channel-divinity"], "8": ["destroy-undead"], "10": ["divine-intervention"], "11": ["destroy-undead"], "14": ["destroy-undead"], "17": ["destroy-undead"], "18": ["channel-divinity"], "20": ["divine-intervention"]},
       "asi": [4, 8, 12, 16, 19],
+      "equipment": {"choices": [[["mace"], ["warhammer !weapon:warhammer"]], [["scale-mail"], ["leather"], ["chain-mail !armor:heavy"]], [["crossbow-light", "20 crossbow-bolts"], ["any:weapon:simple"]], [["priests-pack"], ["explorers-pack"]]], "fixed": ["shield", "any:focus:holy-symbol"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "wis", "min": 13}}, "armor": ["light", "medium", "shield"]}
     },
     "druid": {
@@ -67,6 +70,7 @@
       "features": {"1": ["druidic", "spellcasting"], "2": ["wild-shape", "druid-circle"], "4": ["wild-shape"], "8": ["wild-shape"], "18": ["timeless-body", "beast-spells"], "20": ["archdruid"]},
       "asi": [4, 8, 12, 16, 19],
       "grantsAt": {"1": [{"kind": "language", "value": "druidic"}]},
+      "equipment": {"choices": [[["shield"], ["any:weapon:simple"]], [["scimitar"], ["any:weapon:simple:melee"]]], "fixed": ["leather", "explorers-pack", "any:focus:druidic-focus"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "wis", "min": 13}}, "armor": ["light", "medium", "shield"]}
     },
     "fighter": {
@@ -80,6 +84,7 @@
       "features": {"1": ["fighting-style", "second-wind"], "2": ["action-surge"], "3": ["martial-archetype"], "5": ["extra-attack"], "9": ["indomitable"], "11": ["extra-attack"], "13": ["indomitable"], "17": ["action-surge", "indomitable"], "20": ["extra-attack"]},
       "asi": [4, 6, 8, 12, 14, 16, 19],
       "choicesAt": {"1": [{"slug": "fighting-style", "kind": "feature_option", "count": 1, "parent": "fighter:fighting-style"}]},
+      "equipment": {"choices": [[["chain-mail"], ["leather", "longbow", "20 arrows"]], [["any:weapon:martial", "shield"], ["2 any:weapon:martial"]], [["crossbow-light", "20 crossbow-bolts"], ["2 handaxe"]], [["dungeoneers-pack"], ["explorers-pack"]]], "fixed": []},
       "multiclass": {"prerequisites": {"any": [{"abilityMinimum": {"ability": "str", "min": 13}}, {"abilityMinimum": {"ability": "dex", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"]}
     },
     "monk": {
@@ -94,6 +99,7 @@
       "features": {"1": ["unarmored-defense", "martial-arts"], "2": ["ki", "unarmored-movement"], "3": ["monastic-tradition", "deflect-missiles"], "4": ["slow-fall"], "5": ["extra-attack", "stunning-strike"], "6": ["ki-empowered-strikes"], "7": ["evasion", "stillness-of-mind"], "9": ["unarmored-movement"], "10": ["purity-of-body"], "13": ["tongue-of-the-sun-and-moon"], "14": ["diamond-soul"], "15": ["timeless-body"], "18": ["empty-body"], "20": ["perfect-self"]},
       "asi": [4, 8, 12, 16, 19],
       "grantsAt": {"14": [{"kind": "proficiency", "category": "saving_throw", "value": "all"}]},
+      "equipment": {"choices": [[["shortsword"], ["any:weapon:simple"]], [["dungeoneers-pack"], ["explorers-pack"]]], "fixed": ["10 dart"]},
       "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "dex", "min": 13}}, {"abilityMinimum": {"ability": "wis", "min": 13}}]}, "weapons": ["simple", "shortsword"]}
     },
     "paladin": {
@@ -107,6 +113,7 @@
       "features": {"1": ["divine-sense", "lay-on-hands"], "2": ["fighting-style", "spellcasting", "divine-smite"], "3": ["divine-health", "sacred-oath"], "5": ["extra-attack"], "6": ["aura-of-protection"], "10": ["aura-of-courage"], "11": ["improved-divine-smite"], "14": ["cleansing-touch"], "18": ["aura-of-protection", "aura-of-courage"]},
       "asi": [4, 8, 12, 16, 19],
       "choicesAt": {"2": [{"slug": "fighting-style", "kind": "feature_option", "count": 1, "parent": "paladin:fighting-style"}]},
+      "equipment": {"choices": [[["any:weapon:martial", "shield"], ["2 any:weapon:martial"]], [["5 javelin"], ["any:weapon:simple:melee"]], [["priests-pack"], ["explorers-pack"]]], "fixed": ["chain-mail", "any:focus:holy-symbol"]},
       "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "str", "min": 13}}, {"abilityMinimum": {"ability": "cha", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"]}
     },
     "ranger": {
@@ -126,11 +133,12 @@
         "10": [{"slug": "favored-terrain", "kind": "terrain", "count": 1, "featureRef": "ranger:natural-explorer"}],
         "14": [{"slug": "favored-enemy", "kind": "favored_enemy", "count": 1, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-enemy-language", "kind": "language", "count": 1, "optional": true, "featureRef": "ranger:favored-enemy"}]
       },
+      "equipment": {"choices": [[["scale-mail"], ["leather"]], [["2 shortsword"], ["2 any:weapon:simple:melee"]], [["dungeoneers-pack"], ["explorers-pack"]]], "fixed": ["longbow", "quiver", "20 arrows"]},
       "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "dex", "min": 13}}, {"abilityMinimum": {"ability": "wis", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"], "skillCount": 1}
     },
     "rogue": {
       "pages": [39, 41], "hitDie": 8, "savingThrows": ["dex", "int"],
-      "armor": ["light"], "weapons": ["simple", "hand-crossbow", "longsword", "rapier", "shortsword"], "tools": ["thieves-tools"],
+      "armor": ["light"], "weapons": ["simple", "crossbow-hand", "longsword", "rapier", "shortsword"], "tools": ["thieves-tools"],
       "skills": {"count": 4, "from": ["acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight", "stealth"]},
       "spellcasting": null,
       "subclass": {"level": 3, "featureRef": "rogue:roguish-archetype", "featureLevels": [3, 9, 13, 17]},
@@ -143,11 +151,12 @@
         "1": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills_or_thieves_tools"}],
         "6": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills_or_thieves_tools"}]
       },
+      "equipment": {"choices": [[["rapier"], ["shortsword"]], [["shortbow", "quiver", "20 arrows"], ["shortsword"]], [["burglars-pack"], ["dungeoneers-pack"], ["explorers-pack"]]], "fixed": ["leather", "2 dagger", "thieves-tools"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "dex", "min": 13}}, "armor": ["light"], "skillCount": 1, "tools": ["thieves-tools"]}
     },
     "sorcerer": {
       "pages": [42, 45], "hitDie": 6, "savingThrows": ["con", "cha"],
-      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"], "tools": [],
+      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "crossbow-light"], "tools": [],
       "skills": {"count": 2, "from": ["arcana", "deception", "insight", "intimidation", "persuasion", "religion"]},
       "spellcasting": {"ability": "cha", "mode": "known", "list": "sorcerer", "ritual": false, "focus": "arcane_focus", "slots": "full", "startLevel": 1},
       "subclass": {"level": 1, "featureRef": "sorcerer:sorcerous-origin", "featureLevels": [1, 6, 14, 18]},
@@ -160,6 +169,7 @@
         "10": [{"slug": "metamagic", "kind": "feature_option", "count": 1, "parent": "sorcerer:metamagic"}],
         "17": [{"slug": "metamagic", "kind": "feature_option", "count": 1, "parent": "sorcerer:metamagic"}]
       },
+      "equipment": {"choices": [[["crossbow-light", "20 crossbow-bolts"], ["any:weapon:simple"]], [["component-pouch"], ["any:focus:arcane-focus"]], [["dungeoneers-pack"], ["explorers-pack"]]], "fixed": ["2 dagger"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}}
     },
     "warlock": {
@@ -180,11 +190,12 @@
         "17": [{"slug": "mystic-arcanum-9", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 9}, "featureRef": "warlock:mystic-arcanum"}]
       },
       "invocationsFromColumn": "invocationsKnown",
+      "equipment": {"choices": [[["crossbow-light", "20 crossbow-bolts"], ["any:weapon:simple"]], [["component-pouch"], ["any:focus:arcane-focus"]], [["scholars-pack"], ["dungeoneers-pack"]]], "fixed": ["leather", "any:weapon:simple", "2 dagger"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}, "armor": ["light"], "weapons": ["simple"]}
     },
     "wizard": {
       "pages": [52, 55], "hitDie": 6, "savingThrows": ["int", "wis"],
-      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"], "tools": [],
+      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "crossbow-light"], "tools": [],
       "skills": {"count": 2, "from": ["arcana", "history", "insight", "investigation", "medicine", "religion"]},
       "spellcasting": {"ability": "int", "mode": "spellbook", "list": "wizard", "ritual": true, "focus": "arcane_focus", "slots": "full", "startLevel": 1, "prepared": "ability_plus_level", "spellbook": {"initial": 6, "perLevel": 2}},
       "subclass": {"level": 2, "featureRef": "wizard:arcane-tradition", "featureLevels": [2, 6, 10, 14]},
@@ -196,6 +207,7 @@
         "18": [{"slug": "spell-mastery-1", "kind": "spell", "count": 1, "spellFilter": {"lists": "spellbook", "level": 1}, "featureRef": "wizard:spell-mastery"}, {"slug": "spell-mastery-2", "kind": "spell", "count": 1, "spellFilter": {"lists": "spellbook", "level": 2}, "featureRef": "wizard:spell-mastery"}],
         "20": [{"slug": "signature-spells", "kind": "spell", "count": 2, "spellFilter": {"lists": "spellbook", "level": 3}, "featureRef": "wizard:signature-spells"}]
       },
+      "equipment": {"choices": [[["quarterstaff"], ["dagger"]], [["component-pouch"], ["any:focus:arcane-focus"]], [["scholars-pack"], ["explorers-pack"]]], "fixed": ["spellbook"]},
       "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "int", "min": 13}}}
     }
   },
@@ -265,7 +277,8 @@
   "backgrounds": {
     "acolyte": {"page": 60, "pageEnd": 61, "skills": ["insight", "religion"],
       "choices": [{"slug": "languages", "kind": "language", "count": 2}],
-      "pendingFeature": "Shelter of the Faithful (SRD 61): background_feature record is added to the public feature catalogue in P1b; equipment package — with the equipment projection in P1b."}
+      "featureRef": "background:acolyte:shelter-of-the-faithful",
+      "equipment": {"choices": [[["prayer-book"], ["prayer-wheel"]]], "fixed": ["any:focus:holy-symbol", "5 incense-stick", "vestments", "clothes-common", "pouch"], "currency": {"gp": 15}}}
   },
   "feats": {
     "grappler": {"page": 75, "featureRef": "feats:grappler", "prerequisites": {"abilityMinimum": {"ability": "str", "min": 13}}, "repeatable": false}

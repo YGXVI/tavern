@@ -22,6 +22,34 @@ export function buildCharacterOptions() {
     if (index) { if (spellBySrd.has(index)) throw new Error(`Duplicate SRD spell index ${index}`); spellBySrd.set(index, s.id); }
   }
   const spellRef = index => { const id = spellBySrd.get(index); if (!id) throw new Error(`Unmapped SRD spell ${index}`); return id; };
+  const equipmentBytes = read('dist/js/data/equipment-2014.json'), equipment = JSON.parse(equipmentBytes);
+  const equipmentIds = new Set(equipment.entries.map(e => e.id));
+  // "2 handaxe", "any:weapon:martial:melee", "warhammer !weapon:warhammer" → {ref|filter, quantity}, requiresProficiency.
+  function item(token) {
+    const [body, need] = token.split(' !'), m = body.match(/^(?:(\d+) )?(.+)$/), quantity = Number(m[1] || 1);
+    let out;
+    if (m[2].startsWith('any:')) {
+      const [spec, except] = m[2].slice(4).split('~'), [kind, a, b] = spec.split(':');
+      const exclude = except ? { exclude: [`srd51:equipment:${except}`] } : {};
+      out = { filter: kind === 'weapon' ? { kind, category: a, ...(b ? { range: b } : {}), ...exclude } : { kind, group: a, ...exclude }, quantity };
+    } else {
+      const ref = `srd51:equipment:${m[2]}`;
+      if (!equipmentIds.has(ref)) throw new Error(`Unknown equipment ${m[2]}`);
+      out = { ref, quantity };
+    }
+    return need ? [out, { category: need.split(':')[0], value: need.split(':')[1] }] : [out, null];
+  }
+  function equipmentOf(owner, spec) {
+    const grants = [], choices = [];
+    spec.fixed.forEach((token, i) => { const [it] = item(token); grants.push({ id: `${owner}:item:${i + 1}`, kind: 'item', ...it }); });
+    if (spec.currency) for (const [unit, value] of Object.entries(spec.currency)) grants.push({ id: `${owner}:currency:${unit}`, kind: 'currency', unit, value });
+    spec.choices.forEach((alts, i) => choices.push({ id: `${owner}:equipment:${i + 1}`, kind: 'equipment', count: 1, distinct: true,
+      alternatives: alts.map((tokens, j) => {
+        const parsed = tokens.map(item), need = parsed.find(([, n]) => n)?.[1];
+        return { id: String.fromCharCode(97 + j), items: parsed.map(([it]) => it), ...(need ? { requiresProficiency: need } : {}) };
+      }) }));
+    return { grants, choices };
+  }
   const feature = ref => `srd51:feature:${ref}`;
   const source = (pages) => ({ kind: 'srd51', documentId: corpus.id, sha256: corpus.sha256, pages, url: `${corpus.url}#page=${pages[0]}`, license: corpus.license });
   const range = (a, b = a) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
@@ -89,6 +117,7 @@ export function buildCharacterOptions() {
       ...prof(id, 'saving_throw', c.savingThrows), ...prof(id, 'armor', c.armor), ...prof(id, 'weapon', c.weapons), ...prof(id, 'tool', c.tools),
     ];
     const choices = [choice(id, { slug: 'skills', kind: 'skill', ...c.skills }), ...(c.toolChoices || []).map(spec => choice(id, spec))];
+    const startingEquipment = equipmentOf(`${id}:starting`, c.equipment);
     const mc = c.multiclass, mcOwner = `${id}:multiclass`;
     const multiclass = {
       prerequisites: mc.prerequisites,
@@ -101,6 +130,8 @@ export function buildCharacterOptions() {
     entries.push({
       id, kind: 'class', name: { ru: scope.ru, en: scope.en }, aliases: [cid], source: source(range(...c.pages)), review: review(),
       featureRefs: [...featureRefs].sort(), grants, choices,
+      // Only for the first class (level 1); a multiclass level never brings starting equipment.
+      startingEquipment,
       class: { hitDie: c.hitDie, savingThrows: c.savingThrows, armorNote: c.armorNote ?? null, spellcasting: c.spellcasting ? { ...c.spellcasting, listRef: null } : null,
         subclassLevel: c.subclass.level, subclassFeatureLevels: c.subclass.featureLevels, asiLevels: c.asi, columns: c.columns, multiclass },
       progression,
@@ -177,8 +208,10 @@ export function buildCharacterOptions() {
   }
   for (const [bid, b] of Object.entries(src.backgrounds)) {
     const id = `srd51:background:${bid}`;
-    entries.push({ id, kind: 'background', name: { ru: 'Прислужник', en: 'Acolyte' }, aliases: [bid], source: source(range(b.page, b.pageEnd)),
-      review: review([b.pendingFeature]), featureRefs: [], grants: prof(id, 'skill', b.skills), choices: b.choices.map(spec => choice(id, spec)) });
+    const scope = features.scopes.backgrounds[bid], ref = feature(b.featureRef);
+    entries.push({ id, kind: 'background', name: { ru: scope.ru, en: scope.en }, aliases: [bid], source: source(range(b.page, b.pageEnd)),
+      review: review(), featureRefs: [ref], grants: [...prof(id, 'skill', b.skills), { id: `${id}:feature`, kind: 'feature', ref }], choices: b.choices.map(spec => choice(id, spec)),
+      startingEquipment: equipmentOf(`${id}:starting`, b.equipment) });
   }
   for (const [fid, f] of Object.entries(src.feats)) {
     const id = `srd51:feat:${fid}`, ref = feature(f.featureRef), entry = features.entries.find(e => e.id === ref);
@@ -189,22 +222,21 @@ export function buildCharacterOptions() {
 
   const options = { entries };
   for (const e of entries) { const r = validateCharacterOption(e); if (!r.valid) throw new Error(`${e.id}: ${JSON.stringify(r.errors.slice(0, 5))}`); }
-  const missing = resolveCharacterOptionRefs(options, { featureIds, spellIds: new Set(spells.map(s => s.id)) });
+  const missing = resolveCharacterOptionRefs(options, { featureIds, spellIds: new Set(spells.map(s => s.id)), equipmentIds });
   if (missing.length) throw new Error(`Unresolved refs: ${JSON.stringify(missing.slice(0, 10))}`);
   const count = (pred) => entries.filter(pred).length;
-  const all = entries.flatMap(e => [...e.grants, ...e.choices, ...(e.progression || []).flatMap(r => [...r.grants, ...r.choices])]);
+  const all = entries.flatMap(e => [...e.grants, ...e.choices, ...(e.startingEquipment ? [...e.startingEquipment.grants, ...e.startingEquipment.choices] : []), ...(e.progression || []).flatMap(r => [...r.grants, ...r.choices])]);
   return {
     schemaVersion: 1, catalogueKind: 'character_option', edition: '5e-2014',
-    revision: sha(Buffer.concat([sourceBytes, generatorBytes, featureBytes, spellBytes])),
-    sourceHashes: { source: sha(sourceBytes), generator: sha(generatorBytes), features: features.revision, spells: sha(spellBytes), pdf: corpus.sha256 },
+    revision: sha(Buffer.concat([sourceBytes, generatorBytes, featureBytes, spellBytes, equipmentBytes])),
+    sourceHashes: { source: sha(sourceBytes), generator: sha(generatorBytes), features: features.revision, spells: sha(spellBytes), equipment: equipment.revision, pdf: corpus.sha256 },
     attribution: corpus.attribution, sources: [corpus.url, src.abilityMethods.source.url],
     coverage: { entries: entries.length, classes: count(e => e.kind === 'class'), progressionRows: count(e => e.kind === 'class') * 20, subclasses: count(e => e.kind === 'subclass'),
       races: count(e => e.kind === 'race'), subraces: count(e => e.kind === 'subrace'), backgrounds: count(e => e.kind === 'background'), feats: count(e => e.kind === 'feat'),
       grants: all.filter(x => !Object.hasOwn(x, 'count')).length, choices: all.filter(x => Object.hasOwn(x, 'count')).length, reviewRequired: count(e => e.review.required) },
     scope: 'SRD 5.1 package only: 12 classes, 12 subclasses, 9 races, 4 subraces, Acolyte, Grappler. Not the full PHB; non-SRD options are not available here.',
     limitations: [
-      'Starting equipment trees and the shared equipment projection are not part of this revision (P1b).',
-      'Acolyte feature Shelter of the Faithful is not yet a public feature record (P1b); the background is marked review.required.',
+      'Starting equipment covers the class and background packages only; the optional starting-wealth rule (gold instead of packages) is not encoded.',
       'Values are build inputs; HP/AC/attack formulas belong to TASK-004 sheet rules and are not repeated here.',
     ],
     vocabularies: src.vocabularies, abilityMethods: src.abilityMethods,
