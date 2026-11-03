@@ -171,9 +171,8 @@ function bottomCenter(ctx) {
   if (ctx.isMasterView && (ctx.ui.layer || FOCUS_TOOLS.includes(tool))) return `${settingBar(ctx)}${layerBar(ctx)}`;
   if (tool === 'measure') {
     const s = sub.measure || 'ruler';
-    const tpl = TEMPLATES.find((t) => t.id === s);
-    const size = tpl ? sub.templateSize?.[s] || tpl.size : null;
-    return `<div class="toolbar">${ib('sub:measure:ruler', 'ruler', 'Линейка', { active: s === 'ruler', kbd: 'R' })}${TEMPLATES.map((t) => ib(`sub:measure:${t.id}`, t.icon, `${t.name}`, { active: s === t.id })).join('')}${div}${tpl ? `${ib('tpl-smaller', 'minus-sign', 'Меньше')}<span class="tb-text">${size} фт</span>${ib('tpl-bigger', 'plus-sign', 'Больше')}${div}` : ''}${ib('share-ruler', 'view', ctx.ui.shareRuler ? 'Видно всем за столом' : 'Видно только вам', { active: ctx.ui.shareRuler })}${ib('measure-clear', 'delete-02', 'Убрать')}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
+    // TASK-178: размер шаблона не вписывается — его тянут мышью от точки.
+    return `<div class="toolbar">${ib('sub:measure:ruler', 'ruler', 'Линейка', { active: s === 'ruler', kbd: 'R' })}${TEMPLATES.map((t) => ib(`sub:measure:${t.id}`, t.icon, `${t.name} · тяните от точки: направление и размер, Shift — по 5 фт`, { active: s === t.id })).join('')}${div}${ib('share-ruler', 'view', ctx.ui.shareRuler ? 'Видно всем за столом' : 'Видно только вам', { active: ctx.ui.shareRuler })}${ib('measure-clear', 'delete-02', 'Убрать')}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   if (tool === 'draw') {
     const s = sub.draw || 'pen';

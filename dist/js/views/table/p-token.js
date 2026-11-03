@@ -368,16 +368,20 @@ function setAura(t, c, a) {
   if (t.characterId) { const ch = c.characters.find((x) => x.id === t.characterId); if (ch) ch.aura = a ? { ...a } : null; }
 }
 
-export async function deleteTokens(ctx, ids) {
+/** Удалить токены; drawIds — рисунки группы из рамки (TASK-169), в той же записи — один шаг отмены. */
+export async function deleteTokens(ctx, ids, drawIds = []) {
   const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter(Boolean);
-  if (!toks.length) return;
+  const draws = drawIds.map((id) => ctx.scene.drawings.find((d) => d.id === id)).filter(Boolean);
+  if (!toks.length && !draws.length) return;
   if (toks.some((t) => t.kind === 'hero')) {
     const ok = await confirmDialog({ title: 'Убрать героя со сцены?', body: 'Лист героя останется, исчезнет только фишка на этой карте.', ok: 'Убрать' });
     if (!ok) return;
   }
-  const copies = structuredClone(toks);
-  ctx.mutateScene((s, c) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId)); },
-    { label: 'Удаление', undo: (s) => { s.tokens.push(...structuredClone(copies)); }, redo: (s) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); } });
+  const copies = structuredClone(toks), dcopies = structuredClone(draws);
+  const dset = new Set(draws.map((d) => d.id));
+  const dropDraws = (s) => { if (dset.size) s.drawings = s.drawings.filter((d) => !dset.has(d.id)); };
+  ctx.mutateScene((s, c) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId)); dropDraws(s); },
+    { label: 'Удаление', undo: (s) => { s.tokens.push(...structuredClone(copies)); if (dcopies.length) s.drawings.push(...structuredClone(dcopies)); }, redo: (s) => { s.tokens = s.tokens.filter((t) => !ids.includes(t.id)); dropDraws(s); } });
   ctx.select([]);
 }
 

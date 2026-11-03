@@ -69,8 +69,8 @@ export function assemble(rows0) {
     scene.terrain = sd.terrain || { difficult: [], blocked: [] };
     scene.pins = [...(sd.pins || []), ...(sec.pins || [])];
     scene.traps = sec.traps || [];
-    scene.tokens = (tok.get(s.id) || []).map((t) => ({ ...t.data, id: t.id, characterId: t.character_id || undefined, hidden: !!t.hidden }));
-    for (const t of scene.tokens) if (t.characterId === undefined) delete t.characterId;
+    scene.tokens = (tok.get(s.id) || []).map((t) => ({ ...t.data, id: t.id, characterId: t.character_id || undefined, ownerId: t.owner_id || undefined, hidden: !!t.hidden }));
+    for (const t of scene.tokens) { if (t.characterId === undefined) delete t.characterId; if (t.ownerId === undefined) delete t.ownerId; }
     scene.drawings = (drw.get(s.id) || []).map((x) => ({ ...x.data, id: x.id, author: x.author || null }));
     return scene;
   });
@@ -111,8 +111,14 @@ export function explode(c, prev = emptyRows(), now = Date.now()) {
     rows.secrets.set(id, { scene_id: id, campaign_id: c.id, data: { traps, pins: secret } });
     rows.explored.set(id, { scene_id: id, campaign_id: c.id, cells: [...explored] });
     tokens.forEach((t, k) => {
-      const { id: tid, characterId, hidden, ...td } = t;
-      rows.tokens.set(tid, { id: tid, campaign_id: c.id, scene_id: id, character_id: characterId || null, hidden: !!hidden, ord: prev.tokens.get(tid)?.ord ?? now + k, data: td });
+      const { id: tid, characterId, ownerId, hidden, ...td } = t;
+      const row = { id: tid, campaign_id: c.id, scene_id: id, character_id: characterId || null, hidden: !!hidden, ord: prev.tokens.get(tid)?.ord ?? now + k, data: td };
+      // Владелец своего токена и призыва (TASK-123) — колонка owner_id. Пишем её, когда владелец есть, только что снят
+      // или колонка уже пришла с сервера (после миграции SELECT отдаёт owner_id: null у каждого токена — без неё
+      // «null» и «нет поля» разошлись бы, и любое действие слало бы все токены заново). До миграции поля нет — как раньше.
+      const was = prev.tokens.get(tid);
+      if (ownerId || (was && 'owner_id' in was)) row.owner_id = ownerId || null;
+      rows.tokens.set(tid, row);
     });
     drawings.forEach((d, k) => {
       const { id: did, author, ...dd } = d;
@@ -184,6 +190,53 @@ export function diffRows(a, b, { isMaster = false } = {}) {
   const order = ['campaigns', 'campaign_invites', 'campaign_members', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
   const rank = (o) => (o.op === 'delete' ? 100 - order.indexOf(o.table) : order.indexOf(o.table));
   return ops.sort((x, y) => rank(x) - rank(y));
+}
+
+// ——— Частичная правка токенов (TASK-097 п. 2.5, TASK-173) ———
+const TOKEN_COLS = ['scene_id', 'character_id', 'hidden', 'ord', 'owner_id'];
+const MOVE_KEYS = new Set(['x', 'y', 'movedAt', 'rot']);
+
+/**
+ * Что изменилось в строке токена: cols — изменённые колонки (обычный UPDATE только их), set/unset — поля data
+ * для `patch_token`. Двое правят разные поля одного токена — второй не затирает первого (аудит #57, B1).
+ */
+export function tokenPatch(prev, row) {
+  const cols = {};
+  for (const k of TOKEN_COLS) if (k in row && !same(prev?.[k] ?? null, row[k] ?? null)) cols[k] = row[k];
+  const a = prev?.data || {}, b = row.data || {};
+  const set = {}, unset = [];
+  for (const [k, v] of Object.entries(b)) if (!same(a[k], v)) set[k] = v;
+  for (const k of Object.keys(a)) if (!(k in b)) unset.push(k);
+  return { cols, set, unset };
+}
+
+/** Правка токена — только место и поворот (x, y, movedAt, rot), без колонок и удалённых полей. */
+export function isTokenMove(o) {
+  if (o.table !== 'tokens' || o.op !== 'update' || !o.prev) return false;
+  const { cols, set, unset } = tokenPatch(o.prev, o.row);
+  const keys = Object.keys(set);
+  return !Object.keys(cols).length && !unset.length && keys.length > 0 && keys.every((k) => MOVE_KEYS.has(k));
+}
+
+/**
+ * Сгруппировать перемещения: два и больше токенов одной сцены, сдвинутых одним действием, — одна операция
+ * `{op: 'move', scene, moves:[{id, x, y, …}], parts}` для `move_tokens`: при отказе по любому не двигается никто (B5).
+ * Группа не делится: больше 50 токенов (предел функции сервера) отправка отклоняет целиком (sync.js).
+ * Остальные операции — как были, порядок сохраняется.
+ */
+export function groupTokenMoves(ops) {
+  const out = [], groups = new Map();
+  for (const o of ops) {
+    if (!isTokenMove(o)) { out.push(o); continue; }
+    const scene = o.row.scene_id;
+    let g = groups.get(scene);
+    if (!g) { g = { table: 'tokens', op: 'move', key: `move:${scene}:${o.key}`, scene, moves: [], parts: [] }; groups.set(scene, g); out.push(g); }
+    const { set } = tokenPatch(o.prev, o.row);
+    g.moves.push({ id: o.key, ...set });
+    g.parts.push(o);
+  }
+  // Один токен — обычная частичная правка, без лишнего вызова.
+  return out.map((o) => (o.op === 'move' && o.parts.length === 1 ? o.parts[0] : o));
 }
 
 /** Применить операции к кэшу строк (оптимистично — до ответа сервера). */

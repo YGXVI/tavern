@@ -42,7 +42,14 @@ function randomQuat() {
 const PHI = (1 + Math.sqrt(5)) / 2;
 function rawVerts(kind) {
   const p = [];
-  if (kind === 4) return [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+  // к4 — кристалл (TASK-136): четырёхгранная призма вдоль оси y с заострёнными концами. Числа на длинных гранях;
+  // на остриё кристалл не встаёт — центр тяжести выходит за грань острия, и он ложится на длинную грань.
+  if (kind === 4) {
+    const a = 0.5, h = 0.72, tip = 0.42;
+    for (const y of [-h, h]) for (const [x, z] of [[a, a], [a, -a], [-a, -a], [-a, a]]) p.push([x, y, z]);
+    p.push([0, h + tip, 0], [0, -h - tip, 0]);
+    return p;
+  }
   if (kind === 6) { for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) p.push([x, y, z]); return p; }
   if (kind === 8) return [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   if (kind === 12) {
@@ -87,8 +94,9 @@ function hullFaces(verts) {
   return faces;
 }
 
-// Размер (радиус описанной сферы) в единицах лотка — на глаз, чтобы кубы были соразмерны.
-const SIZE = { 4: 1.04, 6: 0.78, 8: 0.86, 10: 0.84, 12: 0.86, 20: 0.9 };
+// Размер (радиус описанной сферы) в единицах лотка, по просьбам sol0139 (TASK-139, TASK-142) —
+// радиус равного шара: к4 0,59, к8 0,62, к10 0,65, к6 0,66, к12 0,66, к20 0,76.
+const SIZE = { 4: 0.9, 6: 0.92, 8: 0.91, 10: 0.84, 12: 0.76, 20: 0.9 };
 const GEO = {};
 function geometry(kind) {
   if (GEO[kind]) return GEO[kind];
@@ -101,6 +109,7 @@ function geometry(kind) {
     const P = f.idx.map((i) => v[i]);
     let up;
     if (kind === 6) up = norm(sub(mul(add(P[0], P[1]), 0.5), f.c));
+    else if (kind === 4 && Math.abs(f.n[1]) < 1e-6) up = [0, 1, 0]; // к4: число вдоль кристалла
     else if (kind === 10) { const far = P.reduce((a, b) => (len(sub(b, f.c)) > len(sub(a, f.c)) ? b : a)); up = norm(sub(far, f.c)); }
     else up = norm(sub(P[0], f.c));
     f.up = up; f.right = cross(up, f.n);
@@ -109,7 +118,16 @@ function geometry(kind) {
     f.r = Math.min(...P.map((p, i) => { const q = P[(i + 1) % P.length]; const e = norm(sub(q, p)); const w = sub(f.c, p); return len(sub(w, mul(e, dot(w, e)))); }));
   }
   const R = Math.max(...v.map(len));
-  GEO[kind] = { verts: v, faces, R, inertia: 0.4 * R * R };
+  // Грани с числами по порядку меток: у к4 — только длинные (острия без чисел), у остальных — все.
+  const numbered = kind === 4 ? faces.map((f, i) => (Math.abs(f.n[1]) < 1e-6 ? i : -1)).filter((i) => i >= 0) : faces.map((_, i) => i);
+  // Точки касания соседей: вершины и середины рёбер (TASK-139). Только вершины пропускали скрещённые рёбра —
+  // кубы в куче проходили друг сквозь друга, особенно длинный к4 и к10.
+  const seen = new Set(), probes = v.slice();
+  for (const f of faces) f.idx.forEach((a, i) => {
+    const b = f.idx[(i + 1) % f.idx.length], k = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (!seen.has(k)) { seen.add(k); probes.push(mul(add(v[a], v[b]), 0.5)); }
+  });
+  GEO[kind] = { verts: v, faces, numbered, probes, R, inertia: 0.4 * R * R };
   return GEO[kind];
 }
 
@@ -139,15 +157,10 @@ function makeBody(kind, opts = {}) {
 // Материал по умолчанию — тёмный камень; наборы приходят из dice-art.js (поля light/base/dark/ink/spec/metal/lum).
 const DEFAULT_SKIN = { id: 'obsidian', light: '#5d606e', base: '#2e3038', dark: '#16171c', ink: '#f2ead8', spec: 0.6, metal: 0.18, lum: 1 };
 
-/** Значение, которое показывает куб сейчас (к4 — вершина сверху, остальные — верхняя грань). */
+/** Номер метки, которую куб показывает сейчас: верхняя из граней с числами (у к4 — верхняя длинная грань). */
 function topIndex(b) {
-  if (b.shape === 4) {
-    let best = 0, by = -Infinity;
-    b.g.verts.forEach((p, i) => { const y = qrot(b.q, p)[1]; if (y > by) { by = y; best = i; } });
-    return best;
-  }
   let best = 0, bd = -Infinity;
-  b.g.faces.forEach((f, i) => { const d = qrot(b.q, f.n)[1]; if (d > bd) { bd = d; best = i; } });
+  b.g.numbered.forEach((fi, i) => { const d = qrot(b.q, b.g.faces[fi].n)[1]; if (d > bd) { bd = d; best = i; } });
   return best;
 }
 /** Высота нижней вершины куба над дном при повороте q (0 — касается стола; заметно больше — лежит на соседе). */
@@ -158,10 +171,10 @@ function lowest(b, q = b.q) {
 function flatness(b) {
   return Math.max(...b.g.faces.map((f) => -qrot(b.q, f.n)[1]));
 }
-/** Поворот, после которого куб ровно лежит на ближайшей к низу грани. */
+/** Поворот, после которого куб ровно лежит на ближайшей к низу грани (к4 — на длинной: на остриё не ложится). */
 function alignedQuat(b) {
   let best = null, bd = -Infinity;
-  for (const f of b.g.faces) { const n = qrot(b.q, f.n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
+  for (const fi of b.g.numbered) { const n = qrot(b.q, b.g.faces[fi].n); if (-n[1] > bd) { bd = -n[1]; best = n; } }
   const down = [0, -1, 0];
   const axis = cross(best, down), s = len(axis), c = dot(best, down);
   if (s < 1e-7) return c > 0 ? b.q : qnorm(qmul(qaxis([1, 0, 0], Math.PI), b.q));
@@ -172,6 +185,87 @@ function alignedQuat(b) {
 const G = -38, DT = 1 / 240, SUBSTEPS = 4;
 const FLOOR = { e: 0.32, mu: 0.42 }, WALL = { e: 0.45, mu: 0.25 };
 
+// ——— Звук ударов (TASK-145) ———
+// Удары записываются при просчёте броска (кадр, вид, скорость) и звучат при проигрывании в тот же кадр.
+// Звук синтезируется Web Audio — без файлов и чужих записей.
+let hitLog = null; // { frame, byKey: Map } — во время просчёта
+function noteHit(b, kind, v) {
+  if (!hitLog || v < 1.3) return;
+  const k = `${hitLog.frame}|${b.id}|${kind}`;
+  const was = hitLog.byKey.get(k);
+  if (!was || was.v < v) hitLog.byKey.set(k, { f: hitLog.frame, kind, v, die: b.shape });
+}
+let actx = null, noiseBuf = null, soundOn = true;
+/** Звук кубов вкл/выкл (на эту вкладку). */
+export function setDiceSound(on) { soundOn = !!on; }
+export function diceSoundOn() { return soundOn; }
+function audio() {
+  if (!soundOn) return null;
+  try {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      noiseBuf = actx.createBuffer(1, Math.round(actx.sampleRate * 0.25), actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    return actx.state === 'running' ? actx : null;
+  } catch { return null; }
+}
+/**
+ * Один удар (TASK-155: глухо, без жестяного звона): куб о куб — короткий тупой «тук» кости, о борт — деревянный
+ * стук, о дно — мягкий стук по сукну. Шум через широкую полосу и срез верхов, тон — низкий синус с быстрым спадом,
+ * мягкая атака без щелчка. Громкость — от скорости удара, высота чуть плавает, чтобы удары не звучали одинаково.
+ */
+function playHit(kind, v, vol = 1, die = 20) {
+  const ac = audio(); if (!ac) return;
+  hitVoice(ac, ac.destination, ac.currentTime + 0.005, kind, v, vol, die);
+}
+/** Синтез удара в любом аудиоконтексте (живой или офлайн — для проверки). */
+function hitVoice(ac, dest, t, kind, v, vol = 1, die = 20, rnd = Math.random) {
+  const g0 = Math.min(1, Math.max(0, (v - 1.3) / 11)) ** 0.8 * vol;
+  if (g0 < 0.02) return;
+  const r = () => 0.88 + rnd() * 0.24;
+  const small = die === 4 || die === 6 ? 1.1 : die === 20 || die === 12 ? 0.92 : 1;
+  const P = kind === 'dice'
+    ? { f: 720 * small, q: 0.9, dec: 0.028, peak: 0.55, tone: 360 * small, tg: 0.12, lp: 1200 }
+    : kind === 'wall'
+      ? { f: 380, q: 0.8, dec: 0.045, peak: 0.55, tone: 160, tg: 0.32, lp: 850 }
+      : { f: 260 * small, q: 0.7, dec: 0.055, peak: 0.75, tone: 125 * small, tg: 0.38, lp: 700 };
+  // Срез верхов на выходе — «глухо», как через сукно и дерево.
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = P.lp; lp.Q.value = 0.5;
+  lp.connect(dest);
+  const env = (g, peak, dec) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0008, t + dec); };
+  // Шум через широкую полосу — «тело» удара.
+  const src = ac.createBufferSource(); src.buffer = noiseFor(ac);
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = P.f * r(); bp.Q.value = P.q;
+  const ng = ac.createGain(); env(ng, P.peak * g0, P.dec);
+  src.connect(bp); bp.connect(ng); ng.connect(lp);
+  src.start(t, rnd() * 0.15, P.dec + 0.02);
+  // Низкий тон с быстрым спадом — «тук», а не «дзынь».
+  const osc = ac.createOscillator(); osc.type = 'sine';
+  const tone = P.tone * r();
+  osc.frequency.setValueAtTime(tone, t); osc.frequency.exponentialRampToValueAtTime(tone * 0.55, t + P.dec);
+  const og = ac.createGain(); env(og, P.tg * g0, P.dec * 0.75);
+  osc.connect(og); og.connect(lp);
+  osc.start(t); osc.stop(t + P.dec + 0.02);
+}
+/** Буфер белого шума на контекст (живой — один на вкладку). */
+const noiseBufs = new WeakMap();
+function noiseFor(ac) {
+  if (ac === actx && noiseBuf) return noiseBuf;
+  let nb = noiseBufs.get(ac);
+  if (!nb) {
+    nb = ac.createBuffer(1, Math.round(ac.sampleRate * 0.25), ac.sampleRate);
+    const d = nb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    noiseBufs.set(ac, nb);
+  }
+  return nb;
+}
+
 function applyImpulse(b, r, J) {
   b.v = add(b.v, J);
   b.w = add(b.w, mul(cross(r, J), 1 / b.g.inertia));
@@ -179,7 +273,7 @@ function applyImpulse(b, r, J) {
 
 function contactPlane(b, n, off, mat, verts) {
   // Плоскость n·p >= off: последовательные импульсы с накоплением (как в PGS), трение по Кулону.
-  let deepest = 0;
+  let deepest = 0, hit = 0;
   const cs = [];
   for (const p of verts) {
     const pen = off - dot(n, p);
@@ -188,9 +282,11 @@ function contactPlane(b, n, off, mat, verts) {
     const r = sub(p, b.x);
     const rn = cross(r, n);
     const vn0 = dot(add(b.v, cross(b.w, r)), n);
+    if (-vn0 > hit) hit = -vn0;
     cs.push({ r, k: 1 + dot(rn, rn) / b.g.inertia, target: vn0 < -2 ? -mat.e * vn0 : 0, acc: 0, tacc: [0, 0, 0] });
   }
   if (!cs.length) return false;
+  noteHit(b, mat === FLOOR ? 'floor' : 'wall', hit);
   for (let it = 0; it < 6; it++) for (const c of cs) {
     const vel = add(b.v, cross(b.w, c.r));
     const vn = dot(vel, n);
@@ -214,13 +310,76 @@ function contactPlane(b, n, off, mat, verts) {
 }
 
 function worldVerts(b) { return b.g.verts.map((p) => add(b.x, qrot(b.q, p))); }
+function worldProbes(b) { return b.g.probes.map((p) => add(b.x, qrot(b.q, p))); }
+/** Насколько глубоко a вошёл в b: {pen, n} (n — наружу из b, мир) или null. */
+function overlap(a, b) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R) ** 2) return null;
+  let best = null;
+  for (const [A, B, sgn] of [[a, b, 1], [b, a, -1]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      let pen = Infinity, nf = null;
+      for (const f of B.g.faces) { const k = f.d - dot(f.n, lp); if (k < 0) { pen = -1; break; } if (k < pen) { pen = k; nf = f.n; } }
+      if (pen > 0 && nf && (!best || pen > best.pen)) best = { pen, n: mul(qrot(B.q, nf), sgn) };
+    }
+  }
+  return best;
+}
+/** Вернуть куб внутрь стенок площадки и не ниже дна (по настоящим вершинам, без поворота). */
+function keepInside(b, bounds) {
+  const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
+  const vs = worldVerts(b);
+  const lo = (k) => Math.min(...vs.map((p) => p[k])), hi = (k) => Math.max(...vs.map((p) => p[k]));
+  const x0 = -hw + (bounds.left || 0), x1 = hw - (bounds.right || 0), z0 = -hd + (bounds.top || 0), z1 = hd - (bounds.bottom || 0);
+  let dx = 0, dz = 0;
+  if (lo(0) < x0) dx = x0 - lo(0); else if (hi(0) > x1) dx = x1 - hi(0);
+  if (lo(2) < z0) dz = z0 - lo(2); else if (hi(2) > z1) dz = z1 - hi(2);
+  const dy = Math.max(0, -lo(1));
+  if (dx || dy || dz) b.x = [b.x[0] + dx, b.x[1] + dy, b.x[2] + dz];
+}
+/**
+ * Развести кубы, вошедшие друг в друга к концу броска (куча в тесном лотке): сдвиг без поворота,
+ * не ниже дна и не за стенки. Если места внизу нет, куб поднимается на соседей (TASK-146).
+ */
+function separate(list, bounds, iters = 120) {
+  for (let it = 0; it < iters; it++) {
+    let any = false;
+    for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+      const o = overlap(list[i], list[j]);
+      if (!o || o.pen < 0.01) continue;
+      any = true;
+      // Под конец — чуть вверх тому, кто выше: кучу легче развести, подняв её, чем раздвинув по тесному дну.
+      const k = Math.min(o.pen, 0.25) * 0.55, up = it > iters / 2 ? 0.25 : 0;
+      const hiB = list[i].x[1] >= list[j].x[1] ? list[i] : list[j];
+      list[i].x = add(list[i].x, mul(o.n, k)); list[j].x = sub(list[j].x, mul(o.n, k));
+      if (up) hiB.x = [hiB.x[0], hiB.x[1] + k * up, hiB.x[2]];
+    }
+    for (const b of list) keepInside(b, bounds);
+    if (!any) break;
+  }
+}
+/** Касается ли куб соседа (в пределах eps): точка одного внутри другого или у самой его поверхности. */
+function touching(a, b, eps = 0.05) {
+  const d = sub(b.x, a.x);
+  if (dot(d, d) > (a.g.R + b.g.R + eps) ** 2) return false;
+  for (const [A, B] of [[a, b], [b, a]]) {
+    const qi = qinv(B.q);
+    for (const p of worldProbes(A)) {
+      const lp = qrot(qi, sub(p, B.x));
+      if (B.g.faces.every((f) => dot(f.n, lp) - f.d < eps)) return true;
+    }
+  }
+  return false;
+}
 
 function collidePair(a, b) {
   const d = sub(b.x, a.x);
   if (dot(d, d) > (a.g.R + b.g.R) ** 2) return;
   for (const [A, B] of [[a, b], [b, a]]) {
     const qi = qinv(B.q);
-    for (const p of worldVerts(A)) {
+    for (const p of worldProbes(A)) {
       const lp = qrot(qi, sub(p, B.x));
       let minPen = Infinity, nf = null;
       for (const f of B.g.faces) {
@@ -238,6 +397,7 @@ function collidePair(a, b) {
       const vrel = sub(add(A.v, cross(A.w, ra)), add(B.v, cross(B.w, rb)));
       const vn = dot(vrel, n);
       if (vn < 0) {
+        noteHit(A, 'dice', -vn);
         const ran = cross(ra, n), rbn = cross(rb, n);
         const k = wa * (1 + dot(ran, ran) / A.g.inertia) + wb * (1 + dot(rbn, rbn) / B.g.inertia);
         const j = (-(1 + 0.3) * vn) / k;
@@ -285,9 +445,10 @@ function stepWorld(bodies, bounds) {
       if (contactPlane(b, [0, 1, 0], 0, FLOOR, wv)) { b.w = mul(b.w, 0.988); b.v = [b.v[0] * 0.994, b.v[1], b.v[2] * 0.994]; }
       // Стенки чуть внутри холста: в перспективе куб у стенки не обрезается краем.
       // Сверху — полоса под сумму и кнопки лотка (top): кубы туда не закатываются.
+      // Слева и справа — поля (left/right): на столе кубы катаются ближе к середине, не под правой панелью (TASK-130).
       const hw = bounds.w / 2 - 0.35, hd = bounds.d / 2 - 0.35;
-      contactPlane(b, [1, 0, 0], -hw, WALL, worldVerts(b));
-      contactPlane(b, [-1, 0, 0], -hw, WALL, worldVerts(b));
+      contactPlane(b, [1, 0, 0], -hw + (bounds.left || 0), WALL, worldVerts(b));
+      contactPlane(b, [-1, 0, 0], -hw + (bounds.right || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, 1], -hd + (bounds.top || 0), WALL, worldVerts(b));
       contactPlane(b, [0, 0, -1], -hd + (bounds.bottom || 0), WALL, worldVerts(b));
     }
@@ -315,6 +476,330 @@ function rgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+// ——— Нарисованные грани (набор с полем art, TASK-127) ———
+// Лист: 10 ячеек 128 px в ряд, грань в ячейке — ровно та же фигура, что строит to2() ниже (к4/к8/к20 — треугольник
+// вершиной вверх, к6 — квадрат, к10 — дельтоид, к12 — пятиугольник вершиной вверх). Порядок ячеек:
+const ART_LAYOUT = { frame4: 0, glyph: 1, d6: 11, d8: 17, d10: 25, d10t: 35, d12: 45, d20: 57, frame: { 6: 77, 8: 78, 10: 79, 12: 80, 20: 81 } };
+const ART_COLS = 10;
+const artImgs = new Map(); // адрес → Image
+const artWaiters = new Set(); // сцены, которые перерисуют кубы, когда лист догрузится
+function artImage(src) {
+  let im = artImgs.get(src);
+  if (!im) {
+    im = new Image(); im.decoding = 'async';
+    im.onload = () => { for (const f of artWaiters) f(); };
+    im.src = src; artImgs.set(src, im);
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
+/** Ячейка листа для подписи грани; null — нарисованной грани нет (например, «?»). */
+function artCell(kind, v) {
+  if (v === '?') return null;
+  const n = Number(v);
+  if (kind === 'd10t') return ART_LAYOUT.d10t + n / 10;
+  if (kind === 'd10u' || kind === 10) return ART_LAYOUT.d10 + (n % 10); // к10: «10» нарисовано как «0», как на настоящем кубе
+  const base = ART_LAYOUT[`d${kind}`];
+  return base === undefined ? null : base + n - 1;
+}
+function drawArtAtlas(b, cv, x, img) {
+  const faces = b.g.faces, cols = cv.width / CELL;
+  const cell = (i, ox, oy, w = CELL) => x.drawImage(img, (i % ART_COLS) * CELL, Math.floor(i / ART_COLS) * CELL, CELL, CELL, ox, oy, w, w);
+  x.fillStyle = b.skin.dark; x.fillRect(0, 0, cv.width, cv.height);
+  b.uv = [];
+  faces.forEach((f, fi) => {
+    const ox = (fi % cols) * CELL, oy = Math.floor(fi / cols) * CELL;
+    const sc = (CELL * 0.44) / f.R;
+    const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
+    const P = f.idx.map((i) => to2(b.g.verts[i]));
+    b.uv.push(P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
+    const text = (txt, cx, cy, ang) => {
+      x.save(); x.translate(cx, cy); x.rotate(ang); x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = `600 ${fs}px Unbounded, Inter, system-ui, sans-serif`; x.fillStyle = b.skin.ink; x.fillText(txt, 0, 0); x.restore();
+    };
+    if (b.shape === 4) {
+      // к4-кристалл (TASK-136): граней такой формы в листе нет — грань светлая с каймой цвета набора,
+      // на длинной грани — цифра из листа (глифы 0–9), острия без чисел.
+      x.save(); x.beginPath(); P.forEach(([u, w], i) => (i ? x.lineTo(u, w) : x.moveTo(u, w))); x.closePath(); x.clip();
+      x.fillStyle = b.skin.light; x.fill();
+      x.lineJoin = 'round'; x.strokeStyle = b.skin.dark; x.lineWidth = 9; x.stroke();
+      x.restore();
+      const li = b.g.numbered.indexOf(fi);
+      if (li < 0) return;
+      const v = b.labels[li];
+      if (v === '?') { text('?', ox + CELL / 2, oy + CELL / 2, 0); return; }
+      // Ячейка глифа берётся с полем в 4 px — иначе на грани проступает край соседней ячейки.
+      const w = CELL * (fs * 0.9) / 96, gi = ART_LAYOUT.glyph + Number(v), pad = 4, k = w / CELL; // в ячейке цифра высотой 96 px
+      x.drawImage(img, (gi % ART_COLS) * CELL + pad, Math.floor(gi / ART_COLS) * CELL + pad, CELL - 2 * pad, CELL - 2 * pad,
+        ox + CELL / 2 - w / 2 + pad * k, oy + CELL / 2 - w / 2 + pad * k, w - 2 * pad * k, w - 2 * pad * k);
+      return;
+    }
+    const v = b.labels[fi];
+    const i = artCell(b.kind, v);
+    if (i !== null) { cell(i, ox, oy); return; }
+    cell(ART_LAYOUT.frame[b.shape], ox, oy);
+    text(labelText(b.kind, v), ox + CELL / 2, oy + CELL / 2, 0);
+  });
+}
+
+// ——— Набор «Воронёная сталь» (TASK-148): грани рисует код ———
+// Тёмный металл с серебряными шипами-листьями у вершин и рёбер, в центре грани — синий эмалевый медальон
+// в серебряной оправе, цифра — серебро. Основа (металл, шипы, медальон) рисуется один раз на форму куба,
+// перед броском поверх неё ставятся только цифры.
+const filigreeBase = new Map(); // форма → холст основы
+function faceCells(b, cv) {
+  const cols = cv.width / CELL;
+  return b.g.faces.map((f, fi) => {
+    const ox = (fi % cols) * CELL, oy = Math.floor(fi / cols) * CELL;
+    const sc = (CELL * 0.44) / f.R;
+    const to2 = (p) => { const d = sub(p, f.c); return [ox + CELL / 2 + dot(d, f.right) * sc, oy + CELL / 2 - dot(d, f.up) * sc]; };
+    return { f, fi, ox, oy, sc, P: f.idx.map((i) => to2(b.g.verts[i])), cx: ox + CELL / 2, cy: oy + CELL / 2, rr: f.r * sc };
+  });
+}
+/** Радиус медальона на грани: у к4 — по узкой стороне длинной грани; на остриях к4 медальона нет. */
+function medalR(b, fc) {
+  if (b.shape === 4) return b.g.numbered.includes(fc.fi) ? fc.rr * 0.78 : 0;
+  return fc.rr * (b.shape === 12 ? 0.6 : b.shape === 10 ? 0.62 : 0.66);
+}
+function leaf(x, ax, ay, bx, by, w) {
+  const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+  const mx = ax + dx * 0.42, my = ay + dy * 0.42;
+  const g = x.createLinearGradient(ax, ay, bx, by);
+  g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#c6ccd6'); g.addColorStop(1, '#5d6470');
+  x.fillStyle = g;
+  x.beginPath(); x.moveTo(ax, ay);
+  x.quadraticCurveTo(mx + nx * w, my + ny * w, bx, by);
+  x.quadraticCurveTo(mx - nx * w, my - ny * w, ax, ay);
+  x.closePath(); x.fill(); x.stroke();
+}
+function filigreeBaseCanvas(b, w, h) {
+  const key = `${b.shape}|${w}x${h}`;
+  if (filigreeBase.has(key)) return filigreeBase.get(key);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const rnd = seeded(b.shape * 131);
+  x.fillStyle = '#0d0f13'; x.fillRect(0, 0, w, h);
+  for (const fc of faceCells(b, cv)) {
+    const { P, cx, cy } = fc;
+    x.save();
+    x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath(); x.clip();
+    // Воронёный металл: тёмный градиент, мелкие светлые риски.
+    const mg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    mg.addColorStop(0, '#454c58'); mg.addColorStop(0.5, '#23272f'); mg.addColorStop(1, '#0e1014');
+    x.fillStyle = mg; x.fillRect(fc.ox, fc.oy, CELL, CELL);
+    x.lineCap = 'round';
+    for (let i = 0; i < 26; i++) {
+      x.strokeStyle = `rgba(210,220,235,${0.03 + rnd() * 0.06})`; x.lineWidth = 0.6 + rnd();
+      const a = rnd() * Math.PI, l = 8 + rnd() * 30, px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL;
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke();
+    }
+    // Кромка грани — серебряный валик с тёмным швом по самому ребру.
+    x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath();
+    const rg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    rg.addColorStop(0, '#f4f6fa'); rg.addColorStop(0.5, '#8d95a2'); rg.addColorStop(1, '#3a404a');
+    x.strokeStyle = rg; x.lineWidth = 12; x.stroke();
+    x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 3; x.stroke();
+    // Шипы-листья: большой от каждой вершины к центру и по два боковых; маленький — от середины ребра.
+    x.lineJoin = 'round'; x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 1.4;
+    const reach = b.shape === 12 ? 0.42 : b.shape === 4 ? 0.34 : 0.5;
+    P.forEach(([vx, vy], i) => {
+      const dx = cx - vx, dy = cy - vy, D = Math.hypot(dx, dy) || 1, ux = dx / D, uy = dy / D;
+      for (const sgn of [-1, 1]) {
+        const a = Math.atan2(uy, ux) + sgn * 0.7, bx0 = vx + dx * 0.1, by0 = vy + dy * 0.1, L = D * 0.27;
+        leaf(x, bx0, by0, bx0 + Math.cos(a) * L, by0 + Math.sin(a) * L, L * 0.27);
+      }
+      leaf(x, vx + dx * 0.02, vy + dy * 0.02, vx + dx * reach, vy + dy * reach, D * 0.1);
+      const [qx, qy] = P[(i + 1) % P.length], mx = (vx + qx) / 2, my = (vy + qy) / 2;
+      const ex = cx - mx, ey = cy - my;
+      leaf(x, mx, my, mx + ex * 0.32, my + ey * 0.32, Math.hypot(ex, ey) * 0.09);
+    });
+    // Медальон: синяя эмаль с разводами в серебряной оправе.
+    const R = medalR(b, fc);
+    if (R > 0) {
+      x.beginPath(); x.arc(cx, cy, R * 1.18, 0, Math.PI * 2);
+      x.fillStyle = 'rgba(0,0,0,.55)'; x.fill();
+      // Лепестки вокруг оправы.
+      const petals = R > 22 ? 8 : 6;
+      for (let k = 0; k < petals; k++) {
+        const a = (k / petals) * Math.PI * 2 + Math.PI / petals;
+        leaf(x, cx + Math.cos(a) * R * 1.05, cy + Math.sin(a) * R * 1.05, cx + Math.cos(a) * R * 1.5, cy + Math.sin(a) * R * 1.5, R * 0.13);
+      }
+      const ring = x.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+      ring.addColorStop(0, '#ffffff'); ring.addColorStop(0.45, '#b9c0cc'); ring.addColorStop(1, '#3d434d');
+      x.beginPath(); x.arc(cx, cy, R * 1.17, 0, Math.PI * 2); x.fillStyle = ring; x.fill();
+      x.strokeStyle = 'rgba(5,6,9,.9)'; x.lineWidth = 1.4; x.stroke();
+      const en = x.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+      en.addColorStop(0, '#7cc2ff'); en.addColorStop(0.45, '#2a74e6'); en.addColorStop(1, '#0a2766');
+      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fillStyle = en; x.fill();
+      x.save(); x.clip();
+      for (let i = 0; i < 7; i++) {
+        x.strokeStyle = `rgba(150,205,255,${0.12 + rnd() * 0.18})`; x.lineWidth = 1 + rnd() * 1.6;
+        const a0 = rnd() * Math.PI * 2, rr = R * (0.35 + rnd() * 0.6);
+        x.beginPath(); x.arc(cx + (rnd() - 0.5) * R * 0.5, cy + (rnd() - 0.5) * R * 0.5, rr, a0, a0 + 1.2 + rnd() * 1.6); x.stroke();
+      }
+      x.restore();
+      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.strokeStyle = 'rgba(4,10,25,.8)'; x.lineWidth = 2; x.stroke();
+    }
+    x.restore();
+  }
+  filigreeBase.set(key, cv);
+  return cv;
+}
+function drawFiligreeAtlas(b, cv, x) {
+  x.drawImage(filigreeBaseCanvas(b, cv.width, cv.height), 0, 0);
+  b.uv = [];
+  for (const fc of faceCells(b, cv)) {
+    b.uv.push(fc.P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const li = b.g.numbered.indexOf(fc.fi);
+    if (li < 0) continue;
+    const R = medalR(b, fc);
+    const v = b.labels[li];
+    // Как на настоящем к10: «10» — это «0».
+    const txt = v === '?' ? '?' : b.kind === 10 && Number(v) === 10 ? '0' : labelText(b.kind, v);
+    const size = R * (txt.length > 1 ? 0.95 : 1.3);
+    x.save(); x.translate(fc.cx, fc.cy + R * 0.04);
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `700 ${size}px Unbounded, Inter, system-ui, sans-serif`;
+    x.lineJoin = 'round'; x.strokeStyle = 'rgba(3,8,20,.9)'; x.lineWidth = Math.max(2, size * 0.12); x.strokeText(txt, 0, 0);
+    const sg = x.createLinearGradient(0, -size / 2, 0, size / 2);
+    sg.addColorStop(0, '#ffffff'); sg.addColorStop(0.55, '#dfe5ee'); sg.addColorStop(1, '#9aa4b3');
+    x.fillStyle = sg; x.fillText(txt, 0, 0);
+    if (txt === '6' || txt === '9') { x.fillRect(-size * 0.22, size * 0.44, size * 0.44, Math.max(2, size * 0.07)); }
+    x.restore();
+  }
+}
+
+// ——— Набор «Кровавое железо» (TASK-152): грани рисует код ———
+// Тёмное железо с красными прожилками, по рёбрам — светлая стальная рамка с гравировкой, на вершинах — пирамидки
+// заклёпок, вокруг цифры — гравированное кольцо, брызги и потёки крови. Основа — один раз на форму куба, цифры поверх.
+const bloodBase = new Map(); // форма → холст основы
+const polyPath = (x, P) => { x.beginPath(); P.forEach(([u, v], i) => (i ? x.lineTo(u, v) : x.moveTo(u, v))); x.closePath(); };
+const shrink = (P, cx, cy, k) => P.map(([u, v]) => [cx + (u - cx) * k, cy + (v - cy) * k]);
+/** Радиус гравированного кольца и цифры: у к4 — только на длинных гранях. */
+function bloodR(b, fc) {
+  if (b.shape === 4) return b.g.numbered.includes(fc.fi) ? fc.rr * 0.7 : 0;
+  return fc.rr * (b.shape === 10 ? 0.6 : b.shape === 12 ? 0.62 : 0.66);
+}
+function bloodBaseCanvas(b, w, h) {
+  const key = `${b.shape}|${w}x${h}`;
+  if (bloodBase.has(key)) return bloodBase.get(key);
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const x = cv.getContext('2d');
+  const rnd = seeded(b.shape * 977 + 5);
+  x.fillStyle = '#0a0707'; x.fillRect(0, 0, w, h);
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  for (const fc of faceCells(b, cv)) {
+    const { P, cx, cy, rr } = fc;
+    const band = Math.max(5, rr * 0.2);
+    x.save(); polyPath(x, P); x.clip();
+    // Железо: тёмный градиент, ржаво-красные пятна, тонкие кровяные прожилки.
+    const mg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    mg.addColorStop(0, '#3a2c2d'); mg.addColorStop(0.5, '#1c1515'); mg.addColorStop(1, '#0b0808');
+    x.fillStyle = mg; x.fillRect(fc.ox, fc.oy, CELL, CELL);
+    for (let i = 0; i < 9; i++) {
+      const px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL, r = 8 + rnd() * 26;
+      const gr = x.createRadialGradient(px, py, 0, px, py, r);
+      const tone = rnd(); // кровь, копоть или светлый металл
+      gr.addColorStop(0, `rgba(${tone > 0.55 ? '125,18,24' : tone > 0.25 ? '0,0,0' : '120,100,100'},${0.16 + rnd() * 0.22})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = gr; x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    for (let i = 0; i < 7; i++) {
+      x.strokeStyle = `rgba(150,18,26,${0.3 + rnd() * 0.3})`; x.lineWidth = 0.6 + rnd() * 1.4;
+      let px = fc.ox + rnd() * CELL, py = fc.oy + rnd() * CELL;
+      x.beginPath(); x.moveTo(px, py);
+      for (let k = 0; k < 4; k++) { const nx = px + (rnd() - 0.5) * 34, ny = py + (rnd() - 0.5) * 34; x.quadraticCurveTo((px + nx) / 2 + (rnd() - 0.5) * 12, (py + ny) / 2 + (rnd() - 0.5) * 12, nx, ny); px = nx; py = ny; }
+      x.stroke();
+    }
+    // Рамка по рёбрам: светлая сталь с розоватым отливом, паз и насечки гравировки.
+    polyPath(x, P);
+    const fg = x.createLinearGradient(fc.ox, fc.oy, fc.ox + CELL, fc.oy + CELL);
+    fg.addColorStop(0, '#f6e9e6'); fg.addColorStop(0.45, '#a88e8a'); fg.addColorStop(1, '#3f2e2e');
+    x.strokeStyle = fg; x.lineWidth = band * 2; x.stroke();
+    x.strokeStyle = 'rgba(8,3,3,.95)'; x.lineWidth = 2.5; x.stroke();
+    const k1 = Math.max(0.3, 1 - band / rr), kMid = Math.max(0.3, 1 - band * 0.5 / rr);
+    polyPath(x, shrink(P, cx, cy, kMid));
+    x.setLineDash([1.5, 4.5]); x.strokeStyle = 'rgba(30,14,14,.7)'; x.lineWidth = band * 0.32; x.stroke(); x.setLineDash([]);
+    polyPath(x, shrink(P, cx, cy, k1));
+    x.strokeStyle = 'rgba(8,3,3,.9)'; x.lineWidth = 2.6; x.stroke();
+    polyPath(x, shrink(P, cx, cy, k1 - 1.6 / rr));
+    x.strokeStyle = 'rgba(240,215,210,.35)'; x.lineWidth = 1; x.stroke();
+    // Ржавчина и кровь на рамке.
+    x.globalCompositeOperation = 'multiply';
+    for (let i = 0; i < 6; i++) {
+      const [vx, vy] = P[Math.floor(rnd() * P.length)], [qx, qy] = P[Math.floor(rnd() * P.length)], t = rnd();
+      const px = vx + (qx - vx) * t, py = vy + (qy - vy) * t, r = 6 + rnd() * 14;
+      const gr = x.createRadialGradient(px, py, 0, px, py, r);
+      gr.addColorStop(0, 'rgba(190,60,62,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = gr; x.fillRect(px - r, py - r, r * 2, r * 2);
+    }
+    x.globalCompositeOperation = 'source-over';
+    // Гравированное кольцо вокруг цифры.
+    const R = bloodR(b, fc);
+    if (R > 0) {
+      x.beginPath(); x.arc(cx, cy, R * 1.12, 0, Math.PI * 2); x.fillStyle = 'rgba(0,0,0,.35)'; x.fill();
+      x.beginPath(); x.arc(cx, cy, R * 1.04, 0, Math.PI * 2);
+      x.setLineDash([R * 0.05, R * 0.09]); x.strokeStyle = 'rgba(200,170,166,.55)'; x.lineWidth = R * 0.11; x.stroke(); x.setLineDash([]);
+      for (const rq of [R * 1.13, R * 0.95]) {
+        x.beginPath(); x.arc(cx, cy, rq, 0, Math.PI * 2);
+        x.strokeStyle = 'rgba(8,3,3,.9)'; x.lineWidth = 2.4; x.stroke();
+        x.strokeStyle = 'rgba(232,206,201,.75)'; x.lineWidth = 1; x.stroke();
+      }
+    }
+    // Заклёпки-пирамидки на вершинах: каждая грань рисует свою часть, на кубе они складываются в одну.
+    P.forEach(([vx, vy]) => {
+      const th = Math.atan2(cy - vy, cx - vx), s = Math.max(7, rr * 0.44);
+      const C = [0, 1, 2, 3].map((q) => [vx + Math.cos(th + Math.PI / 4 + q * Math.PI / 2) * s, vy + Math.sin(th + Math.PI / 4 + q * Math.PI / 2) * s]);
+      x.beginPath(); x.arc(vx, vy, s * 1.25, 0, Math.PI * 2); x.fillStyle = 'rgba(0,0,0,.5)'; x.fill();
+      const tones = ['#fff4f1', '#c2a6a2', '#3e2c2c', '#86696a'];
+      C.forEach((c, q) => {
+        const d = C[(q + 1) % 4];
+        x.beginPath(); x.moveTo(vx, vy); x.lineTo(c[0], c[1]); x.lineTo(d[0], d[1]); x.closePath();
+        x.fillStyle = tones[q]; x.fill(); x.strokeStyle = 'rgba(8,3,3,.8)'; x.lineWidth = 0.8; x.stroke();
+      });
+      x.beginPath(); x.arc(vx + Math.cos(th) * s * 0.18, vy + Math.sin(th) * s * 0.18, s * 0.12, 0, Math.PI * 2); x.fillStyle = 'rgba(255,255,255,.7)'; x.fill();
+    });
+    // Брызги и потёки крови.
+    for (let i = 0; i < 6; i++) {
+      const [vx, vy] = P[Math.floor(rnd() * P.length)], [qx, qy] = P[Math.floor(rnd() * P.length)], t = 0.15 + rnd() * 0.7, inn = 0.8 + rnd() * 0.18;
+      const px = cx + (vx + (qx - vx) * t - cx) * inn, py = cy + (vy + (qy - vy) * t - cy) * inn, r = 1 + rnd() * 2.2;
+      x.fillStyle = `rgba(120,6,14,${0.55 + rnd() * 0.3})`;
+      for (let k = 0; k < 4; k++) { // неровная клякса из нескольких капель
+        const a = rnd() * Math.PI * 2, d = rnd() * r * 1.4, q = r * (0.35 + rnd() * 0.6);
+        x.beginPath(); x.arc(px + Math.cos(a) * d, py + Math.sin(a) * d, q, 0, Math.PI * 2); x.fill();
+      }
+      if (rnd() > 0.65) { // потёк: сужается к концу
+        const L = 5 + rnd() * 11, a = Math.atan2(cy - py, cx - px) + (rnd() - 0.5) * 0.5, nx = -Math.sin(a), ny = Math.cos(a);
+        x.beginPath(); x.moveTo(px + nx * r * 0.6, py + ny * r * 0.6); x.lineTo(px + Math.cos(a) * L, py + Math.sin(a) * L); x.lineTo(px - nx * r * 0.6, py - ny * r * 0.6); x.closePath(); x.fill();
+      }
+    }
+    x.restore();
+  }
+  bloodBase.set(key, cv);
+  return cv;
+}
+function drawBloodAtlas(b, cv, x) {
+  x.drawImage(bloodBaseCanvas(b, cv.width, cv.height), 0, 0);
+  b.uv = [];
+  for (const fc of faceCells(b, cv)) {
+    b.uv.push(fc.P.map(([u, v]) => [u / cv.width, v / cv.height]));
+    const li = b.g.numbered.indexOf(fc.fi);
+    if (li < 0) continue;
+    const R = bloodR(b, fc), txt = labelText(b.kind, b.labels[li]);
+    const size = R * (txt.length > 1 ? 1.12 : 1.6);
+    x.save(); x.translate(fc.cx, fc.cy + R * 0.05);
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = `700 ${size}px Unbounded, Inter, system-ui, sans-serif`;
+    x.lineJoin = 'round';
+    x.fillStyle = 'rgba(0,0,0,.6)'; x.fillText(txt, size * 0.03, size * 0.07);
+    x.strokeStyle = 'rgba(14,4,5,.95)'; x.lineWidth = Math.max(2, size * 0.15); x.strokeText(txt, 0, 0);
+    const sg = x.createLinearGradient(0, -size / 2, 0, size / 2);
+    sg.addColorStop(0, '#fff6f3'); sg.addColorStop(0.5, '#e6d0cc'); sg.addColorStop(1, '#9a7773');
+    x.fillStyle = sg; x.fillText(txt, 0, 0);
+    if (txt === '6' || txt === '9') { x.fillRect(-size * 0.22, size * 0.44, size * 0.44, Math.max(2, size * 0.07)); }
+    x.restore();
+  }
+}
+
 function drawAtlas(b) {
   const faces = b.g.faces;
   const cols = Math.ceil(Math.sqrt(faces.length));
@@ -324,6 +809,12 @@ function drawAtlas(b) {
   const x = cv.getContext('2d');
   const rnd = seeded(b.id * 7919);
   const sk = b.skin;
+  // Набор с нарисованными гранями: лист готов — рисуем им; нет — камнем в цветах набора, перерисуем по загрузке.
+  const art = sk.art ? artImage(sk.art) : null;
+  b.artPending = !!sk.art && !art;
+  if (art) { drawArtAtlas(b, cv, x, art); b.atlas = cv; b.texDirty = true; return; }
+  if (sk.paint === 'filigree') { drawFiligreeAtlas(b, cv, x); b.atlas = cv; b.texDirty = true; return; }
+  if (sk.paint === 'bloodiron') { drawBloodAtlas(b, cv, x); b.atlas = cv; b.texDirty = true; return; }
   // Камень набора: основа, мягкие пятна светлого и тёмного тона, тонкие прожилки.
   x.fillStyle = sk.base;
   x.fillRect(0, 0, cv.width, cv.height);
@@ -361,7 +852,7 @@ function drawAtlas(b) {
     x.strokeStyle = rgba(sk.light, 0.16); x.lineWidth = 16; x.stroke();
     x.restore();
     // Цифры: на светлых наборах вдавлены (тёмные с бликом снизу), на тёмных — светлые с тенью.
-    const fs = Math.max(18, f.r * sc * (b.shape === 4 ? 0.95 : b.shape === 10 ? 0.95 : 1.12));
+    const fs = Math.max(18, f.r * sc * (b.shape === 10 ? 0.95 : 1.12));
     x.textAlign = 'center'; x.textBaseline = 'middle';
     const put = (txt, cx, cy, ang, size = fs) => {
       x.save(); x.translate(cx, cy); x.rotate(ang);
@@ -372,14 +863,9 @@ function drawAtlas(b) {
       x.restore();
     };
     if (b.shape === 4) {
-      // к4: у каждой вершины грани — её число, повёрнутое к вершине.
-      f.idx.forEach((vi, k) => {
-        const [px, py] = P[k];
-        const cx = ox + CELL / 2, cy = oy + CELL / 2;
-        const tx = cx + (px - cx) * 0.6, ty = cy + (py - cy) * 0.6;
-        const ang = Math.atan2(px - cx, -(py - cy));
-        put(labelText(b.kind, b.labels[vi]), tx, ty, ang);
-      });
+      // к4-кристалл: число по центру длинной грани, вдоль кристалла; острия без чисел.
+      const li = b.g.numbered.indexOf(fi);
+      if (li >= 0) put(labelText(b.kind, b.labels[li]), ox + CELL / 2, oy + CELL / 2, 0);
     } else {
       const shift = b.shape === 10 ? f.r * sc * 0.12 : 0;
       put(labelText(b.kind, b.labels[fi]), ox + CELL / 2, oy + CELL / 2 + shift, 0);
@@ -454,13 +940,15 @@ export const PX_PER_UNIT = 42;
 const FADE_MS = 650;
 
 /**
- * Сцена с кубами на холсте. insetTop/insetBottom — полосы (px), куда кубы не закатываются (шапка лотка, панели стола).
+ * Сцена с кубами на холсте. insetTop/insetBottom/insetLeft/insetRight — полосы (px), куда кубы не закатываются
+ * (шапка лотка, панели стола); на столе их меняет setInsets() перед броском — площадка ближе к середине (TASK-130).
  * hover — кубы до броска висят в воздухе и трясутся, как в кулаке (лоток); иначе падают и укатываются.
  * API: add(kind, opts) — положить куб; remove(kind); throw(targets, opts) → Promise<{center, top, dice}> (px; dice — каждый куб);
- *      place(targets, opts) — без анимации; fade(group, delay); clear(); resize(); destroy().
+ *      place(targets, opts) — без анимации; fade(group, delay); setInsets({top, bottom, left, right}); clear(); resize(); destroy().
  * targets: [{kind, value, glow?, dropped?}]. opts: {skin, fresh, keep, group}.
  */
-export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr = 2, hover = false } = {}) {
+export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, insetLeft = 0, insetRight = 0, maxDpr = 2, hover = false, sound = 1 } = {}) {
+  const inset = { top: insetTop, bottom: insetBottom, left: insetLeft, right: insetRight };
   const gl = canvas.getContext('webgl', { alpha: true, antialias: true, premultipliedAlpha: true });
   if (!gl) return null;
   const prog = compile(gl, VS, FS), sprog = compile(gl, SVS, SFS);
@@ -474,12 +962,16 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   let bodies = [], frames = null, frameAt = 0, raf = 0, bounds = { w: 9, d: 14 }, camH = 20, pv = null, dpr = 1;
   let destroyed = false, pending = [], playStart = 0, liveAt = 0;
+  let sounds = null, soundAt = -1; // удары просчитанного броска по кадрам
+  const onArt = () => { let any = false; for (const b of bodies) if (b.artPending) { b.labelsDirty = true; any = true; } if (any) { render(); kick(); } };
+  artWaiters.add(onArt);
 
   function resize() {
     dpr = Math.min(maxDpr, devicePixelRatio || 1);
     const w = canvas.clientWidth || 300, h = canvas.clientHeight || 480;
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, top: insetTop / PX_PER_UNIT, bottom: insetBottom / PX_PER_UNIT, px: [w, h] };
+    bounds = { w: w / PX_PER_UNIT, d: h / PX_PER_UNIT, px: [w, h] };
+    applyInsets();
     camH = bounds.d / 2 / Math.tan(FOV / 2);
     const proj = perspective(FOV, w / h, 1, camH + 10);
     // Камера над центром смотрит вниз; «вверх» экрана — к −z.
@@ -492,6 +984,20 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       if (!b.hover) b.asleep = false;
     }
     kick();
+  }
+
+  /** Поля площадки в единицах сцены; cx — середина площадки по ширине (туда бросок и целится). */
+  function applyInsets() {
+    const u = PX_PER_UNIT, maxSide = Math.max(0, bounds.w - 3);
+    bounds.top = inset.top / u; bounds.bottom = inset.bottom / u;
+    bounds.left = Math.min(maxSide, Math.max(0, inset.left / u));
+    bounds.right = Math.min(maxSide - bounds.left, Math.max(0, inset.right / u));
+    bounds.cx = (bounds.left - bounds.right) / 2;
+    bounds.aw = bounds.w - bounds.left - bounds.right;
+  }
+  function setInsets(next = {}) {
+    for (const k of ['top', 'bottom', 'left', 'right']) if (Number.isFinite(next[k])) inset[k] = Math.max(0, next[k]);
+    applyInsets();
   }
 
   function buildBuffer(b) {
@@ -599,8 +1105,15 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
       if (!playStart) playStart = now;
       frameAt = Math.floor((now - playStart) / (1000 / 60));
       applyFrame(frames[Math.min(frameAt, frames.length - 1)]);
+      // Удары — в те же кадры; если кадры пропущены, за раз звучит не больше шести самых громких.
+      if (sounds && frameAt > soundAt) {
+        const due = [];
+        for (let f = soundAt + 1; f <= Math.min(frameAt, frames.length - 1); f++) for (const h of sounds.get(f) || []) due.push(h);
+        soundAt = frameAt;
+        due.sort((a, b) => b.v - a.v).slice(0, 6).forEach((h) => playHit(h.kind, h.v, sound, h.die));
+      }
       if (frameAt >= frames.length - 1) {
-        frames = null; playStart = 0;
+        frames = null; playStart = 0; sounds = null;
         for (const b of bodies) { b.asleep = true; b.v = [0, 0, 0]; b.w = [0, 0, 0]; }
         for (const b of bodies) if (b.settled) { b.settled(b); b.settled = null; }
         render();
@@ -636,17 +1149,23 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function hoverSlot() {
     const taken = bodies.filter((b) => b.hover).map((b) => b.hover.base);
     // Висящий куб ближе к камере — на экране он крупнее и дальше от центра: поля с запасом на перспективу.
-    const k = camH / (camH - 3.1), r = 0.95;
-    const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
-    const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+    // Много кубов в одном слое не помещается — следующие висят слоем выше, не внутри соседей (TASK-146).
+    const r = 0.95, gap = 2;
+    const k0 = camH / (camH - 3.1);
+    const cap = Math.max(2, Math.floor((2 * ((bounds.w / 2 - 0.25) / k0 - r)) / gap) * Math.floor(((bounds.d - bounds.top - bounds.bottom) / k0 - 2 * r) / gap) - 2);
+    const extra = gap * Math.floor(taken.length / cap);
     let best = null, bestD = -1;
-    for (let i = 0; i < 40; i++) {
-      const p = [(Math.random() * 2 - 1) * xr, 2.5 + Math.random() * 0.5, z0 + Math.random() * Math.max(0, z1 - z0)];
-      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6) continue; // кнопка «Бросить»
-      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[2] - p[2]))) : 9;
+    for (let i = 0; i < 60; i++) {
+      const y = 2.5 + Math.random() * (0.5 + extra);
+      const k = camH / (camH - y - 0.6);
+      const xr = Math.max(0.5, (bounds.w / 2 - 0.25) / k - r);
+      const z0 = (-bounds.d / 2 + bounds.top + 0.15) / k + r, z1 = (bounds.d / 2 - bounds.bottom - 0.15) / k - r;
+      const p = [(Math.random() * 2 - 1) * xr, y, z0 + Math.random() * Math.max(0, z1 - z0)];
+      if (Math.abs(p[2]) < 1.35 && Math.abs(p[0]) < 2.6 && p[1] < 3.2) continue; // кнопка «Бросить»
+      const d = taken.length ? Math.min(...taken.map((t) => Math.hypot(t[0] - p[0], t[1] - p[1], t[2] - p[2]))) : 9;
       if (d > bestD) { bestD = d; best = p; }
     }
-    return best || [0, 2.6, z0];
+    return best || [0, 2.6, (-bounds.d / 2 + bounds.top + 0.15) / k0 + r];
   }
   /**
    * Тряска: кубы плавно покачиваются в воздухе и медленно кувыркаются, а раз в две-три секунды все разом
@@ -711,12 +1230,12 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function launch(b, k = 1) {
     if (b.fromAir) {
       const ang = Math.random() * Math.PI * 2, sp = k * (4 + Math.random() * 5);
-      b.v = [Math.cos(ang) * sp - b.x[0] * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
+      b.v = [Math.cos(ang) * sp - (b.x[0] - (bounds.cx || 0)) * 0.6, -(3 + Math.random() * 3), Math.sin(ang) * sp - b.x[2] * 0.4];
       b.w = [(Math.random() - 0.5) * 40, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 40];
       return;
     }
     const speed = k * (8 + Math.random() * 9);
-    const ang = (Math.random() - 0.5) * 0.9 - (b.x[0] / bounds.w) * 0.5;
+    const ang = (Math.random() - 0.5) * 0.9 - ((b.x[0] - (bounds.cx || 0)) / (bounds.aw || bounds.w)) * 0.5;
     b.v = [Math.sin(ang) * speed, 3 + Math.random() * 4, -Math.cos(ang) * speed];
     if (b.x[2] < 0) b.v[2] = -b.v[2] * 0.6; // кубы в верхней половине летят вниз, навстречу
     b.w = [(Math.random() - 0.5) * 34, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 34];
@@ -730,17 +1249,25 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     if (frames) { applyFrame(frames[Math.min(frameAt, frames.length - 1)]); for (const b of bodies) if (b.target != null && !b.done) b.asleep = false; frames = null; playStart = 0; }
     const pool = opts.fresh ? [] : bodies.filter((b) => b.target == null);
     const used = [];
-    const cols = Math.max(1, Math.floor((bounds.w - 1.4) / 1.9));
+    // Новые кубы вылетают снизу сеткой с шагом STEP, которая помещается между стенками (не больше трёх рядов);
+    // не влезли — следующим слоем выше, как горсть, высыпанная из руки (TASK-146: раньше ряды уходили за верхнюю
+    // стенку и кубы начинали бросок друг в друге).
+    const STEP = 2;
+    const fresh = targets.filter((t) => !pool.some((b) => b.kind === t.kind)).length;
+    const cols = Math.max(1, Math.floor((bounds.aw - 1.2) / STEP));
+    const rows = Math.max(1, Math.min(3, Math.floor((bounds.d - bounds.top - bounds.bottom - 1.2) / STEP)));
     const lane = opts.lane ?? 0; // смещение ряда вылета по ширине (−0.5…0.5): у разных бросков — разные места
-    targets.forEach((t, i) => {
+    let ni = 0;
+    targets.forEach((t) => {
       const k = pool.findIndex((b) => b.kind === t.kind);
       let b;
       if (k >= 0) b = pool.splice(k, 1)[0];
       else {
-        // Новые кубы вылетают из-под нижнего края рядами, не налезая друг на друга.
-        const n = Math.min(targets.length, cols), col = i % cols, row = Math.floor(i / cols);
-        const x = (col + 0.5 - n / 2) * 1.9 + lane * (bounds.w - n * 1.9) + (Math.random() - 0.5) * 0.3;
-        b = makeBody(t.kind, { x: [x, 1.4 + Math.random() * 0.8 + row * 0.4, bounds.d / 2 - bounds.bottom - 1.3 - row * 1.9], skin: opts.skin });
+        const n = Math.min(fresh, cols), col = ni % cols, row = Math.floor(ni / cols) % rows, layer = Math.floor(ni / (cols * rows));
+        ni++;
+        const x = bounds.cx + (col + 0.5 - n / 2) * STEP + lane * Math.max(0, bounds.aw - 1.2 - n * STEP) + (Math.random() - 0.5) * 0.2;
+        const z = bounds.d / 2 - bounds.bottom - 1.1 - row * STEP;
+        b = makeBody(t.kind, { x: [x, 1.3 + layer * STEP + Math.random() * 0.3, z], skin: opts.skin });
         bodies.push(b);
       }
       b.skin = opts.skin || b.skin;
@@ -754,25 +1281,37 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     });
     // Кубы лотка, не вошедшие в бросок, уходят (стол хранит прежние броски до угасания).
     if (!opts.keep) { dispose(bodies.filter((b) => !used.includes(b))); bodies = used.slice(); }
-    // Просчёт без экрана: все кубы сцены (спящие — опоры). Куб не остаётся лежать на соседе:
-    // такой исход просчитывается заново с другим замахом (до пяти попыток).
-    let sim, map, rec, finalQ;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (attempt) for (const b of used) launch(b, opts.speed);
-      sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
-      map = new Map(sim.map((s, i) => [s, bodies[i]]));
-      rec = [];
+    // Просчёт без экрана: все кубы сцены (спящие — опоры). Кубы, как настоящие, могут лечь кучей друг на друга
+    // и чуть наискось (TASK-139); число читается с грани, которая смотрит вверх сильнее остальных.
+    const sim = bodies.map((b) => ({ ...b, x: [...b.x], v: [...b.v], q: [...b.q], w: [...b.w] }));
+    const map = new Map(sim.map((s, i) => [s, bodies[i]]));
+    const rec = [];
+    hitLog = { frame: 0, byKey: new Map() };
+    let hits;
+    try {
       for (let f = 0; f < 60 * 7 && sim.some((s) => !s.asleep); f++) {
+        hitLog.frame = f;
         stepWorld(sim, bounds);
         rec.push(sim.map((s) => [map.get(s), [...s.x], [...s.q], [...s.v], [...s.w]]));
       }
-      finalQ = sim.map((s) => alignedQuat(s));
-      if (!sim.some((s, i) => lowest(s, finalQ[i]) > 0.12)) break;
-    }
-    // Доводка: лечь ровно на грань и коснуться дна.
+    } finally { hits = hitLog ? [...hitLog.byKey.values()] : []; hitLog = null; }
+    // Звук по кадрам: в одном кадре — не больше пяти самых сильных ударов.
+    const byFrame = new Map();
+    for (const h of hits) { const l = byFrame.get(h.f) || []; l.push(h); byFrame.set(h.f, l); }
+    for (const [f, l] of byFrame) byFrame.set(f, l.sort((a, b) => b.v - a.v).slice(0, 5));
+    // Доводка — только у кубов, что лежат на дне сами по себе: ровно на грань и до дна. Куб на соседе или
+    // впритык к нему остаётся как лёг: выравнивание вдавило бы его в соседа.
+    const free = sim.map((s) => lowest(s) < 0.06 && !sim.some((o) => o !== s && touching(s, o, 0.12)));
+    const finalQ = sim.map((s, i) => (free[i] ? alignedQuat(s) : s.q));
     const last = rec[rec.length - 1] || sim.map((s) => [map.get(s), [...s.x], [...s.q], [0, 0, 0], [0, 0, 0]]);
-    const drop = sim.map((s, i) => { const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
-    for (let k = 1; k <= 8; k++) rec.push(last.map(([b, x, q], i) => [b, [x[0], x[1] - drop[i] * (k / 8), x[2]], qslerp(q, finalQ[i], k / 8), [0, 0, 0], [0, 0, 0]]));
+    const drop = sim.map((s, i) => { if (!free[i]) return 0; const low = lowest(s, finalQ[i]); return Math.abs(low) < 0.3 ? low : 0; });
+    // Итоговые места: после выравнивания кубы, вошедшие друг в друга, разводятся — сквозь соседа не лежит никто.
+    const fin = sim.map((s, i) => ({ g: s.g, x: [s.x[0], s.x[1] - drop[i], s.x[2]], q: finalQ[i] }));
+    separate(fin, bounds);
+    for (let k = 1; k <= 8; k++) {
+      const t = k / 8;
+      rec.push(last.map(([b, x, q], i) => [b, [x[0] + (fin[i].x[0] - x[0]) * t, x[1] + (fin[i].x[1] - x[1]) * t, x[2] + (fin[i].x[2] - x[2]) * t], qslerp(q, finalQ[i], t), [0, 0, 0], [0, 0, 0]]));
+    }
     // Метки: сверху — нужное число у каждого брошенного куба (и у задетых прежних).
     sim.forEach((s, i) => {
       const b = map.get(s);
@@ -787,7 +1326,7 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
     // Текстуры с новыми метками готовим до старта: тяжёлый первый кадр не съедает начало полёта.
     for (const b of bodies) prepare(b);
     for (const b of used) b.settled = (x) => { x.done = true; if (x.target.dropped) x.alpha = 0.4; if (x.target.glow) x.glow = x.target.glow; };
-    frames = rec; frameAt = 0; playStart = 0;
+    frames = rec; frameAt = 0; playStart = 0; sounds = sound > 0 ? byFrame : null; soundAt = -1;
     return new Promise((resolve) => {
       pending.push(() => {
         const cx = used.reduce((a, b) => a + b.x[0], 0) / (used.length || 1), cz = used.reduce((a, b) => a + b.x[2], 0) / (used.length || 1);
@@ -804,10 +1343,10 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
   function placeDice(targets, opts = {}) {
     frames = null;
     if (!opts.keep) { dispose(bodies); bodies = []; }
-    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.w / 2)));
+    const n = targets.length, cols = Math.min(n, Math.max(1, Math.floor(bounds.aw / 2)));
     const lane = opts.lane ?? 0;
     const placed = targets.map((t, i) => {
-      const x = ((i % cols) + 0.5 - cols / 2) * 2 + lane * (bounds.w - cols * 2);
+      const x = bounds.cx + ((i % cols) + 0.5 - cols / 2) * 2 + lane * Math.max(0, bounds.aw - cols * 2);
       const z = (Math.floor(i / cols) - (Math.ceil(n / cols) - 1) / 2) * 2 + (bounds.top - bounds.bottom) / 2;
       const b = makeBody(t.kind, { x: [x, 0, z], skin: opts.skin });
       b.q = alignedQuat(b);
@@ -834,13 +1373,13 @@ export function createDiceStage(canvas, { insetTop = 0, insetBottom = 0, maxDpr 
 
   resize();
   return {
-    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, resize,
+    add: addDie, remove: removeDie, throw: throwDice, place: placeDice, fade: fadeGroup, setInsets, resize,
     clear() { dispose(bodies); bodies = []; frames = null; const done = pending; pending = []; for (const r of done) r(); render(); },
     /** Кубы, лежащие в лотке до броска. */
     kinds: () => bodies.filter((b) => b.target == null).map((b) => b.kind),
     get count() { return bodies.length; },
     get playing() { return !!frames; },
-    destroy() { destroyed = true; cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
+    destroy() { destroyed = true; artWaiters.delete(onArt); cancelAnimationFrame(raf); dispose(bodies); gl.getExtension('WEBGL_lose_context')?.loseContext(); },
   };
 }
 
@@ -852,4 +1391,4 @@ export function splitD100(value) {
 }
 
 // Для проверок в Node: чистые функции геометрии.
-export const _test = { geometry, hullFaces, topIndex, forceTop, makeBody, alignedQuat, defaultLabels, stepWorld, flatness, lowest };
+export const _test = { geometry, hullFaces, topIndex, forceTop, makeBody, alignedQuat, defaultLabels, stepWorld, flatness, lowest, hitVoice };

@@ -2,7 +2,8 @@
 // Иконки — SVG из макета как есть; цвета кости (#F3E8D2 / #D9C49C / #9A7F55) заменяются цветами набора.
 
 const RAIL = {
-  4: '<path d="M16 2L30.5 28H1.5L16 2Z" fill="D" stroke="D" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 2V7.5L6 25L1.5 28L16 2Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M1.5 28L6 25H26L30.5 28H1.5Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 7.5L26 25H6L16 7.5Z" fill="L" stroke="L" stroke-width="0.25" stroke-linejoin="round"/>',
+  // к4 — кристалл (TASK-136): силуэт D, левая длинная грань — светлая, правая и левые скосы острий — средние.
+  4: '<path d="M16 1L24.5 8V24L16 31L7.5 24V8L16 1Z" fill="D" stroke="D" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 1L7.5 8L16 11.5V1Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 11.5L24.5 8V24L16 27.5V11.5Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M7.5 24L16 27.5V31L7.5 24Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M7.5 8L16 11.5V27.5L7.5 24V8Z" fill="L" stroke="L" stroke-width="0.25" stroke-linejoin="round"/>',
   6: '<rect x="2" y="2" width="28" height="28" rx="6" fill="D"/><rect x="3" y="2.5" width="26" height="25" rx="5.5" fill="B"/><rect x="6" y="5" width="20" height="19" rx="3.5" fill="L"/>',
   8: '<path d="M16 1L31 16L16 31L1 16L16 1Z" fill="D" stroke="D" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 1V5L5 22L1 16L16 1Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M5 22H27L16 31L5 22Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 5L27 22H5L16 5Z" fill="L" stroke="L" stroke-width="0.25" stroke-linejoin="round"/>',
   10: '<path d="M16 1L30.5 13V18.5L16 31L1.5 18.5V13L16 1Z" fill="D" stroke="D" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 1V4L8 16L1.5 18.5V13L16 1Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M8 16L16 22.5L24 16L30.5 18.5L16 31L1.5 18.5L8 16Z" fill="B" stroke="B" stroke-width="0.25" stroke-linejoin="round"/><path d="M16 4L24 16L16 22.5L8 16L16 4Z" fill="L" stroke="L" stroke-width="0.25" stroke-linejoin="round"/>',
@@ -13,7 +14,9 @@ const RAIL = {
 
 /**
  * Наборы кубов. light/base/dark — грани иконки и основа камня объёмного куба, ink — цифры,
- * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость.
+ * engrave — цифры вдавлены (светлый блик снизу) у светлых материалов; spec/metal/lum — блеск, отражение, яркость;
+ * art — лист нарисованных граней (вместо камня и шрифта), пока не загрузился — рисуется камнем в цветах набора;
+ * paint — грани рисует код: 'filigree' — металл с орнаментом и эмалевым медальоном, 'bloodiron' — железо с рамкой, заклёпками и кровью.
  */
 export const SKINS = [
   { id: 'bone', name: 'Кость', light: '#f3e8d2', base: '#d9c49c', dark: '#9a7f55', ink: '#2b1e15', engrave: true, spec: 0.35, metal: 0.05, lum: 0.78 },
@@ -22,6 +25,13 @@ export const SKINS = [
   { id: 'ruby', name: 'Рубин', light: '#ff8f86', base: '#b8263a', dark: '#5c0f1f', ink: '#fff0d6', spec: 0.75, metal: 0.22, lum: 0.95 },
   { id: 'jade', name: 'Нефрит', light: '#a9e9c8', base: '#2f8a68', dark: '#134634', ink: '#f2fff8', spec: 0.55, metal: 0.12, lum: 0.92 },
   { id: 'sapphire', name: 'Сапфир', light: '#a6c6ff', base: '#2f5fc4', dark: '#142a66', ink: '#f2f6ff', spec: 0.75, metal: 0.22, lum: 0.95 },
+  // Пилот (TASK-127): грани нарисованы — лист картинок из макета sol0139, порядок ячеек — ART_LAYOUT в dice3d.js.
+  { id: 'cobalt', name: 'Кобальт', light: '#ffffff', base: '#dfe5f1', dark: '#1e3c96', ink: '#1e3c96', spec: 0.85, metal: 0.03, lum: 0.9,
+    art: new URL('./dice-cobalt.webp', import.meta.url).href },
+  // TASK-148: грани рисует код (paint: 'filigree' в dice3d.js) — воронёный металл, серебряные шипы, синяя эмаль.
+  { id: 'blued', name: 'Воронёная сталь', light: '#3d8bff', base: '#9aa3b0', dark: '#16191f', ink: '#e8ecf2', spec: 0.9, metal: 0.5, lum: 1.05, paint: 'filigree' },
+  // TASK-152: грани рисует код (paint: 'bloodiron' в dice3d.js) — тёмное железо, стальная рамка, заклёпки, кровь.
+  { id: 'bloodiron', name: 'Кровавое железо', light: '#6e1b22', base: '#bfa6a2', dark: '#1a1112', ink: '#f3e2de', spec: 0.85, metal: 0.45, lum: 1.05, paint: 'bloodiron' },
 ];
 export const skinById = (id) => SKINS.find((s) => s.id === id) || SKINS[0];
 
@@ -33,9 +43,29 @@ export function railDie(sides, skinId = 'bone') {
 }
 
 /**
- * Набор пользователя: живёт в этой вкладке до перезагрузки, остальным уходит вместе с броском.
- * Запоминать его на устройстве — новый ключ хранилища (docs/data.md), это отдельное изменение L2.
+ * Набор пользователя запоминается на этом устройстве (TASK-104): localStorage `rasputye-v2-prefs:<userId>` →
+ * `{diceSkin}` — общий объект личных настроек интерфейса, чужие поля в нём сохраняются. На сервер не уходит;
+ * остальным за столом набор приходит вместе с открытым броском. Хранилище недоступно — набор живёт до перезагрузки.
  */
+const PREFS = (userId) => `rasputye-v2-prefs:${userId}`;
 const chosen = new Map();
-export const mySkin = (userId) => skinById(chosen.get(userId)).id;
-export function setMySkin(userId, id) { chosen.set(userId, skinById(id).id); }
+function readPrefs(userId) {
+  try {
+    const v = JSON.parse(localStorage.getItem(PREFS(userId)) || 'null');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch { return {}; }
+}
+export function mySkin(userId) {
+  if (!chosen.has(userId)) {
+    const s = skinById(readPrefs(userId).diceSkin); // неизвестное → «Кость»
+    chosen.set(userId, s.id);
+    if (s.art) new Image().src = s.art;
+  }
+  return chosen.get(userId);
+}
+export function setMySkin(userId, id) {
+  const s = skinById(id);
+  chosen.set(userId, s.id);
+  if (s.art) new Image().src = s.art; // лист граней заранее — к первому броску он уже в кэше
+  try { localStorage.setItem(PREFS(userId), JSON.stringify({ ...readPrefs(userId), diceSkin: s.id })); } catch { /* приватный режим — до перезагрузки */ }
+}

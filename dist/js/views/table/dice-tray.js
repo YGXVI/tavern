@@ -183,13 +183,32 @@ export function diceFloor(ctx) {
   return f;
 }
 
+/**
+ * Площадка кубов на столе (TASK-130): прямоугольник у середины свободной части стола — кубы не укатываются
+ * под правую панель (лист, статблок, «Сцены») и к краям экрана. Поля в px от краёв слоя.
+ */
+const ARENA = { w: 800, h: 540, top: 100, bottom: 110 };
+function floorInsets(node, root) {
+  const box = node.getBoundingClientRect();
+  const W = box.width, H = box.height;
+  let right = W;
+  for (const p of root.querySelectorAll('.sheet-drawer, .side-panel:not(.hidden):not([data-panel="bestiary"])')) {
+    const r = p.getBoundingClientRect();
+    // Панель во весь экран (телефон) не сужает площадку — кубы всё равно под ней.
+    if (r.width && r.left - box.left > W / 2) right = Math.min(right, r.left - box.left - 12);
+  }
+  const aw = Math.min(ARENA.w, right), cx = right / 2;
+  const y0 = ARENA.top, y1 = H - ARENA.bottom, ah = Math.min(ARENA.h, Math.max(0, y1 - y0)), cy = (y0 + y1) / 2;
+  return { left: Math.max(0, cx - aw / 2), right: Math.max(0, W - cx - aw / 2), top: Math.max(0, cy - ah / 2), bottom: Math.max(0, H - cy - ah / 2) };
+}
+
 function createFloor(ctx) {
   const node = el('<div class="dice-floor" aria-hidden="true"><canvas class="df-canvas"></canvas></div>');
   const chrome = ctx.root.querySelector('.chrome');
   if (chrome) chrome.before(node); else ctx.root.append(node);
   const canvas = node.querySelector('.df-canvas');
   let stage = null;
-  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 100, insetBottom: 110, maxDpr: 1.5 }); return stage; };
+  const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 100, insetBottom: 110, maxDpr: 1.5, sound: 0.6 }); return stage; };
   const onResize = () => stage?.resize();
   addEventListener('resize', onResize);
 
@@ -197,7 +216,7 @@ function createFloor(ctx) {
     /** Бросок падает на стол: кубы катятся по карте, сверху — кто и сколько, потом всё тает. */
     roll({ entry, results, dropped, skin, mine = false }) {
       if (!results?.length) return;
-      ensure();
+      ensure().setInsets(floorInsets(node, ctx.root));
       const targets = targetsOf(results, dropped);
       const opts = { skin: skinById(skin), keep: true, group: entry.id, lane: (Math.random() - 0.5) * 0.7, speed: 1.08 };
       const done = reducedMotion() ? stage.place(targets, opts) : stage.throw(targets, opts);
@@ -219,7 +238,7 @@ function createFloor(ctx) {
      */
     rollGroup({ id, userId, title, items, skin, mine = false }) {
       if (!items?.length) return;
-      ensure();
+      ensure().setInsets(floorInsets(node, ctx.root));
       const targets = items.map((x) => ({ kind: 20, value: x.natural }));
       const opts = { skin: skinById(skin), keep: true, group: id, lane: 0, speed: 1.08 };
       const done = reducedMotion() ? stage.place(targets, opts) : stage.throw(targets, opts);

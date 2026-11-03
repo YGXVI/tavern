@@ -76,10 +76,53 @@ export function shapeEdit(grid, d, k, w, mods = {}) {
   return { patch: { size, angle }, label: d.shape === 'sphere' ? `радиус ${ft} фт` : `${ft} фт · ${deg}°` };
 }
 
-/** Рисунок с учётом того, что сейчас тянут (сдвиг или правка ручкой). */
+/**
+ * Касается ли рисунок рамки r = {x0, y0, x1, y1} (TASK-169, правило Figma): вершина внутри или отрезок пересекает край.
+ * Надпись — по её прямоугольнику box (getBBox узла). Рамка целиком внутри фигуры фигуру не берёт.
+ */
+export function drawingTouchesRect(grid, d, r, box = null) {
+  const inR = (p) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+  if (d.type === 'text') {
+    const b = box || { x: d.x, y: d.y - (d.size || 28), width: (d.size || 28) * 0.6 * String(d.text || '').length, height: d.size || 28 };
+    return b.x <= r.x1 && b.x + b.width >= r.x0 && b.y <= r.y1 && b.y + b.height >= r.y0;
+  }
+  const pts = d.type === 'shape' ? shapePoints(grid, d) : d.pts || [];
+  if (!pts.length) return false;
+  if (pts.some(inR)) return true;
+  const ring = d.type === 'shape' && d.shape !== 'seg' ? [...pts, pts[0]] : pts;
+  const edges = [[{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }], [{ x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }], [{ x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }], [{ x: r.x0, y: r.y1 }, { x: r.x0, y: r.y0 }]];
+  for (let i = 1; i < ring.length; i++) for (const [a, b] of edges) if (segmentsCross(ring[i - 1], ring[i], a, b)) return true;
+  return false;
+}
+function segmentsCross(p1, p2, p3, p4) {
+  const o = (a, b, c) => Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+  const on = (a, b, c) => Math.min(a.x, b.x) <= c.x && c.x <= Math.max(a.x, b.x) && Math.min(a.y, b.y) <= c.y && c.y <= Math.max(a.y, b.y);
+  const d1 = o(p3, p4, p1), d2 = o(p3, p4, p2), d3 = o(p1, p2, p3), d4 = o(p1, p2, p4);
+  if (d1 !== d2 && d3 !== d4) return true;
+  return (d1 === 0 && on(p3, p4, p1)) || (d2 === 0 && on(p3, p4, p2)) || (d3 === 0 && on(p1, p2, p3)) || (d4 === 0 && on(p1, p2, p4));
+}
+
+const POS_KEYS = ['pts', 'x', 'y', 'a', 'b', 'origin'];
+/** Сдвиг группы рисунков: координаты до и после — для одной записи с отменой (TASK-169). */
+export function drawingsShift(scene, ids, dx, dy) {
+  const before = {}, after = {};
+  for (const d of scene.drawings || []) {
+    if (!ids.has(d.id)) continue;
+    const s = shiftDrawing(d, dx, dy);
+    before[d.id] = {}; after[d.id] = {};
+    for (const k of POS_KEYS) if (d[k] != null) { before[d.id][k] = structuredClone(d[k]); after[d.id][k] = s[k]; }
+  }
+  return { before, after };
+}
+/** Применить координаты из drawingsShift к сцене. */
+export function applyDrawingPos(s, map) {
+  for (const d of s.drawings || []) if (map[d.id]) Object.assign(d, structuredClone(map[d.id]));
+}
+
+/** Рисунок с учётом того, что сейчас тянут (сдвиг одного или группы, правка ручкой). */
 export function liveDrawing(ctx, d) {
   const mv = ctx?.ui.drawMove, ed = ctx?.ui.shapeEdit;
-  if (mv?.id === d.id) return shiftDrawing(d, mv.dx, mv.dy);
+  if (mv && (mv.id === d.id || mv.ids?.has(d.id))) return shiftDrawing(d, mv.dx, mv.dy);
   if (ed?.id === d.id) return { ...d, ...ed.patch };
   return d;
 }
@@ -132,6 +175,7 @@ export function deleteDrawing(ctx, id) {
   ctx.mutateScene((s) => { s.drawings = s.drawings.filter((x) => x.id !== id); },
     { label: d.type === 'text' ? 'Удалить надпись' : 'Удалить рисунок', undo: (s) => s.drawings.push(structuredClone(copy)), redo: (s) => { s.drawings = s.drawings.filter((x) => x.id !== id); } });
   if (ctx.ui.selDrawing === id) ctx.ui.selDrawing = null;
+  ctx.ui.selDrawings?.delete(id);
 }
 
 /** Панель выделенного рисунка: цвет, (надпись: текст и размер), удалить. */

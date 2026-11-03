@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedDB } from '../dist/js/data/demo.js';
-import { explode, assemble, diffRows, applyOps, applyChange, emptyRows } from '../dist/js/server/model.js';
+import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves } from '../dist/js/server/model.js';
 
 const clone = (x) => structuredClone(x);
 const demo = () => clone(seedDB().campaigns['c-crypt']);
@@ -134,4 +134,104 @@ test('приглашение без даты создания не шлёт crea
   assert.ok(!('created_at' in rows.invite));
   const m = { ...c.members[0] }; delete m.joinedAt; c.members[0] = m;
   assert.ok(!('joined_at' in explode(c).members.get(m.userId)));
+});
+
+test('TASK-123: владелец своего токена — колонка owner_id, туда и обратно', () => {
+  const c = demo(), s = c.scenes[0];
+  s.tokens.push({ id: 't-owl', kind: 'custom', ownerId: 'u-ася', name: 'Сова', x: 10, y: 10, hidden: false });
+  const rows = explode(c);
+  const row = rows.tokens.get('t-owl');
+  assert.equal(row.owner_id, 'u-ася');
+  assert.equal('ownerId' in row.data, false, 'владелец не дублируется в data');
+  const back = assemble(rows).scenes[0].tokens.find((t) => t.id === 't-owl');
+  assert.equal(back.ownerId, 'u-ася');
+});
+
+test('TASK-123: токен без владельца отправляется без owner_id, снятый владелец — null', () => {
+  const before = demo();
+  const plain = before.scenes[0].tokens[0];
+  assert.equal('owner_id' in explode(before).tokens.get(plain.id), false);
+  before.scenes[0].tokens.push({ id: 't-owl', kind: 'custom', ownerId: 'u-ася', name: 'Сова', x: 10, y: 10, hidden: false });
+  const a = explode(before);
+  const after = clone(before);
+  delete after.scenes[0].tokens.find((t) => t.id === 't-owl').ownerId;
+  const ops = diffRows(a, explode(after, a), { isMaster: true });
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].row.owner_id, null);
+  assert.ok('owner_id' in ops[0].row);
+});
+
+test('TASK-123 (review #126): строки SELECT после миграции с owner_id: null — без лишних UPDATE', () => {
+  // После миграции сервер отдаёт owner_id: null у каждого токена (колонка — последняя, как в SELECT *).
+  const rows = explode(demo());
+  for (const [id, t] of rows.tokens) rows.tokens.set(id, { ...t, owner_id: t.owner_id ?? null });
+  assert.equal(diffRows(rows, explode(assemble(rows), rows), { isMaster: true }).length, 0, 'без изменений — ни одной операции');
+  // Изменился один токен — одна операция, и колонка owner_id в ней осталась null.
+  const c = assemble(rows);
+  c.scenes[0].tokens[0].x += 5;
+  const ops = diffRows(rows, explode(c, rows), { isMaster: true });
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].row.owner_id, null);
+  // Свой токен со строки сервера — туда и обратно без операций.
+  const own = rows.tokens.get(c.scenes[0].tokens[1].id);
+  rows.tokens.set(own.id, { ...own, owner_id: 'u-ася' });
+  assert.equal(diffRows(rows, explode(assemble(rows), rows), { isMaster: true }).length, 0);
+});
+
+// ——— TASK-173 (TASK-097 п. 2.5): токены частичной правкой ———
+const tok = (id, data, extra = {}) => ({ id, campaign_id: 'c', scene_id: 's1', character_id: null, hidden: false, ord: 1, data, ...extra });
+const upd = (prev, row) => ({ table: 'tokens', op: 'update', key: row.id, row, prev });
+
+test('tokenPatch: только изменённые поля data и колонки', () => {
+  const a = tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 20, y: 0, hp: 10, hpMax: 10 })), { cols: {}, set: { x: 20 }, unset: [] });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 7 })), { cols: {}, set: { hp: 7 }, unset: ['hpMax'] });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 }, { hidden: true })).cols, { hidden: true });
+  // Колонка owner_id приходит только после миграции: её нет в обеих строках — не изменение.
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 })).cols, {});
+  assert.deepEqual(tokenPatch(tok('t1', {}, { owner_id: null }), tok('t1', {}, { owner_id: 'u1' })).cols, { owner_id: 'u1' });
+  // Вложенные значения сравниваются целиком.
+  assert.deepEqual(tokenPatch(tok('t1', { conds: ['prone'] }), tok('t1', { conds: ['prone', 'blinded'] })).set, { conds: ['prone', 'blinded'] });
+});
+
+test('isTokenMove: только место и поворот', () => {
+  const a = tok('t1', { x: 0, y: 0, hp: 10 });
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 7, hp: 10, movedAt: 1 }))), true);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 0, hp: 9 }))), false);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 0, hp: 10 }, { hidden: true }))), false);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 0, y: 0 }))), false); // убрали поле
+  assert.equal(isTokenMove({ table: 'tokens', op: 'insert', key: 't1', row: a }), false);
+});
+
+test('groupTokenMoves: несколько перемещений сцены — один move_tokens, порядок остальных сохранён', () => {
+  const a1 = tok('t1', { x: 0, y: 0 }), a2 = tok('t2', { x: 0, y: 0 }), a3 = tok('t3', { x: 0, y: 0 }, { scene_id: 's2' });
+  const log = { table: 'log_entries', op: 'insert', key: 'l1', row: { id: 'l1' } };
+  const ops = [upd(a1, tok('t1', { x: 70, y: 0, movedAt: 9 })), upd(a2, tok('t2', { x: 70, y: 70, movedAt: 9 })), upd(a3, tok('t3', { x: 1, y: 1 }, { scene_id: 's2' })), log];
+  const out = groupTokenMoves(ops);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].op, 'move');
+  assert.equal(out[0].scene, 's1');
+  assert.deepEqual(out[0].moves, [{ id: 't1', x: 70, movedAt: 9 }, { id: 't2', x: 70, y: 70, movedAt: 9 }]);
+  assert.deepEqual(out[0].parts.map((o) => o.key), ['t1', 't2']);
+  // Один токен на сцене — обычная частичная правка.
+  assert.equal(out[1].op, 'update'); assert.equal(out[1].key, 't3');
+  assert.equal(out[2], log);
+  // Правка хитов не попадает в группу.
+  const mixed = groupTokenMoves([upd(a1, tok('t1', { x: 70, y: 0 })), upd(a2, tok('t2', { x: 0, y: 0, hp: 3 }))]);
+  assert.deepEqual(mixed.map((o) => o.op), ['update', 'update']);
+});
+
+test('groupTokenMoves: группа одной сцены не делится — предел 50 проверяет отправка целиком', () => {
+  const ops = Array.from({ length: 120 }, (_, i) => upd(tok(`t${i}`, { x: 0, y: 0 }), tok(`t${i}`, { x: 70, y: 0 })));
+  const out = groupTokenMoves(ops);
+  assert.deepEqual(out.map((o) => o.moves.length), [120]);
+});
+
+test('правка токена в мастерском diffRows даёт prev — частичная правка возможна', () => {
+  const c = demo();
+  const a = explode(c);
+  const c2 = clone(c); c2.scenes[0].tokens[0].x += 70;
+  const ops = diffRows(a, explode(c2, a), { isMaster: true }).filter((o) => o.table === 'tokens');
+  assert.equal(ops.length, 1); assert.ok(ops[0].prev);
+  assert.deepEqual(tokenPatch(ops[0].prev, ops[0].row), { cols: {}, set: { x: c.scenes[0].tokens[0].x + 70 }, unset: [] });
 });

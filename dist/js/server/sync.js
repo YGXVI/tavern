@@ -6,7 +6,7 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves } from './model.js';
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
@@ -175,7 +175,9 @@ export function afterCommit(before, after) {
     // Мастер скрыл токены — игрокам изменение не придёт (RLS), поэтому сообщаем id отдельно.
     const hiddenNow = ops.filter((o) => o.table === 'tokens' && o.op === 'update' && o.row.hidden && !o.prev?.hidden).map((o) => o.key);
     applyOps(rows, ops);
-    enqueue(cid, () => send(cid, ops).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }));
+    // Перемещение нескольких токенов одним действием — один вызов move_tokens (TASK-173).
+    const out = groupTokenMoves(ops);
+    enqueue(cid, () => send(cid, out).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }));
   }
 }
 
@@ -248,7 +250,68 @@ async function send(cid, ops) {
   netState(cid, true);
 }
 
+/**
+ * Токены частичной правкой (TASK-097 п. 2.5, TASK-173): функции patch_token и move_tokens из миграции own_tokens (#126).
+ * Пока миграция не применена на сервере, функций нет — вкладка переходит на прежнюю отправку целой строки (со старыми
+ * ограничениями B1/B5) до перезагрузки страницы: после применения миграции частичная правка включится с новой загрузкой.
+ */
+let tokenRpc = true;
+const missingFn = (e) => e?.code === 'PGRST202' || e?.code === '42883' || /could not find the function/i.test(String(e?.message || ''));
+
+/**
+ * Группа перемещений одной сцены: все или никто. Функция сервера берёт до 50 токенов — большую группу отклоняем
+ * целиком до первой записи, иначе часть осталась бы на месте (review #174). Повтор после обрыва ставит то же место;
+ * если между попытками кто-то успел подвинуть тот же токен, повтор вернёт наше место — порядка команд пока нет.
+ */
+const MOVE_MAX = 50;
+async function sendMoves(cid, o, attempt) {
+  if (tokenRpc) {
+    if (o.moves.length > MOVE_MAX) throw new Error(`за раз сервер двигает не больше ${MOVE_MAX} токенов — выделите меньше`);
+    const { error } = await sb.rpc('move_tokens', { p_scene: o.scene, p_moves: o.moves });
+    if (!error) return;
+    if (!missingFn(error)) throw error;
+    tokenRpc = false;
+  }
+  for (const p of o.parts) await sendOne(cid, p, attempt);
+}
+
+/**
+ * Правка токена — только то, что изменилось:
+ * - только колонки (скрыт, сцена, герой, владелец, порядок) — UPDATE только их, старое data не уходит (review #174);
+ * - только поля data — patch_token: двигающий не затирает хиты, правящий хиты — место;
+ * - колонки и data вместе (редко: например, переход на другую сцену) — одной строкой целиком, как раньше: обе части
+ *   проходят проверку сервера вместе, без половинчатого состояния; чужое поле data тут ещё может перезаписаться.
+ * Повтор после обрыва ставит те же значения: другие поля не трогает, но более новую чужую правку того же поля
+ * вернёт назад — версий и порядка команд пока нет. Хиты прибавкой (adjust_token) не используются: повтор применил
+ * бы дельту дважды (аудит #57).
+ */
+async function sendTokenPatch(cid, o) {
+  const { cols, set, unset } = tokenPatch(o.prev, o.row);
+  const hasCols = Object.keys(cols).length > 0, hasData = Object.keys(set).length > 0 || unset.length > 0;
+  if (!hasCols && !hasData) return;
+  if (!hasData) {
+    const res = await sb.from('tokens').update(cols).match({ id: o.key }).select('id');
+    if (res.error) throw res.error;
+    if (!res.data?.length) throw new Error('нет доступа к изменению');
+    return;
+  }
+  if (hasCols || !tokenRpc) return updateRow(cid, o);
+  const { error } = await sb.rpc('patch_token', { p_id: o.key, p_set: set, p_unset: unset });
+  if (!error) return;
+  if (!missingFn(error)) throw error;
+  tokenRpc = false;
+  return updateRow(cid, o);
+}
+
+async function updateRow(cid, o) {
+  const res = await sb.from(o.table).update(o.row).match(pkOf(o.table, o.row)).select(PK[o.table]?.[0] || 'id');
+  if (res.error) throw res.error;
+  if (!res.data?.length) throw new Error('нет доступа к изменению');
+}
+
 async function sendOne(cid, o, attempt) {
+  if (o.op === 'move') return sendMoves(cid, o, attempt);
+  if (o.table === 'tokens' && o.op === 'update' && o.prev) return sendTokenPatch(cid, o);
   const t = sb.from(o.table);
   let res;
   if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
@@ -259,10 +322,7 @@ async function sendOne(cid, o, attempt) {
     if (attempt && res.error?.code === '23505') return;
   }
   else if (['campaign_invites', 'combats', 'scene_secrets'].includes(o.table) && isMasterOf(cid)) res = await t.upsert(o.row);
-  else {
-    res = await t.update(o.row).match(pkOf(o.table, o.row)).select(PK[o.table]?.[0] || 'id');
-    if (!res.error && !res.data?.length) throw new Error('нет доступа к изменению');
-  }
+  else return updateRow(cid, o);
   if (res.error) throw res.error;
 }
 

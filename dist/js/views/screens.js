@@ -11,6 +11,7 @@ import { newCampaign, makeCharacter, DEMO_USERS, seedDB } from '../data/demo.js'
 import { CLASSES, RACES, classById, raceById } from '../data/rules.js';
 import { replaceDB } from '../core/store.js';
 import { freeSpots } from '../rules/geometry.js';
+import { creaturesPage, bindCreatures } from './creatures.js';
 
 /** Модуль синхронизации — уже загружен в серверном режиме, import вернёт его из кэша. */
 const server = () => import('../server/sync.js');
@@ -154,10 +155,10 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адрес #/characters обрабатывает этот же экран. */
-const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : 'campaigns');
+/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адреса #/characters и #/creatures (TASK-175) обрабатывает этот же экран. */
+const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
 function homeTabs(active) {
-  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a></nav>`;
+  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a><a class="tab" href="#/creatures" aria-selected="${active === 'creatures'}">Существа</a></nav>`;
 }
 
 /** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
@@ -187,6 +188,14 @@ export function mountCampaigns(root) {
   let filter = 'all';
   const render = () => {
     const user = currentUser();
+    if (homeTab() === 'creatures') {
+      const { tools, body } = creaturesPage(user);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+        <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
+      bindHeader(root, user);
+      bindCreatures(root, user, render);
+      return;
+    }
     if (homeTab() === 'characters') {
       root.innerHTML = String(html`<div class="screen">${appHeader(user)}
         <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);

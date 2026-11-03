@@ -563,7 +563,7 @@ export class Panels {
   // ——— Мосты для ввода и токенов ———
   tokenBar() { return T.tokenBarHTML(this.ctx); }
   contextMenu(target, w, screen) { T.contextMenu(this.ctx, target, w, screen); }
-  deleteTokens(ids) { T.deleteTokens(this.ctx, ids); }
+  deleteTokens(ids, drawIds) { T.deleteTokens(this.ctx, ids, drawIds); }
   toggleHidden(ids, force) { T.toggleHidden(this.ctx, ids, force); }
   deleteWall(id) { M.deleteWall(this.ctx, id); }
   deleteLight(id) { M.deleteLight(this.ctx, id); }
@@ -625,6 +625,8 @@ export class Panels {
     const after = { ...structuredClone(ctx.scene.grid), calibrated: true };
     const moved = {};
     ctx.ui.gridBefore = null;
+    // Подгонка показывалась вживую в самой сцене. Вернуть «до», иначе запись не увидит разницы (TASK-166).
+    Object.assign(ctx.scene.grid, structuredClone(before));
     ctx.mutateScene((s) => {
       Object.assign(s.grid, after);
       // Токены встают в центры новых клеток; исследованное по старой сетке сбрасываем.
@@ -751,15 +753,6 @@ export class Panels {
       case 'grid-toggle': ctx.scene.grid.visible = ctx.scene.grid.visible === false; ctx.invalidate('grid', 'chrome'); break;
       case 'grid-cancel': ctx.setTool('move'); break;
       case 'grid-done': this.gridDone(); break;
-      case 'tpl-smaller': case 'tpl-bigger': {
-        const s = ctx.ui.sub.measure;
-        const sizes = ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {});
-        const cur = sizes[s] || ({ cone: 15, line: 30, cube: 15, sphere: 20 }[s] || 15);
-        sizes[s] = Math.max(5, Math.min(120, cur + (act === 'tpl-bigger' ? 5 : -5)));
-        if (ctx.ui.template?.type === s) { ctx.ui.template.size = sizes[s]; if (ctx.ui.shareRuler) ctx.sendTemplate(ctx.ui.template); }
-        ctx.invalidate('chrome', 'areas');
-        break;
-      }
       case 'share-ruler': ctx.ui.shareRuler = !ctx.ui.shareRuler; if (!ctx.ui.shareRuler) { ctx.sendRuler(null); ctx.sendTemplate(null); } ctx.invalidate('chrome'); break;
       case 'measure-clear': ctx.clearMeasure(); break;
       case 'draw-clear': {
