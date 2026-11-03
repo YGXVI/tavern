@@ -491,7 +491,16 @@ select pg_temp.err('catalogue: более64К UTF-8 отвергается', $q$
 select pg_temp.ok('catalogue: ровно65536 байт представления JSONB принимается', $q$select public.save_catalogue_entry('edge','feature',jsonb_set(d,'{notes}',to_jsonb(repeat('a',65536-octet_length(convert_to(d::text,'UTF8'))))),0,auth.uid()) from (select pg_temp.catalogue_feature()||'{"notes":""}' d) x$q$);
 select pg_temp.err('catalogue: внутренний счётчик не читается напрямую', $q$select * from public.catalogue_entry_quota$q$);
 select pg_temp.ok('catalogue: удалить можно с текущей revision', $q$select public.delete_catalogue_entry('same',2,auth.uid())$q$);
+select pg_temp.err('catalogue: удалённый ID не создаётся заново тем же типом', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),0,auth.uid())$q$);
+select pg_temp.err('catalogue: удалённый ID не создаётся заново другим типом', $q$select public.save_catalogue_entry('same','feature',pg_temp.catalogue_feature(),0,auth.uid())$q$);
+select pg_temp.err('catalogue: устаревший save после удаления не воскрешает запись', $q$select public.save_catalogue_entry('same','magic_item',pg_temp.catalogue_item(),2,auth.uid())$q$);
+select pg_temp.err('catalogue: устаревший delete после удаления отклоняется', $q$select public.delete_catalogue_entry('same',2,auth.uid())$q$);
+select pg_temp.cnt('catalogue: отказ повторного ID ничего не записал', $q$select 1 from public.user_catalogue_entries where id='same'$q$,0);
+select pg_temp.err('catalogue: реестр использованных ID не читается клиентом', $q$select * from public.catalogue_entry_ids$q$);
+select pg_temp.ok('catalogue: копия после удаления получает новый ID', $q$select public.save_catalogue_entry('same-copy','magic_item',pg_temp.catalogue_item(),0,auth.uid())$q$);
 reset role;
+select pg_temp.cnt('catalogue: реестр хранит только владельца и ID', $q$select 1 from information_schema.columns where table_schema='public' and table_name='catalogue_entry_ids' and column_name not in ('owner_id','id')$q$,0);
+select pg_temp.cnt('catalogue: у клиентов нет прав на реестр ID', $q$select 1 from information_schema.role_table_grants where table_schema='public' and table_name='catalogue_entry_ids' and grantee in ('anon','authenticated','PUBLIC')$q$,0);
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.cnt('catalogue: чужие upsert/delete не меняли A', $q$select 1 from public.user_catalogue_entries where id='same' and revision=1 and kind='feature'$q$,1);
 select pg_temp.cnt('catalogue: мастер не читает личный edge B', $q$select 1 from public.user_catalogue_entries where id='edge'$q$,0);

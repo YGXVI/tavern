@@ -64,8 +64,38 @@ end $check$;
 select public.delete_catalogue_entry('seed-1',2,'{uid}');
 """))
     assert sql(f"select used from public.catalogue_entry_quota where owner_id='{uid}';").stdout.strip() == '499'
+
+    # sol0139-pr176-id-policy-1: one owner never gets the same ID twice, even across two writers.
+    def create_twin(kind):
+        data = feature if kind == 'feature' else item
+        return sql(authenticated(f"select public.save_catalogue_entry('twin','{kind}',{literal(data)},0,'{uid}');"), check=False)
+
+    with ThreadPoolExecutor(2) as pool:
+        results = list(pool.map(create_twin, ['feature', 'magic_item']))
+    assert sorted(r.returncode for r in results) == [0, 3], [r.stderr for r in results]
+    assert 'Запись изменена или удалена' in next(r.stderr for r in results if r.returncode), [r.stderr for r in results]
+    twin = sql(f"select kind,revision from public.user_catalogue_entries where owner_id='{uid}' and id='twin';").stdout.strip()
+    sql(authenticated(f"select public.delete_catalogue_entry('twin',1,'{uid}');"))
+    for statement in [f"select public.save_catalogue_entry('twin','feature',{literal(feature)},0,'{uid}');",
+                      f"select public.save_catalogue_entry('twin','magic_item',{literal(item)},0,'{uid}');",
+                      f"select public.save_catalogue_entry('twin','feature',{literal(feature)},1,'{uid}');",
+                      f"select public.delete_catalogue_entry('twin',1,'{uid}');"]:
+        rejected = sql(authenticated(statement), check=False)
+        assert rejected.returncode == 3 and 'Запись изменена или удалена' in rejected.stderr, (statement, rejected.stderr)
+    after = sql(f"select (select count(*) from public.user_catalogue_entries where owner_id='{uid}' and id='twin'),"
+                f"(select used from public.catalogue_entry_quota where owner_id='{uid}'),"
+                f"(select count(*) from public.catalogue_entry_ids where owner_id='{uid}' and id='twin');").stdout.strip()
+    assert after == '0|499|1', after
+    # A pre-registry live row (seeded directly) is registered by its delete as well.
+    sql(authenticated(f"select public.delete_catalogue_entry('seed-3',1,'{uid}');"))
+    seeded = sql(authenticated(f"select public.save_catalogue_entry('seed-3','feature',{literal(feature)},0,'{uid}');"), check=False)
+    assert seeded.returncode == 3, seeded.stderr
+
     sql(f"delete from auth.users where id='{uid}';")
     assert sql('select count(*) from public.catalogue_entry_quota;').stdout.strip() == '0'
     assert sql('select count(*) from public.user_catalogue_entries;').stdout.strip() == '0'
+    assert sql('select count(*) from public.catalogue_entry_ids;').stdout.strip() == '0'
     return {'quota': totals, 'two_kinds': 'shared quota', 'concurrent_cas': state,
-            'stale_delete': '40001; current revision succeeds', 'cascade': 'passed'}
+            'stale_delete': '40001; current revision succeeds',
+            'id_reuse': f'race one winner ({twin}); recreate same/other kind, stale save/delete 40001; quota 499',
+            'cascade': 'entries, quota and used IDs cleared'}

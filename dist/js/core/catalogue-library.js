@@ -17,8 +17,16 @@ export function createCatalogueLibrary({ getContext, storage, onSandboxWrite = (
   function read() {
     const db = JSON.parse(storage.getItem(KEY));
     if (!db || db.version !== 1 || !db.users || !db.campaigns) throw new Error('Песочница не открыта или её данные повреждены.');
-    if (db.catalogueEntries !== undefined && (!db.catalogueEntries || typeof db.catalogueEntries !== 'object' || Array.isArray(db.catalogueEntries))) throw new Error('Повреждены личные каталоги.');
+    for (const root of ['catalogueEntries', 'catalogueEntryIds']) {
+      if (db[root] !== undefined && (!db[root] || typeof db[root] !== 'object' || Array.isArray(db[root]))) throw new Error('Повреждены личные каталоги.');
+    }
     return db;
+  }
+  // An owner never reuses a template ID (#176 sol0139-pr176-id-policy-1). Live records written
+  // before the registry are added on the next write; the registry travels in the same setItem.
+  function remember(db, ownerId) {
+    db.catalogueEntryIds ||= {};
+    for (const [key, entry] of Object.entries(db.catalogueEntries || {})) if (entry.ownerId === ownerId) db.catalogueEntryIds[key] = true;
   }
   function write(db) {
     db.rev = (db.rev || 0) + 1; db.updatedAt = now();
@@ -47,16 +55,16 @@ export function createCatalogueLibrary({ getContext, storage, onSandboxWrite = (
       if (ctx.server) return ctx.server.save(entry);
       const db = read(); db.catalogueEntries ||= {};
       const key = keyFor(ctx.userId, entry.id), previous = db.catalogueEntries[key];
-      if ((previous && (previous.revision !== entry.revision || previous.kind !== entry.kind)) || (!previous && entry.revision !== 0)) throw conflict();
+      if ((previous && (previous.revision !== entry.revision || previous.kind !== entry.kind)) || (!previous && (entry.revision !== 0 || db.catalogueEntryIds?.[key]))) throw conflict();
       if (!previous && Object.values(db.catalogueEntries).filter(v => v.ownerId === ctx.userId).length >= 500) throw new Error('В личных каталогах уже 500 шаблонов.');
-      entry.revision++; db.catalogueEntries[key] = entry; write(db); return entry;
+      entry.revision++; db.catalogueEntries[key] = entry; remember(db, ctx.userId); write(db); return entry;
     }),
     remove: (id, revision) => scoped(async ctx => {
       if (typeof id !== 'string' || !Number.isSafeInteger(revision) || revision < 1) throw new TypeError('Нужны ID и ожидаемая ревизия записи.');
       if (ctx.server) return ctx.server.remove(id, revision);
       const db = read(), key = keyFor(ctx.userId, id), previous = db.catalogueEntries?.[key];
       if (!previous || previous.revision !== revision) throw conflict();
-      delete db.catalogueEntries[key]; write(db); return true;
+      remember(db, ctx.userId); delete db.catalogueEntries[key]; write(db); return true;
     }),
   };
 }

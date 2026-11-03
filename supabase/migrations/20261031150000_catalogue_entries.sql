@@ -84,17 +84,31 @@ end $$;
 create trigger catalogue_entry_quota after insert or delete on public.user_catalogue_entries
   for each row execute function public.catalogue_quota_change();
 
+-- An owner never reuses a template ID (#176 sol0139-pr176-id-policy-1): delete/recreate cannot revive stale CAS.
+-- No template data, no client grants, outside the 500 quota; the owner cascade clears it.
+create table public.catalogue_entry_ids (
+  owner_id uuid not null references public.profiles(id) on delete cascade,
+  id text not null check(id ~ '^[A-Za-z0-9_:-]{1,128}$'),
+  primary key(owner_id,id)
+);
+alter table public.catalogue_entry_ids enable row level security;
+revoke all on public.catalogue_entry_ids from public,anon,authenticated;
+
 create function public.save_catalogue_entry(p_id text,p_kind text,p_data jsonb,p_revision bigint,p_owner uuid)
 returns setof public.user_catalogue_entries language plpgsql security definer set search_path='' as $$
-declare uid uuid:=auth.uid(); saved public.user_catalogue_entries;
+declare uid uuid:=auth.uid(); saved public.user_catalogue_entries; claimed text;
 begin
   if uid is null or p_owner is distinct from uid then raise exception 'Пользователь изменился; войдите снова' using errcode='42501'; end if;
   if p_revision is null or p_revision<0 or p_revision>=9007199254740991 then
     raise exception 'Некорректная ожидаемая ревизия' using errcode='40001';
   end if;
   if p_revision=0 then
-    insert into public.user_catalogue_entries(owner_id,id,kind,data,revision)
-      values(uid,p_id,p_kind,p_data,1) on conflict(owner_id,id) do nothing returning * into saved;
+    -- A concurrent create of the same ID waits on this key; any later failure rolls the claim back.
+    insert into public.catalogue_entry_ids(owner_id,id) values(uid,p_id) on conflict(owner_id,id) do nothing returning id into claimed;
+    if claimed is not null then
+      insert into public.user_catalogue_entries(owner_id,id,kind,data,revision)
+        values(uid,p_id,p_kind,p_data,1) on conflict(owner_id,id) do nothing returning * into saved;
+    end if;
   else
     update public.user_catalogue_entries set data=p_data,revision=revision+1,updated_at=now()
       where owner_id=uid and id=p_id and kind=p_kind and revision=p_revision returning * into saved;
@@ -109,6 +123,8 @@ begin
   if uid is null or p_owner is distinct from uid then raise exception 'Пользователь изменился; войдите снова' using errcode='42501'; end if;
   delete from public.user_catalogue_entries where owner_id=uid and id=p_id and revision=p_revision returning id into removed;
   if removed is null then raise exception 'Запись изменена или удалена; обновите данные' using errcode='40001'; end if;
+  -- Rows created before the registry existed become used here as well.
+  insert into public.catalogue_entry_ids(owner_id,id) values(uid,removed) on conflict(owner_id,id) do nothing;
   return removed;
 end $$;
 revoke execute on function public.catalogue_manual_data_valid(text,jsonb),public.catalogue_quota_change(),

@@ -55,6 +55,45 @@ test('500 quota covers both private types; failures and concurrent stale revisio
   assert.equal((await s.api.list()).length, 500);
 });
 
+test('deleted IDs are never recreated by the same owner, so stale save/delete cannot hit a new record', async () => {
+  const s = sandbox();
+  const old = await s.api.save(record());
+  await s.api.remove(old.id, old.revision);
+  await assert.rejects(s.api.save(record()), e => e.code === 'CATALOGUE_CONFLICT', 'same kind');
+  await assert.rejects(s.api.save(record({ kind: 'magic_item', data: item() })), e => e.code === 'CATALOGUE_CONFLICT', 'other kind');
+  await assert.rejects(s.api.save({ ...old, data: feature() }), e => e.code === 'CATALOGUE_CONFLICT', 'stale save');
+  await assert.rejects(s.api.remove(old.id, old.revision), e => e.code === 'CATALOGUE_CONFLICT', 'stale delete');
+  assert.deepEqual(await s.api.list(), []);
+  assert.deepEqual(s.read().catalogueEntryIds, { [JSON.stringify(['user-a', 'same'])]: true });
+  assert.deepEqual(s.read().catalogueEntries, {}, 'rejected reuse writes nothing');
+  const copy = await s.api.save(record({ id: 'copy' }));
+  assert.equal(copy.revision, 1, 'a copy gets its own ID');
+  s.user('user-b');
+  assert.equal((await s.api.save(record({ ownerId: '' }))).revision, 1, 'another owner may use the same ID');
+  const twins = await Promise.allSettled([s.api.save(record({ ownerId: '', id: 'twin' })), s.api.save(record({ ownerId: '', id: 'twin' }))]);
+  assert.equal(twins.filter(r => r.status === 'fulfilled').length, 1);
+  assert.equal(twins.find(r => r.status === 'rejected').reason.code, 'CATALOGUE_CONFLICT');
+});
+
+test('ID registry adopts live legacy records on the next write and fails together with the record', async () => {
+  const s = sandbox(), db = s.read();
+  db.catalogueEntries = { [JSON.stringify(['user-a', 'legacy'])]: record({ id: 'legacy', revision: 1 }) };
+  s.storage.setItem('', JSON.stringify(db));
+  let writes = 0; const setItem = s.storage.setItem; s.storage.setItem = (k, v) => { writes++; setItem(k, v); };
+  await s.api.save(record({ id: 'fresh' }));
+  assert.equal(writes, 1, 'record and registry share one setItem');
+  assert.equal(s.read().catalogueEntryIds[JSON.stringify(['user-a', 'legacy'])], true);
+  await s.api.remove('legacy', 1);
+  await assert.rejects(s.api.save(record({ id: 'legacy' })), e => e.code === 'CATALOGUE_CONFLICT');
+  const before = JSON.stringify(s.read());
+  const broken = s.read(); broken.catalogueEntryIds = [];
+  setItem('', JSON.stringify(broken));
+  await assert.rejects(s.api.list(), /Повреждены/);
+  setItem('', before);
+  s.fail(); await assert.rejects(s.api.save(record({ id: 'lost' })), /Storage full/);
+  assert.equal(JSON.stringify(s.read()), before, 'failed write leaves neither record nor registry');
+});
+
 test('manual validation, malformed storage and type switches cannot silently replace records', async () => {
   const s = sandbox();
   await assert.rejects(s.api.save(record({ revision: null })), e => e.errors.some(e => e.path === 'revision'));
