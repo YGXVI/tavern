@@ -144,6 +144,7 @@ Supabase [рекомендует считать storage schema доступно�
 | --- | --- | --- |
 | `dist/js/data/features-2014.json` | Envelope v1: catalogueKind=feature, revision hash, entries391; исходные spans/hash — `data/features/manifest.json`,729 кандидатов | SRD5.1, текст EN; RU-названия проекта, level/actionType неизвестные null; без исполнения эффектов |
 | `dist/js/data/magic-items-2014.json` | Envelope v1: catalogueKind=magic_item;934 прежних ID,221 SRD/713 metadata,98 вложенных вариантов | Read-only проекция прежнего JSON, исходник/SQLite не меняются; metadata-only не содержит полного описания |
+| `dist/js/data/character-options-2014.json` | Envelope v1: catalogueKind=character_option, revision hash; 39 Definition (12 классов ×20 уровней, 12 подклассов, 9 рас, 4 подрасы, Acolyte, Grappler) с Grant/Choice | TASK-186 P1, SRD5.1; ссылки на прежние feature/spell ID, личные шаблоны этот вид не принимают; контракт — [catalogues.md](catalogues.md) |
 | `public.user_catalogue_entries` | PK `(owner_id,id)`, kind feature/magic_item, data JSONB, revision>=1, updated_at | Только собственник читает; source.kind=manual, edition5e-2014; запись/удаление через CAS RPC, direct writes запрещены |
 | `public.catalogue_entry_quota` | Внутренний owner_id/used0–500, AFTER INSERT/DELETE | Общая квота двух видов, отдельная от Creature; API доступа нет |
 | `public.catalogue_entry_ids` | Внутренний PK `(owner_id,id)` без данных шаблона | Использованные ID владельца: create занимает, delete сохраняет; не в квоте500, прав authenticated/anon нет, очищается каскадом владельца |

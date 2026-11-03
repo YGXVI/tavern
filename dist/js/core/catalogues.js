@@ -1,4 +1,8 @@
 import { CATALOGUE_KINDS, validateCatalogueEntry, cloneCatalogueData } from '../rules/catalogue.js';
+import { validateCharacterOption } from '../rules/character-options.js';
+
+// Public-only kinds. CATALOGUE_KINDS stays the private-template whitelist (TASK-186 plan r1 D2).
+export const PUBLIC_CATALOGUE_KINDS = Object.freeze([...CATALOGUE_KINDS, 'character_option']);
 
 export const normalizeCatalogueSearch = value => String(value ?? '').normalize('NFKC').toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
 function freeze(value) {
@@ -10,7 +14,7 @@ export function validatePublicCatalogue(kind, value) {
     || !/^[a-f0-9]{64}$/.test(value.revision) || !Array.isArray(value.entries) || value.coverage?.entries !== value.entries.length) throw new Error('Неподдерживаемый формат каталога.');
   const ids = new Set();
   for (const entry of value.entries) {
-    const result = validateCatalogueEntry(kind, entry);
+    const result = kind === 'character_option' ? validateCharacterOption(entry) : validateCatalogueEntry(kind, entry);
     if (!result.valid || ids.has(entry.id)) { const error = new Error(`Некорректная запись каталога: ${entry.id || '?'}`); error.errors = result.errors; throw error; }
     ids.add(entry.id);
   }
@@ -29,6 +33,16 @@ export function validatePublicCatalogue(kind, value) {
       }
     }
   }
+  if (kind === 'character_option') {
+    const kinds = new Map(value.entries.map(e => [e.id, e.kind]));
+    const expect = (id, kindOf) => { if (kinds.get(id) !== kindOf) throw new Error(`Неверная ссылка определения: ${id}`); };
+    for (const e of value.entries) {
+      if (e.kind === 'subclass') expect(e.classId, 'class');
+      if (e.kind === 'subrace') expect(e.raceId, 'race');
+      for (const row of e.progression || []) for (const c of row.choices) if (c.kind === 'subclass') c.options.forEach(id => expect(id, 'subclass'));
+      for (const c of e.choices) if (c.kind === 'subrace') c.options.forEach(id => expect(id, 'subrace'));
+    }
+  }
   return value;
 }
 
@@ -36,9 +50,10 @@ export function validatePublicCatalogue(kind, value) {
 export function createCatalogueLoader({ fetcher = globalThis.fetch, urls = {
   feature: new URL('../data/features-2014.json', import.meta.url),
   magic_item: new URL('../data/magic-items-2014.json', import.meta.url),
+  character_option: new URL('../data/character-options-2014.json', import.meta.url),
 } } = {}) {
   const cache = new Map(), pending = new Map(), generations = new Map();
-  const checkKind = kind => { if (!CATALOGUE_KINDS.includes(kind)) throw new TypeError('Неизвестный вид каталога.'); };
+  const checkKind = kind => { if (!PUBLIC_CATALOGUE_KINDS.includes(kind)) throw new TypeError('Неизвестный вид каталога.'); };
   return {
     async load(kind) {
       checkKind(kind);

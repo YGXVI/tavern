@@ -1,0 +1,279 @@
+{
+  "comment": "TASK-186 P1. Hand-normalized SRD 5.1 character options; generate.mjs expands this file and tests/character-options.test.js checks every number against data/rules-2014/srd-5.1.json and the #176 feature texts. Feature refs omit the 'srd51:feature:' prefix; spell refs are SRD API indexes resolved to existing dndsu IDs.",
+  "skills": ["acrobatics", "animal", "arcana", "athletics", "deception", "history", "insight", "intimidation", "investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight", "stealth", "survival"],
+  "vocabularies": {
+    "languages": {"pages": [59], "standard": {"common": "Common", "dwarvish": "Dwarvish", "elvish": "Elvish", "giant": "Giant", "gnomish": "Gnomish", "goblin": "Goblin", "halfling": "Halfling", "orc": "Orc"}, "exotic": {"abyssal": "Abyssal", "celestial": "Celestial", "draconic": "Draconic", "deep-speech": "Deep Speech", "infernal": "Infernal", "primordial": "Primordial", "sylvan": "Sylvan", "undercommon": "Undercommon"}, "secret": {"druidic": "Druidic", "thieves-cant": "Thieves’ cant"}},
+    "tools": {"pages": [70, 71], "artisan": {"alchemists-supplies": "Alchemist’s supplies", "brewers-supplies": "Brewer’s supplies", "calligraphers-supplies": "Calligrapher's supplies", "carpenters-tools": "Carpenter’s tools", "cartographers-tools": "Cartographer’s tools", "cobblers-tools": "Cobbler’s tools", "cooks-utensils": "Cook’s utensils", "glassblowers-tools": "Glassblower’s tools", "jewelers-tools": "Jeweler’s tools", "leatherworkers-tools": "Leatherworker’s tools", "masons-tools": "Mason’s tools", "painters-supplies": "Painter’s supplies", "potters-tools": "Potter’s tools", "smiths-tools": "Smith’s tools", "tinkers-tools": "Tinker’s tools", "weavers-tools": "Weaver’s tools", "woodcarvers-tools": "Woodcarver’s tools"}, "musical_instrument": {"bagpipes": "Bagpipes", "drum": "Drum", "dulcimer": "Dulcimer", "flute": "Flute", "lute": "Lute", "lyre": "Lyre", "horn": "Horn", "pan-flute": "Pan flute", "shawm": "Shawm", "viol": "Viol"}, "other": {"herbalism-kit": "Herbalism kit", "thieves-tools": "Thieves’ tools"}},
+    "favoredEnemies": {"pages": [35], "types": {"aberration": "aberrations", "beast": "beasts", "celestial": "celestials", "construct": "constructs", "dragon": "dragons", "elemental": "elementals", "fey": "fey", "fiend": "fiends", "giant": "giants", "monstrosity": "monstrosities", "ooze": "oozes", "plant": "plants", "undead": "undead", "humanoid-pair": "two races of humanoid"}},
+    "terrains": {"pages": [36], "types": {"arctic": "arctic", "coast": "coast", "desert": "desert", "forest": "forest", "grassland": "grassland", "mountain": "mountain", "swamp": "swamp"}}
+  },
+  "slotTables": {
+    "full": [[2],[3],[4,2],[4,3],[4,3,2],[4,3,3],[4,3,3,1],[4,3,3,2],[4,3,3,3,1],[4,3,3,3,2],[4,3,3,3,2,1],[4,3,3,3,2,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],[4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1]],
+    "half": [[],[2],[3],[3],[4,2],[4,2],[4,3],[4,3],[4,3,2],[4,3,2],[4,3,3],[4,3,3],[4,3,3,1],[4,3,3,1],[4,3,3,2],[4,3,3,2],[4,3,3,3,1],[4,3,3,3,1],[4,3,3,3,2],[4,3,3,3,2]]
+  },
+  "classes": {
+    "barbarian": {
+      "pages": [8, 10], "hitDie": 12, "savingThrows": ["str", "con"],
+      "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"], "tools": [],
+      "skills": {"count": 2, "from": ["animal", "athletics", "intimidation", "nature", "perception", "survival"]},
+      "spellcasting": null,
+      "subclass": {"level": 3, "featureRef": "barbarian:primal-path", "featureLevels": [3, 6, 10, 14]},
+      "columns": [{"id": "rages", "kind": "count_or_unlimited"}, {"id": "rageDamage", "kind": "bonus"}],
+      "values": [[2,"+2"],[2,"+2"],[3,"+2"],[3,"+2"],[3,"+2"],[4,"+2"],[4,"+2"],[4,"+2"],[4,"+3"],[4,"+3"],[4,"+3"],[5,"+3"],[5,"+3"],[5,"+3"],[5,"+3"],[5,"+4"],[6,"+4"],[6,"+4"],[6,"+4"],["unlimited","+4"]],
+      "features": {"1": ["rage", "unarmored-defense"], "2": ["reckless-attack", "danger-sense"], "3": ["primal-path"], "5": ["extra-attack", "fast-movement"], "7": ["feral-instinct"], "9": ["brutal-critical"], "11": ["relentless-rage"], "13": ["brutal-critical"], "15": ["persistent-rage"], "17": ["brutal-critical"], "18": ["indomitable-might"], "20": ["primal-champion"]},
+      "asi": [4, 8, 12, 16, 19],
+      "grantsAt": {"20": [{"kind": "ability_increase", "ability": "str", "value": 4, "maximum": 24}, {"kind": "ability_increase", "ability": "con", "value": 4, "maximum": 24}]},
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "str", "min": 13}}, "armor": ["shield"], "weapons": ["simple", "martial"]}
+    },
+    "bard": {
+      "pages": [11, 14], "hitDie": 8, "savingThrows": ["dex", "cha"],
+      "armor": ["light"], "weapons": ["simple", "hand-crossbow", "longsword", "rapier", "shortsword"], "tools": [],
+      "toolChoices": [{"slug": "instruments", "kind": "tool", "count": 3, "category": "musical_instrument"}],
+      "skills": {"count": 3, "any": true},
+      "spellcasting": {"ability": "cha", "mode": "known", "list": "bard", "ritual": true, "focus": "musical_instrument", "slots": "full", "startLevel": 1},
+      "subclass": {"level": 3, "featureRef": "bard:bard-college", "featureLevels": [3, 6, 14]},
+      "columns": [{"id": "cantripsKnown", "kind": "integer"}, {"id": "spellsKnown", "kind": "integer"}],
+      "values": [[2,4],[2,5],[2,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[4,14],[4,15],[4,15],[4,16],[4,18],[4,19],[4,19],[4,20],[4,22],[4,22],[4,22]],
+      "features": {"1": ["spellcasting", "bardic-inspiration"], "2": ["jack-of-all-trades", "song-of-rest"], "3": ["bard-college", "expertise"], "5": ["bardic-inspiration", "font-of-inspiration"], "6": ["countercharm"], "9": ["song-of-rest"], "10": ["bardic-inspiration", "expertise", "magical-secrets"], "13": ["song-of-rest"], "14": ["magical-secrets"], "15": ["bardic-inspiration"], "17": ["song-of-rest"], "18": ["magical-secrets"], "20": ["superior-inspiration"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {
+        "3": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills"}],
+        "10": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills"}, {"slug": "magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:magical-secrets"}],
+        "14": [{"slug": "magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:magical-secrets"}],
+        "18": [{"slug": "magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:magical-secrets"}]
+      },
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}, "armor": ["light"], "skillCount": 1, "skillsAny": true, "toolCount": 1, "toolCategory": "musical_instrument"}
+    },
+    "cleric": {
+      "pages": [15, 18], "hitDie": 8, "savingThrows": ["wis", "cha"],
+      "armor": ["light", "medium", "shield"], "weapons": ["simple"], "tools": [],
+      "skills": {"count": 2, "from": ["history", "insight", "medicine", "persuasion", "religion"]},
+      "spellcasting": {"ability": "wis", "mode": "prepared", "list": "cleric", "ritual": true, "focus": "holy_symbol", "slots": "full", "startLevel": 1, "prepared": "ability_plus_level"},
+      "subclass": {"level": 1, "featureRef": "cleric:divine-domain", "featureLevels": [1, 2, 6, 8, 17]},
+      "columns": [{"id": "cantripsKnown", "kind": "integer"}],
+      "values": [[3],[3],[3],[4],[4],[4],[4],[4],[4],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5]],
+      "features": {"1": ["spellcasting", "divine-domain"], "2": ["channel-divinity"], "5": ["destroy-undead"], "6": ["channel-divinity"], "8": ["destroy-undead"], "10": ["divine-intervention"], "11": ["destroy-undead"], "14": ["destroy-undead"], "17": ["destroy-undead"], "18": ["channel-divinity"], "20": ["divine-intervention"]},
+      "asi": [4, 8, 12, 16, 19],
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "wis", "min": 13}}, "armor": ["light", "medium", "shield"]}
+    },
+    "druid": {
+      "pages": [19, 23], "hitDie": 8, "savingThrows": ["int", "wis"],
+      "armor": ["light", "medium", "shield"], "armorNote": "nonmetal", "weapons": ["club", "dagger", "dart", "javelin", "mace", "quarterstaff", "scimitar", "sickle", "sling", "spear"], "tools": ["herbalism-kit"],
+      "skills": {"count": 2, "from": ["arcana", "animal", "insight", "medicine", "nature", "perception", "religion", "survival"]},
+      "spellcasting": {"ability": "wis", "mode": "prepared", "list": "druid", "ritual": true, "focus": "druidic_focus", "slots": "full", "startLevel": 1, "prepared": "ability_plus_level"},
+      "subclass": {"level": 2, "featureRef": "druid:druid-circle", "featureLevels": [2, 6, 10, 14]},
+      "columns": [{"id": "cantripsKnown", "kind": "integer"}],
+      "values": [[2],[2],[2],[3],[3],[3],[3],[3],[3],[4],[4],[4],[4],[4],[4],[4],[4],[4],[4],[4]],
+      "features": {"1": ["druidic", "spellcasting"], "2": ["wild-shape", "druid-circle"], "4": ["wild-shape"], "8": ["wild-shape"], "18": ["timeless-body", "beast-spells"], "20": ["archdruid"]},
+      "asi": [4, 8, 12, 16, 19],
+      "grantsAt": {"1": [{"kind": "language", "value": "druidic"}]},
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "wis", "min": 13}}, "armor": ["light", "medium", "shield"]}
+    },
+    "fighter": {
+      "pages": [24, 25], "hitDie": 10, "savingThrows": ["str", "con"],
+      "armor": ["light", "medium", "heavy", "shield"], "weapons": ["simple", "martial"], "tools": [],
+      "skills": {"count": 2, "from": ["acrobatics", "animal", "athletics", "history", "insight", "intimidation", "perception", "survival"]},
+      "spellcasting": null,
+      "subclass": {"level": 3, "featureRef": "fighter:martial-archetype", "featureLevels": [3, 7, 10, 15, 18]},
+      "columns": [],
+      "values": [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]],
+      "features": {"1": ["fighting-style", "second-wind"], "2": ["action-surge"], "3": ["martial-archetype"], "5": ["extra-attack"], "9": ["indomitable"], "11": ["extra-attack"], "13": ["indomitable"], "17": ["action-surge", "indomitable"], "20": ["extra-attack"]},
+      "asi": [4, 6, 8, 12, 14, 16, 19],
+      "choicesAt": {"1": [{"slug": "fighting-style", "kind": "feature_option", "count": 1, "parent": "fighter:fighting-style"}]},
+      "multiclass": {"prerequisites": {"any": [{"abilityMinimum": {"ability": "str", "min": 13}}, {"abilityMinimum": {"ability": "dex", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"]}
+    },
+    "monk": {
+      "pages": [26, 29], "hitDie": 8, "savingThrows": ["str", "dex"],
+      "armor": [], "weapons": ["simple", "shortsword"], "tools": [],
+      "toolChoices": [{"slug": "tool", "kind": "tool", "count": 1, "category": "artisan_or_musical_instrument"}],
+      "skills": {"count": 2, "from": ["acrobatics", "athletics", "history", "insight", "religion", "stealth"]},
+      "spellcasting": null,
+      "subclass": {"level": 3, "featureRef": "monk:monastic-tradition", "featureLevels": [3, 6, 11, 17]},
+      "columns": [{"id": "martialArts", "kind": "dice"}, {"id": "kiPoints", "kind": "integer"}, {"id": "unarmoredMovement", "kind": "feet_bonus"}],
+      "values": [["1d4",null,null],["1d4",2,10],["1d4",3,10],["1d4",4,10],["1d6",5,10],["1d6",6,15],["1d6",7,15],["1d6",8,15],["1d6",9,15],["1d6",10,20],["1d8",11,20],["1d8",12,20],["1d8",13,20],["1d8",14,25],["1d8",15,25],["1d8",16,25],["1d10",17,25],["1d10",18,30],["1d10",19,30],["1d10",20,30]],
+      "features": {"1": ["unarmored-defense", "martial-arts"], "2": ["ki", "unarmored-movement"], "3": ["monastic-tradition", "deflect-missiles"], "4": ["slow-fall"], "5": ["extra-attack", "stunning-strike"], "6": ["ki-empowered-strikes"], "7": ["evasion", "stillness-of-mind"], "9": ["unarmored-movement"], "10": ["purity-of-body"], "13": ["tongue-of-the-sun-and-moon"], "14": ["diamond-soul"], "15": ["timeless-body"], "18": ["empty-body"], "20": ["perfect-self"]},
+      "asi": [4, 8, 12, 16, 19],
+      "grantsAt": {"14": [{"kind": "proficiency", "category": "saving_throw", "value": "all"}]},
+      "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "dex", "min": 13}}, {"abilityMinimum": {"ability": "wis", "min": 13}}]}, "weapons": ["simple", "shortsword"]}
+    },
+    "paladin": {
+      "pages": [30, 34], "hitDie": 10, "savingThrows": ["wis", "cha"],
+      "armor": ["light", "medium", "heavy", "shield"], "weapons": ["simple", "martial"], "tools": [],
+      "skills": {"count": 2, "from": ["athletics", "insight", "intimidation", "medicine", "persuasion", "religion"]},
+      "spellcasting": {"ability": "cha", "mode": "prepared", "list": "paladin", "ritual": false, "focus": "holy_symbol", "slots": "half", "startLevel": 2, "prepared": "ability_plus_half_level"},
+      "subclass": {"level": 3, "featureRef": "paladin:sacred-oath", "featureLevels": [3, 7, 15, 20]},
+      "columns": [],
+      "values": [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]],
+      "features": {"1": ["divine-sense", "lay-on-hands"], "2": ["fighting-style", "spellcasting", "divine-smite"], "3": ["divine-health", "sacred-oath"], "5": ["extra-attack"], "6": ["aura-of-protection"], "10": ["aura-of-courage"], "11": ["improved-divine-smite"], "14": ["cleansing-touch"], "18": ["aura-of-protection", "aura-of-courage"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {"2": [{"slug": "fighting-style", "kind": "feature_option", "count": 1, "parent": "paladin:fighting-style"}]},
+      "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "str", "min": 13}}, {"abilityMinimum": {"ability": "cha", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"]}
+    },
+    "ranger": {
+      "pages": [35, 38], "hitDie": 10, "savingThrows": ["str", "dex"],
+      "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"], "tools": [],
+      "skills": {"count": 3, "from": ["animal", "athletics", "insight", "investigation", "nature", "perception", "stealth", "survival"]},
+      "spellcasting": {"ability": "wis", "mode": "known", "list": "ranger", "ritual": false, "focus": null, "slots": "half", "startLevel": 2},
+      "subclass": {"level": 3, "featureRef": "ranger:ranger-archetype", "featureLevels": [3, 7, 11, 15]},
+      "columns": [{"id": "spellsKnown", "kind": "integer"}],
+      "values": [[null],[2],[3],[3],[4],[4],[5],[5],[6],[6],[7],[7],[8],[8],[9],[9],[10],[10],[11],[11]],
+      "features": {"1": ["favored-enemy", "natural-explorer"], "2": ["fighting-style", "spellcasting"], "3": ["ranger-archetype", "primeval-awareness"], "5": ["extra-attack"], "6": ["favored-enemy", "natural-explorer"], "8": ["land-s-stride"], "10": ["natural-explorer", "hide-in-plain-sight"], "14": ["favored-enemy", "vanish"], "18": ["feral-senses"], "20": ["foe-slayer"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {
+        "1": [{"slug": "favored-enemy", "kind": "favored_enemy", "count": 1, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-enemy-language", "kind": "language", "count": 1, "optional": true, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-terrain", "kind": "terrain", "count": 1, "featureRef": "ranger:natural-explorer"}],
+        "2": [{"slug": "fighting-style", "kind": "feature_option", "count": 1, "parent": "ranger:fighting-style"}],
+        "6": [{"slug": "favored-enemy", "kind": "favored_enemy", "count": 1, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-enemy-language", "kind": "language", "count": 1, "optional": true, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-terrain", "kind": "terrain", "count": 1, "featureRef": "ranger:natural-explorer"}],
+        "10": [{"slug": "favored-terrain", "kind": "terrain", "count": 1, "featureRef": "ranger:natural-explorer"}],
+        "14": [{"slug": "favored-enemy", "kind": "favored_enemy", "count": 1, "featureRef": "ranger:favored-enemy"}, {"slug": "favored-enemy-language", "kind": "language", "count": 1, "optional": true, "featureRef": "ranger:favored-enemy"}]
+      },
+      "multiclass": {"prerequisites": {"all": [{"abilityMinimum": {"ability": "dex", "min": 13}}, {"abilityMinimum": {"ability": "wis", "min": 13}}]}, "armor": ["light", "medium", "shield"], "weapons": ["simple", "martial"], "skillCount": 1}
+    },
+    "rogue": {
+      "pages": [39, 41], "hitDie": 8, "savingThrows": ["dex", "int"],
+      "armor": ["light"], "weapons": ["simple", "hand-crossbow", "longsword", "rapier", "shortsword"], "tools": ["thieves-tools"],
+      "skills": {"count": 4, "from": ["acrobatics", "athletics", "deception", "insight", "intimidation", "investigation", "perception", "performance", "persuasion", "sleight", "stealth"]},
+      "spellcasting": null,
+      "subclass": {"level": 3, "featureRef": "rogue:roguish-archetype", "featureLevels": [3, 9, 13, 17]},
+      "columns": [{"id": "sneakAttack", "kind": "dice"}],
+      "values": [["1d6"],["1d6"],["2d6"],["2d6"],["3d6"],["3d6"],["4d6"],["4d6"],["5d6"],["5d6"],["6d6"],["6d6"],["7d6"],["7d6"],["8d6"],["8d6"],["9d6"],["9d6"],["10d6"],["10d6"]],
+      "features": {"1": ["expertise", "sneak-attack", "thieves-cant"], "2": ["cunning-action"], "3": ["roguish-archetype"], "5": ["uncanny-dodge"], "6": ["expertise"], "7": ["evasion"], "11": ["reliable-talent"], "14": ["blindsense"], "15": ["slippery-mind"], "18": ["elusive"], "20": ["stroke-of-luck"]},
+      "asi": [4, 8, 10, 12, 16, 19],
+      "grantsAt": {"1": [{"kind": "language", "value": "thieves-cant"}], "15": [{"kind": "proficiency", "category": "saving_throw", "value": "wis"}]},
+      "choicesAt": {
+        "1": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills_or_thieves_tools"}],
+        "6": [{"slug": "expertise", "kind": "expertise", "count": 2, "from": "proficient_skills_or_thieves_tools"}]
+      },
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "dex", "min": 13}}, "armor": ["light"], "skillCount": 1, "tools": ["thieves-tools"]}
+    },
+    "sorcerer": {
+      "pages": [42, 45], "hitDie": 6, "savingThrows": ["con", "cha"],
+      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"], "tools": [],
+      "skills": {"count": 2, "from": ["arcana", "deception", "insight", "intimidation", "persuasion", "religion"]},
+      "spellcasting": {"ability": "cha", "mode": "known", "list": "sorcerer", "ritual": false, "focus": "arcane_focus", "slots": "full", "startLevel": 1},
+      "subclass": {"level": 1, "featureRef": "sorcerer:sorcerous-origin", "featureLevels": [1, 6, 14, 18]},
+      "columns": [{"id": "sorceryPoints", "kind": "integer"}, {"id": "cantripsKnown", "kind": "integer"}, {"id": "spellsKnown", "kind": "integer"}],
+      "values": [[null,4,2],[2,4,3],[3,4,4],[4,5,5],[5,5,6],[6,5,7],[7,5,8],[8,5,9],[9,5,10],[10,6,11],[11,6,12],[12,6,12],[13,6,13],[14,6,13],[15,6,14],[16,6,14],[17,6,15],[18,6,15],[19,6,15],[20,6,15]],
+      "features": {"1": ["spellcasting", "sorcerous-origin"], "2": ["font-of-magic"], "3": ["metamagic"], "10": ["metamagic"], "17": ["metamagic"], "20": ["sorcerous-restoration"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {
+        "3": [{"slug": "metamagic", "kind": "feature_option", "count": 2, "parent": "sorcerer:metamagic"}],
+        "10": [{"slug": "metamagic", "kind": "feature_option", "count": 1, "parent": "sorcerer:metamagic"}],
+        "17": [{"slug": "metamagic", "kind": "feature_option", "count": 1, "parent": "sorcerer:metamagic"}]
+      },
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}}
+    },
+    "warlock": {
+      "pages": [46, 51], "hitDie": 8, "savingThrows": ["wis", "cha"],
+      "armor": ["light"], "weapons": ["simple"], "tools": [],
+      "skills": {"count": 2, "from": ["arcana", "deception", "history", "intimidation", "investigation", "nature", "religion"]},
+      "spellcasting": {"ability": "cha", "mode": "known", "list": "warlock", "ritual": false, "focus": "arcane_focus", "slots": "pact", "startLevel": 1},
+      "subclass": {"level": 1, "featureRef": "warlock:otherworldly-patron", "featureLevels": [1, 6, 10, 14]},
+      "columns": [{"id": "cantripsKnown", "kind": "integer"}, {"id": "spellsKnown", "kind": "integer"}, {"id": "pactSlots", "kind": "integer"}, {"id": "pactSlotLevel", "kind": "ordinal"}, {"id": "invocationsKnown", "kind": "integer"}],
+      "values": [[2,2,1,1,null],[2,3,2,1,2],[2,4,2,2,2],[3,5,2,2,2],[3,6,2,3,3],[3,7,2,3,3],[3,8,2,4,4],[3,9,2,4,4],[3,10,2,5,5],[4,10,2,5,5],[4,11,3,5,5],[4,11,3,5,6],[4,12,3,5,6],[4,12,3,5,6],[4,13,3,5,7],[4,13,3,5,7],[4,14,4,5,7],[4,14,4,5,8],[4,15,4,5,8],[4,15,4,5,8]],
+      "features": {"1": ["otherworldly-patron", "pact-magic"], "2": ["eldritch-invocations"], "3": ["pact-boon"], "11": ["mystic-arcanum"], "13": ["mystic-arcanum"], "15": ["mystic-arcanum"], "17": ["mystic-arcanum"], "20": ["eldritch-master"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {
+        "3": [{"slug": "pact-boon", "kind": "feature_option", "count": 1, "parent": "warlock:pact-boon"}],
+        "11": [{"slug": "mystic-arcanum-6", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 6}, "featureRef": "warlock:mystic-arcanum"}],
+        "13": [{"slug": "mystic-arcanum-7", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 7}, "featureRef": "warlock:mystic-arcanum"}],
+        "15": [{"slug": "mystic-arcanum-8", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 8}, "featureRef": "warlock:mystic-arcanum"}],
+        "17": [{"slug": "mystic-arcanum-9", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 9}, "featureRef": "warlock:mystic-arcanum"}]
+      },
+      "invocationsFromColumn": "invocationsKnown",
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "cha", "min": 13}}, "armor": ["light"], "weapons": ["simple"]}
+    },
+    "wizard": {
+      "pages": [52, 55], "hitDie": 6, "savingThrows": ["int", "wis"],
+      "armor": [], "weapons": ["dagger", "dart", "sling", "quarterstaff", "light-crossbow"], "tools": [],
+      "skills": {"count": 2, "from": ["arcana", "history", "insight", "investigation", "medicine", "religion"]},
+      "spellcasting": {"ability": "int", "mode": "spellbook", "list": "wizard", "ritual": true, "focus": "arcane_focus", "slots": "full", "startLevel": 1, "prepared": "ability_plus_level", "spellbook": {"initial": 6, "perLevel": 2}},
+      "subclass": {"level": 2, "featureRef": "wizard:arcane-tradition", "featureLevels": [2, 6, 10, 14]},
+      "columns": [{"id": "cantripsKnown", "kind": "integer"}],
+      "values": [[3],[3],[3],[4],[4],[4],[4],[4],[4],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5],[5]],
+      "features": {"1": ["spellcasting", "arcane-recovery"], "2": ["arcane-tradition"], "18": ["spell-mastery"], "20": ["signature-spells"]},
+      "asi": [4, 8, 12, 16, 19],
+      "choicesAt": {
+        "18": [{"slug": "spell-mastery-1", "kind": "spell", "count": 1, "spellFilter": {"lists": "spellbook", "level": 1}, "featureRef": "wizard:spell-mastery"}, {"slug": "spell-mastery-2", "kind": "spell", "count": 1, "spellFilter": {"lists": "spellbook", "level": 2}, "featureRef": "wizard:spell-mastery"}],
+        "20": [{"slug": "signature-spells", "kind": "spell", "count": 2, "spellFilter": {"lists": "spellbook", "level": 3}, "featureRef": "wizard:signature-spells"}]
+      },
+      "multiclass": {"prerequisites": {"abilityMinimum": {"ability": "int", "min": 13}}}
+    }
+  },
+  "subclasses": {
+    "barbarian:berserker": {"page": 9, "features": {"3": ["frenzy"], "6": ["mindless-rage"], "10": ["intimidating-presence"], "14": ["retaliation"]}, "option": "berserker:path-of-the-berserker"},
+    "bard:lore": {"page": 13, "features": {"3": ["bonus-proficiencies", "cutting-words"], "6": ["additional-magical-secrets"], "14": ["peerless-skill"]}, "option": "lore:college-of-lore",
+      "choicesAt": {"3": [{"slug": "bonus-proficiencies", "kind": "skill", "count": 3, "any": true, "featureRef": "bard:lore:bonus-proficiencies"}], "6": [{"slug": "additional-magical-secrets", "kind": "spell", "count": 2, "spellFilter": {"lists": "any", "maxLevel": "castable"}, "featureRef": "bard:lore:additional-magical-secrets"}]}},
+    "cleric:life": {"page": 17, "features": {"1": ["life-domain-spells", "bonus-proficiency", "disciple-of-life"], "2": ["channel-divinity-preserve-life"], "6": ["blessed-healer"], "8": ["divine-strike"], "17": ["supreme-healing"]}, "option": "life:life-domain",
+      "grantsAt": {"1": [{"kind": "proficiency", "category": "armor", "value": "heavy"}]},
+      "spellList": {"featureRef": "cleric:life:life-domain-spells", "levelKind": "class", "spells": {"1": ["bless", "cure-wounds"], "3": ["lesser-restoration", "spiritual-weapon"], "5": ["beacon-of-hope", "revivify"], "7": ["death-ward", "guardian-of-faith"], "9": ["mass-cure-wounds", "raise-dead"]}, "alwaysPrepared": true}},
+    "druid:land": {"page": 21, "pageEnd": 22, "features": {"2": ["bonus-cantrip", "natural-recovery", "circle-spells"], "6": ["land-s-stride"], "10": ["nature-s-ward"], "14": ["nature-s-sanctuary"]}, "option": "land:circle-of-the-land",
+      "choicesAt": {"2": [{"slug": "bonus-cantrip", "kind": "spell", "count": 1, "spellFilter": {"lists": "class", "level": 0}, "featureRef": "druid:land:bonus-cantrip"}, {"slug": "land", "kind": "feature_option", "count": 1, "parent": "druid:land:circle-spells"}]},
+      "terrainSpells": {"featureRef": "druid:land:circle-spells", "levelKind": "class", "alwaysPrepared": true, "lands": {
+        "arctic": {"3": ["hold-person", "spike-growth"], "5": ["sleet-storm", "slow"], "7": ["freedom-of-movement", "ice-storm"], "9": ["commune-with-nature", "cone-of-cold"]},
+        "coast": {"3": ["mirror-image", "misty-step"], "5": ["water-breathing", "water-walk"], "7": ["control-water", "freedom-of-movement"], "9": ["conjure-elemental", "scrying"]},
+        "desert": {"3": ["blur", "silence"], "5": ["create-food-and-water", "protection-from-energy"], "7": ["blight", "hallucinatory-terrain"], "9": ["insect-plague", "wall-of-stone"]},
+        "forest": {"3": ["barkskin", "spider-climb"], "5": ["call-lightning", "plant-growth"], "7": ["divination", "freedom-of-movement"], "9": ["commune-with-nature", "tree-stride"]},
+        "grassland": {"3": ["invisibility", "pass-without-trace"], "5": ["daylight", "haste"], "7": ["divination", "freedom-of-movement"], "9": ["dream", "insect-plague"]},
+        "mountain": {"3": ["spider-climb", "spike-growth"], "5": ["lightning-bolt", "meld-into-stone"], "7": ["stone-shape", "stoneskin"], "9": ["passwall", "wall-of-stone"]},
+        "swamp": {"3": ["acid-arrow", "darkness"], "5": ["water-walk", "stinking-cloud"], "7": ["freedom-of-movement", "locate-creature"], "9": ["insect-plague", "scrying"]}}}},
+    "fighter:champion": {"page": 25, "features": {"3": ["improved-critical"], "7": ["remarkable-athlete"], "10": ["additional-fighting-style"], "15": ["superior-critical"], "18": ["survivor"]}, "option": "champion:champion",
+      "choicesAt": {"10": [{"slug": "additional-fighting-style", "kind": "feature_option", "count": 1, "parent": "fighter:fighting-style", "featureRef": "fighter:champion:additional-fighting-style"}]}},
+    "monk:open-hand": {"page": 28, "features": {"3": ["open-hand-technique"], "6": ["wholeness-of-body"], "11": ["tranquility"], "17": ["quivering-palm"]}, "option": "open-hand:way-of-the-open-hand"},
+    "paladin:devotion": {"page": 33, "features": {"3": ["tenets-of-devotion", "oath-spells", "channel-divinity"], "7": ["aura-of-devotion"], "15": ["purity-of-spirit"], "20": ["holy-nimbus"]}, "option": "devotion:oath-of-devotion",
+      "spellList": {"featureRef": "paladin:devotion:oath-spells", "levelKind": "class", "spells": {"3": ["protection-from-evil-and-good", "sanctuary"], "5": ["lesser-restoration", "zone-of-truth"], "9": ["beacon-of-hope", "dispel-magic"], "13": ["freedom-of-movement", "guardian-of-faith"], "17": ["commune", "flame-strike"]}, "alwaysPrepared": true}},
+    "ranger:hunter": {"page": 37, "pageEnd": 38, "features": {"3": ["hunter-s-prey"], "7": ["defensive-tactics"], "11": ["multiattack"], "15": ["superior-hunter-s-defense"]}, "option": "hunter:hunter",
+      "choicesAt": {"3": [{"slug": "hunters-prey", "kind": "feature_option", "count": 1, "parent": "ranger:hunter:hunter-s-prey"}], "7": [{"slug": "defensive-tactics", "kind": "feature_option", "count": 1, "parent": "ranger:hunter:defensive-tactics"}], "11": [{"slug": "multiattack", "kind": "feature_option", "count": 1, "parent": "ranger:hunter:multiattack"}], "15": [{"slug": "superior-defense", "kind": "feature_option", "count": 1, "parent": "ranger:hunter:superior-hunter-s-defense"}]}},
+    "rogue:thief": {"page": 40, "pageEnd": 41, "features": {"3": ["fast-hands", "second-story-work"], "9": ["supreme-sneak"], "13": ["use-magic-device"], "17": ["thief-s-reflexes"]}, "option": "thief:thief"},
+    "sorcerer:draconic-bloodline": {"page": 44, "pageEnd": 45, "features": {"1": ["dragon-ancestor", "draconic-resilience"], "6": ["elemental-affinity"], "14": ["dragon-wings"], "18": ["draconic-presence"]}, "option": "draconic-bloodline:draconic-bloodline",
+      "grantsAt": {"1": [{"kind": "language", "value": "draconic"}, {"kind": "hit_points", "perClassLevel": 1}]},
+      "choicesAt": {"1": [{"slug": "dragon-ancestor", "kind": "feature_option", "count": 1, "parent": "sorcerer:draconic-bloodline:dragon-ancestor"}]}},
+    "warlock:fiend": {"page": 50, "pageEnd": 51, "features": {"1": ["expanded-spell-list", "dark-one-s-blessing"], "6": ["dark-one-s-own-luck"], "10": ["fiendish-resilience"], "14": ["hurl-through-hell"]}, "option": "fiend:the-fiend",
+      "spellList": {"featureRef": "warlock:fiend:expanded-spell-list", "levelKind": "spell", "spells": {"1": ["burning-hands", "command"], "2": ["blindness-deafness", "scorching-ray"], "3": ["fireball", "stinking-cloud"], "4": ["fire-shield", "wall-of-fire"], "5": ["flame-strike", "hallow"]}, "alwaysPrepared": false}},
+    "wizard:evocation": {"page": 54, "features": {"2": ["evocation-savant", "sculpt-spells"], "6": ["potent-cantrip"], "10": ["empowered-evocation"], "14": ["overchannel"]}, "option": "evocation:school-of-evocation"}
+  },
+  "races": {
+    "dwarf": {"page": 3, "size": "medium", "speed": 25, "darkvision": 60, "asi": {"con": 2}, "languages": ["common", "dwarvish"],
+      "weapons": ["battleaxe", "handaxe", "light-hammer", "warhammer"], "resistances": ["poison"],
+      "choices": [{"slug": "tool", "kind": "tool", "count": 1, "options": ["smiths-tools", "brewers-supplies", "masons-tools"], "featureRef": "dwarf:tool-proficiency"}],
+      "aliases": ["dwarf"]},
+    "elf": {"page": 4, "size": "medium", "speed": 30, "darkvision": 60, "asi": {"dex": 2}, "languages": ["common", "elvish"], "skills": ["perception"], "aliases": ["elf"]},
+    "halfling": {"page": 4, "pageEnd": 5, "size": "small", "speed": 25, "darkvision": null, "asi": {"dex": 2}, "languages": ["common", "halfling"], "aliases": ["halfling"]},
+    "human": {"page": 5, "size": "medium", "speed": 30, "darkvision": null, "asi": {"str": 1, "dex": 1, "con": 1, "int": 1, "wis": 1, "cha": 1}, "languages": ["common"],
+      "choices": [{"slug": "language", "kind": "language", "count": 1, "featureRef": "human:languages"}], "aliases": ["human"]},
+    "dragonborn": {"page": 5, "pageEnd": 6, "size": "medium", "speed": 30, "darkvision": null, "asi": {"str": 2, "cha": 1}, "languages": ["common", "draconic"],
+      "choices": [{"slug": "draconic-ancestry", "kind": "feature_option", "count": 1, "parent": "dragonborn:draconic-ancestry"}],
+      "ancestry": {"black": ["acid", "line", 5, 30, "dex"], "blue": ["lightning", "line", 5, 30, "dex"], "brass": ["fire", "line", 5, 30, "dex"], "bronze": ["lightning", "line", 5, 30, "dex"], "copper": ["acid", "line", 5, 30, "dex"], "gold": ["fire", "cone", 15, 15, "dex"], "green": ["poison", "cone", 15, 15, "con"], "red": ["fire", "cone", 15, 15, "dex"], "silver": ["cold", "cone", 15, 15, "con"], "white": ["cold", "cone", 15, 15, "con"]},
+      "aliases": ["dragonborn"]},
+    "gnome": {"page": 6, "size": "small", "speed": 25, "darkvision": 60, "asi": {"int": 2}, "languages": ["common", "gnomish"], "aliases": ["gnome"]},
+    "half-elf": {"page": 6, "pageEnd": 7, "size": "medium", "speed": 30, "darkvision": 60, "asi": {"cha": 2}, "languages": ["common", "elvish"],
+      "choices": [{"slug": "ability-increase", "kind": "ability_increase", "count": 2, "value": 1, "exclude": ["cha"], "distinct": true, "featureRef": "half-elf:ability-score-increase"},
+        {"slug": "skill-versatility", "kind": "skill", "count": 2, "any": true, "featureRef": "half-elf:skill-versatility"},
+        {"slug": "language", "kind": "language", "count": 1, "featureRef": "half-elf:languages"}],
+      "aliases": ["halfelf"]},
+    "half-orc": {"page": 7, "size": "medium", "speed": 30, "darkvision": 60, "asi": {"str": 2, "con": 1}, "languages": ["common", "orc"], "skills": ["intimidation"], "aliases": ["halforc"]},
+    "tiefling": {"page": 7, "size": "medium", "speed": 30, "darkvision": 60, "asi": {"int": 1, "cha": 2}, "languages": ["common", "infernal"], "resistances": ["fire"],
+      "racialSpells": {"featureRef": "tiefling:infernal-legacy", "ability": "cha", "spells": [{"spell": "thaumaturgy", "characterLevel": 1, "uses": "at_will"}, {"spell": "hellish-rebuke", "characterLevel": 3, "castLevel": 2, "uses": "1/long_rest"}, {"spell": "darkness", "characterLevel": 5, "uses": "1/long_rest"}]},
+      "aliases": ["tiefling"]}
+  },
+  "subraces": {
+    "dwarf:hill-dwarf": {"page": 4, "asi": {"wis": 1}, "grants": [{"kind": "hit_points", "perCharacterLevel": 1}]},
+    "elf:high-elf": {"page": 4, "asi": {"int": 1}, "weapons": ["longsword", "shortsword", "shortbow", "longbow"],
+      "choices": [{"slug": "cantrip", "kind": "spell", "count": 1, "spellFilter": {"lists": ["wizard"], "level": 0}, "ability": "int", "featureRef": "elf:high-elf:cantrip"}, {"slug": "language", "kind": "language", "count": 1, "featureRef": "elf:high-elf:extra-language"}]},
+    "halfling:lightfoot": {"page": 5, "asi": {"cha": 1}},
+    "gnome:rock-gnome": {"page": 6, "asi": {"con": 1}, "tools": ["tinkers-tools"]}
+  },
+  "backgrounds": {
+    "acolyte": {"page": 60, "pageEnd": 61, "skills": ["insight", "religion"],
+      "choices": [{"slug": "languages", "kind": "language", "count": 2}],
+      "pendingFeature": "Shelter of the Faithful (SRD 61): background_feature record is added to the public feature catalogue in P1b; equipment package — with the equipment projection in P1b."}
+  },
+  "feats": {
+    "grappler": {"page": 75, "featureRef": "feats:grappler", "prerequisites": {"abilityMinimum": {"ability": "str", "min": 13}}, "repeatable": false}
+  },
+  "abilityMethods": {
+    "source": {"documentId": "dnd-basic-rules-2014-player-v0.3", "title": "Player’s Basic Rules, Version 0.3 (June 2015), D&D 5e 2014", "url": "https://media.wizards.com/2015/downloads/dnd/BasicRules_Playerv3.4_PF.pdf", "pages": [7, 8], "license": "facts-only", "note": "Mechanical facts only; no prose, PDF or translation imported (plan r1 D1)."},
+    "standardArray": [15, 14, 13, 12, 10, 8],
+    "roll": {"dice": "4d6", "dropLowest": 1, "scores": 6},
+    "pointBuy": {"budget": 27, "min": 8, "max": 15, "cost": {"8": 0, "9": 1, "10": 2, "11": 3, "12": 4, "13": 5, "14": 7, "15": 9}}
+  }
+}

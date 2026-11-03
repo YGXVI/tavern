@@ -49,6 +49,24 @@ await deleteCatalogueTemplate(changed.id, changed.revision);
 
 Песочница использует owner/id ключи root catalogueEntries в rasputye-v2-db с прежними version/campaigns/creatures; использованные ID — root catalogueEntryIds с теми же ключами, пишется одним setItem вместе с записью. Живые записи, сохранённые до реестра, регистрируются при следующей записи владельца; ID, удалённые до реестра, восстановить нельзя. Проверяет ожидаемую ревизию последней локальной записи, возвращает ошибку localStorage; защищённую серверную авторизацию/межпроцессную транзакцию это не заменяет. Тестовые фабрики createCatalogueLibrary/createServerCatalogueLibrary принимают адаптеры.
 
+## Параметры создания героя (TASK-186 P1)
+
+`dist/js/data/character-options-2014.json` — публичный каталог `catalogueKind:'character_option'` в той же оболочке v1 (`schemaVersion/edition/revision/sourceHashes/coverage/entries`), загружается тем же `loadCatalogue('character_option')`. Личные шаблоны этот вид не принимают: `CATALOGUE_KINDS` (private) по-прежнему `feature`/`magic_item`, публичный список — `PUBLIC_CATALOGUE_KINDS`. Объём — только SRD-пакет (12 классов × 20 уровней, 12 подклассов, 9 рас, 4 подрасы, Acolyte, Grappler), покрытие и проверки — [data/character-options/README.md](../data/character-options/README.md).
+
+**Definition** `{id,kind,name,aliases,source,review,featureRefs,grants,choices}`; kind = class/subclass/race/subrace/background/feat, ID `srd51:<kind>:<slug>` (подкласс/подраса — `srd51:subclass:<class>:<id>`, `srd51:subrace:<race>:<id>`). У класса есть `class{hitDie,savingThrows,spellcasting,subclassLevel,subclassFeatureLevels,asiLevels,columns,multiclass}` и ровно 20 строк `progression[{level,proficiencyBonus,values,spellSlots,subclassFeature,grants,choices}]`; у подкласса — `classId`, `selectionLevel`, `optionRef` и 20 строк по **уровню класса**. Уровень всегда уровень соответствующего класса; общий уровень персонажа используется только в предикате `characterLevel` (например, заклинания тифлинга). `null` — неизвестно/нет значения в таблице, не 0.
+
+**Grant** `{id,kind,…}` — устойчивый ID, повторная оценка не начисляет его второй раз. kind: feature{ref}, proficiency{category,value}, language, ability_increase{ability,value,maximum?}, size, speed, sense, resistance, hit_points{perClassLevel|perCharacterLevel}, spell{ref,…,prerequisites?}, spell_list_addition{ref,spellLevel}. **Choice** `{id,kind,count,options|from|spellFilter,featureRef?,distinct,optional?,replacementPolicy?}`; kind: skill, tool, language, expertise, feature_option (варианты — ID опций #176), subclass, subrace, asi_or_feat, spell, ability_increase, favored_enemy, terrain. **Предикаты** — закрытый набор `all/any/not/classLevel/characterLevel/abilityMinimum/hasFeature/hasSpell/sourceEnabled/unique`; неизвестный оператор — ошибка валидации, исполняемых строк нет. Черта доступна только через `asi_or_feat` при `sourceEnabled:'rule:feats'`.
+
+Пример (реальная строка Fighter 3):
+
+```json
+{"level":3,"proficiencyBonus":2,"values":{},"spellSlots":null,"subclassFeature":false,
+ "grants":[{"id":"srd51:class:fighter:L3:feature:martial-archetype","kind":"feature","ref":"srd51:feature:fighter:martial-archetype"}],
+ "choices":[{"id":"srd51:class:fighter:L3:subclass","kind":"subclass","count":1,"options":["srd51:subclass:fighter:champion"],"featureRef":"srd51:feature:fighter:martial-archetype","distinct":true}]}
+```
+
+`validateCharacterOption` и `resolveCharacterOptionRefs` (`dist/js/rules/character-options.js`) — чистые функции без DOM/store/RNG/eval. Каталог описывает допустимые варианты; порядок решений, проверка истории уровней и инвалидация зависимых выборов — движок P2, запись героя — путь TASK-004 после согласования DTO с «Правилами».
+
 ## Граница C–D и проверки
 
 Экземпляр Character получает **свой instance ID**, источник — catalogueRef, текст — выбранный снимок. Состав полей и CAS/operationId листа согласует D с TASK-004; API каталога не пишет characters.data, не импортирует sheet/store model sync для этого и не меняет КБ/атаки/ресурсы. Отмена превью ничего не сохраняет. Владелец/мастер и управляющий ресурсами остаются разными правами.
