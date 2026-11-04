@@ -108,7 +108,10 @@ test('Runtime: только добавление ru, все EN и механич
     ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'ru').map(([key, v]) => [key, dropRu(v)])) : value;
   assert.equal(SRD.length, 322);
   // SHA JSON модуля до TASK-117, main bf3b426b8a05bab35bac655488fb6439c70fa419.
-  assert.equal(hashEnglish(JSON.stringify(dropRu(SRD))), '929ea66757f2fcae286b35a62a461aad6bea95f239bf02ba371065223a708fc3');
+  // Портреты (TASK-199) меняют только img: для сверки возвращаем прежние буквы имени, остальное — побайтно.
+  for (const m of SRD) assert.equal(m.img, `assets/portraits/srd/${m.id.slice(4)}.webp`, m.id);
+  const beforePortraits = SRD.map((m) => ({ ...m, img: `ini:${m.name}` }));
+  assert.equal(hashEnglish(JSON.stringify(dropRu(beforePortraits))), '929ea66757f2fcae286b35a62a461aad6bea95f239bf02ba371065223a708fc3');
   let count = 0;
   for (const monster of SRD) {
     const original = catalogue.monsters.find((m) => m.stat_block?.source === 'srd_api_2014' && `srd:${m.identity?.srd_index || m.identity?.slug}` === monster.id);
