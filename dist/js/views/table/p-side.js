@@ -258,7 +258,16 @@ function duplicateScene(ctx, sid) {
   const copy = structuredClone(s);
   copy.id = uid('s-');
   copy.name = `${s.name} (копия)`;
-  copy.tokens = copy.tokens.filter((t) => t.kind !== 'hero').map((t) => ({ ...t, id: uid('t-') }));
+  // Новые id — токенам и рисункам (на сервере это отдельные строки по id); ссылки езды и призыва — на копии.
+  const ids = new Map(copy.tokens.filter((t) => t.kind !== 'hero').map((t) => [t.id, uid('t-')]));
+  copy.tokens = copy.tokens.filter((t) => ids.has(t.id)).map((t) => {
+    const n = { ...t, id: ids.get(t.id) };
+    if (n.riding) { if (ids.has(n.riding)) n.riding = ids.get(n.riding); else delete n.riding; }
+    if (n.summonedBy) { if (ids.has(n.summonedBy)) n.summonedBy = ids.get(n.summonedBy); else delete n.summonedBy; }
+    delete n.sight; delete n.pending;
+    return n;
+  });
+  copy.drawings = (copy.drawings || []).map((d) => ({ ...d, id: uid('d-') }));
   copy.fog.explored = [];
   copy.status = 'draft';
   copy.createdAt = Date.now();
@@ -334,7 +343,7 @@ export function newSceneModal(ctx) {
       <div class="field"><label>Карта</label><div class="map-pick">
         ${BUILTIN_MAP_LIST.map((mp) => `<button class="map-opt ${!state.upload && state.map.id === mp.id ? 'on' : ''}" data-map="${mp.id}">${mapImg(mp.id)}<span>${esc(mp.name)}</span></button>`).join('')}
         <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp,.dd2vtt,.uvtt,.df2vtt" hidden data-upload></label>
-      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана · хранится только в этом браузере` : state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом. Хранится только в этом браузере.'}</div></div>
+      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана${isServerMode() ? '' : ' · хранится только в этом браузере'}` : state.upload ? `${state.upload.width}×${state.upload.height} px${isServerMode() ? '' : ' · хранится только в этом браузере'}` : `JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом.${isServerMode() ? '' : ' Хранится только в этом браузере.'}`}</div></div>
       <div class="form-grid">
         <div class="field"><label>Одна клетка</label><div class="chips-wrap">${[5, 10].map((f) => `<button class="chip chip-md ${state.feet === f ? 'chip-accent' : ''}" data-feet="${f}">${f} фт</button>`).join('')}</div></div>
         <div class="field"><label>Освещение</label><div class="chips-wrap"><button class="chip chip-md ${state.lighting === 'bright' ? 'chip-accent' : ''}" data-light="bright">${icon('sun-01', 12)}Светло</button><button class="chip chip-md ${state.lighting === 'dark' ? 'chip-accent' : ''}" data-light="dark">${icon('moon-02', 12)}Темно</button></div></div>

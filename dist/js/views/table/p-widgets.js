@@ -89,14 +89,14 @@ function party(ctx) {
     const owner = ownerOfCharacter(c, ch);
     const on = owner ? online.has(owner.id) : null;
     const tok = sc?.tokens.find((t) => t.characterId === ch.id);
-    const frac = Math.max(0, Math.min(1, ch.hp / Math.max(1, ch.hpMax)));
+    const frac = Math.max(0, Math.min(1, Number(ch.hp) / Math.max(1, Number(ch.hpMax)))) || 0;
     const conds = (ch.conditions || []).map((id) => conditionById(id)).filter(Boolean);
     const mine = ch.id === ctx.myCharacterId;
     return `<button class="list-row party-row ${mine ? 'mine' : ''}" data-act="party-focus" data-id="${esc(ch.id)}">${avatarImg(ch.portrait, `hero ${mine ? 'mine' : ''}`, on)}
       <span class="grow col-tight"><span class="row-tight"><span class="primary ellipsis">${esc(ch.name)}</span>${conds.slice(0, 3).map((x) => `<span class="mini-cond" title="${esc(x.name)}">${icon(x.icon, 12)}</span>`).join('')}</span>
-      <span class="secondary ellipsis">${esc(ch.className)} ${ch.level} · ${owner ? esc(owner.name) + (on ? '' : ' · не в сети') : 'без игрока'}${tok ? '' : ' · не на сцене'}</span>
-      <span class="hp-line"><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span><b class="${ch.hp <= 0 ? 'negative' : ''}">${ch.hp}/${ch.hpMax}</b></span></span>
-      <span class="chip">КД ${ch.ac}</span></button>`;
+      <span class="secondary ellipsis">${esc(ch.className)} ${esc(ch.level)} · ${owner ? esc(owner.name) + (on ? '' : ' · не в сети') : 'без игрока'}${tok ? '' : ' · не на сцене'}</span>
+      <span class="hp-line"><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span><b class="${ch.hp <= 0 ? 'negative' : ''}">${esc(ch.hp)}/${esc(ch.hpMax)}</b></span></span>
+      <span class="chip">КД ${esc(ch.ac)}</span></button>`;
   }).join('');
   return `<div class="widget panel party-widget">${head('Отряд', `${chars.length} ${plural(chars.length, 'герой', 'героя', 'героев')} · ${onCount} в сети`)}
     <div class="w-list scroll">${rows || '<p class="t-sm muted" style="padding:0 16px 12px">Пока никого — пригласите игроков</p>'}</div>
@@ -194,8 +194,8 @@ function entryRow(ctx, e, cur) {
   const hp = st.hpMax ? (showExact ? `${st.hp}/${st.hpMax}` : woundLabel(st.hp, st.hpMax)) : '';
   const down = st.hpMax > 0 && st.hp <= 0;
   const initCell = ctx.isMaster
-    ? `<button class="init-num ${e.init == null ? 'pending' : ''}" data-act="init-set" data-id="${esc(e.tokenId)}" data-tip="Изменить инициативу">${e.init ?? '?'}</button>`
-    : `<span class="init-num ${e.init == null ? 'pending' : ''}">${e.init ?? '?'}</span>`;
+    ? `<button class="init-num ${e.init == null ? 'pending' : ''}" data-act="init-set" data-id="${esc(e.tokenId)}" data-tip="Изменить инициативу">${esc(e.init ?? '?')}</button>`
+    : `<span class="init-num ${e.init == null ? 'pending' : ''}">${esc(e.init ?? '?')}</span>`;
   return `<div class="init-row ${isCur ? 'current' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${t.kind}">
       ${initCell}<button class="init-who" data-act="init-focus" data-id="${esc(e.tokenId)}">${avatarImg(t.img, `${t.kind} ${mine ? 'mine' : ''}`)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, st))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span><span class="secondary ellipsis">${esc(hp)}${(st.conditions || []).length ? ` · ${st.conditions.map((x) => conditionById(x)?.name).filter(Boolean).join(', ')}` : ''}</span></span></button>
       ${mine && e.init == null ? `<button class="btn btn-sm btn-primary" data-act="init-roll" data-id="${esc(e.tokenId)}">${icon('dice-faces-06', 14)}Бросить</button>`
@@ -221,12 +221,13 @@ function packRow(ctx, s, cur, marks) {
   const open = !!ctx.ui.packOpen?.has(s.key);
   const pend = lead.init == null ? 'pending' : '';
   const initCell = ctx.isMaster
-    ? `<button class="init-num ${pend}" data-act="init-set" data-id="${esc(lead.tokenId)}" data-tip="Инициатива пачки">${lead.init ?? '?'}</button>`
-    : `<span class="init-num ${pend}">${lead.init ?? '?'}</span>`;
+    ? `<button class="init-num ${pend}" data-act="init-set" data-id="${esc(lead.tokenId)}" data-tip="Инициатива пачки">${esc(lead.init ?? '?')}</button>`
+    : `<span class="init-num ${pend}">${esc(lead.init ?? '?')}</span>`;
   // Группа призывов игрока (#198 §4): один к20 владельца пишется во все записи группы.
   const roll = !ctx.isMaster && lead.init == null && ctx.actsFor(t) ? `<button class="btn btn-sm btn-primary" data-act="init-roll" data-id="${esc(lead.tokenId)}">${icon('dice-faces-06', 14)}Бросить</button>` : '';
   const members = open ? `<div class="pack-members">${ms.map((e) => {
-    const st = e.stats, showExact = ctx.isMasterView || ctx.c.settings.playersSeeHp === 'exact';
+    // Свои призывы игрок видит точно — как одиночек в очереди.
+    const st = e.stats, showExact = ctx.isMasterView || !!e.token.ownerId || !!e.token.summonedBy || ctx.c.settings.playersSeeHp === 'exact';
     const hp = st.hpMax ? (showExact ? `${st.hp}/${st.hpMax}` : woundLabel(st.hp, st.hpMax)) : '';
     return `<div class="pack-member ${fallen(e) ? 'downed' : ''} ${e.token.hidden ? 'is-hidden' : ''}"><button class="init-who" data-act="init-focus" data-id="${esc(e.tokenId)}">${avatarImg(e.token.img, e.token.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(e.token, st))}${e.token.hidden ? ` ${icon('view-off', 12)}` : ''}</span><span class="secondary ellipsis">${esc(hp)}</span></span></button>${ctx.isMaster ? `<button class="icon-btn icon-btn-xs" data-act="pack-split" data-id="${esc(e.tokenId)}" data-tip="Отделить: свой ход с той же инициативой" aria-label="Отделить ${esc(ctx.nameOf(e.token, st))}">${icon('link-04', 14)}</button>` : ''}</div>`;
   }).join('')}</div>` : '';

@@ -7,7 +7,7 @@ import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf, canFight } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers } from './combat.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers, keepTurnWith } from './combat.js';
 import { packKind, summonKind } from './packs.js';
 import { deathSaveStep, isDead, isStable } from '../../rules/attack.js';
 import { mobAttack } from './mob-attack.js';
@@ -323,19 +323,19 @@ export class Panels {
       for (const [uidKey, s] of this.shares) {
         if (s.sceneId !== ctx.sceneId || Date.now() - s.at > 10 * 60000) { this.shares.delete(uidKey); continue; }
         const n = s.targets.length;
-        cards.push(`<div class="float-card panel" data-key="share-${esc(uidKey)}">${icon('cone-01', 20)}<div class="titles"><b>${esc(s.name)}: шаблон ${s.tpl.size} фт</b><small>${n} ${plural(n, 'цель', 'цели', 'целей')} в области</small></div><button class="btn btn-sm btn-ghost" data-act="share-dismiss" data-id="${esc(uidKey)}">Убрать</button><button class="btn btn-sm btn-secondary" data-act="share-show" data-id="${esc(uidKey)}">${icon('location-01', 14)}Показать</button><button class="btn btn-sm btn-primary" data-act="share-saves" data-id="${esc(uidKey)}" ${n ? '' : 'disabled'}>${icon('dice-faces-06', 14)}Спасброски</button></div>`);
+        cards.push(`<div class="float-card panel" data-key="share-${esc(uidKey)}">${icon('cone-01', 20)}<div class="titles"><b>${esc(s.name)}: шаблон ${esc(s.tpl.size)} фт</b><small>${n} ${plural(n, 'цель', 'цели', 'целей')} в области</small></div><button class="btn btn-sm btn-ghost" data-act="share-dismiss" data-id="${esc(uidKey)}">Убрать</button><button class="btn btn-sm btn-secondary" data-act="share-show" data-id="${esc(uidKey)}">${icon('location-01', 14)}Показать</button><button class="btn btn-sm btn-primary" data-act="share-saves" data-id="${esc(uidKey)}" ${n ? '' : 'disabled'}>${icon('dice-faces-06', 14)}Спасброски</button></div>`);
       }
     } else {
       for (const r of reqs) for (const t of this.mySaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const m = this.saveMod(t, r.ability);
-        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${r.dc}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
+        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${esc(r.dc)}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
       }
       // Герой товарища, которого нет за столом: тихая карточка «бросить за него».
       for (const r of reqs) for (const t of this.friendSaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const name = tokenStats(c, t).name;
-        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${r.dc} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
+        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${esc(r.dc)} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
       }
     }
     const html = cards.join('');
@@ -354,9 +354,9 @@ export class Panels {
     const rows = toks.map((t) => {
       const st = tokenStats(c, t);
       const res = r.results[t.id];
-      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow ellipsis">${esc(st.name)}</span>${res ? `<b class="mono">${res.total}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">Бросить за него</button>`}</div>`;
+      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow ellipsis">${esc(st.name)}</span>${res ? `<b class="mono">${esc(res.total)}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">Бросить за него</button>`}</div>`;
     }).join('');
-    return `<div class="float-card panel save-card" data-key="save-${esc(r.id)}"><div class="sv-head"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>${esc(r.label)} · ${esc(ab.short)} СЛ ${r.dc}</b><small>${done} из ${toks.length} бросили${r.damage ? ` · урон ${esc(r.damage)}${r.half ? ', при успехе половина' : ''}` : ''}</small></div><button class="icon-btn icon-btn-xs" data-act="save-close" data-id="${esc(r.id)}" aria-label="Закрыть">${icon('cancel-01', 14)}</button></div>
+    return `<div class="float-card panel save-card" data-key="save-${esc(r.id)}"><div class="sv-head"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>${esc(r.label)} · ${esc(ab.short)} СЛ ${esc(r.dc)}</b><small>${done} из ${toks.length} бросили${r.damage ? ` · урон ${esc(r.damage)}${r.half ? ', при успехе половина' : ''}` : ''}</small></div><button class="icon-btn icon-btn-xs" data-act="save-close" data-id="${esc(r.id)}" aria-label="Закрыть">${icon('cancel-01', 14)}</button></div>
       <div class="sv-list">${rows}</div>
       ${r.damage ? `<div class="row"><span class="spacer"></span><button class="btn btn-sm btn-danger" data-act="save-apply" data-id="${esc(r.id)}" ${done ? '' : 'disabled'}>${icon('flash', 14)}Бросить урон и применить</button></div>` : ''}</div>`;
   }
@@ -538,18 +538,7 @@ export class Panels {
   /** Изменить участников боя, сохранив, чей сейчас ход. */
   keepTurn(fn) {
     const ctx = this.ctx, sid = ctx.sceneId;
-    updateCampaign(ctx.cid, (c) => {
-      const sc = c.scenes.find((s) => s.id === sid);
-      const before = currentEntry(c, sc, { raw: true })?.tokenId;
-      const group = c.combat.entries.find((e) => e.tokenId === before)?.group;
-      fn(c, sc);
-      if (!c.combat.entries.length) { endCombat(c); return; }
-      const order = initiativeOrder(c, sc);
-      // Ход остаётся за тем же слотом: у пачки — за пачкой, даже если её ведущего отделили (#198).
-      const stay = (group && order.find((e) => e.group === group)?.tokenId) || before;
-      const i = turnIndexOf(order, stay);
-      c.combat.turn = i >= 0 ? i : Math.min(c.combat.turn, order.length - 1);
-    });
+    updateCampaign(ctx.cid, (c) => keepTurnWith(c, c.scenes.find((s) => s.id === sid), fn));
   }
 
   /** Инициатива записи; у пачки (#198) — у всех её членов. */
@@ -611,6 +600,14 @@ export class Panels {
     const cur = currentEntry(ctx.c, ctx.scene);
     if (!cur) return;
     if (!ctx.isMaster && !ctx.actsFor(cur.token)) return;
+    // Сервер: игрок не передаёт ход сам — он отмечает «ход закончен» (ended), и клиент мастера сдвигает очередь.
+    // Номер хода у игрока может не совпадать с мастерским (скрытые участники), поэтому угадывать по нему нельзя.
+    if (!ctx.isMaster && isServerMode() && 'current' in (ctx.c.combat || {})) {
+      const raw = currentEntry(ctx.c, ctx.scene, { raw: true });
+      if (!raw || ctx.c.combat.ended === raw.tokenId) return;
+      updateCampaign(ctx.cid, (c) => { if (c.combat.current === raw.tokenId) c.combat.ended = raw.tokenId; });
+      return;
+    }
     this.nextTurn(1);
   }
 

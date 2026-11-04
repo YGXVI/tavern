@@ -5,8 +5,8 @@ import { srcOf, storeImage } from '../../core/assets.js';
 import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById } from '../../core/campaign.js';
 import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
-import { currentEntry } from './combat.js';
-import { ridingItems } from './riding.js';
+import { currentEntry, keepTurnWith } from './combat.js';
+import { ridingItems, editFields } from './riding.js';
 import { sightMenuItems } from './sight-ui.js';
 import { mobAttack } from './mob-attack.js';
 import { pendingItems, creatureCard } from './own-creature.js';
@@ -28,9 +28,9 @@ export function selectedTokens(ctx) {
 function hpCell(st, canEdit, id = '') {
   const frac = Math.max(0, Math.min(1, st.hp / Math.max(1, st.hpMax)));
   const num = canEdit
-    ? `<input class="hp-input ${st.hp <= 0 ? 'negative' : ''}" data-hp-input="${esc(id)}" value="${st.hp}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Хиты сейчас: впишите число, −урон или +лечение" data-tip="Впишите, сколько осталось, или −урон / +лечение">`
-    : `<b class="${st.hp <= 0 ? 'negative' : ''}">${st.hp}</b>`;
-  return `<div class="hp-cell ${canEdit ? 'editable' : ''}"><span class="hp-num"><small>хп</small> ${num}<b class="hp-max">/${st.hpMax}</b>${st.tempHp ? `<em>+${st.tempHp}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></div>${canEdit ? ib('hp', 'first-aid-kit', 'Урон, лечение, временные хиты') : ''}`;
+    ? `<input class="hp-input ${st.hp <= 0 ? 'negative' : ''}" data-hp-input="${esc(id)}" value="${esc(st.hp)}" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Хиты сейчас: впишите число, −урон или +лечение" data-tip="Впишите, сколько осталось, или −урон / +лечение">`
+    : `<b class="${st.hp <= 0 ? 'negative' : ''}">${esc(st.hp)}</b>`;
+  return `<div class="hp-cell ${canEdit ? 'editable' : ''}"><span class="hp-num"><small>хп</small> ${num}<b class="hp-max">/${esc(st.hpMax)}</b>${st.tempHp ? `<em>+${esc(st.tempHp)}</em>` : ''}</span><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span></div>${canEdit ? ib('hp', 'first-aid-kit', 'Урон, лечение, временные хиты') : ''}`;
 }
 
 /** Записать ввод хитов токену. */
@@ -63,7 +63,7 @@ export function setHp(ctx, id, value) {
       after = { ...pick(x), ...out };
       return out;
     });
-    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${st.name}: хиты ${st.hp} → ${hp}` });
+    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${st.name}: хиты ${st.hp} → ${hp}`, ...hpLogVis(c, [t]) });
   }, {
     label: 'Хиты',
     undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },
@@ -86,7 +86,7 @@ export function tokenBarHTML(ctx) {
     const title = same ? `${toks.length} ${plural(toks.length, names[0].toLowerCase(), names[0].toLowerCase(), names[0].toLowerCase())}` : `${toks.length} ${plural(toks.length, 'токен', 'токена', 'токенов')}`;
     return `<div class="toolbar token-bar">
       <span class="tb-avatars">${toks.slice(0, 3).map((t) => `<span class="mini-tok ${t.kind}" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>`).join('')}</span>
-      <span class="tb-titles"><b>${esc(same && toks.length > 1 ? `${toks.length} ${names[0].toLowerCase()}${toks.length > 4 ? 'ов' : 'а'}` : title)}</b><small>${allHidden ? 'скрыты от игроков' : 'выделено'}</small></span>${div}
+      <span class="tb-titles"><b>${esc(same && toks.length > 1 ? `${names[0]} ×${toks.length}` : title)}</b><small>${allHidden ? 'скрыты от игроков' : 'выделено'}</small></span>${div}
       ${ib('combat-add', 'sword-03', c.combat.active ? 'Добавить в бой' : 'Начать бой с ними')}${ib('hp', 'first-aid-kit', 'Хиты всем (урон по области)')}${ib('conditions', 'sparkles', 'Состояния')}${ib('visibility', allHidden ? 'view-off' : 'view', allHidden ? 'Скрыты от игроков' : 'Видны игрокам', allHidden ? 'aria-pressed="true"' : '')}${ib('token-menu', 'more-vertical', 'Ещё')}${div}
       ${allHidden ? `<button class="btn btn-sm btn-secondary" data-act="reveal">${icon('view', 16)}Показать игрокам</button>` : ''}${ib('deselect', 'cancel-01', 'Снять выделение')}</div>`;
   }
@@ -119,7 +119,7 @@ export function tokenBarHTML(ctx) {
         : isStable(ds) ? `${div}<span class="chip chip-md chip-success">${icon('heart-check', 12)}Стабилен</span>`
         : `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
     } else {
-      middle += `${div}<span class="chip chip-md">КД ${st.ac}</span><span class="chip chip-md">${left !== null ? `${left}/${st.speed} фт` : `${st.speed} фт`}</span>${master && t.kind === 'foe' ? `<span class="chip chip-md">Иниц. ${fmtMod(st.initBonus)}</span>` : ''}`;
+      middle += `${div}<span class="chip chip-md">КД ${esc(st.ac)}</span><span class="chip chip-md">${left !== null ? `${esc(left)}/${esc(st.speed)} фт` : `${esc(st.speed)} фт`}</span>${master && t.kind === 'foe' ? `<span class="chip chip-md">Иниц. ${fmtMod(st.initBonus)}</span>` : ''}`;
     }
     return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${esc(down ? (t.kind === 'hero' && isDead(st.deathSaves) ? 'Погиб' : `Без сознания${mine ? ' · ваш ход' : ''}`) : sub)}</small></span>${div}${middle}${div}
       ${ib('conditions', 'sparkles', `Состояния${st.conditions.length ? ` · ${st.conditions.length}` : ''}`)}${master ? ib('visibility', t.hidden ? 'view-off' : 'view', t.hidden ? 'Скрыт от игроков' : 'Виден игрокам', t.hidden ? 'aria-pressed="true"' : '') : ''}
@@ -146,9 +146,9 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   const one = toks.length === 1 ? toks[0] : null;
   const st = one ? tokenStats(ctx.c, one) : null;
   const pop = popover(`<div class="hp-editor">
-    <div class="panel-header">${one ? `<span class="avatar sm ${one.kind}"><img src="${esc(srcOf(one.img))}" alt=""></span>` : ''}<div class="titles"><div class="title">${esc(one ? st.name : `${toks.length} ${plural(toks.length, 'цель', 'цели', 'целей')}`)}</div><div class="subtitle">${one ? `${st.hp} из ${st.hpMax} хитов${st.tempHp ? ` · +${st.tempHp} временных` : ''}` : 'Урон по области: одно число для всех'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-header">${one ? `<span class="avatar sm ${one.kind}"><img src="${esc(srcOf(one.img))}" alt=""></span>` : ''}<div class="titles"><div class="title">${esc(one ? st.name : `${toks.length} ${plural(toks.length, 'цель', 'цели', 'целей')}`)}</div><div class="subtitle">${one ? `${esc(st.hp)} из ${esc(st.hpMax)} хитов${st.tempHp ? ` · +${esc(st.tempHp)} временных` : ''}` : 'Урон по области: одно число для всех'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
     ${one ? `<div class="panel-section"><label class="label" for="hpset">Осталось хитов</label>
-      <div class="row"><div class="input grow"><input id="hpset" type="number" min="0" max="${st.hpMax}" inputmode="numeric" value="${st.hp}" data-set><span class="suffix">из ${st.hpMax}</span></div><button class="btn btn-primary" data-set-ok>${icon('tick-02', 16)}Записать</button></div>
+      <div class="row"><div class="input grow"><input id="hpset" type="number" min="0" max="${esc(st.hpMax)}" inputmode="numeric" value="${esc(st.hp)}" data-set><span class="suffix">из ${esc(st.hpMax)}</span></div><button class="btn btn-primary" data-set-ok>${icon('tick-02', 16)}Записать</button></div>
       <span class="t-xs tertiary">Впишите число — без подсчётов. Или ниже: урон и лечение с учётом временных хитов.</span></div><hr class="panel-divider">` : ''}
     <div class="panel-section">
       <label class="label" for="hpv">${one ? 'Урон или лечение' : 'Сколько хитов'}</label>
@@ -157,7 +157,7 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
       <div class="row hp-actions"><button class="btn btn-danger grow" data-dmg>${icon('minus-sign', 16)}Урон</button><button class="btn btn-success grow" data-heal>${icon('plus-sign', 16)}Лечение</button></div>
     </div>
     ${one ? `<hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('shield-01', 18)}<span class="titles"><span class="label-main">Временные хиты</span></span><div class="input" style="width:72px;height:32px"><input type="number" min="0" data-temp value="${st.tempHp || ''}" placeholder="0"></div></div>
-      ${ctx.isMasterView ? `<div class="setting-row">${icon('favourite', 18)}<span class="titles"><span class="label-main">Максимум хитов</span></span><div class="input" style="width:72px;height:32px"><input type="number" min="1" data-max value="${st.hpMax}"></div></div>` : ''}</div>` : ''}
+      ${ctx.isMasterView ? `<div class="setting-row">${icon('favourite', 18)}<span class="titles"><span class="label-main">Максимум хитов</span></span><div class="input" style="width:72px;height:32px"><input type="number" min="1" data-max value="${esc(st.hpMax)}"></div></div>` : ''}</div>` : ''}
   </div>`, anchor, { placement: 'top', className: 'hp-pop' });
   const box = pop.node;
   const v = box.querySelector('[data-v]');
@@ -229,8 +229,9 @@ export function applyHp(ctx, ids, delta, { crit = false } = {}) {
         return out;
       });
     }
-    const names = ids.map((id) => s.tokens.find((x) => x.id === id)).filter(Boolean).map((t) => tokenStats(c, t).name).join(', ');
-    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${names}: ${delta < 0 ? `урон ${-delta}` : `лечение ${delta}`}` });
+    const hit = ids.map((id) => s.tokens.find((x) => x.id === id)).filter(Boolean);
+    const names = hit.map((t) => tokenStats(c, t).name).join(', ');
+    addLog(c, { kind: 'hp', userId: ctx.userId, text: `${names}: ${delta < 0 ? `урон ${-delta}` : `лечение ${delta}`}`, ...hpLogVis(c, hit) });
   }, {
     label: 'Хиты',
     undo: (s, c) => { for (const id of ids) if (before[id]) patchTokenStats(c, s, id, () => structuredClone(before[id])); },
@@ -360,11 +361,17 @@ export function tokenSettings(ctx, id, anchor) {
     const sw = e.target.closest('[data-aura-color]');
     if (sw) upd((t, c) => setAura(t, c, { ...t.aura, color: sw.dataset.auraColor }));
   });
-  // Живой предпросмотр цвета и заметности — в памяти, запись по отпусканию.
+  // Живой предпросмотр цвета и заметности — в памяти, запись по отпусканию. Перед записью предпросмотр откатывается
+  // к исходному значению: иначе «до» уже содержит новое, разница пуста и сервер изменения не получает.
+  const orig = new Map(); // 'light' | 'aura' → значение до предпросмотра
+  const keep = (t, f) => { if (!orig.has(f)) orig.set(f, structuredClone(t[f] ?? null)); };
+  const restore = () => { const t = ctx.scene?.tokens.find((x) => x.id === id); if (t) for (const [f, v] of orig) t[f] = v; orig.clear(); };
+  box.addEventListener('change', restore, true);
   box.addEventListener('input', (e) => {
     const t = ctx.scene.tokens.find((x) => x.id === id);
     if (e.target.matches('[data-tl]') && t?.light) {
       const k = e.target.dataset.tl, v = Number(e.target.value);
+      keep(t, 'light');
       t.light = { ...t.light, [k]: v };
       e.target.style.setProperty('--fill', `${(v / 60) * 100}%`);
       box.querySelector(`[data-tl-out="${k}"]`).textContent = `${v} фт`;
@@ -372,6 +379,7 @@ export function tokenSettings(ctx, id, anchor) {
       return;
     }
     if (!t?.aura) return;
+    if (e.target.matches('[data-aura-op]') || e.target.matches('[data-aura-custom]')) keep(t, 'aura');
     if (e.target.matches('[data-aura-op]')) {
       const v = Number(e.target.value);
       t.aura = { ...t.aura, opacity: v };
@@ -399,6 +407,15 @@ function setAura(t, c, a) {
 }
 
 /** Удалить токены; drawIds — рисунки группы из рамки (TASK-169), в той же записи — один шаг отмены. */
+/**
+ * Запись о хитах в журнал: скрытый токен, тайное имя и точные хиты врага (если игрокам их не показывают) — только
+ * мастеру; на сервере такая запись уходит в log_secrets, игроки её текста не получают.
+ */
+export function hpLogVis(c, toks) {
+  const secret = toks.some((t) => t.hidden || t.nameHidden || (t.kind === 'foe' && !t.ownerId && !t.summonedBy && c.settings?.playersSeeHp !== 'exact'));
+  return secret ? { vis: 'gm', hidden: true } : {};
+}
+
 export async function deleteTokens(ctx, ids, drawIds = []) {
   // Игрок удаляет только свои токены и призывы (TASK-183); очередь боя меняет мастер — токен из боя убирает он.
   if (!ctx.isMasterView) {
@@ -427,11 +444,18 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
   // и стоят на его клетке (TASK-187). Отмена связи возвращает.
   const orphans = ctx.scene.tokens.filter((t) => t.summonedBy && ids.includes(t.summonedBy) && !ids.includes(t.id)).map((t) => [t.id, t.summonedBy]);
   const riders = ctx.scene.tokens.filter((t) => t.riding && ids.includes(t.riding) && !ids.includes(t.id)).map((t) => [t.id, t.riding]);
+  // Ход и раунд до удаления — отмена возвращает их вместе с записями боя.
+  const turn0 = ctx.c.combat.active ? { turn: ctx.c.combat.turn, round: ctx.c.combat.round, startedAt: ctx.c.combat.startedAt } : null;
   const drop = (s, c) => {
-    s.tokens = s.tokens.filter((t) => !ids.includes(t.id));
-    for (const [id] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.summonedBy; }
-    for (const [id] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.riding; }
-    c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId));
+    const inFight = c.combat.active && c.combat.entries.some((e) => ids.includes(e.tokenId)) && c.combat.entries.some((e) => !ids.includes(e.tokenId));
+    const cut = () => {
+      s.tokens = s.tokens.filter((t) => !ids.includes(t.id));
+      for (const [id] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.summonedBy; }
+      for (const [id] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) delete t.riding; }
+      c.combat.entries = c.combat.entries.filter((e) => !ids.includes(e.tokenId));
+    };
+    // Убрали того, кто ходит, — ход переходит к следующему, а не «зависает» на пустом месте.
+    if (inFight) keepTurnWith(c, s, cut); else cut();
     dropDraws(s);
   };
   ctx.mutateScene(drop, {
@@ -440,7 +464,11 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
       s.tokens.push(...structuredClone(copies));
       for (const [id, by] of orphans) { const t = s.tokens.find((x) => x.id === id); if (t) t.summonedBy = by; }
       for (const [id, on] of riders) { const t = s.tokens.find((x) => x.id === id); if (t) t.riding = on; }
-      if (c.combat.active) for (const { e, i } of entries) if (!c.combat.entries.some((x) => x.tokenId === e.tokenId)) c.combat.entries.splice(Math.min(i, c.combat.entries.length), 0, structuredClone(e));
+      if (c.combat.active) {
+        const back = entries.filter(({ e }) => !c.combat.entries.some((x) => x.tokenId === e.tokenId));
+        for (const { e, i } of back) c.combat.entries.splice(Math.min(i, c.combat.entries.length), 0, structuredClone(e));
+        if (back.length && turn0 && c.combat.startedAt === turn0.startedAt) { c.combat.turn = turn0.turn; c.combat.round = turn0.round; }
+      }
       if (dcopies.length) s.drawings.push(...structuredClone(dcopies));
     },
     redo: drop,
@@ -459,7 +487,7 @@ export function toggleHidden(ctx, ids, force = null) {
 
 export function duplicateTokens(ctx, ids) {
   const g = gridSize(ctx.scene.grid);
-  const copies = [];
+  const copies = [], made = [];
   ctx.mutateScene((s) => {
     for (const id of ids) {
       const t = s.tokens.find((x) => x.id === id);
@@ -467,9 +495,11 @@ export function duplicateTokens(ctx, ids) {
       const base = t.name.replace(/\s\d+$/, '');
       const n = { ...structuredClone(t), id: uid('t-'), name: nextTokenName(s, base), x: t.x + g, y: t.y };
       delete n.sight; // выданные глаза (#190 C) копия не наследует
-      s.tokens.push(n); copies.push(n.id);
+      delete n.riding; // копия стоит в стороне — не верхом
+      delete n.pending;
+      s.tokens.push(n); copies.push(n.id); made.push(structuredClone(n));
     }
-  }, { label: 'Копия', undo: (s) => { s.tokens = s.tokens.filter((t) => !copies.includes(t.id)); }, redo: () => {} });
+  }, { label: 'Копия', undo: (s) => { s.tokens = s.tokens.filter((t) => !copies.includes(t.id)); }, redo: (s) => { for (const n of made) if (!s.tokens.some((t) => t.id === n.id)) s.tokens.push(structuredClone(n)); } });
   if (copies.length) ctx.select(copies);
 }
 
@@ -490,7 +520,8 @@ export function pasteTokens(ctx, at) {
     for (const t0 of cb.items) {
       const base = t0.name.replace(/\s\d+$/, '');
       const t = { ...structuredClone(t0), id: uid('t-'), name: nextTokenName(s, base), x: Math.max(0, Math.min(m.width, at.x + (t0.x - cb.cx))), y: Math.max(0, Math.min(m.height, at.y + (t0.y - cb.cy))) };
-      delete t.sight;
+      delete t.sight; delete t.riding; delete t.pending;
+      if (t.summonedBy && !s.tokens.some((x) => x.id === t.summonedBy)) delete t.summonedBy; // призыватель — на другой сцене
       s.tokens.push(t); made.push(t);
     }
   }, { label: 'Вставка', undo: (s) => { const ids = new Set(made.map((t) => t.id)); s.tokens = s.tokens.filter((t) => !ids.has(t.id)); }, redo: (s) => { s.tokens.push(...structuredClone(made)); } });
@@ -602,12 +633,9 @@ function bindStats(ctx, node) {
 
 // ——— Свой токен и призыв игрока (TASK-183, план TASK-097 п. 3.2): пункты меню владельца ———
 const DISPOSITIONS = [['friendly', 'Союзник'], ['neutral', 'Нейтрал'], ['hostile', 'Враг']];
-/** Правка своего токена с отменой: fn меняет поля токена в сцене. */
+/** Правка своего токена с отменой только изменённых полей (чужие правки отмена не трогает). */
 function updOwn(ctx, id, label, fn) {
-  const before = structuredClone(ctx.scene.tokens.find((x) => x.id === id));
-  if (!before) return;
-  ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === id); if (x) fn(x); },
-    { label, undo: (s) => { const i = s.tokens.findIndex((q) => q.id === id); if (i >= 0) s.tokens[i] = structuredClone(before); }, redo: (s) => { const x = s.tokens.find((q) => q.id === id); if (x) fn(x); } });
+  editFields(ctx, [id], label, (x) => fn(x));
 }
 export function renameOwn(ctx, id) {
   const t = ctx.scene?.tokens.find((x) => x.id === id);

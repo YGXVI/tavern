@@ -256,7 +256,8 @@ function campaign(o) {
 
 export function makeInviteCode() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const a = crypto.getRandomValues(new Uint32Array(4));
+  // 8 знаков (~10¹² вариантов): по 4 код подбирался перебором (review C12). Формат сервера допускает 4–8.
+  const a = crypto.getRandomValues(new Uint32Array(8));
   return 'RSP-' + [...a].map((x) => abc[x % abc.length]).join('');
 }
 

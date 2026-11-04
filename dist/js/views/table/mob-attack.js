@@ -14,7 +14,8 @@ import { footprintAt, footprintGap } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { initiativeOrder, slotMembers } from './combat.js';
 import { attackOutcome, critDamageFormula, heroDamage } from '../../rules/attack.js';
-import { showRollToast } from './dice.js';
+import { showRollToast, poolVis } from './dice.js';
+import { hpLogVis } from './p-token.js';
 
 // ——— Правила (чистые функции, покрыты тестами) ———
 const rnd = (sides, random = Math.random) => Math.floor(random() * sides) + 1;
@@ -28,9 +29,24 @@ export function attackReach(a) {
   const text = `${a.desc || ''} ${a.note || ''}`;
   let m;
   if (out.melee == null && (m = text.match(/reach (\d+) ft/i) || text.match(/досягаемость (\d+) фт/i))) out.melee = Number(m[1]);
-  if (!out.range && (m = text.match(/range (\d+)\/(\d+) ft/i) || text.match(/дистанция (\d+)\/(\d+) фт/i))) out.range = { normal: Number(m[1]), long: Number(m[2]) };
+  if (!out.range && (m = text.match(/range (\d+)\/(\d+) ft/i) || text.match(/(?:дистанция|дальность) (\d+)\/(\d+) фт/i))) out.range = { normal: Number(m[1]), long: Number(m[2]) };
   return out.melee != null || out.range ? out : null;
 }
+
+/**
+ * Действие — бросок атаки: есть бонус к попаданию и урон. «+0 к попаданию» (кошка, крыса) — тоже атака; бонус 0 у
+ * дыхания и мультиатаки — нет (у них в описании нет «Attack: +0 to hit»).
+ */
+export function isAttackAction(a) {
+  if (!a) return false;
+  if (Number.isFinite(a.attack?.bonus)) return true;
+  if (!Number.isFinite(a.bonus) || !a.damage) return false;
+  return a.bonus !== 0 || /attack:\s*\+0 to hit/i.test(a.desc || '') || /атака[^:]*:\s*\+0 к попаданию/i.test(a.ru || a.note || '');
+}
+
+/** Цель беспомощна (парализована, без сознания): попадание с 5 фт — критическое (PHB, приложение A). */
+export const HELPLESS = ['paralyzed', 'unconscious'];
+export const autoCrit = (conditions, ft) => ft != null && ft <= 5 && (conditions || []).some((c) => HELPLESS.includes(c));
 
 /** Достаёт ли атакующий цель: {ok, disadv, ft}. reach null — дальность не указана, считаем «достаёт». */
 export function inReach(scene, attacker, target, reach) {
@@ -126,7 +142,7 @@ export function mobAttack(ctx, tokenId) {
   const pack = (slotMembers(order, tokenId).length ? slotMembers(order, tokenId) : order.filter((e) => e.tokenId === tokenId)).filter((e) => !fallen(e.stats));
   if (!pack.length) { ctx.toast({ title: 'Некому атаковать', body: 'Все члены пачки выбыли', icon: 'sword-03' }); return; }
   const lead = pack[0];
-  const actions = (lead.stats.monster?.actions || []).filter((a) => a.bonus || a.attack?.bonus != null).map((a, i) => ({ ...a, i, bonus: a.bonus ?? a.attack.bonus }));
+  const actions = (lead.stats.monster?.actions || []).map((a, i) => ({ a, i })).filter(({ a }) => isAttackAction(a)).map(({ a, i }) => ({ ...a, i, bonus: Number.isFinite(a.attack?.bonus) ? a.attack.bonus : a.bonus }));
   if (!actions.length) { ctx.toast({ title: 'В статблоке нет атак', body: 'Атака толпой берёт действие с бонусом к попаданию', icon: 'sword-03' }); return; }
   const memberIds = new Set(pack.map((e) => e.tokenId));
   const targets = sc.tokens.filter((t) => t.kind !== 'item' && !memberIds.has(t.id));
@@ -162,6 +178,7 @@ export function mobAttack(ctx, tokenId) {
         <label class="field"><span class="label">Цель</span><span class="input"><select data-target>${targets.map((t) => `<option value="${esc(t.id)}" ${t.id === st.target ? 'selected' : ''}>${esc(name(t))}${t.hidden ? ' (скрыт)' : ''} · КД ${tokenStats(ctx.c, t).ac ?? '—'}</option>`).join('')}</select></span></label>
         <label class="field"><span class="label">Действие</span><span class="input"><select data-action>${actions.map((x) => `<option value="${x.i}" ${x.i === st.action ? 'selected' : ''}>${esc(x.name)} · ${x.bonus >= 0 ? '+' : ''}${x.bonus}${x.damage ? ` · ${esc(x.damage)}${x.type ? ` ${esc(x.type)}` : ''}` : ''}</option>`).join('')}</select></span></label>
         <p class="t-sm muted">${esc(reachText)}</p>
+        ${tst && (tst.conditions || []).some((x) => HELPLESS.includes(x)) ? '<p class="t-sm muted">Цель беспомощна: атаки по ней с преимуществом, попадание с 5 фт — критическое.</p>' : ''}
       </div>
       <div class="panel-section"><div class="label">Кто атакует · достают ${can.length} из ${pack.length}</div>
         <div class="mob-who">${pack.map((e) => {
@@ -180,7 +197,9 @@ export function mobAttack(ctx, tokenId) {
       <div class="panel-footer"><span class="t-sm muted grow">${tst ? `КД цели ${(tst.ac ?? 10) + Number(st.cover)}` : ''}</span><button class="btn btn-sm btn-ghost" data-close>Отмена</button><button class="btn btn-sm btn-primary" data-roll ${can.length && a?.damage ? '' : 'disabled'}>${icon('sword-03', 14)}Бросить ${can.length * st.attacks} ${plural(can.length * st.attacks, 'атаку', 'атаки', 'атак')}</button></div>`);
   };
 
-  const hitsOf = () => st.result.map((r) => ({ ...r, res: outcome(r.nat, r.total, st.ac) })).map((r) => ({ ...r, damage: r.res === 'crit' ? r.crit?.total || 0 : r.res === 'hit' ? r.normal?.total || 0 : 0, isCrit: r.res === 'crit' }));
+  // Попадание вплотную по парализованной или лежащей без сознания цели — крит (near — атакующий в 5 фт).
+  const hitsOf = () => st.result.map((r) => { const res = outcome(r.nat, r.total, st.ac); return { ...r, res: res === 'hit' && r.helpless ? 'crit' : res }; })
+    .map((r) => ({ ...r, damage: r.res === 'crit' ? r.crit?.total || 0 : r.res === 'hit' ? r.normal?.total || 0 : 0, isCrit: r.res === 'crit' }));
   const renderResult = (target, tst, a) => {
     const rows = hitsOf();
     const hits = rows.filter((r) => r.res !== 'miss');
@@ -188,7 +207,7 @@ export function mobAttack(ctx, tokenId) {
     const sum = hits.reduce((s, r) => s + adjust(r.damage, st.rel), 0);
     dlg.set(`<div class="panel-header"><div class="titles"><div class="title">Атака толпой · ${esc(a.name)}</div><div class="subtitle">${esc(packName)} → ${esc(name(target))}</div></div><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
       <div class="panel-section"><div class="mob-sum"><b>${rows.length} ${plural(rows.length, 'атака', 'атаки', 'атак')}: ${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}${crits ? ` (${crits} ${plural(crits, 'крит', 'крита', 'критов')})` : ''}</b><span>урон ${sum}${st.rel ? ` · ${{ resist: 'сопротивление', vuln: 'уязвимость', immune: 'иммунитет' }[st.rel]}` : ''}</span></div>
-        <label class="mob-ac"><span class="t-sm">КД цели</span><span class="input"><input type="number" min="0" max="40" data-ac value="${st.ac}"></span><small class="muted">Поправьте, если цель успела наложить «Щит», — попадания пересчитаются</small></label></div>
+        <label class="mob-ac"><span class="t-sm">КД цели</span><span class="input"><input type="number" min="0" max="40" data-ac value="${esc(st.ac)}"></span><small class="muted">Поправьте, если цель успела наложить «Щит», — попадания пересчитаются</small></label></div>
       <div class="panel-section mob-rows">${rows.map((r) => `<div class="mob-row ${r.res}"><span class="grow ellipsis">${esc(r.name)}</span><span class="mono">к20 ${r.mode ? `${r.nat} <s>${r.other === r.nat ? r.nat : r.other}</s>` : r.nat} ${a.bonus >= 0 ? '+' : '−'} ${Math.abs(a.bonus)} = ${r.total}</span><b>${r.res === 'crit' ? 'крит' : r.res === 'hit' ? 'попал' : 'мимо'}</b><span class="mono dmg">${r.res === 'miss' ? '—' : adjust(r.damage, st.rel)}</span></div>`).join('')}</div>
       <div class="panel-footer"><button class="btn btn-sm btn-ghost" data-back>${icon('arrow-left-01', 14)}Назад</button><span class="spacer"></span><button class="btn btn-sm btn-secondary" data-reroll>Перебросить</button><button class="btn btn-sm btn-primary" data-apply ${hits.length ? '' : 'disabled'}>${icon('first-aid-kit', 14)}Нанести урон${hits.length ? ` · ${sum}` : ''}</button></div>`);
   };
@@ -197,12 +216,14 @@ export function mobAttack(ctx, tokenId) {
     const { target, a, map } = reachInfo();
     const tst = tokenStats(ctx.c, target);
     const attackers = pack.filter((e) => st.on.has(e.tokenId) && map.get(e.tokenId)?.ok).map((e) => ({ id: e.tokenId, name: name(e.token), disadv: !!map.get(e.tokenId)?.disadv }));
-    st.result = rollAttacks({ attackers, bonus: a.bonus, damage: a.damage, attacks: Number(st.attacks), adv: st.adv });
+    const conds = tst.conditions || [];
+    st.result = rollAttacks({ attackers, bonus: a.bonus, damage: a.damage, attacks: Number(st.attacks), adv: st.adv })
+      .map((r) => ({ ...r, helpless: autoCrit(conds, map.get(r.id)?.ft) }));
     st.ac = (tst.ac ?? 10) + Number(st.cover);
     // Журнал — одна запись; видимость — как у бросков мастера за монстров (скрытый остаётся скрытым).
     const rows = hitsOf(), hits = rows.filter((r) => r.res !== 'miss');
-    const hidden = !!ctx.ui.dicePool?.hidden || attackers.some((x) => sc.tokens.find((t) => t.id === x.id)?.hidden);
-    const entry = { id: uid('r-'), at: Date.now(), userId: ctx.userId, kind: 'attack', label: `${packName}: ${a.name} → ${name(target)}`, total: hits.length, detail: `${rows.length} ${plural(rows.length, 'атака', 'атаки', 'атак')} против КД ${st.ac}: ${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}${hits.filter((r) => r.isCrit).length ? `, критов ${hits.filter((r) => r.isCrit).length}` : ''} · к20: ${rows.map((r) => r.nat).join(', ')}`, hidden, vis: hidden ? 'gm' : 'all', nat: null };
+    const vis = poolVis(ctx, attackers.some((x) => sc.tokens.find((t) => t.id === x.id)?.hidden)), hidden = vis !== 'all';
+    const entry = { id: uid('r-'), at: Date.now(), userId: ctx.userId, kind: 'attack', label: `${packName}: ${a.name} → ${name(target)}`, total: hits.length, detail: `${rows.length} ${plural(rows.length, 'атака', 'атаки', 'атак')} против КД ${st.ac}: ${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}${hits.filter((r) => r.isCrit).length ? `, критов ${hits.filter((r) => r.isCrit).length}` : ''} · к20: ${rows.map((r) => r.nat).join(', ')}`, hidden, vis, nat: null };
     updateCampaign(ctx.cid, (c) => addLog(c, entry));
     bus.send('roll', { cid: ctx.cid, entry });
     showRollToast(ctx, entry, true);
@@ -224,7 +245,8 @@ export function mobAttack(ctx, tokenId) {
         after = { ...before, ...out };
         return out;
       });
-      addLog(c, { kind: 'hp', userId: ctx.userId, text: `${tokenStats(c, s.tokens.find((t) => t.id === id)).name}: урон ${res?.dealt ?? 0} — атака толпой (${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}, ${a.name})` });
+      const tt = s.tokens.find((t) => t.id === id);
+      addLog(c, { kind: 'hp', userId: ctx.userId, ...hpLogVis(c, [tt].filter(Boolean)), text: `${tokenStats(c, tt).name}: урон ${res?.dealt ?? 0} — атака толпой (${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}, ${a.name})` });
     }, {
       label: 'Атака толпой',
       undo: (s, c) => { if (before) patchTokenStats(c, s, id, () => structuredClone(before)); },

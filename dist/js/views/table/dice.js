@@ -58,10 +58,21 @@ export const rollVis = (l) => l.vis || (l.hidden ? 'gm' : 'all');
 /** Видно ли этому участнику число броска. */
 export function canSeeRoll(ctx, l) {
   const v = rollVis(l), mine = l.userId === ctx.userId;
+  // Тайная часть скрытого броска ещё не пришла с сервера — числа нет, показываем как скрытый.
+  if (l.redacted && !mine) return false;
   if (v === 'all') return true;
   if (v === 'gm') return mine || ctx.isMaster;
   if (v === 'blind') return ctx.isMaster;
   return mine;
+}
+/**
+ * Кому виден бросок с листа или статблока — как выбрано на панели кубов. «Вслепую» у мастера — просто скрыто;
+ * hidden (скрытый токен мастера) делает открытый бросок скрытым: число и имя не должны выдать засаду.
+ */
+export function poolVis(ctx, hidden = false) {
+  const p = ctx.ui.dicePool || {};
+  const v = ctx.isMaster && p.vis === 'blind' ? 'gm' : p.vis || 'all';
+  return hidden && v === 'all' ? 'gm' : v;
 }
 /** Знает ли участник, что бросок был (бросок «себе» другим не показывается). */
 export const knowsRoll = (ctx, l) => rollVis(l) !== 'self' || l.userId === ctx.userId;
