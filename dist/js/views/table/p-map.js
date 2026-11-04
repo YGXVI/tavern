@@ -7,8 +7,8 @@ import { tokenStats, characterOf, addLog, sceneOf, updateCampaign, monsterOf } f
 import { LIGHTS, LIGHT_COLORS, ABILITIES, mod, profBonus, TEMPLATES } from '../../data/rules.js';
 import { WALL_KINDS, cellOf, footprintAt, gridSize, gridDims, templateCells, footprintCells, key, cellCenter } from '../../rules/geometry.js';
 import { popover, closePopover, confirmDialog } from '../../ui/kit.js';
-import { doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
-import { attackOutcome, critDamageFormula } from '../../rules/attack.js';
+import { poolVis, doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
+import { attackOutcome, critDamageFormula, opportunityAttack } from '../../rules/attack.js';
 import { ridersOf } from './riding.js';
 import { sizeById } from '../../data/rules.js';
 import { hpEditor } from './p-token.js';
@@ -508,12 +508,17 @@ export function opportunityForMaster(ctx, p) {
     if (!f) continue;
     const fs = tokenStats(ctx.c, f);
     const m = monsterOf(ctx.c, f.monsterId);
-    const a = m?.actions.find((x) => x.bonus);
+    const { action: a, why } = opportunityAttack(m?.actions, ctx.c.combat?.reacted?.[fid]);
     ctx.toast({
-      title: `${st.name} выходит из досягаемости`, body: `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,
+      title: `${st.name} выходит из досягаемости`, body: why || `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,
       // #197 R1/R2: натуральная 1 — промах, на крите удваиваются только кости урона (модификатор — один раз).
       action: a ? { label: 'Атаковать', onClick: () => {
-        const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack' });
+        // Проверяем повторно: мастер мог оставить несколько уведомлений открытыми.
+        if (ctx.scene?.id !== sc.id) return;
+        const check = opportunityAttack(monsterOf(ctx.c, f.monsterId)?.actions, ctx.c.combat?.reacted?.[fid]);
+        if (!check.action) { ctx.toast({ title: check.why, icon: 'sword-03' }); return; }
+        updateCampaign(ctx.cid, (c) => { (c.combat.reacted ??= {})[fid] = true; });
+        const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.attack?.bonus ?? a.bonus, kind: 'attack', vis: poolVis(ctx, !!f.hidden) });
         const ac = tokenStats(ctx.c, t).ac;
         const res = attackOutcome(r.entry.nat, r.total, ac);
         if (res === 'miss') { ctx.toast({ title: 'Промах', body: r.entry.nat === 1 ? 'Натуральная 1' : `${r.total} против КД ${ac}`, icon: 'shield-01' }); return; }
