@@ -5,9 +5,11 @@
 // не-SRD существа в общий каталог сайта не попадают — только через личную библиотеку мастера (TASK-119, решение #116).
 // Названия действий и особенностей — по-русски по словарю ниже (неизвестное осталось бы английским; сейчас переведено всё),
 // описания — английский текст SRD 5.1 как есть. Переведённые вручную существа стола не дублируются.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
+// Портрет существа: своя картинка dist/assets/portraits/srd/<slug>.webp, если она есть; иначе — буквы имени, как раньше.
+const portrait = (slug, name) => (existsSync(new URL(`dist/assets/portraits/srd/${slug}.webp`, root)) ? `assets/portraits/srd/${slug}.webp` : `ini:${name}`);
 const [inArg, outArg] = process.argv.slice(2);
 const src = JSON.parse(readFileSync(inArg || new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
 const HAND = new Set(['cultist', 'cult-fanatic', 'acolyte', 'goblin', 'hobgoblin', 'skeleton', 'zombie', 'wolf', 'bandit', 'giant-rat', 'ogre', 'gnoll']);
@@ -157,7 +159,7 @@ for (const m of src.monsters) {
   const out = {
     id, name: m.name?.ru || MONSTER_RU[slug] || s.name_en, en: s.name_en, type: TYPE[s.type] || s.type, size: s.size, cr: cr(s, m.catalogue),
     ac: s.armor_class?.[0]?.value ?? 10, hp: s.hit_points?.average ?? 1, hpDice: s.hit_points?.formula || s.hit_points?.hit_dice || '',
-    speed: ft(s.speed?.walk) ?? 0, stats, img: `ini:${m.name?.ru || MONSTER_RU[slug] || s.name_en}`, init: Math.floor((stats.dex - 10) / 2),
+    speed: ft(s.speed?.walk) ?? 0, stats, img: portrait(slug, m.name?.ru || MONSTER_RU[slug] || s.name_en), init: Math.floor((stats.dex - 10) / 2),
     darkvision: ft(s.senses?.darkvision) || 0, senses: [...(other.length ? [`скорость: ${other.join(', ')}`] : []), ...senses].join(', '),
     traits: (s.special_abilities || []).map(trait),
     actions: (s.actions || []).map(action),
