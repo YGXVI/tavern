@@ -51,8 +51,15 @@ export function getMode() {
 }
 export function setMode(mode) { try { sessionStorage.setItem(MODE_KEY, mode); } catch { /* приватный режим */ } }
 
-/** Ссылка-приглашение. Пока сервер включён не для всех, ссылка из серверной кампании включает его и у друга. */
+/**
+ * Ссылка-приглашение. Пока сервер включён не для всех, ссылка из серверной кампании включает его и у друга.
+ * Если в этой вкладке открыт вход гостем (`?guest=1`), ссылка несёт его дальше: иначе приглашённый на тестовую
+ * партию увидит только Discord (#194).
+ */
 export function joinUrl(code, serverMode) {
-  const q = serverMode && !SERVER_ENABLED ? '?server=1' : '';
-  return `${location.origin}${location.pathname}${q}#/join/${code}`;
+  const q = new URLSearchParams();
+  if (serverMode && !SERVER_ENABLED) q.set('server', '1');
+  if (serverMode && guestAllowed()) q.set('guest', '1');
+  const s = String(q);
+  return `${location.origin}${location.pathname}${s ? `?${s}` : ''}#/join/${code}`;
 }

@@ -2,6 +2,7 @@
 // 1) База. Если заданы TEST_SUPABASE_URL и TEST_SUPABASE_KEY (переменные репозитория, ключ — только
 //    publishable), стенд подключается к ОТДЕЛЬНОМУ тестовому проекту Supabase и серверный режим включён
 //    для всех. Без них стенд работает только песочницей. Боевую базу стенд не использует никогда.
+//    С тестовой базой «Войти гостем» видно без ?guest=1.
 // 2) Ставит плашку «Тестовый стенд · <sha>» и запрет индексации, чтобы стенд не путали с сайтом.
 // Меняет файлы на месте — запускать только в CI на свежем checkout, не в рабочей копии.
 // Запуск: [TEST_SUPABASE_URL=… TEST_SUPABASE_KEY=…] node tools/mark-test-stand.mjs [папка dist] [метка версии]
@@ -43,6 +44,10 @@ if (db) {
     ['export const SERVER_ENABLED = false;', 'export const SERVER_ENABLED = true; // тестовый стенд: своя база Supabase'],
     [`export const SUPABASE_URL = '${PROD_URL}';`, `export const SUPABASE_URL = '${db.url}';`],
     [`export const SUPABASE_KEY = '${prodKey}';`, `export const SUPABASE_KEY = '${db.key}';`],
+    // Вход гостем (#194) на стенде — без ?guest=1: Discord у тестового проекта может быть не настроен,
+    // а анонимный вход включён только в тестовой базе. На проде гость по-прежнему только по ссылке.
+    ['export function guestAllowed() {\n  if (!GUEST_ENABLED) return false;',
+      'export function guestAllowed() {\n  if (!GUEST_ENABLED) return false;\n  return true; // тестовый стенд: гость без ?guest=1'],
   ]);
 } else {
   patch('js/server/config.js', [[
