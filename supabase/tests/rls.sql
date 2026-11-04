@@ -2,6 +2,9 @@
 -- Всё в одной транзакции без COMMIT: после выполнения данные исчезают. Последний SELECT — таблица результатов.
 -- Запуск: Supabase SQL (MCP execute_sql или SQL Editor) от владельца базы. Ожидание: все строки ok = true.
 begin;
+-- Новые версии Supabase Storage запрещают прямой DELETE из storage.objects (триггер storage.protect_delete);
+-- Storage API снимает запрет этим флагом. Проверки ниже имитируют запросы Storage API, поэтому флаг — на транзакцию.
+set local storage.allow_delete_query = 'true';
 
 create temp table _r (at timestamptz default clock_timestamp(), test text, ok boolean, info text);
 grant insert, select on _r to authenticated, anon;
@@ -265,7 +268,9 @@ select pg_temp.cnt('library: откат Storage probe не расходует м
 select pg_temp.ok('library: 200 неиспользуемых файлов учитываются', $q$insert into storage.objects(bucket_id,name,metadata) select 'library','00000000-0000-0000-0000-00000000000d/file-'||g||'.png','{"size":1}' from generate_series(1,200) g$q$);
 select pg_temp.cnt('library: точное число и объём через личный RPC', $q$select * from public.library_image_usage() where files=200 and bytes=200$q$,1);
 select pg_temp.err('library: файл 201 запрещён', $q$insert into storage.objects(bucket_id,name,metadata) values('library','00000000-0000-0000-0000-00000000000d/overflow.png','{"size":1}')$q$);
-select pg_temp.ok('library: upsert файла не расходует второе место', $q$insert into storage.objects(bucket_id,name,metadata) values('library','00000000-0000-0000-0000-00000000000d/file-1.png','{"size":2}') on conflict(bucket_id,name) do update set metadata=excluded.metadata$q$);
+-- Перезапись файла (upsert Storage API) доходит до таблицы как UPDATE той же строки. ON CONFLICT(bucket_id,name)
+-- не годится: в новых версиях Storage уникальность (bucket_id,name) — частичные индексы.
+select pg_temp.rows('library: upsert файла не расходует второе место', $q$update storage.objects set metadata='{"size":2}' where bucket_id='library' and name='00000000-0000-0000-0000-00000000000d/file-1.png'$q$,1);
 select pg_temp.cnt('library: upsert изменил только байты', $q$select * from public.library_image_usage() where files=200 and bytes=201$q$,1);
 select pg_temp.err('library: нельзя переместить файл даже в своей папке', $q$update storage.objects set name='00000000-0000-0000-0000-00000000000d/renamed.png' where bucket_id='library' and name='00000000-0000-0000-0000-00000000000d/file-1.png'$q$);
 select pg_temp.rows('library: очищаются только свои 200 сирот', $q$delete from storage.objects where bucket_id='library'$q$,200);
