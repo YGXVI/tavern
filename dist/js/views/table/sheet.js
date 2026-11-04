@@ -2,10 +2,9 @@
 import { esc, fmtMod, el } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats } from '../../core/campaign.js';
+import { tokenStats, monsterOf } from '../../core/campaign.js';
 import { ABILITIES, conditionById } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
-import { doRoll, parseFormula } from './dice.js';
+import { doRoll, parseFormula, poolVis } from './dice.js';
 import { abilityModifier } from './sheet-rules.js';
 import { catalogueAttackBonus } from './sheet-fields.js';
 import { createSheetEditor } from './sheet-editor.js';
@@ -33,7 +32,14 @@ export function refreshSheet(ctx){if(editor){editor.refresh();return;}if(!drawer
  const t=ctx.scene?.tokens.find(x=>x.id===state.id);if(!t){closeSheet();return;}drawer.innerHTML=monsterHTML(ctx,t);
 }
 // Статблок существа. Ручные существа: особенности — строки; SRD (TASK-083): { name, en, desc } с английским текстом SRD.
-const MLISTS = { actions: 'Действия', reactions: 'Реакции', legendary: 'Легендарные действия' };
+const MLISTS = { actions: 'Действия', bonusActions: 'Бонусные действия', reactions: 'Реакции', legendary: 'Легендарные действия' };
+// Подпись способности своего существа (TASK-179): урон и спасбросок по-русски, а не служебной строкой копии.
+const AB_NAMES = { str: 'Силы', dex: 'Ловкости', con: 'Телосложения', int: 'Интеллекта', wis: 'Мудрости', cha: 'Харизмы' };
+function libMeta(a) {
+  const dmg = (a.damageComponents || []).filter((d) => d.dice || d.type).map((d) => [d.dice, d.type].filter(Boolean).join(' '));
+  const sv = a.save ? `Спасбросок ${AB_NAMES[a.save.ability] || a.save.ability}${a.save.dc != null ? ` СЛ ${a.save.dc}` : ''}${a.save.who === 'self' ? ', бросает само существо' : ''}` : '';
+  return [...dmg, sv, a.recharge ? `перезарядка ${a.recharge}` : ''].filter(Boolean).join(' · ');
+}
 const openDesc = new Set(); // раскрытые описания: «monsterId:list:i» — переживают перерисовку листа
 
 function traitHTML(x) {
@@ -42,7 +48,7 @@ function traitHTML(x) {
 }
 
 function actionHTML(m, list, a, i) {
-  const meta = [a.type, a.note].filter(Boolean).join(' · ');
+  const meta = String(m.id).startsWith('lib:') ? libMeta(a) : [a.type, a.note].filter(Boolean).join(' · ');
   const bonus = catalogueAttackBonus(a);
   const rolls = (bonus !== null ? `<button class="btn btn-sm btn-secondary" data-roll="mattack" data-list="${list}" data-i="${i}" aria-label="Атака: ${esc(a.name)}">${knownBonus(bonus)}</button>` : '')
     + (a.damage ? parseFormula(a.damage) ? `<button class="btn btn-sm btn-secondary" data-roll="mdamage" data-list="${list}" data-i="${i}" aria-label="Урон: ${esc(a.name)}">${esc(a.damage)}</button>`
@@ -55,14 +61,16 @@ function actionHTML(m, list, a, i) {
 
 function monsterHTML(ctx, t) {
   const st = tokenStats(ctx.c, t);
-  const m = monsterById(t.monsterId);
-  const isM = ctx.isMaster;
+  const m = monsterOf(ctx.c, t.monsterId);
+  const isM = ctx.isMaster || ctx.owns?.(t); // свой призыв владелец видит целиком (TASK-183)
+  const lib = String(t.monsterId || '').startsWith('lib:');
+  const copyOwner = lib ? ctx.c.creatures?.[t.monsterId.slice(4)]?.ownerId : null;
   const currentHp = t.characterId ? st.hp : t.hp, maxHp = t.characterId ? st.hpMax : t.hpMax;
   if (!m) return `<header class="sheet-head"><div class="titles grow"><b>${esc(t.name)}</b>${t.monsterId?.startsWith('srd:') ? '<div class="t-sm muted">Бестиарий загружается…</div>' : ''}</div><button class="icon-btn icon-btn-sm" data-close-sheet>${icon('cancel-01', 18)}</button></header>`;
   const saves = m.saves ? ABILITIES.filter((a) => Number.isSafeInteger(m.saves[a.id])).map((a) => `${a.short} ${fmtMod(m.saves[a.id])}`).join(', ') : '';
   return `<header class="sheet-head">
       <span class="sheet-portrait foe" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>
-      <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''} · ${esc(m.type)} · КО ${esc(m.cr)}</div></div>
+      <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''}${m.type ? ` · ${esc(m.type)}` : ''}${m.cr != null ? ` · КО ${esc(m.cr)}` : ''}</div></div>
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
@@ -74,21 +82,22 @@ function monsterHTML(ctx, t) {
     <div class="sheet-body scroll">
       ${isM ? `<div class="abilities">${ABILITIES.map((a) => {const score=m.stats?.[a.id],bonus=abilityModifier(score);return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="mcheck" data-ab="${a.id}" ${bonus===null?'disabled':''}>${knownBonus(bonus)}</button><span class="ab-score">${knownNumber(score)}</span></div>`;}).join('')}</div>
       ${saves ? `<p class="t-sm muted" style="margin:12px 0 0">Спасброски: ${saves}</p>` : ''}
-      <p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>
+      ${m.senses ? `<p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>` : ''}
       ${(m.traits||[]).map(traitHTML).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
       ${list === 'reactions' ? m.reactions.map(traitHTML).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
-      <p class="t-xs tertiary" style="margin-top:16px">${m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
+      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
 
 function monsterRoll(ctx,b){
- if(!ctx.isMaster)return;
- const t=ctx.scene?.tokens.find(x=>x.id===state.id),m=monsterById(t?.monsterId);if(!m)return;
- const kind=b.dataset.roll,hidden=!!ctx.ui.dicePool?.hidden;
- if(kind==='mcheck'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(ab){const bonus=abilityModifier(m.stats?.[ab.id]);if(bonus===null){ctx.toast('Характеристика неизвестна: бросок не выполнен');return;}doRoll(ctx,{label:`${t.name}: проверка ${ab.name}`,dice:{20:1},mod:bonus,hidden});}}
+ const t=ctx.scene?.tokens.find(x=>x.id===state.id);
+ if(!t||!(ctx.isMaster||ctx.owns?.(t)))return; // свой призыв бросает и владелец (TASK-183)
+ const m=monsterOf(ctx.c,t.monsterId);if(!m)return;
+ const kind=b.dataset.roll,vis=poolVis(ctx,!!t.hidden),who=ctx.nameOf?ctx.nameOf(t):t.name;
+ if(kind==='mcheck'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(ab){const bonus=abilityModifier(m.stats?.[ab.id]);if(bonus===null){ctx.toast('Характеристика неизвестна: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: проверка ${AB_NAMES[ab.id]||ab.name}`,dice:{20:1},mod:bonus,vis});}}
  const a=(m[b.dataset.list]||m.actions)?.[Number(b.dataset.i)];
- if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${t.name}: ${a.name}`,dice:{20:1},mod:bonus,kind:'attack',hidden});}
- if(kind==='mdamage'&&a){const f=parseFormula(a.damage);if(f)doRoll(ctx,{label:`${t.name}: ${a.name} — урон`,...f,hidden});}
+ if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1},mod:bonus,kind:'attack',vis});}
+ if(kind==='mdamage'&&a){const f=parseFormula(a.damage);if(f)doRoll(ctx,{label:`${who}: ${a.name} — урон${a.type?` (${a.type})`:''}`,...f,vis});}
 }
 export {conditionById};

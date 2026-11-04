@@ -1,0 +1,19 @@
+# Tasks
+
+План подтверждён Ярой на `0301f4c` (31.10, #168, запись Codex «Центр» 6540902900); реализация — в `server` после головы #174.
+
+## 1. Реализация
+
+- [x] 1.1 `model.js`: `ownsDeleted(rows, table, row)` — есть ли ключ удалённой строки в кэше кампании
+- [x] 1.2 `sync.js`: в `subscribe(cid)` — подписки `DELETE` без фильтра для `characters`, `scenes`, `scene_secrets`, `scene_explored`, `tokens`, `drawings`, `log_entries`, `log_secrets`, `save_requests`, `portal_requests`; обработчик вызывает `onChange` только при `ownsDeleted`
+- [x] 1.3 Тест `tests/server-model.test.js`: своё/чужое удаление, ключи `scene_id`
+
+## 2. Проверки
+
+- [x] 2.1 `npm ci`, `npm test`, `spec:validate`, `spec:validate:archive`, `node --check`
+- [x] 2.2 Пробное слияние со свежим `main` и с `codex/rules5e` (общий `sync.js`) — main `bc0eade`: без конфликтов, npm test 87/87; `codex/rules5e` `cdaf587`: конфликты в `model.js` (2), `sync.js` (2: импорт и отправка токенов), `sheet.js` (5), `table.css` (1) — смысловые, обе стороны сохраняются при слиянии
+Не проверено (следующий шаг, не галочка): после деплоя — живая проверка двумя аккаунтами: рисунок, токен, герой.
+
+## 3. Выпуск
+
+- [x] 3.1 Синхронизация change со specs и архив перед финальным review; review результата — Яра, интегратор — не автор (пакет 31.10)

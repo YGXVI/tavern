@@ -1,16 +1,17 @@
 // Окна стола: меню кампании, приглашение, настройки, справка, пауза, начало боя, запрос спасброска.
-import { esc, plural, timeAgo } from '../../core/dom.js';
+import { esc, plural, timeAgo, uid } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { replaceDB, getDB, commit, isServerMode } from '../../core/store.js';
 import { joinUrl } from '../../server/config.js';
-import { characterOf, tokenStats, updateCampaign, userById, addLog } from '../../core/campaign.js';
+import { characterOf, tokenStats, updateCampaign, userById, addLog, canFight } from '../../core/campaign.js';
 import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
 import { startCombat, rollInitiative } from './combat.js';
-import { initiativeDice } from './dice.js';
+import { groupKind, isSummonKind, planPacks, baseName } from './packs.js';
+import { initiativeDice, canSeeRoll, knowsRoll, rollVis } from './dice.js';
 import { closeSheet } from './sheet.js';
 
 // ——— Меню кампании (логотип) ———
@@ -23,7 +24,7 @@ export function campaignMenu(ctx, anchor) {
     ctx.isMaster ? { icon: 'user-add-01', label: 'Пригласить игроков', onClick: () => inviteModal(ctx) } : null,
     ctx.isMaster ? { icon: 'settings-01', label: 'Настройки кампании', onClick: () => settingsModal(ctx) } : null,
     !ctx.isMaster && ctx.myCharacterId ? { icon: 'book-open-01', label: 'Лист героя', href: `#/c/${ctx.cid}/sheet/${encodeURIComponent(ctx.myCharacterId)}`, onClick: () => ctx.panels.openSheetFor({ characterId: ctx.myCharacterId }) } : null,
-    { icon: 'dice-faces-06', label: 'Журнал бросков', onClick: () => ctx.panels.openWidget('dice', true) },
+    { icon: 'dice-faces-06', label: 'Журнал бросков', onClick: () => logModal(ctx) },
     { icon: 'keyboard', label: 'Горячие клавиши', hint: '?', onClick: () => helpModal(ctx) },
     !ctx.isMaster ? 'divider' : null,
     !ctx.isMaster ? { icon: 'logout-01', label: 'Покинуть кампанию', danger: true, onClick: () => leaveCampaign(ctx) } : null,
@@ -35,6 +36,14 @@ export function campaignMenu(ctx, anchor) {
 async function leaveCampaign(ctx) {
   const ok = await confirmDialog({ title: 'Покинуть кампанию?', body: 'Лист героя останется у мастера. Вернуться можно по новому приглашению.', ok: 'Покинуть', danger: true });
   if (!ok) return;
+  if (isServerMode()) {
+    // Сервер: запись в журнал, пока ещё участник, затем своё членство. Владельца героя меняет мастер — не трогаем.
+    updateCampaign(ctx.cid, (c) => addLog(c, { kind: 'member', text: `${ctx.user.name} покинул кампанию` }));
+    try { await (await import('../../server/sync.js')).leaveCampaign(ctx.cid); }
+    catch (err) { ctx.toast({ title: 'Не получилось выйти', body: err.message || 'Попробуйте ещё раз', icon: 'alert-circle' }); return; }
+    go('#/campaigns');
+    return;
+  }
   updateCampaign(ctx.cid, (c) => {
     const m = c.members.find((x) => x.userId === ctx.userId);
     if (m?.characterId) { const ch = c.characters.find((x) => x.id === m.characterId); if (ch) ch.ownerId = null; }
@@ -87,7 +96,7 @@ export function inviteModal(ctx) {
         <div class="row"><span class="t-sm muted">Код для вставки:</span><span class="code-chip mono">${esc(inv.code)}</span><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-regen>${icon('reload', 14)}Новая ссылка</button></div>
         <div class="field"><label>Срок действия</label><div class="chips-wrap">${[['day', '24 часа'], ['week', '7 дней'], ['never', 'Без срока']].map(([v, l]) => `<button class="chip chip-md ${exp === v ? 'chip-accent' : ''}" data-exp="${v}">${l}</button>`).join('')}</div></div>
         <div class="setting-row">${icon('shield-user', 20)}<span class="titles"><span class="label-main">Одобрять вручную</span><span class="hint">Новый игрок ждёт, пока вы его примете</span></span><input type="checkbox" class="switch" data-manual ${inv.manual ? 'checked' : ''} aria-label="Одобрять вручную"></div>
-        <p class="t-xs tertiary">Демо: ссылка работает только в этом браузере — откройте её в другой вкладке и войдите другим аккаунтом.</p>
+        ${isServerMode() ? '' : '<p class="t-xs tertiary">Демо: ссылка работает только в этом браузере — откройте её в другой вкладке и войдите другим аккаунтом.</p>'}
       </div>
       ${pending.length ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Заявки · ${pending.length}</div>${pending.map((m) => { const u = userById(m.userId); return `<div class="list-row">${userAvatar(u, 'sm')}<span class="grow col-tight"><span class="primary">${esc(u?.name || 'Игрок')}</span><span class="secondary">хочет присоединиться · ${esc(timeAgo(m.joinedAt))}</span></span><button class="btn btn-sm btn-ghost" data-decline="${esc(m.userId)}">Отклонить</button><button class="btn btn-sm btn-primary" data-accept="${esc(m.userId)}">${icon('tick-02', 14)}Принять</button></div>`; }).join('')}</div>` : ''}
       </div>
@@ -128,7 +137,7 @@ export function settingsModal(ctx) {
         <div class="field"><label for="cs-desc">Описание для игроков</label><div class="input area"><textarea id="cs-desc" rows="3" maxlength="400">${esc(c.description || '')}</textarea></div></div>
         <div class="form-grid"><div class="field"><label for="cs-level">Уровень отряда</label><div class="input"><input id="cs-level" type="number" min="1" max="20" value="${c.level || 1}"></div></div><div class="field"><label for="cs-seats">Мест для игроков</label><div class="input"><input id="cs-seats" type="number" min="1" max="12" value="${c.seats || 5}"></div></div></div>
         <div class="row"><span class="spacer"></span><button class="btn btn-primary" data-save-general>${icon('tick-02', 16)}Сохранить</button></div>
-      </div><hr class="panel-divider"><div class="panel-section"><div class="label negative">Опасная зона</div><div class="row"><span class="t-sm muted grow">Удалить кампанию со всеми сценами и листами — только в этом браузере.</span><button class="btn btn-sm btn-danger" data-delete>${icon('delete-02', 14)}Удалить</button></div></div>`;
+      </div><hr class="panel-divider"><div class="panel-section"><div class="label negative">Опасная зона</div><div class="row"><span class="t-sm muted grow">${isServerMode() ? 'Удалить кампанию со всеми сценами и листами — для всех участников, без возврата.' : 'Удалить кампанию со всеми сценами и листами — только в этом браузере.'}</span><button class="btn btn-sm btn-danger" data-delete>${icon('delete-02', 14)}Удалить</button></div></div>`;
     } else if (settingsTab === 'members') {
       body = `<div class="panel-section">${c.members.map((m) => {
         const u = userById(m.userId); const ch = characterOf(c, m.characterId);
@@ -191,6 +200,28 @@ export function referenceModal(ctx) {
 }
 
 // ——— Справка по управлению ———
+/**
+ * Журнал бросков: последние броски, которые этот участник вправе знать. Мастер видит и служебные записи (хиты,
+ * бой, участники). Скрытый чужой бросок у игрока — без числа; бросок «себе» другим не виден вовсе.
+ */
+export function logModal(ctx) {
+  const rows = () => {
+    const list = (ctx.c.log || []).filter((l) => (l.label || l.total != null ? knowsRoll(ctx, l) : ctx.isMaster && !l.redacted && l.text)).slice(0, 60);
+    if (!list.length) return '<p class="t-sm muted" style="padding:0 16px 16px">Бросков пока не было.</p>';
+    return list.map((l) => {
+      const who = userById(l.userId)?.name || '';
+      const roll = l.label || l.total != null;
+      const see = roll && canSeeRoll(ctx, l);
+      const vis = roll && rollVis(l) !== 'all' ? ' · скрыто' : '';
+      const title = roll ? (see ? l.label : 'Скрытый бросок') : l.text;
+      const sub = [who, see && l.detail ? l.detail : '', timeAgo(l.at)].filter(Boolean).join(' · ') + vis;
+      return `<div class="list-row log-row"><span class="grow col-tight"><span class="primary ellipsis">${esc(title || '')}</span><span class="secondary ellipsis">${esc(sub)}</span></span>${see ? `<b class="mono log-total">${esc(l.total)}</b>` : ''}</div>`;
+    }).join('');
+  };
+  const m = modal(`${panelHeader('Журнал бросков', ctx.isMaster ? 'Все броски и события стола' : 'Броски, которые вам видны')}<div class="modal-body scroll"><div class="w-list log-list">${rows()}</div></div>`, { className: 'log-modal' });
+  return m;
+}
+
 export function helpModal(ctx) {
   const k = (keys, text) => `<div class="hk-row"><span class="hk-keys">${keys.map((x) => `<kbd class="key">${esc(x)}</kbd>`).join('')}</span><span>${esc(text)}</span></div>`;
   const master = ctx.isMaster;
@@ -223,7 +254,7 @@ export function helpModal(ctx) {
         ${k(['Ctrl', 'Z'], 'Отменить')}${k(['Ctrl', '⇧', 'Z'], 'Повторить')}
       </div>
     </div>
-    <div class="panel-section"><p class="t-xs tertiary">Демо-режим: «онлайн» работает между вкладками одного браузера. Откройте кампанию во второй вкладке другим аккаунтом — и увидите стол глазами игрока.</p></div></div>
+    ${isServerMode() ? '' : `<div class="panel-section"><p class="t-xs tertiary">Демо-режим: «онлайн» работает между вкладками одного браузера. Откройте кампанию во второй вкладке другим аккаунтом — и увидите стол глазами игрока.</p></div>`}</div>
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-secondary" data-close>Понятно</button></div>`, { wide: true });
   return m;
 }
@@ -251,11 +282,13 @@ export function pausePopover(ctx, anchor) {
  */
 export function combatSetup(ctx, preselect = []) {
   const sc = ctx.scene;
-  const toks = sc.tokens.filter((t) => t.kind !== 'item');
+  const toks = sc.tokens.filter((t) => canFight(t) && !t.pending); // «ждёт мастера» — не в бой (#190 E)
   const pre = new Set(preselect);
-  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
+  // Свои токены и призывы игроков сами в бой не попадают — мастер отмечает их в списке (TASK-183).
+  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || (!t.hidden && !t.ownerId && !t.summonedBy))).map((t) => t.id);
   // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует. Мастер по умолчанию бросает за всех (TASK-111).
-  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false };
+  // mode — пачки по видам (#198): 'auto' (по умолчанию) | 'one' | 'each'; open — раскрытые виды.
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false, mode: {}, open: new Set() };
   ctx.panels.openWidget('initiative', true);
   ctx.panels.refreshWidget(true);
 }
@@ -266,16 +299,38 @@ export const hasPlayerHero = (ctx, t) => !!t.characterId && ctx.c.members.some((
 export function setupAction(ctx, act, b) {
   const st = ctx.ui.setup; if (!st) return;
   const sc = ctx.scene;
+  const ofKind = (k) => st.pool.filter((id) => groupKind(sc.tokens.find((t) => t.id === id)) === k);
   if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-kind') { const ids = ofKind(b.dataset.kind); const all = ids.every((id) => st.ids.has(id)); for (const id of ids) all ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-mode') st.mode[b.dataset.kind] = b.dataset.mode;
+  else if (act === 'setup-kind-open') { const k = b.dataset.kind; st.open.has(k) ? st.open.delete(k) : st.open.add(k); }
   else if (act === 'setup-self') st.self = !st.self;
   else if (act === 'setup-cancel') ctx.ui.setup = null;
   else if (act === 'setup-start') {
     const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
     if (!ids.length) return;
-    const use = {}, rolled = [];
+    const use = {}, rolled = [], groups = {};
+    // Пачки (#198): одинаковые существа мастера — по виду; у каждой пачки свой к20 с бонусом вида.
+    // Группа призывов игрока — по умолчанию одной строкой; с «Игроки бросают сами» бросает их владелец.
+    const kinds = new Map();
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); const k = groupKind(t); if (k) { if (!kinds.has(k)) kinds.set(k, []); kinds.get(k).push(t); } }
+    const playerHere = (uid0) => ctx.c.members.some((m) => m.userId === uid0 && m.status === 'active' && m.role === 'player');
+    for (const [k, toks] of kinds) {
+      const summon = isSummonKind(k);
+      for (const pack of planPacks(toks, st.mode[k] || (summon ? 'one' : 'auto'))) {
+        if (pack.length < 2) continue;
+        const lead = sc.tokens.find((x) => x.id === pack[0]);
+        const gid = uid('g-');
+        if (summon && st.self && playerHere(lead.ownerId)) { for (const id of pack) { use[id] = null; groups[id] = gid; } continue; }
+        const r = rollInitiative(ctx.c, lead);
+        for (const id of pack) { use[id] = r.init; groups[id] = gid; }
+        rolled.push({ tokenId: lead.id, ...r, name: `${baseName(ctx.nameOf(lead))} ×${pack.length}` });
+      }
+    }
     // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
     // Бросаем до записи: те же к20 падают на стол (TASK-106).
     for (const id of ids) {
+      if (id in use) continue;
       const t = sc.tokens.find((x) => x.id === id);
       if (st.self && hasPlayerHero(ctx, t)) { use[id] = null; continue; }
       const r = rollInitiative(ctx.c, t);
@@ -283,7 +338,7 @@ export function setupAction(ctx, act, b) {
     }
     const sid = ctx.sceneId;
     ctx.ui.setup = null;
-    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
+    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use, groups));
     initiativeDice(ctx, rolled);
     ctx.select([]);
   }
@@ -320,10 +375,11 @@ export function saveConfig(ctx, ids, { label = '', anchor = null } = {}) {
 export function initEdit(ctx, tokenId, anchor) {
   const e0 = ctx.c.combat.entries.find((x) => x.tokenId === tokenId);
   if (!e0) return;
-  const pop = popover(`<div class="pick-pop"><div class="panel-section"><div class="label">Инициатива</div><div class="row"><div class="input" style="width:88px"><input type="number" data-v value="${e0.init ?? ''}" min="-5" max="40" autofocus></div><button class="btn btn-primary" data-ok>Готово</button></div></div></div>`, anchor, { placement: 'right' });
+  const pop = popover(`<div class="pick-pop"><div class="panel-section"><div class="label">Инициатива</div><div class="row"><div class="input" style="width:88px"><input type="number" data-v value="${esc(e0.init ?? '')}" min="-5" max="40" autofocus></div><button class="btn btn-primary" data-ok>Готово</button></div></div></div>`, anchor, { placement: 'right' });
   const inp = pop.node.querySelector('[data-v]');
   setTimeout(() => { inp.focus(); inp.select(); }, 20);
-  const ok = () => { const v = Number(inp.value); if (Number.isFinite(v)) ctx.panels.setInitiative(tokenId, v); closePopover(); };
+  // Пустое поле — не «0»: инициатива остаётся прежней.
+  const ok = () => { const s = inp.value.trim(), v = Number(s); if (s !== '' && Number.isFinite(v)) ctx.panels.setInitiative(tokenId, Math.round(v)); closePopover(); };
   pop.node.querySelector('[data-ok]').addEventListener('click', ok);
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
 }

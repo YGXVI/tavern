@@ -6,7 +6,7 @@ const chans = new Map();
 let authCbs = [];
 
 function session() {
-  try { const u = localStorage.getItem('fake-sb-user'); return u ? { user: { id: u }, access_token: `tok-${u}` } : null; } catch { return null; }
+  try { const u = localStorage.getItem('fake-sb-user'); return u ? { user: { id: u, is_anonymous: localStorage.getItem('fake-sb-anon') === u }, access_token: `tok-${u}` } : null; } catch { return null; }
 }
 const uid = () => session()?.user.id || null;
 
@@ -75,6 +75,13 @@ export function createClient(url, key, opts) {
     auth: {
       getSession: async () => ({ data: { session: session() }, error: null }),
       signInWithOAuth: async (o) => { await call({ op: 'oauth', o }); return { data: {}, error: null }; },
+      // Вход гостем (#194): анонимный пользователь, ник — в метаданных, профиль создаёт «триггер» стенда.
+      signInAnonymously: async (o) => {
+        const r = await call({ op: 'anon', name: o?.options?.data?.name });
+        if (r?.error) return { data: null, error: r.error };
+        localStorage.setItem('fake-sb-user', r.id); localStorage.setItem('fake-sb-anon', r.id);
+        return { data: { user: { id: r.id, is_anonymous: true } }, error: null };
+      },
       onAuthStateChange: (cb) => { authCbs.push(cb); return { data: { subscription: { unsubscribe() { authCbs = authCbs.filter((x) => x !== cb); } } } }; },
       signOut: async () => { localStorage.removeItem('fake-sb-user'); for (const cb of authCbs) cb('SIGNED_OUT', null); return { error: null }; },
     },

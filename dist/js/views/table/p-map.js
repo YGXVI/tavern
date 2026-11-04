@@ -3,12 +3,13 @@ import { esc, uid, fmtMod, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { bus } from '../../core/store.js';
-import { tokenStats, characterOf, addLog, sceneOf, updateCampaign } from '../../core/campaign.js';
+import { tokenStats, characterOf, addLog, sceneOf, updateCampaign, monsterOf } from '../../core/campaign.js';
 import { LIGHTS, LIGHT_COLORS, ABILITIES, mod, profBonus, TEMPLATES } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { WALL_KINDS, cellOf, footprintAt, gridSize, gridDims, templateCells, footprintCells, key, cellCenter } from '../../rules/geometry.js';
 import { popover, closePopover, confirmDialog } from '../../ui/kit.js';
 import { doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
+import { attackOutcome, critDamageFormula } from '../../rules/attack.js';
+import { ridersOf } from './riding.js';
 import { sizeById } from '../../data/rules.js';
 import { hpEditor } from './p-token.js';
 
@@ -187,15 +188,26 @@ export function lightPopover(ctx, id, anchor) {
   ctx.invalidate('markers', 'areas');
   const pop = popover(render(), anchor, { placement: 'top', onClose: () => { ctx.ui.selectedLight = null; ctx.invalidate('markers', 'areas'); } });
   const box = pop.node;
+  // Ползунок двигает свет сразу (предпросмотр в живой сцене), а запись идёт через 250 мс. Перед записью предпросмотр
+  // откатывается: иначе «до» уже содержит новое значение, разница пуста и сервер изменения не получает.
   let pending = null;
+  const orig = {}, vals = {};
   box.addEventListener('input', (e) => {
     const k = e.target.dataset.k; if (!k) return;
     const v = Number(e.target.value);
     e.target.style.setProperty('--fill', `${(v / 60) * 100}%`);
     e.target.closest('.slider-row').querySelector('b').textContent = k === 'dim' ? `ещё ${v} фт` : `${v} фт`;
-    const l = ctx.scene.lights.find((x) => x.id === id); if (l) { l[k] = v; ctx.invalidateVision(); ctx.invalidate('fog', 'areas'); }
+    const l = ctx.scene.lights.find((x) => x.id === id);
+    if (l) { if (!(k in orig)) orig[k] = l[k]; l[k] = v; vals[k] = v; ctx.invalidateVision(); ctx.invalidate('fog', 'areas'); }
     clearTimeout(pending);
-    pending = setTimeout(() => ctx.mutateScene((s) => { const x = s.lights.find((q) => q.id === id); if (x) x[k] = v; }), 250);
+    pending = setTimeout(() => {
+      const live = ctx.scene?.lights.find((x) => x.id === id);
+      const put = { ...vals };
+      if (live) for (const kk of Object.keys(orig)) live[kk] = orig[kk];
+      for (const kk of Object.keys(orig)) delete orig[kk];
+      for (const kk of Object.keys(vals)) delete vals[kk];
+      ctx.mutateScene((s) => { const x = s.lights.find((q) => q.id === id); if (x) Object.assign(x, put); });
+    }, 250);
   });
   box.addEventListener('click', (e) => {
     const c = e.target.closest('[data-color]');
@@ -327,6 +339,14 @@ export function transferTokens(ctx, tokenIds, portal, fromSceneId = ctx.sceneId)
     const from = c.scenes.find((s) => s.id === fromSceneId);
     const to = c.scenes.find((s) => s.id === portal.targetSceneId);
     if (!from || !to) return;
+    // Всадники уходят вместе с ездовым (TASK-187). Игрок уводит только тех, кем управляет сам; чужого всадника
+    // он спешивает — тот остаётся на этой сцене (сменить сцену чужому токену сервер не даст).
+    const mine = (t) => ctx.isMasterView || ctx.isMine(t) || ctx.owns(t);
+    const carried = [];
+    for (const id of tokenIds) for (const r of ridersOf(from, id)) {
+      if (tokenIds.includes(r.id)) continue;
+      if (mine(r)) carried.push({ r, mount: id }); else delete r.riding;
+    }
     const g = gridSize(to.grid);
     const base = portal.target || { x: to.map.width / 2, y: to.map.height / 2 };
     tokenIds.forEach((id, i) => {
@@ -339,10 +359,18 @@ export function transferTokens(ctx, tokenIds, portal, fromSceneId = ctx.sceneId)
       to.tokens.push(t);
       if (t.characterId) { const m = c.members.find((mm) => mm.characterId === t.characterId); if (m) m.sceneId = to.id; }
     });
+    for (const { r, mount } of carried) {
+      const m = to.tokens.find((x) => x.id === mount); if (!m) continue;
+      from.tokens = from.tokens.filter((x) => x.id !== r.id);
+      r.x = m.x; r.y = m.y;
+      to.tokens.push(r);
+      if (r.characterId) { const mm = c.members.find((q) => q.characterId === r.characterId); if (mm) mm.sceneId = to.id; }
+    }
     c.portalRequests = (c.portalRequests || []).filter((r) => !tokenIds.includes(r.tokenId));
-    // Если на исходной сцене не осталось героев, весь отряд теперь на новой.
+    // Если на исходной сцене не осталось героев, весь отряд теперь на новой. Общую сцену и чужие членства меняет
+    // только мастер: сервер такие правки игрока отклонит, и вместе с ними пропал бы и сам переход героя.
     const heroesLeft = from.tokens.some((t) => t.kind === 'hero' && c.members.some((m) => m.characterId === t.characterId && m.status === 'active'));
-    if (!heroesLeft && c.activeSceneId === from.id) { c.activeSceneId = to.id; for (const m of c.members) if (m.sceneId === to.id) delete m.sceneId; }
+    if (!heroesLeft && c.activeSceneId === from.id && ctx.isMaster) { c.activeSceneId = to.id; for (const m of c.members) if (m.sceneId === to.id) delete m.sceneId; }
     addLog(c, { kind: 'scene', text: `${tokenIds.length} → «${to.name}»` });
   });
 }
@@ -431,7 +459,7 @@ export function templatePopover(ctx, anchor) {
   const def = TEMPLATES.find((t) => t.id === tpl.type);
   ctx.ui.templateTargets = targets.map((t) => t.id);
   const list = targets.map((t) => { const st = tokenStats(ctx.c, t); return `<div class="list-row"><span class="avatar sm ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="primary grow">${esc(st.name)}</span></div>`; }).join('');
-  const pop = popover(`<div class="tpl-pop">${head(`${def.name} · ${tpl.size} фт`, `В области: ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`)}
+  const pop = popover(`<div class="tpl-pop">${head(`${def.name} · ${String(tpl.size).replace('.', ',')} фт`, `В области: ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`)}
     <div class="tpl-list scroll">${list || '<p class="t-sm muted" style="padding:0 16px">Никого не задевает</p>'}</div>
     <div class="panel-section">${ctx.isMaster
       ? `<p class="t-xs tertiary">Спасброски героев попросим у игроков, за существ бросите вы.</p>`
@@ -445,7 +473,7 @@ export function templatePopover(ctx, anchor) {
     if (e.target.closest('[data-saves]')) { closePopover(); ctx.panels.saveRequestPanel(targets.map((t) => t.id), { label: def.name }); }
     if (e.target.closest('[data-send]')) {
       bus.send('template-share', { cid: ctx.cid, sceneId: ctx.sceneId, tpl, targets: targets.map((t) => t.id), userId: ctx.userId, name: characterOf(ctx.c, ctx.myCharacterId)?.name || ctx.user.name });
-      ctx.toast({ title: 'Отправлено мастеру', body: `${def.name} ${tpl.size} фт · ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`, icon: 'arrow-right-02' });
+      ctx.toast({ title: 'Отправлено мастеру', body: `${def.name} ${String(tpl.size).replace('.', ',')} фт · ${targets.length} ${plural(targets.length, 'цель', 'цели', 'целей')}`, icon: 'arrow-right-02' });
       closePopover();
     }
   });
@@ -457,10 +485,13 @@ export function opportunityWarning(ctx, token, foes, handlers) {
   const s = ctx.camera.toScreen(token.x, token.y);
   const pop = popover(`<div class="warn-pop"><div class="panel-header"><span class="status-badge negative">${icon('alert-circle', 13)}</span><div class="titles"><div class="title">${esc(names.join(', '))} ${names.length > 1 ? 'ударят' : 'ударит'} вслед</div></div></div>
     <div class="panel-section"><p class="t-sm muted">Вы выходите из досягаемости — у врага есть атака по возможности. «Отход» убережёт, но займёт действие.</p>
-    <button class="btn btn-secondary btn-block" data-w="dis">${icon('shield-01', 16)}Сначала «Отход»</button>
-    <div class="row"><button class="btn btn-ghost" data-w="cancel">Отмена</button><button class="btn btn-danger grow" data-w="go">Всё равно идти</button></div></div></div>`, s, { placement: 'left', keepOpen: true });
+    ${ctx.isMine(token) || ctx.owns(token) ? `<button class="btn btn-secondary btn-block" data-w="dis">${icon('shield-01', 16)}Сначала «Отход»</button>` : '<p class="t-xs tertiary">«Отход» отмечает владелец героя или мастер.</p>'}
+    <div class="row"><button class="btn btn-ghost" data-w="cancel">Отмена</button><button class="btn btn-danger grow" data-w="go">Всё равно идти</button></div></div></div>`, s, { placement: 'left', keepOpen: true, onClose: () => { if (!chosen) { chosen = true; handlers.cancel?.(); } } });
+  // Окно закрыли без выбора (колесо, Escape, другое окно) — как «Отмена»: иначе перетаскивание зависает.
+  let chosen = false;
   pop.node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-w]'); if (!b) return;
+    chosen = true;
     closePopover();
     ({ go: handlers.go, dis: handlers.disengage, cancel: handlers.cancel })[b.dataset.w]?.();
   });
@@ -476,11 +507,19 @@ export function opportunityForMaster(ctx, p) {
     const f = sc.tokens.find((x) => x.id === fid);
     if (!f) continue;
     const fs = tokenStats(ctx.c, f);
-    const m = monsterById(f.monsterId);
+    const m = monsterOf(ctx.c, f.monsterId);
     const a = m?.actions.find((x) => x.bonus);
     ctx.toast({
       title: `${st.name} выходит из досягаемости`, body: `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,
-      action: a ? { label: 'Атаковать', onClick: () => { const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack' }); const ac = tokenStats(ctx.c, t).ac; if (r.total >= ac || r.entry.nat === 20) { const f2 = parseFormula(a.damage); if (f2) { const d = doRoll(ctx, { label: `${fs.name}: урон`, ...f2 }); ctx.panels.applyHp([t.id], -(r.entry.nat === 20 ? d.total * 2 : d.total)); } } else ctx.toast({ title: 'Промах', body: `${r.total} против КД ${ac}`, icon: 'shield-01' }); } } : null,
+      // #197 R1/R2: натуральная 1 — промах, на крите удваиваются только кости урона (модификатор — один раз).
+      action: a ? { label: 'Атаковать', onClick: () => {
+        const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack' });
+        const ac = tokenStats(ctx.c, t).ac;
+        const res = attackOutcome(r.entry.nat, r.total, ac);
+        if (res === 'miss') { ctx.toast({ title: 'Промах', body: r.entry.nat === 1 ? 'Натуральная 1' : `${r.total} против КД ${ac}`, icon: 'shield-01' }); return; }
+        const f2 = parseFormula(res === 'crit' ? critDamageFormula(a.damage) : a.damage);
+        if (f2) { const d = doRoll(ctx, { label: `${fs.name}: урон${res === 'crit' ? ' (крит)' : ''}`, ...f2 }); ctx.panels.applyHp([t.id], -d.total, { crit: res === 'crit' }); }
+      } } : null,
     });
   }
 }
