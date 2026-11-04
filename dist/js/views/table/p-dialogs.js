@@ -1,5 +1,5 @@
 // Окна стола: меню кампании, приглашение, настройки, справка, пауза, начало боя, запрос спасброска.
-import { esc, plural, timeAgo } from '../../core/dom.js';
+import { esc, plural, timeAgo, uid } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { replaceDB, getDB, commit, isServerMode } from '../../core/store.js';
@@ -10,6 +10,7 @@ import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
 import { startCombat, rollInitiative } from './combat.js';
+import { packKind, planPacks, baseName } from './packs.js';
 import { initiativeDice } from './dice.js';
 import { closeSheet } from './sheet.js';
 
@@ -256,7 +257,8 @@ export function combatSetup(ctx, preselect = []) {
   // Свои токены и призывы игроков сами в бой не попадают — мастер отмечает их в списке (TASK-183).
   const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || (!t.hidden && !t.ownerId && !t.summonedBy))).map((t) => t.id);
   // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует. Мастер по умолчанию бросает за всех (TASK-111).
-  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false };
+  // mode — пачки по видам (#198): 'auto' (по умолчанию) | 'one' | 'each'; open — раскрытые виды.
+  ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false, mode: {}, open: new Set() };
   ctx.panels.openWidget('initiative', true);
   ctx.panels.refreshWidget(true);
 }
@@ -267,16 +269,34 @@ export const hasPlayerHero = (ctx, t) => !!t.characterId && ctx.c.members.some((
 export function setupAction(ctx, act, b) {
   const st = ctx.ui.setup; if (!st) return;
   const sc = ctx.scene;
+  const ofKind = (k) => st.pool.filter((id) => packKind(sc.tokens.find((t) => t.id === id)) === k);
   if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-kind') { const ids = ofKind(b.dataset.kind); const all = ids.every((id) => st.ids.has(id)); for (const id of ids) all ? st.ids.delete(id) : st.ids.add(id); }
+  else if (act === 'setup-mode') st.mode[b.dataset.kind] = b.dataset.mode;
+  else if (act === 'setup-kind-open') { const k = b.dataset.kind; st.open.has(k) ? st.open.delete(k) : st.open.add(k); }
   else if (act === 'setup-self') st.self = !st.self;
   else if (act === 'setup-cancel') ctx.ui.setup = null;
   else if (act === 'setup-start') {
     const ids = sc.tokens.filter((t) => st.ids.has(t.id)).map((t) => t.id);
     if (!ids.length) return;
-    const use = {}, rolled = [];
+    const use = {}, rolled = [], groups = {};
+    // Пачки (#198): одинаковые существа мастера — по виду; у каждой пачки свой к20 с бонусом вида.
+    const kinds = new Map();
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); const k = packKind(t); if (k) { if (!kinds.has(k)) kinds.set(k, []); kinds.get(k).push(t); } }
+    for (const [k, toks] of kinds) {
+      for (const pack of planPacks(toks, st.mode[k] || 'auto')) {
+        if (pack.length < 2) continue;
+        const lead = sc.tokens.find((x) => x.id === pack[0]);
+        const r = rollInitiative(ctx.c, lead);
+        const gid = uid('g-');
+        for (const id of pack) { use[id] = r.init; groups[id] = gid; }
+        rolled.push({ tokenId: lead.id, ...r, name: `${baseName(ctx.nameOf(lead))} ×${pack.length}` });
+      }
+    }
     // Свежий бросок к20 + инициатива для всех, кроме героев, за которых бросают игроки (null).
     // Бросаем до записи: те же к20 падают на стол (TASK-106).
     for (const id of ids) {
+      if (id in use) continue;
       const t = sc.tokens.find((x) => x.id === id);
       if (st.self && hasPlayerHero(ctx, t)) { use[id] = null; continue; }
       const r = rollInitiative(ctx.c, t);
@@ -284,7 +304,7 @@ export function setupAction(ctx, act, b) {
     }
     const sid = ctx.sceneId;
     ctx.ui.setup = null;
-    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use));
+    updateCampaign(ctx.cid, (c) => startCombat(c, c.scenes.find((s) => s.id === sid), ids, use, groups));
     initiativeDice(ctx, rolled);
     ctx.select([]);
   }

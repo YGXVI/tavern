@@ -7,7 +7,8 @@ import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf, canFight } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers } from './combat.js';
+import { packKind } from './packs.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
@@ -492,13 +493,30 @@ export class Panels {
     const inCombat = new Set(c.combat.entries.map((e) => e.tokenId));
     const removeAll = ids.every((id) => inCombat.has(id));
     // Новых участников бросаем до записи — их к20 падают на стол.
-    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
-      const t = ctx.scene?.tokens.find((x) => x.id === id);
+    // Пачки (#198): существо мастера встаёт в неполную (до 10) пачку своего вида с той же скрытностью — без броска.
+    const joins = new Map(); // tokenId → {group, init}
+    const fill = new Map(); // group → сколько в ней
+    for (const e of c.combat.entries) if (e.group) fill.set(e.group, (fill.get(e.group) || 0) + 1);
+    const tokOf = (id) => ctx.scene?.tokens.find((x) => x.id === id);
+    if (!removeAll) for (const id of ids) {
+      if (inCombat.has(id)) continue;
+      const t = tokOf(id), k = packKind(t);
+      if (!k || !canFight(t)) continue;
+      const e = c.combat.entries.find((x) => x.group && (fill.get(x.group) || 0) < 10 && packKind(tokOf(x.tokenId)) === k && !!tokOf(x.tokenId)?.hidden === !!t.hidden);
+      if (!e) continue;
+      joins.set(id, { group: e.group, init: e.init });
+      fill.set(e.group, fill.get(e.group) + 1);
+    }
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id) && !joins.has(id)).map((id) => {
+      const t = tokOf(id);
       return canFight(t) ? { tokenId: id, ...rollInitiative(c, t) } : null;
     }).filter(Boolean);
     this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
-      else for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
+      else {
+        for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
+        for (const [id, j] of joins) if (!cc.combat.entries.some((e) => e.tokenId === id)) cc.combat.entries.push({ tokenId: id, init: j.init, group: j.group });
+      }
     });
     initiativeDice(ctx, rolled);
     ctx.toast({ title: removeAll ? 'Убраны из боя' : 'В бою', body: `${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}`, icon: 'sword-03' });
@@ -510,15 +528,56 @@ export class Panels {
     updateCampaign(ctx.cid, (c) => {
       const sc = c.scenes.find((s) => s.id === sid);
       const before = currentEntry(c, sc, { raw: true })?.tokenId;
+      const group = c.combat.entries.find((e) => e.tokenId === before)?.group;
       fn(c, sc);
       if (!c.combat.entries.length) { endCombat(c); return; }
       const order = initiativeOrder(c, sc);
-      const i = order.findIndex((e) => e.tokenId === before);
+      // Ход остаётся за тем же слотом: у пачки — за пачкой, даже если её ведущего отделили (#198).
+      const stay = (group && order.find((e) => e.group === group)?.tokenId) || before;
+      const i = turnIndexOf(order, stay);
       c.combat.turn = i >= 0 ? i : Math.min(c.combat.turn, order.length - 1);
     });
   }
 
-  setInitiative(tokenId, v) { this.keepTurn((c) => { const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (e) e.init = v; }); }
+  /** Инициатива записи; у пачки (#198) — у всех её членов. */
+  setInitiative(tokenId, v) {
+    this.keepTurn((c) => {
+      const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (!e) return;
+      for (const x of c.combat.entries) if (x === e || (e.group && x.group === e.group)) x.init = v;
+    });
+  }
+
+  // ——— Пачки в бою (#198) ———
+  /** Выделить живых членов пачки (их можно тащить одним движением). */
+  packSelect(tokenId) {
+    const ctx = this.ctx;
+    const ids = slotMembers(ctx.combatOrder(), tokenId).filter((e) => !(e.stats.hpMax > 0 && e.stats.hp <= 0)).map((e) => e.tokenId);
+    if (ids.length) ctx.select(ids);
+  }
+  /** Отделить токен от пачки: свой ход с той же инициативой. */
+  packSplit(tokenId) { this.keepTurn((c) => { const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (e) delete e.group; }); }
+  /** Разгруппировать пачку: каждый ходит сам, инициатива прежняя. */
+  packUngroup(tokenId) {
+    this.keepTurn((c) => { const g = c.combat.entries.find((x) => x.tokenId === tokenId)?.group; if (g) for (const e of c.combat.entries) if (e.group === g) delete e.group; });
+  }
+  /**
+   * Сделать пачкой выделенных участников боя: инициатива — первого из них по очереди. Если среди выделенных ровно
+   * одна пачка — остальные вливаются в неё с её инициативой.
+   */
+  packMake(ids) {
+    const ctx = this.ctx;
+    const order = ctx.combatOrder().filter((e) => ids.includes(e.tokenId));
+    if (order.length < 2) return;
+    const had = [...new Set(order.map((e) => e.group).filter(Boolean))];
+    const base = had.length === 1 ? order.find((e) => e.group === had[0]) : order[0];
+    const gid = had.length === 1 ? had[0] : uid('g-'), init = base.init;
+    this.keepTurn((c) => { for (const e of c.combat.entries) if (ids.includes(e.tokenId)) { e.group = gid; e.init = init; } });
+    ctx.toast({ title: `Пачка из ${order.length}`, body: `Ходят вместе, инициатива ${init ?? '—'}`, icon: 'group-items' });
+  }
+  /** Убрать пачку из боя целиком. */
+  packRemove(tokenId) {
+    this.keepTurn((c) => { const g = c.combat.entries.find((x) => x.tokenId === tokenId)?.group; c.combat.entries = c.combat.entries.filter((e) => e.tokenId !== tokenId && !(g && e.group === g)); });
+  }
 
   rollMyInitiative(tokenId) {
     const ctx = this.ctx, c = ctx.c;
@@ -794,13 +853,17 @@ export class Panels {
         break;
       }
       case 'combat-start': D.combatSetup(ctx, sel); break;
-      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
+      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': case 'setup-kind': case 'setup-mode': case 'setup-kind-open': D.setupAction(ctx, act, b); break;
       case 'combat-next': this.nextTurn(1); break;
       case 'combat-prev': this.nextTurn(-1); break;
       case 'combat-end': updateCampaign(ctx.cid, (cc) => endCombat(cc)); ctx.toast({ title: 'Бой окончен', icon: 'sword-03' }); break;
       case 'combat-add': this.combatToggle(sel); break;
       case 'init-set': D.initEdit(ctx, b.dataset.id, b); break;
       case 'init-remove': this.keepTurn((cc) => { cc.combat.entries = cc.combat.entries.filter((x) => x.tokenId !== b.dataset.id); }); break;
+      case 'pack-open': { ctx.ui.packOpen ||= new Set(); const k = b.dataset.slot; ctx.ui.packOpen.has(k) ? ctx.ui.packOpen.delete(k) : ctx.ui.packOpen.add(k); this.refreshWidget(); break; }
+      case 'pack-select': this.packSelect(b.dataset.id); break;
+      case 'pack-split': this.packSplit(b.dataset.id); break;
+      case 'pack-remove': this.packRemove(b.dataset.id); break;
       case 'init-roll': this.rollMyInitiative(b.dataset.id); break;
       // Токен-бар
       case 'focus': if (one) ctx.camera.centerOn(one.x, one.y); break;

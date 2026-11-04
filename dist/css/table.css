@@ -429,6 +429,23 @@ button.init-num:hover { background: var(--bg-control-off); }
 .init-num.pending { background: none; box-shadow: inset 0 0 0 1.5px dashed; outline: 1.5px dashed var(--neutral-500); outline-offset: -2px; color: var(--text-tertiary); }
 .init-who { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left; border-radius: 10px; padding: 2px; }
 .init-who:hover { background: var(--bg-hover); }
+/* Пачки в инициативе (#198): строка пачки, раскрытый список, метка с номером на аватаре и на токене. */
+.pack-ava { position: relative; display: inline-flex; flex: none; }
+.pack-ava b { position: absolute; right: -4px; bottom: -3px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: var(--r-full); display: grid; place-items: center;
+  background: var(--pc, var(--brand-500)); color: #111; font: 700 10px/1 var(--font-text); box-shadow: 0 0 0 2px var(--bg-panel); }
+.init-row.pack .init-who > .ic { flex: none; color: var(--text-tertiary); }
+.pack-members { display: flex; flex-direction: column; gap: 2px; margin: -2px 0 4px 44px; padding-left: 8px; border-left: 1px solid var(--stroke-divider); }
+.pack-member { display: flex; align-items: center; gap: 4px; min-height: 36px; }
+.pack-member .avatar { width: 24px; height: 24px; }
+.pack-member.downed .avatar img { filter: grayscale(1); }
+.pack-member.downed .primary { text-decoration: line-through; color: var(--text-tertiary); }
+.pack-member.is-hidden { opacity: .6; }
+.setup-kind { display: flex; flex-direction: column; border-radius: var(--r-12); }
+.setup-kind.off .setup-row { opacity: .55; }
+.setup-modes { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 6px 8px 40px; }
+.setup-modes .chip { cursor: pointer; }
+.setup-members { margin-left: 28px; border-left: 1px solid var(--stroke-divider); }
+.tok-badge.tok-pack { top: -4%; left: -6%; background: var(--pc, var(--brand-500)); color: #111; font-variant-numeric: tabular-nums; }
 .widget .panel-footer { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
 
 /* Кубы: рейка, лоток, кубы на столе — в конце файла (TASK-092/093). */

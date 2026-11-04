@@ -13,7 +13,8 @@ import {
 } from './world.js';
 import { computeVision, isVisible, visibleCells } from './fog.js';
 import { cellOf, gridSize, key } from '../../rules/geometry.js';
-import { initiativeOrder } from './combat.js';
+import { initiativeOrder, turnTokenIds } from './combat.js';
+import { packMarks } from './packs.js';
 import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar, fitDrawBar } from './drawings.js';
@@ -155,12 +156,9 @@ export function mountTable(root, cid) {
   ctx.isDim = (t) => ctx.isMasterView && ctx.fogView() === 'master' && t.kind !== 'hero' && !t.hidden && !isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
 
   ctx.combatOrder = () => initiativeOrder(ctx.c, ctx.scene);
-  ctx.currentTurnTokenId = () => {
-    const cb = ctx.c.combat;
-    if (!cb.active) return null;
-    const o = ctx.combatOrder();
-    return o[cb.turn % Math.max(1, o.length)]?.tokenId || null;
-  };
+  // Чей ход — одиночка или вся пачка (#198); метки пачек — номера по очереди, видимой зрителю.
+  ctx.turnIds = () => (ctx.c.combat?.active ? turnTokenIds(ctx.c, ctx.scene) : new Set());
+  ctx.packMarks = () => (ctx.c.combat?.active ? packMarks(ctx.combatOrder().filter((e) => ctx.isMasterView || ctx.tokenShown(e.token))) : new Map());
   ctx.templates = () => {
     const list = [];
     if (ctx.ui.template) list.push(ctx.ui.template);
