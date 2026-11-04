@@ -9,6 +9,7 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers } from './combat.js';
 import { packKind } from './packs.js';
+import { mobAttack } from './mob-attack.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
@@ -862,6 +863,7 @@ export class Panels {
       case 'init-remove': this.keepTurn((cc) => { cc.combat.entries = cc.combat.entries.filter((x) => x.tokenId !== b.dataset.id); }); break;
       case 'pack-open': { ctx.ui.packOpen ||= new Set(); const k = b.dataset.slot; ctx.ui.packOpen.has(k) ? ctx.ui.packOpen.delete(k) : ctx.ui.packOpen.add(k); this.refreshWidget(); break; }
       case 'pack-select': this.packSelect(b.dataset.id); break;
+      case 'pack-attack': mobAttack(ctx, b.dataset.id); break;
       case 'pack-split': this.packSplit(b.dataset.id); break;
       case 'pack-remove': this.packRemove(b.dataset.id); break;
       case 'init-roll': this.rollMyInitiative(b.dataset.id); break;

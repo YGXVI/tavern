@@ -110,3 +110,61 @@ test('старый бой без group — как раньше', () => {
   advanceTurn(c, scene, 1);
   assert.equal(initiativeOrder(c, scene)[c.combat.turn].tokenId, 'z2');
 });
+
+// ——— Атака толпой (#198 §5, честный режим) ———
+const realInterval2 = globalThis.setInterval;
+globalThis.setInterval = () => 0;
+const { attackReach, inReach, critDice, rollDamage, outcome, adjust, applyHits, rollAttacks } = await import('../dist/js/views/table/mob-attack.js');
+globalThis.setInterval = realInterval2;
+
+test('атака толпой: дальность из статблока, досягаемость по клеткам, помеха на дальней дистанции', () => {
+  assert.deepEqual(attackReach({ desc: 'Melee Weapon Attack: +4 to hit, reach 5 ft., one target.' }), { melee: 5 });
+  assert.deepEqual(attackReach({ desc: 'Ranged Weapon Attack: +4 to hit, range 80/320 ft., one target.' }), { range: { normal: 80, long: 320 } });
+  assert.deepEqual(attackReach({ note: 'досягаемость 10 фт' }), { melee: 10 });
+  assert.equal(attackReach({ name: 'Скимитар', bonus: 4 }), null, 'не указано — не гадаем');
+  const scene = { grid: { size: 50, feet: 5, offsetX: 0, offsetY: 0 } };
+  const at = (c, r) => ({ x: c * 50 + 25, y: r * 50 + 25, size: 'medium' });
+  assert.deepEqual(inReach(scene, at(0, 0), at(1, 0), { melee: 5 }).ok, true, 'соседняя клетка — 5 фт');
+  assert.deepEqual(inReach(scene, at(0, 0), at(2, 0), { melee: 5 }).ok, false);
+  assert.equal(inReach(scene, at(0, 0), at(2, 0), { melee: 10 }).ok, true, 'досягаемость 10 фт');
+  const far = inReach(scene, at(0, 0), at(20, 0), { range: { normal: 80, long: 320 } });
+  assert.equal(far.ok && far.disadv, true, '100 фт из 80/320 — с помехой');
+  assert.equal(inReach(scene, at(0, 0), at(70, 0), { range: { normal: 80, long: 320 } }).ok, false);
+});
+
+test('атака толпой: крит удваивает только кубы, 20 — крит, 1 — промах', () => {
+  assert.equal(critDice('1d6+2'), '2d6+2');
+  assert.equal(critDice('2к8 + 1d6 + 3'), '4d8 + 2d6 + 3');
+  const seq = (vals) => { let i = 0; return () => (vals[i++ % vals.length] - 1) / 6 + 0.0001; };
+  assert.deepEqual(rollDamage('1d6+2', seq([4])).total, 6);
+  assert.equal(rollDamage('2d6+5', seq([1, 1])).total, 7);
+  assert.equal(rollDamage('урон'), null);
+  assert.equal(outcome(20, 5, 30), 'crit');
+  assert.equal(outcome(1, 40, 10), 'miss');
+  assert.equal(outcome(12, 16, 15), 'hit');
+  assert.equal(outcome(12, 14, 15), 'miss');
+  const r = rollAttacks({ attackers: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B', disadv: true }], bonus: 4, damage: '1d6+2', attacks: 2, adv: null });
+  assert.equal(r.length, 4, 'по 2 атаки на каждого');
+  assert.equal(r.filter((x) => x.mode === 'dis').length, 2, 'дальний — с помехой');
+  assert.ok(r.every((x) => x.crit.total >= x.normal.total - 6 && x.total === x.nat + 4));
+});
+
+test('атака толпой: сопротивление — на каждое попадание, концентрация — за каждое, герой на 0 — провалы', () => {
+  assert.equal(adjust(5, 'resist'), 2);
+  assert.equal(adjust(5, 'vuln'), 10);
+  assert.equal(adjust(5, 'immune'), 0);
+  const four = [5, 5, 5, 5].map((damage) => ({ damage }));
+  const r = applyHits({ hp: 30, hpMax: 30, tempHp: 0, conditions: ['concentration'] }, four, 'resist', false);
+  assert.equal(r.dealt, 8, '2 + 2 + 2 + 2, а не ⌊20 / 2⌋ = 10');
+  assert.equal(r.state.hp, 22);
+  assert.equal(r.notes.length, 4, 'проверка концентрации за каждое попадание');
+  const temp = applyHits({ hp: 10, hpMax: 10, tempHp: 6, conditions: [] }, [{ damage: 4 }, { damage: 4 }], null, false);
+  assert.deepEqual([temp.state.tempHp, temp.state.hp], [0, 8], 'временные хиты — первыми');
+  const down = applyHits({ hp: 0, hpMax: 20, tempHp: 0, conditions: ['unconscious'], deathSaves: { s: 1, f: 0 } }, [{ damage: 3 }, { damage: 9, crit: true }, { damage: 2 }], null, true);
+  assert.deepEqual(down.state.deathSaves, { s: 1, f: 3 }, '3 попадания, одно крит — 4 провала, то есть смерть');
+  assert.ok(down.notes.some((n) => /погибает/.test(n)));
+  const drop = applyHits({ hp: 4, hpMax: 20, tempHp: 0, conditions: ['concentration'] }, [{ damage: 6 }, { damage: 3 }], null, true);
+  assert.equal(drop.state.hp, 0);
+  assert.ok(drop.state.conditions.includes('unconscious') && !drop.state.conditions.includes('concentration'));
+  assert.deepEqual(drop.state.deathSaves, { s: 0, f: 1 }, 'второе попадание уже по лежащему — провал');
+});

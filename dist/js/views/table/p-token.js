@@ -8,6 +8,7 @@ import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { ridingItems } from './riding.js';
 import { sightMenuItems } from './sight-ui.js';
+import { mobAttack } from './mob-attack.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
@@ -668,6 +669,7 @@ function packItems(ctx, t, ids) {
     out.push({ icon: 'group-items', label: one ? `Влить в пачку (${ids.length})` : `Сделать пачкой (${ids.length})`, onClick: () => ctx.panels.packMake(ids) });
   }
   if (e?.group && entries.filter((x) => x.group === e.group).length > 1) {
+    out.push({ icon: 'sword-03', label: 'Атака толпой…', onClick: () => mobAttack(ctx, t.id) });
     if (ids.length === 1) out.push({ icon: 'cursor-rectangle-selection-01', label: 'Выделить пачку', onClick: () => ctx.panels.packSelect(t.id) });
     if (ids.length === 1) out.push({ icon: 'link-04', label: 'Отделить от пачки', onClick: () => ctx.panels.packSplit(t.id) });
     out.push({ icon: 'user-group', label: 'Разгруппировать пачку', onClick: () => ctx.panels.packUngroup(t.id) });
