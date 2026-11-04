@@ -5,7 +5,7 @@ import { icon } from '../../icons.js';
 import { gridSize } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { menu, closePopover } from '../../ui/kit.js';
-import { deleteTokens, duplicateTokens, tokenSettings, contextMenu } from './p-token.js';
+import { deleteTokens, duplicateTokens, tokenSettings, contextMenu, renameOwn } from './p-token.js';
 
 export const SCALE_MIN = 0.25, SCALE_MAX = 8;
 
@@ -41,7 +41,8 @@ function rights(ctx, t) {
   return {
     master,
     rot: !t.locked && (master || ctx.canControl(t)),
-    size: !t.locked && (master || ctx.isMine(t)),
+    size: !t.locked && (master || ctx.isMine(t) || ctx.owns(t)),
+    own: !master && ctx.owns(t), // свой токен и призыв игрока (TASK-183): имя и удаление
   };
 }
 
@@ -69,8 +70,13 @@ export function renderGizmo(L, ctx) {
       t.locked ? '' : btn('del', 'delete-02', 'Удалить', 'danger'),
       btn('more', 'more-vertical', 'Ещё'),
     ].join('')
-    : btn('layer', 'layers-01', 'Слой: поверх или под всеми') + btn('more', 'more-vertical', 'Ещё');
-  const sig = [t.id, r.rot, r.size, r.master, t.locked, !!t.characterId].join('|');
+    : [
+      btn('layer', 'layers-01', 'Слой: поверх или под всеми'),
+      r.own ? btn('name', 'text-font', 'Имя на карте') : '',
+      r.own ? btn('del', 'delete-02', 'Удалить', 'danger') : '',
+      btn('more', 'more-vertical', 'Ещё'),
+    ].join('');
+  const sig = [t.id, r.rot, r.size, r.master, r.own, t.locked, !!t.characterId].join('|');
   if (box.dataset.sig !== sig) {
     box.innerHTML = `<div class="gz">
       <div class="gz-ring"></div>
@@ -159,6 +165,7 @@ export function attachGizmo(L, ctx) {
       { icon: 'send-to-back', label: 'Под всеми', onClick: () => put({ movedAt: -Date.now() }, 'Вниз') },
     ], anchor, { placement: 'bottom' });
     if (k === 'dup') duplicateTokens(ctx, [t.id]);
+    if (k === 'name' && !ctx.isMasterView) { renameOwn(ctx, t.id); return; }
     if (k === 'name') { tokenSettings(ctx, t.id, anchor); setTimeout(() => document.querySelector('.popover [data-name]')?.select(), 40); }
     if (k === 'del') { closePopover(); deleteTokens(ctx, [t.id]); }
     if (k === 'more') contextMenu(ctx, { kind: 'token', id: t.id }, { x: t.x, y: t.y }, anchor);

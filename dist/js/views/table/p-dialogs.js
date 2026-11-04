@@ -4,7 +4,7 @@ import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { replaceDB, getDB, commit, isServerMode } from '../../core/store.js';
 import { joinUrl } from '../../server/config.js';
-import { characterOf, tokenStats, updateCampaign, userById, addLog } from '../../core/campaign.js';
+import { characterOf, tokenStats, updateCampaign, userById, addLog, canFight } from '../../core/campaign.js';
 import { ABILITIES } from '../../data/rules.js';
 import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
@@ -251,9 +251,10 @@ export function pausePopover(ctx, anchor) {
  */
 export function combatSetup(ctx, preselect = []) {
   const sc = ctx.scene;
-  const toks = sc.tokens.filter((t) => t.kind !== 'item');
+  const toks = sc.tokens.filter(canFight);
   const pre = new Set(preselect);
-  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || !t.hidden)).map((t) => t.id);
+  // Свои токены и призывы игроков сами в бой не попадают — мастер отмечает их в списке (TASK-183).
+  const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || (!t.hidden && !t.ownerId && !t.summonedBy))).map((t) => t.id);
   // Инициатива бросается при «Начать бой» (TASK-038), здесь — только кто участвует. Мастер по умолчанию бросает за всех (TASK-111).
   ctx.ui.setup = { ids: new Set(on), pool: toks.map((t) => t.id), self: false };
   ctx.panels.openWidget('initiative', true);

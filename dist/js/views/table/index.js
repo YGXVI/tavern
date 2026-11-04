@@ -3,7 +3,7 @@ import { el, throttle, debounce, uid } from '../../core/dom.js';
 import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMode } from '../../core/store.js';
 import { currentUser } from '../../core/auth.js';
 import {
-  getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, updateCampaign, updateScene,
+  getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, ownsToken, updateCampaign, updateScene,
   tokenStats, userById,
 } from '../../core/campaign.js';
 import { Camera } from './camera.js';
@@ -16,7 +16,7 @@ import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder } from './combat.js';
 import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
-import { attachDrawBar } from './drawings.js';
+import { attachDrawBar, fitDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
 import { loadSrdBestiary } from '../../data/bestiary.js';
 import { refreshSheet } from './sheet.js';
@@ -68,6 +68,8 @@ export function mountTable(root, cid) {
   // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
   ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;
+  // Свой токен или призыв игрока (TASK-183): правит владелец — активный участник.
+  ctx.owns = (t) => !!t && ownsToken(ctx.c, ctx.userId, t);
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
@@ -124,7 +126,8 @@ export function mountTable(root, cid) {
     if (ctx.isMasterView) return true;
     if (t.hidden) return false;
     if (ctx.fogView() !== 'player') return true;
-    if (t.kind === 'hero') return true;
+    // Герои, свои токены и призывы игроков видны всем, как герои (TASK-183): владелец не теряет их в тумане.
+    if (t.kind === 'hero' || t.ownerId) return true;
     return isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
   };
   // Имя для игроков: мастер может скрыть имя существа («Неизвестное существо»).
@@ -381,6 +384,7 @@ export function mountTable(root, cid) {
     const far = ctx.camera.z * gridSize(ctx.scene?.grid || {}) < 34;
     if (far) viewport.dataset.far = '1'; else delete viewport.dataset.far;
     updateEdges();
+    fitDrawBar(L, ctx);
     saveCam();
   });
 

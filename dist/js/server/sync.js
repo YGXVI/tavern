@@ -6,11 +6,11 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves, UNFILTERED_DELETES, ownsDeleted } from './model.js';
 import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
-const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'] };
+const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'], campaign_creatures: ['campaign_id', 'id'] };
 const pkOf = (table, row) => Object.fromEntries((PK[table] || ['id']).map((k) => [k, row[k]]));
 const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
 const AUTHORED = new Set(['log_entries', 'log_secrets', 'portal_requests']);
@@ -112,12 +112,13 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   let rows;
   try {
     const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat] = await Promise.all([
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures] = await Promise.all([
       sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
       q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
       q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
       sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
       q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
+      q('campaign_creatures'),
     ]);
     const logRows = must(log);
     const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
@@ -126,6 +127,8 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
       campaign: must(campaign), members: must(members), invite: must(invite), characters: must(characters), scenes: must(scenes),
       secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
       saves: must(saves), portals: must(portals), combat: must(combat),
+      // Снимки существ (TASK-179): таблицы ещё нет на живой базе (миграция #150 не применена) — кампания грузится без них.
+      creatures: noTable(creatures.error) ? null : must(creatures),
     });
   } finally {
     ld.n -= 1;
@@ -326,6 +329,9 @@ async function sendOne(cid, o, attempt) {
   if (res.error) throw res.error;
 }
 
+/** Таблицы нет на сервере (миграция не применена): PostgREST PGRST205 / Postgres 42P01. */
+const noTable = (e) => !!e && (e.code === 'PGRST205' || e.code === '42P01' || /could not find the table|does not exist/i.test(String(e.message || '')));
+
 /** Ошибка сети (нет интернета, сервер не ответил), а не отказ базы. */
 const isNetwork = (e) => !e?.code && /fetch|network|load failed|timed? ?out|aborted/i.test(String(e?.message || e || ''));
 
@@ -361,6 +367,11 @@ function subscribe(cid) {
   const ch = sb.channel(`campaign:${cid}`, { config: { private: true, broadcast: { self: false }, presence: { key: `${me}:${Math.random().toString(36).slice(2, 8)}` } } });
   ch.on('postgres_changes', { event: '*', schema: 'public', table: 'campaigns', filter: `id=eq.${cid}` }, (p) => onChange(cid, 'campaigns', p));
   for (const t of CAMPAIGN_TABLES) ch.on('postgres_changes', { event: '*', schema: 'public', table: t, filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, t, p));
+  // Удаления этих таблиц по фильтру не приходят (TASK-168): слушаем без фильтра, применяем только ключи своей кампании.
+  // Пока кампания грузится, событие копится и применяется к свежим строкам — чужой ключ там ничего не удалит.
+  for (const t of UNFILTERED_DELETES) ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: t }, (p) => {
+    if (loading.has(cid) || ownsDeleted(cache.get(cid), t, p.old)) onChange(cid, t, p);
+  });
   ch.on('broadcast', { event: 'bus' }, ({ payload }) => onBus(cid, payload));
   ch.on('presence', { event: 'sync' }, () => {
     const map = new Map();
@@ -405,6 +416,7 @@ function scheduleAssemble(cid) {
     if (!c) { delete db.campaigns[cid]; store.setDB(db, { remote: true }); return; }
     db.campaigns[cid] = c;
     store.setDB(db, { remote: true });
+    prefetchAssets(c); // новая картинка своего токена у собеседника (TASK-183)
     masterDuties(cid, c);
   }, 30));
 }
@@ -509,10 +521,15 @@ export function signedUrl(ref) {
   return s && s.until > Date.now() ? s.url : '';
 }
 
+// 'sb:<путь>' — бакет карт; 'sb:@tokens/<путь>' — картинки своих токенов игроков (бакет tokens, TASK-183).
+const TOKEN_REF = 'sb:@tokens/';
+const bucketOf = (ref) => (ref.startsWith(TOKEN_REF) ? ['tokens', ref.slice(TOKEN_REF.length)] : ['maps', ref.slice(3)]);
+
 export async function resolveSigned(ref) {
   const hit = signedUrl(ref); if (hit) return hit;
   if (!sb) return '';
-  const { data, error } = await sb.storage.from('maps').createSignedUrl(ref.slice(3), 3600 * 6);
+  const [bucket, path] = bucketOf(ref);
+  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, 3600 * 6);
   if (error || !data?.signedUrl) return '';
   signed.set(ref, { url: data.signedUrl, until: Date.now() + 3600 * 6 * 1000 - 60000 });
   return data.signedUrl;
@@ -529,9 +546,32 @@ export async function uploadImage(cid, blob) {
   return ref;
 }
 
+/**
+ * Картинка своего токена игрока (TASK-183): PNG, JPEG или WebP до 5 МБ в бакет tokens, путь <кампания>/<игрок>/<файл>.
+ * Возвращает ссылку 'sb:@tokens/<путь>'. Читают её участники кампании (RLS бакета).
+ */
+export async function uploadTokenImage(cid, blob) {
+  const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' })[blob?.type];
+  if (!ext || blob.size > 5 * 1024 * 1024) throw new Error('Нужна картинка PNG, JPEG или WebP до 5 МБ');
+  if (!sb || !me) throw new Error('Нет связи с сервером');
+  const path = `${cid}/${me}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await sb.storage.from('tokens').upload(path, blob, { contentType: blob.type, upsert: false });
+  if (error) {
+    const msg = String(error.message || '');
+    throw new Error(/bucket not found/i.test(msg) ? 'Картинки своих токенов появятся после обновления базы' : /row-level/i.test(msg) ? 'Картинку можно загрузить только в свою кампанию' : msg);
+  }
+  const ref = `${TOKEN_REF}${path}`;
+  signed.set(ref, { url: URL.createObjectURL(blob), until: Date.now() + 3600 * 1000 });
+  return ref;
+}
+
+const asked = new Map(); // ссылка → время последней попытки: недоступную картинку не спрашиваем на каждое событие
 function prefetchAssets(c) {
   if (!c) return;
-  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src)].filter((r) => r?.startsWith('sb:') && !signedUrl(r)));
+  const toks = c.scenes.flatMap((s) => (s.tokens || []).map((t) => t.img));
+  const now = Date.now();
+  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src), ...toks].filter((r) => r?.startsWith('sb:') && !signedUrl(r) && now - (asked.get(r) || 0) > 60000));
   if (!refs.size) return;
+  for (const r of refs) asked.set(r, now);
   Promise.all([...refs].map(resolveSigned)).then(() => store.setDB(store.getDB(), { remote: true, assets: true }));
 }
