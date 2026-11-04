@@ -70,7 +70,12 @@ jobs:
     # Одна выкладка стенда за раз: миграции тестовой базы не должны идти параллельно.
     concurrency: test-stand
     env:
-      VERCEL_PROJECT_ID: prj_zkprAhi4TwEii6GylM8i1ltaP1VN
+      # Стенд живёт в отдельной команде Vercel «DropDice» (drop-dice, team_El3MbNs7g6pj19nbs68Jyqz8),
+      # не в команде прода: боевые ID сбрасываются, проект находится по имени.
+      VERCEL_ORG_ID: ''
+      VERCEL_PROJECT_ID: ''
+      VERCEL_SCOPE: drop-dice
+      VERCEL_PROJECT: dropdice-test
     steps:
       # Стенд отделён от прода (docs/test-environment.md): свой проект Vercel со своим токеном
       # VERCEL_TOKEN_TEST и свой проект Supabase. Чего нет — то пропускается, тесты test остаются зелёными.
@@ -114,4 +119,9 @@ jobs:
         working-directory: dist
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN_TEST }}
-        run: npx --yes vercel@64.1.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+        run: |
+          vercel() { npx --yes vercel@64.1.0 "$@" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN"; }
+          # Первый запуск создаёт проект; дальше он находится по имени.
+          vercel project inspect "$VERCEL_PROJECT" >/dev/null 2>&1 || vercel project create "$VERCEL_PROJECT"
+          vercel link --yes --project "$VERCEL_PROJECT"
+          vercel deploy --prod --yes

@@ -4,7 +4,7 @@
 
 | | Прод (`main`) | Тест (`test`) |
 |---|---|---|
-| Сайт | Vercel `rasputye`, токен `VERCEL_TOKEN` | Vercel `dropdice-test` (`prj_zkprAhi4…`), токен `VERCEL_TOKEN_TEST` |
+| Сайт | Vercel `rasputye`, токен `VERCEL_TOKEN` | Vercel `dropdice-test` в отдельной команде `drop-dice`, токен `VERCEL_TOKEN_TEST` |
 | База | Supabase `ilsuespohsuligyiqjsx` | свой проект Supabase, адрес — переменная `TEST_SUPABASE_URL` |
 | Вход | Discord-приложение «Распутье» | своё Discord-приложение «Распутье (тест)», гости по `?guest=1` |
 | Миграции | вручную, после бэкапа | сами из CI при каждом пуше в `test` |
@@ -41,8 +41,8 @@
 
 **3. Vercel — проект и токен стенда**
 
-1. Проект Vercel должен называться `dropdice-test` (имя даёт адрес `dropdice-test.vercel.app`) и иметь ID из workflow (`VERCEL_PROJECT_ID`, сейчас `prj_zkprAhi4TwEii6GylM8i1ltaP1VN`). Если проект создан заново — агент заменяет ID в `.github/workflows/deploy.yml`.
-2. Account Settings → Tokens: создать токен для этой команды, срок — по желанию.
+1. Отдельная команда Vercel `DropDice` (`drop-dice`, создана 04.11). Проект `dropdice-test` создаёт сам workflow при первой выкладке (`vercel project create`), дальше находит его по имени.
+2. Account Settings → Tokens: создать токен со scope **DropDice** (только эта команда — прод токену недоступен), срок — по желанию.
 
 **4. GitHub — Settings → Secrets and variables → Actions**
 
