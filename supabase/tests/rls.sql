@@ -135,6 +135,8 @@ select pg_temp.cnt('мастер видит тайную часть броска
 select pg_temp.ok('мастер выключает открытое перемещение', $q$update public.campaigns set data = jsonb_set(data, '{settings,openMovement}', 'false') where id = 'c-rls'$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.err('инициатива строкой — отказ (аудит 04.11)', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '"12"') where campaign_id = 'c-rls'$q$);
+select pg_temp.err('инициатива объектом — отказ', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '{"v":12}') where campaign_id = 'c-rls'$q$);
 select pg_temp.rows('игрок бросает свою инициативу', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '12') where campaign_id = 'c-rls'$q$, 1);
 select pg_temp.err('второй раз инициативу не переписать', $q$update public.combats set data = jsonb_set(data, '{entries,1,init}', '20') where campaign_id = 'c-rls'$q$);
 select pg_temp.rows('инициатива за другого героя (сидит с телефона)', $q$update public.combats set data = jsonb_set(data, '{entries,2,init}', '9') where campaign_id = 'c-rls'$q$, 1);
@@ -142,9 +144,14 @@ select pg_temp.err('инициативу скрытого огра — маст�
 select pg_temp.err('инициативу гоблина не тронуть', $q$update public.combats set data = jsonb_set(data, '{entries,0,init}', '1') where campaign_id = 'c-rls'$q$);
 select pg_temp.err('ход монстра не закончить', $q$update public.combats set data = data || '{"ended":"t-gob"}' where campaign_id = 'c-rls'$q$);
 select pg_temp.err('раунд игрок не меняет', $q$update public.combats set data = data || '{"round":2}' where campaign_id = 'c-rls'$q$);
+select pg_temp.err('пройденное строкой — отказ (аудит 04.11)', $q$update public.combats set data = jsonb_set(data, '{moved}', '{"t-p":"15"}') where campaign_id = 'c-rls'$q$);
+select pg_temp.err('пройденное отрицательное — отказ', $q$update public.combats set data = jsonb_set(data, '{moved}', '{"t-p":-5}') where campaign_id = 'c-rls'$q$);
 select pg_temp.rows('движение героя и видимого гоблина в бою', $q$update public.combats set data = jsonb_set(data, '{moved}', '{"t-p":15,"t-gob":10}') where campaign_id = 'c-rls'$q$, 1);
 select pg_temp.err('движение скрытого огра — мастер', $q$update public.combats set data = jsonb_set(data, '{moved,t-ogre}', '5') where campaign_id = 'c-rls'$q$);
-select pg_temp.rows('спасбросок своего героя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":13}') where id = 'sv-1'$q$, 1);
+select pg_temp.err('спасбросок с total строкой — отказ (аудит 04.11)', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":"13"}') where id = 'sv-1'$q$);
+select pg_temp.err('спасбросок с лишним полем — отказ', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":13,"html":"x"}') where id = 'sv-1'$q$);
+select pg_temp.err('спасбросок с detail объектом — отказ', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":13,"detail":{}}') where id = 'sv-1'$q$);
+select pg_temp.rows('спасбросок своего героя (полная форма клиента)', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":13,"nat":11,"ok":true,"by":"player","detail":"к20 11 +2"}') where id = 'sv-1'$q$, 1);
 select pg_temp.rows('спасбросок за другого героя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-q2}', '{"total":11}') where id = 'sv-1'$q$, 1);
 select pg_temp.err('спасбросок за гоблина нельзя', $q$update public.save_requests set data = jsonb_set(data, '{results,t-gob}', '{"total":20}') where id = 'sv-1'$q$);
 select pg_temp.err('свой результат не переписать', $q$update public.save_requests set data = jsonb_set(data, '{results,t-p}', '{"total":20}') where id = 'sv-1'$q$);
