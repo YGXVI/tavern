@@ -18,6 +18,23 @@ export function abilityModifier(score) {
   return knownInteger(score) === null || knownInteger(score - 10) === null ? null : Math.floor((score - 10) / 2);
 }
 
+/**
+ * TASK-186 P4a: HP of a newly built hero with fixed average HP (plan r1 D3). Same formula as
+ * public.character_creation_hp in SQL. hitDice: [{classId, die, count}] in level order of classes, first class first;
+ * perLevelBonus: [{perCharacterLevel: true} | {perClassLevel: classId}]. Unknown CON or die gives null, not 0.
+ */
+export function creationHitPoints({ method, firstLevelHitDie, hitDice = [], perLevelBonus = [], constitution }) {
+  const m = abilityModifier(constitution);
+  if (method !== 'fixed_average' || m === null || !Number.isSafeInteger(firstLevelHitDie)) return null;
+  if (hitDice.some(h => !Number.isSafeInteger(h.die) || !Number.isSafeInteger(h.count) || h.count < 1)) return null;
+  const levels = hitDice.reduce((n, h) => n + h.count, 0);
+  if (levels < 1 || hitDice[0].die !== firstLevelHitDie) return null;
+  let total = firstLevelHitDie + levels * m;
+  hitDice.forEach((h, i) => { total += (i === 0 ? h.count - 1 : h.count) * (h.die / 2 + 1); });
+  for (const b of perLevelBonus) total += b.perCharacterLevel ? levels : (hitDice.find(h => h.classId === b.perClassLevel)?.count ?? 0);
+  return total;
+}
+
 export function totalClassLevel(classes) {
   if (!Array.isArray(classes) || !classes.length) return null;
   if (classes.some((c) => !c || knownInteger(c.levels) === null || c.levels < 1)) return null;
