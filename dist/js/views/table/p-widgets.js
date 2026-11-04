@@ -8,6 +8,7 @@ import { LIGHTS, conditionById, woundLabel } from '../../data/rules.js';
 import { diceWidget } from './dice.js';
 import { visionFields } from './p-token.js';
 import { currentEntry, combatRound } from './combat.js';
+import { sightWidgetRows, heroSightNote } from './sight-ui.js';
 
 const close = `<button class="icon-btn icon-btn-sm" data-act="w-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button>`;
 const head = (title, sub) => `<div class="panel-header"><div class="titles"><div class="title">${esc(title)}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${close}</div>`;
@@ -51,7 +52,8 @@ function visionMaster(ctx) {
         const on = ctx.ui.viewAs === t.characterId;
         // TASK-046: рядом с «смотреть глазами» — настройка света и тёмного зрения героя.
         const open = ctx.ui.visionEdit === t.id;
-        return `<div class="vision-hero ${open ? 'open' : ''}"><div class="vh-row"><button class="list-row grow ${on ? 'current' : ''}" data-act="viewas" data-id="${esc(t.characterId)}">${avatarImg(t.img, 'hero')}<span class="grow col-tight"><span class="primary">${esc(st.name)}</span><span class="secondary">${st.darkvision ? `тёмное зрение ${st.darkvision} фт` : 'без тёмного зрения'}${t.light ? ` · ${esc(lightName(t.light))}` : ''}</span></span>${on ? '<span class="chip chip-accent">сейчас</span>' : icon('view', 18)}</button><button class="icon-btn icon-btn-sm ${open ? 'active' : ''}" data-act="vision-edit" data-id="${esc(t.id)}" data-tip="Свет и тёмное зрение" aria-label="Свет и тёмное зрение ${esc(st.name)}" aria-expanded="${open}">${icon('settings-01', 18)}</button></div>${open ? visionFields(ctx, t) : ''}</div>`;
+        const eyes = heroSightNote(ctx, t.characterId); // #190 C: «Своё + глаза …»
+        return `<div class="vision-hero ${open ? 'open' : ''}"><div class="vh-row"><button class="list-row grow ${on ? 'current' : ''}" data-act="viewas" data-id="${esc(t.characterId)}">${avatarImg(t.img, 'hero')}<span class="grow col-tight"><span class="primary">${esc(st.name)}</span><span class="secondary">${st.darkvision ? `тёмное зрение ${st.darkvision} фт` : 'без тёмного зрения'}${t.light ? ` · ${esc(lightName(t.light))}` : ''}</span>${eyes ? `<span class="secondary sight-note-line">${icon('view', 12)}${esc(eyes)}</span>` : ''}</span>${on ? '<span class="chip chip-accent">сейчас</span>' : icon('view', 18)}</button><button class="icon-btn icon-btn-sm ${open ? 'active' : ''}" data-act="vision-edit" data-id="${esc(t.id)}" data-tip="Свет и тёмное зрение" aria-label="Свет и тёмное зрение ${esc(st.name)}" aria-expanded="${open}">${icon('settings-01', 18)}</button></div>${open ? visionFields(ctx, t) : ''}</div>`;
       }).join('') || '<p class="t-sm muted">На сцене нет героев</p>'}</div>
       <button class="btn btn-secondary btn-block" data-act="preview-players">${icon('view-off', 16)}Как видят игроки</button>
     </div>
@@ -68,6 +70,7 @@ function visionPlayer(ctx) {
   return `<div class="widget panel vision-widget">${head('Зрение', ch?.name || '')}
     <div class="panel-section">
       ${tok ? visionFields(ctx, tok) : `<div class="setting-row">${icon('eye', 20)}<span class="titles"><span class="label-main">Тёмное зрение</span><span class="hint">${ch?.darkvision ? `${ch.darkvision} фт` : 'Нет'} · героя нет на этой сцене</span></span></div>`}
+      ${sightWidgetRows(ctx)}
       <div class="setting-row">${icon(dark ? 'moon-02' : 'sun-01', 20)}<span class="titles"><span class="label-main">${dark ? 'Здесь темно' : 'Здесь светло'}</span><span class="hint">${c.settings.sharedVision ? 'Вы видите то же, что и весь отряд' : 'Вы видите только глазами своего героя'}</span></span></div>
     </div>
     ${dark ? `<hr class="panel-divider"><div class="panel-section"><div class="label">Что видит ${esc(ch?.name || 'герой')}</div><p class="t-sm muted"><span class="legend lit"></span>Свет — всё как есть</p>${st?.darkvision ? `<p class="t-sm muted"><span class="legend dv"></span>Тёмное зрение — видно как при свете, до ${st.darkvision} фт</p>` : ''}<p class="t-sm muted"><span class="legend fog-dark"></span>Темнота — не видно</p></div>` : ''}

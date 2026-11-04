@@ -11,6 +11,7 @@ import { DRAW_TOOLS, DRAW_TEMPLATES } from './drawings.js';
 import { drawStyle, fillSwatch, strokeSwatch } from './draw-style.js';
 import { movementLeft, FOCUS_TOOLS } from './input.js';
 import { pauseElapsed } from './panels.js';
+import { sightBanner } from './sight-ui.js';
 
 const ib = (act, name, tip, { active = false, kbd = '', extra = '', disabled = false, count = 0 } = {}) =>
   `<button class="icon-btn ${active ? 'active' : ''}" data-act="${act}" ${extra} ${disabled ? 'disabled' : ''} data-tip="${esc(tip)}" ${kbd ? `data-kbd="${esc(kbd)}"` : ''} aria-label="${esc(tip)}" aria-pressed="${active}">${icon(name, 22)}${count ? `<span class="count">${count}</span>` : ''}</button>`;
@@ -128,6 +129,8 @@ function topCenter(ctx) {
     const left = movementLeft(ctx, mine);
     return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${combatRound(c, sc)} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
   }
+  const eyes = sightBanner(ctx, banner);
+  if (eyes) return eyes;
   const m = membership(c, ctx.userId);
   if (m?.characterId && !sc.tokens.some((t) => ctx.isMine(t))) return banner('chess-pawn', 'Вашего героя нет на этой сцене', 'Мастер поставит его, когда отряд доберётся сюда. Карту уже можно смотреть');
   if (m?.sceneId && m.sceneId !== c.activeSceneId) {

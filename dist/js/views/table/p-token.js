@@ -7,6 +7,7 @@ import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_CO
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry } from './combat.js';
 import { ridingItems } from './riding.js';
+import { sightMenuItems } from './sight-ui.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
@@ -444,6 +445,7 @@ export function duplicateTokens(ctx, ids) {
       if (!t || t.characterId) continue;
       const base = t.name.replace(/\s\d+$/, '');
       const n = { ...structuredClone(t), id: uid('t-'), name: nextTokenName(s, base), x: t.x + g, y: t.y };
+      delete n.sight; // выданные глаза (#190 C) копия не наследует
       s.tokens.push(n); copies.push(n.id);
     }
   }, { label: 'Копия', undo: (s) => { s.tokens = s.tokens.filter((t) => !copies.includes(t.id)); }, redo: () => {} });
@@ -467,6 +469,7 @@ export function pasteTokens(ctx, at) {
     for (const t0 of cb.items) {
       const base = t0.name.replace(/\s\d+$/, '');
       const t = { ...structuredClone(t0), id: uid('t-'), name: nextTokenName(s, base), x: Math.max(0, Math.min(m.width, at.x + (t0.x - cb.cx))), y: Math.max(0, Math.min(m.height, at.y + (t0.y - cb.cy))) };
+      delete t.sight;
       s.tokens.push(t); made.push(t);
     }
   }, { label: 'Вставка', undo: (s) => { const ids = new Set(made.map((t) => t.id)); s.tokens = s.tokens.filter((t) => !ids.has(t.id)); }, redo: (s) => { s.tokens.push(...structuredClone(made)); } });
@@ -666,6 +669,7 @@ export function contextMenu(ctx, target, w, screen) {
         { icon: 'first-aid-kit', label: 'Хиты…', onClick: () => hpEditor(ctx, ids, anchor) },
         { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, ids, anchor) },
         { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
+        ...(ids.length === 1 ? sightMenuItems(ctx, t, anchor) : []),
         { icon: 'sword-03', label: ctx.c.combat.active ? (ctx.c.combat.entries.some((e) => e.tokenId === t.id) ? 'Убрать из боя' : 'Добавить в бой') : 'Начать бой с выделенными', onClick: () => ctx.panels.combatToggle(ids) },
         ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
         'divider',

@@ -7,6 +7,7 @@ import { stackOrder } from './riding.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
 import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
+import { sightRings } from './sight-ui.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
 import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing, drawingMarkup, drawingFrame, shapePoints, zOf, validDrawing, svgNum } from './drawings.js';
@@ -247,6 +248,13 @@ export function renderAuras(L, ctx) {
     const hex = auraHex(t.aura), a = auraAlpha(t.aura);
     out.push(`<circle class="aura" cx="${p.x}" cy="${p.y}" r="${rad}" style="--ac:${hex};--aa:${a};--as:${Math.min(1, a + 0.45)}"/>`);
     labels.push(`<button class="aura-label" data-aura="${esc(t.id)}" style="left:${p.x}px;top:${p.y - rad}px;--ac:${hex}">${esc(t.aura.name)} · ${t.aura.radius} фт</button>`);
+  }
+  // Глаза существ (#190 C): у мастера — пунктирное кольцо с подписью «глаза · кому · дальность» и круг превью,
+  // у игрока — край своих выданных глаз.
+  for (const g of sightRings(ctx)) {
+    const p = ctx.posOf(g.t);
+    out.push(`<circle class="sight-ring ${g.cls}" cx="${p.x}" cy="${p.y}" r="${g.r}"/>`);
+    if (g.label) labels.push(`<span class="sight-label ${g.cls}" style="left:${p.x - g.r}px;top:${p.y}px">${icon('view', 12)}${esc(g.label)}</span>`);
   }
   L.auras.innerHTML = out.join('');
   L.auraLabels.innerHTML = labels.join('');

@@ -22,6 +22,7 @@ import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { DRAW_TEMPLATES } from './drawings.js';
 import { drawStyle, stylePopover } from './draw-style.js';
+import { mySight, setSightOff } from './sight-ui.js';
 
 const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
 
@@ -679,6 +680,8 @@ export class Panels {
       case 'w-close': ctx.ui.widget = null; this.refreshWidget(); ctx.invalidate('chrome'); break;
       case 'pause': D.pausePopover(ctx, b); break;
       case 'exit-viewas': ctx.setViewAs(null); break;
+      case 'sight-off': setSightOff(ctx, mySight(ctx).filter((s) => !s.blocked && !s.off).map((s) => s.t.id), true); break;
+      case 'sight-toggle': setSightOff(ctx, [b.dataset.id], !ctx.ui.sightOff?.has(b.dataset.id)); break;
       case 'viewas': ctx.setViewAs(ctx.ui.viewAs === b.dataset.id ? null : b.dataset.id); break;
       case 'vision-edit': ctx.ui.visionEdit = ctx.ui.visionEdit === b.dataset.id ? null : b.dataset.id; this.refreshWidget(true); break;
       case 'v-light': if (this.canSetVision(b.dataset.id)) T.setTokenLight(ctx, b.dataset.id, b.dataset.v); break;

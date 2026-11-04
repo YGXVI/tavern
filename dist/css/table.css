@@ -100,6 +100,17 @@
 .viewport[data-focus] .aura-labels { opacity: 0; pointer-events: none; }
 .aura-pop { width: 300px; }
 .aura { fill: var(--ac, var(--violet-500)); fill-opacity: var(--aa, .16); stroke: var(--ac, var(--aura-stroke)); stroke-opacity: var(--as, .6); stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(6px * var(--iz)) calc(5px * var(--iz)); }
+/* Глаза существ (#190 C, Figma 2.11 экраны 39·2–39·4): пунктирное кольцо дальности, подпись слева на кольце. */
+.sight-ring { fill: none; stroke: var(--violet-500); stroke-opacity: .9; stroke-width: calc(1.5px * var(--iz)); stroke-dasharray: calc(9px * var(--iz)) calc(6px * var(--iz)); }
+.sight-ring.preview { fill: var(--violet-500); fill-opacity: .1; stroke-width: calc(2px * var(--iz)); stroke-dasharray: none; }
+.sight-ring.off { stroke-opacity: .4; }
+.sight-ring.edge { stroke-opacity: .55; }
+.sight-label { position: absolute; transform: translate(-50%, -50%) scale(var(--iz)); transform-origin: center; white-space: nowrap; pointer-events: none;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: var(--r-full); background: rgb(12 14 22 / .85); color: #fff;
+  font: 600 11px/14px var(--font-text); box-shadow: inset 0 0 0 1px var(--violet-500); }
+.sight-label .ic { width: 12px; height: 12px; color: var(--violet-500); }
+.sight-label.off { opacity: .6; }
+.viewport[data-focus] .sight-label { opacity: 0; }
 .light-radius { fill: none; stroke: var(--brand-500); stroke-width: calc(1px * var(--iz)); }
 .light-radius.dim { fill: none; stroke-dasharray: calc(5px * var(--iz)) calc(5px * var(--iz)); stroke-opacity: .6; }
 .light-radius.bright { fill: rgb(233 176 82 / .05); stroke-opacity: .9; }
@@ -826,6 +837,28 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .vision-hero.open { background: rgb(255 255 255 / .04); }
 .vh-row { display: flex; align-items: center; gap: 4px; }
 .vh-row .list-row { min-width: 0; }
+.sight-note-line { display: inline-flex; align-items: center; gap: 4px; color: var(--text-magic); }
+.sight-note-line .ic { width: 12px; height: 12px; flex: none; }
+/* Окно «Дать зрение игроку» (39·2) */
+.sight-pop { width: 320px; max-width: calc(100vw - 24px); }
+.sight-pop .panel-section .label { margin-bottom: 8px; }
+.sight-who { display: flex; flex-wrap: wrap; gap: 6px; }
+.sight-hero { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px 0 5px; border: 0; border-radius: var(--r-full); cursor: pointer;
+  background: var(--bg-control); color: var(--text-primary); font: 500 14px/16px var(--font-text); box-shadow: inset 0 0 0 1px var(--stroke-subtle); }
+.sight-hero:hover { background: var(--bg-hover); }
+.sight-hero.on { background: var(--bg-accent-subtle); box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
+.sight-hero .avatar { width: 28px; height: 28px; }
+.sight-hero .tag { color: var(--text-accent); font-size: 12px; }
+.sight-seg { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; padding: 4px; border-radius: var(--r-12); background: var(--bg-control); box-shadow: inset 0 0 0 1px var(--stroke-subtle); }
+.sight-seg button { height: 32px; border: 0; border-radius: var(--r-8); background: none; color: var(--text-primary); font: 500 14px/16px var(--font-text); cursor: pointer; }
+.sight-seg button:hover { background: var(--bg-hover); }
+.sight-seg button.on { background: var(--bg-accent-subtle); color: var(--text-accent); box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
+.sight-own { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.sight-own[hidden] { display: none; }
+.sight-own .input { width: 110px; height: 36px; }
+.sight-pop .t-sm.muted { margin-top: 8px; }
+.sight-note { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: var(--text-secondary); font: 400 13px/16px var(--font-text); }
+.sight-note .ic { flex: none; color: var(--violet-500); }
 .vision-edit { display: flex; flex-direction: column; gap: 10px; padding: 4px 10px 12px; }
 .vision-edit .field { gap: 6px; }
 .vision-edit .field > label { font: 500 12px/16px var(--font-text); color: var(--text-secondary); }
