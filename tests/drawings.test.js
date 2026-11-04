@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   boxCorners, shapePoints, isClosed, styleOf, drawingMarkup, drawingFrame, transformEdit,
-  shapeHandles, drawingsShift, shiftDrawing, zOf,
+  shapeHandles, drawingsShift, shiftDrawing, zOf, validDrawing, safeDrawingId, svgNum, canDeleteDrawing, deleteDrawing,
 } from '../dist/js/views/table/drawings.js';
 import { safeColor } from '../dist/js/views/table/draw-style.js';
 
@@ -114,4 +114,76 @@ test('сдвиг: фигура по рамке едет центром; закр
   assert.deepEqual(Object.keys(after), ['a']);
   assert.equal(zOf({}), 0);
   assert.equal(zOf({ z: -2 }), -2);
+});
+
+// Блокеры #185 (P1, P2): чужие данные рисунка не становятся разметкой; закреплённый не удаляется ни одним путём.
+const EVIL = '0" onload="alert(1)';
+const VALID = [
+  { id: 'l', type: 'line', pts: [{ x: 0, y: 0 }, { x: 70, y: 0 }], color: '#f00' },
+  { id: 'b', type: 'line', pts: [{ x: 0, y: 0 }, { x: 70, y: 0 }, { x: 0, y: 70 }], closed: true, width: 0, opacity: 0.5, fill: '#0f0', fillOpacity: 0.35, dash: true, z: -3 },
+  { id: 't-1', type: 'text', x: 10, y: 20, text: '<b>Привет</b>', size: 28, color: '#fff' },
+  { id: 's', type: 'shape', shape: 'seg', a: { x: 0, y: 0 }, b: { x: 1, y: 1 } },
+  { id: 'c', type: 'shape', shape: 'cone', origin: { x: 0, y: 0 }, angle: 0.5, size: 15 },
+  { id: 'r', type: 'shape', shape: 'ellipse', c: { x: 5, y: 5 }, w: 70, h: 35, rot: 30, locked: true },
+  { id: 'p', type: 'shape', shape: 'poly', pts: [{ x: 0, y: 0 }, { x: 10, y: 0 }], closed: false },
+  { id: 'd-k3x9a1b2c', type: 'shape', shape: 'hex', c: { x: 0, y: 0 }, w: 0, h: 0 },
+];
+
+test('P1: проверенные рисунки — старые и новые — рисуются', () => {
+  for (const d of VALID) assert.equal(validDrawing(d), true, d.id);
+  assert.equal(safeDrawingId('123e4567-e89b-12d3-a456-426614174000'), true);
+});
+
+test('P1: строка, бесконечность или лишний вид в любом поле — рисунок не рисуется', () => {
+  const base = { rect: { id: 'r', type: 'shape', shape: 'rect', c: { x: 0, y: 0 }, w: 70, h: 70, rot: 0 } };
+  const bad = [
+    { ...base.rect, id: 'x" onclick="1' }, { ...base.rect, id: '<svg>' }, { ...base.rect, id: 5 },
+    { ...base.rect, c: { x: EVIL, y: 0 } }, { ...base.rect, c: { x: 0, y: Infinity } }, { ...base.rect, c: null },
+    { ...base.rect, w: EVIL }, { ...base.rect, h: NaN }, { ...base.rect, rot: EVIL }, { ...base.rect, w: -1 },
+    { ...base.rect, width: EVIL }, { ...base.rect, width: 1e9 }, { ...base.rect, opacity: '1;fill:red' }, { ...base.rect, opacity: 2 },
+    { ...base.rect, fillOpacity: EVIL }, { ...base.rect, z: EVIL }, { ...base.rect, shape: 'star' }, { ...base.rect, type: 'img' },
+    { id: 't', type: 'text', x: EVIL, y: 0, text: 'a' }, { id: 't', type: 'text', x: 0, y: 0, size: EVIL, text: 'a' }, { id: 't', type: 'text', x: 0, y: 0, text: { a: 1 } },
+    { id: 'l', type: 'line', pts: [{ x: 0, y: EVIL }] }, { id: 'l', type: 'line', pts: EVIL }, { id: 'l', type: 'line' },
+    { id: 's', type: 'shape', shape: 'seg', a: { x: 0, y: 0 }, b: { x: EVIL, y: 0 } },
+    { id: 'c', type: 'shape', shape: 'cone', origin: { x: EVIL, y: 0 }, angle: 0, size: 15 },
+    { id: 'c', type: 'shape', shape: 'cone', origin: { x: 0, y: 0 }, angle: EVIL, size: 15 },
+    { id: 'c', type: 'shape', shape: 'sphere', origin: { x: 0, y: 0 }, size: EVIL },
+    { id: 'p', type: 'shape', shape: 'poly', pts: [{ x: 0, y: 0 }, { x: '1e3', y: 0 }] },
+    null, 'строка', [],
+  ];
+  for (const d of bad) assert.equal(validDrawing(d), false, JSON.stringify(d));
+});
+
+test('P1: даже без проверки разметка фигуры не выпускает строки из данных', () => {
+  const ell = { type: 'shape', shape: 'ellipse', c: { x: EVIL, y: EVIL }, w: EVIL, h: 70, rot: EVIL, width: EVIL, opacity: EVIL, fill: EVIL, fillOpacity: EVIL, color: EVIL };
+  const m = drawingMarkup(grid, ell);
+  assert.doesNotMatch(m, /onload|alert/);
+  assert.match(m, /^<ellipse cx="0" cy="0" rx="0" ry="35" transform="rotate\(0 0 0\)"/);
+  assert.deepEqual(styleOf(ell), { color: '#e9b052', width: 4, opacity: 1, dash: false, fill: '#e9b052', fillOpacity: 1 });
+  assert.equal(svgNum(EVIL), 0);
+  assert.equal(svgNum(12.5), 12.5);
+});
+
+test('P2: закреплённый и чужой рисунок не удаляются, свой — удаляется одной записью', () => {
+  const mk = (master, drawings) => {
+    const calls = [];
+    const ctx = { isMasterView: master, userId: 'u1', scene: { drawings }, ui: { selDrawing: null, selDrawings: new Set() },
+      mutateScene: (fn, rec) => { fn(ctx.scene); calls.push(rec.label); } };
+    return { ctx, calls };
+  };
+  const mine = { id: 'm', type: 'line', pts: [], author: 'u1' }, other = { id: 'o', type: 'line', pts: [], author: 'u2' };
+  const locked = { ...mine, id: 'k', locked: true };
+  assert.equal(canDeleteDrawing({ isMasterView: true, userId: 'x' }, locked), false, 'и мастер не удаляет закреплённый');
+  assert.equal(canDeleteDrawing({ isMasterView: false, userId: 'u1' }, other), false);
+  assert.equal(canDeleteDrawing({ isMasterView: true, userId: 'x' }, other), true);
+  assert.equal(canDeleteDrawing({ isMasterView: true, userId: 'x' }, undefined), false);
+  const p = mk(false, [mine, other, locked]);
+  assert.equal(deleteDrawing(p.ctx, 'k'), false);
+  assert.equal(deleteDrawing(p.ctx, 'o'), false);
+  assert.equal(deleteDrawing(p.ctx, 'm'), true);
+  assert.deepEqual(p.ctx.scene.drawings.map((d) => d.id), ['o', 'k']);
+  assert.deepEqual(p.calls, ['Удалить рисунок']);
+  const m = mk(true, [locked]);
+  assert.equal(deleteDrawing(m.ctx, 'k'), false);
+  assert.deepEqual(m.calls, []);
 });

@@ -11,6 +11,7 @@ import { movementLeft } from './input.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
 import { parseHpInput } from '../../rules/hp.js';
+import { canDeleteDrawing } from './drawings.js';
 
 const ib = (act, name, tip, extra = '') => `<button class="icon-btn" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(name, 22)}</button>`;
 const div = '<span class="divider"></span>';
@@ -386,7 +387,10 @@ export async function deleteTokens(ctx, ids, drawIds = []) {
     }
   }
   const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter(Boolean);
-  const draws = drawIds.map((id) => ctx.scene.drawings.find((d) => d.id === id)).filter(Boolean);
+  // Рисунки группы — только те, что можно удалить: закреплённые и чужие остаются (блокер P2 в #185).
+  const found = drawIds.map((id) => ctx.scene.drawings.find((d) => d.id === id)).filter(Boolean);
+  const draws = found.filter((d) => canDeleteDrawing(ctx, d)), kept = found.length - draws.length;
+  if (kept) ctx.toast({ title: 'Закреплённые остались', body: `Не удалено: ${kept} — сначала открепите`, icon: 'square-lock-02' });
   if (!toks.length && !draws.length) return;
   if (toks.some((t) => t.kind === 'hero')) {
     const ok = await confirmDialog({ title: 'Убрать героя со сцены?', body: 'Лист героя останется, исчезнет только фишка на этой карте.', ok: 'Убрать' });

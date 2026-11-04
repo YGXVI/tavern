@@ -59,6 +59,32 @@ export function isClosed(d) {
 }
 const isTemplate = (d) => d.type === 'shape' && DRAW_TEMPLATES.some((t) => t.id === d.shape);
 
+// Чужие рисунки (TASK-182, блокер P1 в #185): рисунок приходит с сервера от любого участника, поэтому в разметку
+// попадают только конечные числа в разумных пределах, известные виды фигур и безопасные ID. Остальное не рисуется.
+const LIM = 1e6;
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= LIM;
+const optNum = (v, lo = -LIM, hi = LIM) => v == null || (isNum(v) && v >= lo && v <= hi);
+const isPt = (p) => !!p && typeof p === 'object' && isNum(p.x) && isNum(p.y);
+const isPts = (a) => Array.isArray(a) && a.length <= 20000 && a.every(isPt);
+/** Число для разметки: проверенное число как есть, всё остальное — 0 (запасная защита поверх validDrawing). */
+export const svgNum = (v) => (isNum(v) ? v : 0);
+const SHAPE_IDS = ['seg', 'poly', ...BOX_SHAPES, ...DRAW_TEMPLATES.map((t) => t.id)];
+/** ID рисунка, который можно вставить в атрибут: буквы, цифры и _ : . - */
+export const safeDrawingId = (id) => typeof id === 'string' && /^[A-Za-z0-9_:.-]{1,128}$/.test(id);
+
+/** Можно ли рисовать этот рисунок: известный вид, конечные координаты, числа стиля в пределах. */
+export function validDrawing(d) {
+  if (!d || typeof d !== 'object' || !safeDrawingId(d.id)) return false;
+  if (!optNum(d.width, 0, 1000) || !optNum(d.opacity, 0, 1) || !optNum(d.fillOpacity, 0, 1) || !optNum(d.z)) return false;
+  if (d.type === 'text') return isNum(d.x) && isNum(d.y) && optNum(d.size, 1, 1000) && (d.text == null || (typeof d.text === 'string' && d.text.length <= 10000));
+  if (d.type === 'line') return isPts(d.pts);
+  if (d.type !== 'shape' || !SHAPE_IDS.includes(d.shape)) return false;
+  if (d.shape === 'seg') return isPt(d.a) && isPt(d.b);
+  if (d.shape === 'poly') return isPts(d.pts);
+  if (BOX_SHAPES.includes(d.shape)) return isPt(d.c) && isNum(d.w) && d.w >= 0 && isNum(d.h) && d.h >= 0 && optNum(d.rot);
+  return isPt(d.origin) && optNum(d.angle) && optNum(d.size, 0, 100000);
+}
+
 /**
  * Стиль рисунка. Новые поля необязательны (TASK-182): width, opacity, dash, fill, fillOpacity.
  * Старые рисунки: обводка 4 px; шаблон без поля fill — заливка его цветом на 18 %, как было.
@@ -66,9 +92,9 @@ const isTemplate = (d) => d.type === 'shape' && DRAW_TEMPLATES.some((t) => t.id 
 export function styleOf(d) {
   const closed = isClosed(d), legacy = isTemplate(d) && d.fill == null;
   return {
-    color: safeColor(d.color), width: d.width ?? 4, opacity: d.opacity ?? 1, dash: !!d.dash,
+    color: safeColor(d.color), width: isNum(d.width) ? d.width : 4, opacity: isNum(d.opacity) ? d.opacity : 1, dash: !!d.dash,
     fill: closed ? (legacy ? safeColor(d.color) : d.fill && d.fill !== 'none' ? safeColor(d.fill) : 'none') : 'none',
-    fillOpacity: d.fillOpacity ?? (legacy ? 0.18 : 1),
+    fillOpacity: isNum(d.fillOpacity) ? d.fillOpacity : legacy ? 0.18 : 1,
   };
 }
 function styleCss(d) {
@@ -84,9 +110,10 @@ export function drawingMarkup(grid, d, cls = '', attr = '', hit = false) {
   const base = hit ? `draw-hit${closed && cls.includes('fillhit') ? ' fillhit' : ''}` : closed ? 'draw-shape' : 'draw-line';
   if (hit) cls = '';
   if (d.type === 'shape' && d.shape === 'ellipse' && !hit) {
-    return `<ellipse cx="${d.c.x}" cy="${d.c.y}" rx="${d.w / 2}" ry="${d.h / 2}" transform="rotate(${d.rot || 0} ${d.c.x} ${d.c.y})" class="${base}${cls}"${st}${attr}/>`;
+    const cx = svgNum(d.c?.x), cy = svgNum(d.c?.y);
+    return `<ellipse cx="${cx}" cy="${cy}" rx="${svgNum(d.w) / 2}" ry="${svgNum(d.h) / 2}" transform="rotate(${svgNum(d.rot)} ${cx} ${cy})" class="${base}${cls}"${st}${attr}/>`;
   }
-  const pts = (d.type === 'shape' ? shapePoints(grid, d) : d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const pts = (d.type === 'shape' ? shapePoints(grid, d) : d.pts || []).map((p) => `${svgNum(p?.x).toFixed(1)},${svgNum(p?.y).toFixed(1)}`).join(' ');
   return `<${closed ? 'polygon' : 'polyline'} points="${pts}" class="${base}${cls}"${st}${attr}/>`;
 }
 
@@ -211,6 +238,8 @@ export function canEditDrawing(ctx, d) {
 }
 /** Можно ли двигать, тянуть ручки и стирать: свой и не закреплённый (TASK-182). */
 export function canMoveDrawing(ctx, d) { return canEditDrawing(ctx, d) && !d.locked; }
+/** Можно ли удалить (блокер P2 в #185): то же, что двигать, — закреплённый не удаляется ни одним путём: Del, панель, группа из рамки. */
+export function canDeleteDrawing(ctx, d) { return !!d && canMoveDrawing(ctx, d); }
 
 /** Копия рисунка, сдвинутая на dx, dy. */
 export function shiftDrawing(d, dx, dy) {
@@ -269,12 +298,13 @@ export function duplicateDrawing(ctx, id) {
 }
 
 export function deleteDrawing(ctx, id) {
-  const d = ctx.scene.drawings.find((x) => x.id === id); if (!d) return;
+  const d = ctx.scene.drawings.find((x) => x.id === id); if (!canDeleteDrawing(ctx, d)) return false;
   const copy = structuredClone(d);
   ctx.mutateScene((s) => { s.drawings = s.drawings.filter((x) => x.id !== id); },
     { label: d.type === 'text' ? 'Удалить надпись' : 'Удалить рисунок', undo: (s) => s.drawings.push(structuredClone(copy)), redo: (s) => { s.drawings = s.drawings.filter((x) => x.id !== id); } });
   if (ctx.ui.selDrawing === id) ctx.ui.selDrawing = null;
   ctx.ui.selDrawings?.delete(id);
+  return true;
 }
 
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -341,23 +371,23 @@ export function transformEdit(grid, d, kind, w, mods = {}) {
 export function renderDrawBar(L, ctx, bbox) {
   const box = L.drawUi;
   const d0 = ctx.ui.selDrawing && !ctx.ui.drawMove ? ctx.scene.drawings.find((x) => x.id === ctx.ui.selDrawing) : null;
-  if (!d0 || !bbox || !canEditDrawing(ctx, d0)) { if (box.innerHTML) box.innerHTML = ''; return; }
+  if (!d0 || !bbox || !validDrawing(d0) || !canEditDrawing(ctx, d0)) { if (box.innerHTML) box.innerHTML = ''; return; }
   const d = liveDrawing(ctx, d0);
   const grid = ctx.scene.grid, z = ctx.camera?.z || 1;
   const free = !d.locked;
   // Ручки прямой и шаблона (TASK-042): тянуть кончик — поворот и размер; у прямой — концы.
-  let handles = free ? shapeHandles(grid, d).map((h) => `<button class="gz-h sh-h" data-sh="${h.k}" style="left:${h.p.x}px;top:${h.p.y}px" aria-label="${h.k === 'tip' ? 'Повернуть и изменить размер' : 'Конец прямой'}" data-tip="${h.k === 'tip' ? 'Тянуть — поворот и размер · угол липнет к 45°, Shift — по 15° и 5 фт, Alt — свободно' : 'Тянуть конец'}">${icon(h.k === 'tip' ? 'rotate-clockwise' : 'arrow-all-direction', 16)}</button>`).join('') : '';
+  let handles = free ? shapeHandles(grid, d).map((h) => `<button class="gz-h sh-h" data-sh="${h.k}" style="left:${svgNum(h.p.x)}px;top:${svgNum(h.p.y)}px" aria-label="${h.k === 'tip' ? 'Повернуть и изменить размер' : 'Конец прямой'}" data-tip="${h.k === 'tip' ? 'Тянуть — поворот и размер · угол липнет к 45°, Shift — по 15° и 5 фт, Alt — свободно' : 'Тянуть конец'}">${icon(h.k === 'tip' ? 'rotate-clockwise' : 'arrow-all-direction', 16)}</button>`).join('') : '';
   // Рамка с ручками (TASK-182): углы — размер, круглая — поворот.
   const f = free ? drawingFrame(grid, d) : null;
   if (f) {
     const rh = rotHandle(f, 30 / z);
-    handles += f.corners.map((p, k) => `<button class="tf-h" data-sh="k${k}" style="left:${p.x}px;top:${p.y}px" aria-label="Размер" data-tip="Тянуть — размер · Shift — пропорционально"></button>`).join('')
-      + `<button class="gz-h tf-rot" data-sh="rot" style="left:${rh.x}px;top:${rh.y}px" aria-label="Повернуть" data-tip="Тянуть — поворот · липнет к 45°, Shift — по 15°, Alt — свободно">${icon('rotate-clockwise', 16)}</button>`;
+    handles += f.corners.map((p, k) => `<button class="tf-h" data-sh="k${k}" style="left:${svgNum(p.x)}px;top:${svgNum(p.y)}px" aria-label="Размер" data-tip="Тянуть — размер · Shift — пропорционально"></button>`).join('')
+      + `<button class="gz-h tf-rot" data-sh="rot" style="left:${svgNum(rh.x)}px;top:${svgNum(rh.y)}px" aria-label="Повернуть" data-tip="Тянуть — поворот · липнет к 45°, Shift — по 15°, Alt — свободно">${icon('rotate-clockwise', 16)}</button>`;
   }
   const ed = ctx.ui.shapeEdit?.id === d.id ? ctx.ui.shapeEdit : null;
   if (ed) {
     const hp = ed.at || shapeHandles(grid, d).find((h) => h.k === ed.k)?.p;
-    box.innerHTML = handles + (hp ? `<span class="sh-val" style="left:${hp.x}px;top:${hp.y}px">${esc(ed.label || '')}</span>` : '');
+    box.innerHTML = handles + (hp ? `<span class="sh-val" style="left:${svgNum(hp.x)}px;top:${svgNum(hp.y)}px">${esc(ed.label || '')}</span>` : '');
     return;
   }
   const b = (k, ic, tip, extra = '') => `<button class="gz-b ${extra}" data-db="${k}" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${ic}</button>`;
@@ -376,7 +406,7 @@ export function renderDrawBar(L, ctx, bbox) {
       + b('dup', icon('copy-01', 18), 'Дублировать') + b('lock', icon('square-unlock-02', 18), 'Закрепить')
       + '<span class="db-div"></span>' + b('del', icon('delete-02', 18), 'Удалить · Del', 'danger');
   }
-  box.innerHTML = `${handles}<div class="db" style="transform: translate(${bbox.x + bbox.width / 2}px, ${bbox.y + bbox.height}px)"><div class="gz-bar db-bar">${inner}</div></div>`;
+  box.innerHTML = `${handles}<div class="db" style="transform: translate(${svgNum(bbox.x + bbox.width / 2)}px, ${svgNum(bbox.y + bbox.height)}px)"><div class="gz-bar db-bar">${inner}</div></div>`;
   fitDrawBar(L, ctx);
 }
 

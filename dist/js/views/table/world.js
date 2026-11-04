@@ -9,7 +9,8 @@ import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
-import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing, drawingMarkup, drawingFrame, shapePoints, zOf } from './drawings.js';
+import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing, drawingMarkup, drawingFrame, shapePoints, zOf, validDrawing, svgNum } from './drawings.js';
+import { safeColor } from './draw-style.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -92,19 +93,23 @@ export function renderDrawings(L, scene, ctx = null) {
   const selId = ctx?.ui.selDrawing;
   const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
   // Порядок наложения: поле z (TASK-182), при равных — порядок списка.
-  const list = (scene.drawings || []).map((d, i) => [d, i]).sort((a, b) => zOf(a[0]) - zOf(b[0]) || a[1] - b[1]).map((x) => x[0]);
+  // Рисунок с сервера может прийти от любого участника (блокер P1 в #185): непроверенный не рисуется вовсе,
+  // а в разметку идут только проверенные числа, безопасный цвет и экранированные ID/текст.
+  const list = (scene.drawings || []).filter(validDrawing).map((d, i) => [d, i]).sort((a, b) => zOf(a[0]) - zOf(b[0]) || a[1] - b[1]).map((x) => x[0]);
   L.drawings.innerHTML = list.map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
+    if (d !== d0 && !validDrawing(d)) return '';
     const ed = live && canEditDrawing(ctx, d);
-    const attr = ed ? ` data-drawing="${d.id}"` : '';
+    const id = esc(d.id);
+    const attr = ed ? ` data-drawing="${id}"` : '';
     const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
-    if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
-    return drawingMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? drawingMarkup(scene.grid, d, drawSel ? ' fillhit' : '', attr, true) : '');
+    if (d.type === 'text') return `<text x="${svgNum(d.x)}" y="${svgNum(d.y)}" class="draw-text${cls}" fill="${esc(safeColor(d.color))}" style="font-size:${svgNum(d.size) || 28}px" data-did="${id}"${attr}>${esc(d.text)}</text>`;
+    return drawingMarkup(scene.grid, d, cls, ` data-did="${id}"`) + (ed ? drawingMarkup(scene.grid, d, drawSel ? ' fillhit' : '', attr, true) : '');
   }).join('');
   const z = ctx?.camera?.z || 1, pad = 8 / z;
   // Границы рисунка по его точкам (у повёрнутого круга getBBox не учитывает поворот), у надписи — по узлу.
   const boundsOf = (id) => {
-    const d0 = scene.drawings?.find((x) => x.id === id); if (!d0) return null;
+    const d0 = scene.drawings?.find((x) => x.id === id); if (!d0 || !validDrawing(d0)) return null;
     const d = ctx ? liveDrawing(ctx, d0) : d0;
     if (d.type === 'text') { const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); return n ? n.getBBox() : null; }
     const pts = d.type === 'shape' ? shapePoints(scene.grid, d) : d.pts || [];
@@ -120,14 +125,14 @@ export function renderDrawings(L, scene, ctx = null) {
     // У фигуры по рамке — повёрнутая рамка, как ручки; у остальных — прямоугольник.
     const f = sb.d ? drawingFrame(scene.grid, sb.d) : null;
     L.drawings.insertAdjacentHTML('beforeend', f?.box
-      ? `<polygon class="draw-sel" points="${f.corners.map((p) => `${p.x},${p.y}`).join(' ')}"/>`
-      : `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+      ? `<polygon class="draw-sel" points="${f.corners.map((p) => `${svgNum(p.x)},${svgNum(p.y)}`).join(' ')}"/>`
+      : `<rect class="draw-sel" x="${svgNum(bbox.x)}" y="${svgNum(bbox.y)}" width="${svgNum(bbox.width)}" height="${svgNum(bbox.height)}" rx="${pad}"/>`);
   }
   if (group?.size) {
     let out = '';
     for (const id of group) {
       const b = boundsOf(id); if (!b) continue;
-      out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
+      out += `<rect class="draw-sel" x="${svgNum(b.x - pad)}" y="${svgNum(b.y - pad)}" width="${svgNum(b.width + pad * 2)}" height="${svgNum(b.height + pad * 2)}" rx="${pad}"/>`;
     }
     L.drawings.insertAdjacentHTML('beforeend', out);
   }

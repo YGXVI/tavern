@@ -14,7 +14,7 @@ import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit
 import { currentEntry } from './combat.js';
 import { expandRideMoves, ridersOf } from './riding.js';
 import { renderChrome } from './chrome.js';
-import { moveDrawing, deleteDrawing, DRAW_SHAPES, BOX_SHAPES, shapeFromDrag, nearShape, aimShape, canEditDrawing, drawingTouchesRect, drawingsShift, applyDrawingPos } from './drawings.js';
+import { moveDrawing, deleteDrawing, DRAW_SHAPES, BOX_SHAPES, shapeFromDrag, nearShape, aimShape, canEditDrawing, drawingTouchesRect, drawingsShift, applyDrawingPos, validDrawing } from './drawings.js';
 import { drawStyle } from './draw-style.js';
 
 const DRAG_THRESHOLD = 4;
@@ -203,7 +203,7 @@ export function attachInput(ctx) {
     const grpDraws = [...ctx.ui.selDrawings].filter((id) => ctx.scene?.drawings.some((d) => d.id === id));
     if ((e.key === 'Delete' || e.key === 'Backspace') && grpDraws.length) { ctx.panels.deleteTokens(ctx.isMasterView ? [...ctx.ui.selection] : [], grpDraws); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) {
-      if (!ctx.scene?.drawings.find((d) => d.id === ctx.ui.selDrawing)?.locked) deleteDrawing(ctx, ctx.ui.selDrawing);
+      deleteDrawing(ctx, ctx.ui.selDrawing); // закреплённый и чужой не удаляются — проверка внутри (canDeleteDrawing)
       ctx.invalidate('drawings'); return;
     }
     // Игрок удаляет свои токены и призывы (TASK-183); чужие и героев — мастер.
@@ -557,7 +557,7 @@ function legPath(ctx, grid, start, want, n, opts) {
 function drawingsInRect(ctx, r) {
   const grid = sceneGrid(ctx);
   const boxOf = (d) => { try { return ctx.L.drawings.querySelector(`[data-did="${CSS.escape(d.id)}"]`)?.getBBox() || null; } catch { return null; } };
-  return (ctx.scene.drawings || []).filter((d) => canEditDrawing(ctx, d) && drawingTouchesRect(grid, d, r, d.type === 'text' ? boxOf(d) : null)).map((d) => d.id);
+  return (ctx.scene.drawings || []).filter((d) => validDrawing(d) && canEditDrawing(ctx, d) && drawingTouchesRect(grid, d, r, d.type === 'text' ? boxOf(d) : null)).map((d) => d.id);
 }
 
 /** Тянуть группу за её рисунок (TASK-169): с токенами — целыми клетками (фишки остаются в клетках), без — свободно. */
@@ -941,7 +941,7 @@ const drawTool = {
 function eraseAt(ctx, w) {
   const tol = 10 / ctx.camera.z;
   for (const d of ctx.scene.drawings) {
-    if (d.locked || (!ctx.isMaster && d.author !== ctx.userId)) continue;
+    if (!validDrawing(d) || d.locked || (!ctx.isMaster && d.author !== ctx.userId)) continue;
     let near = false;
     if (d.type === 'text') near = Math.abs(d.x - w.x) < 80 && Math.abs(d.y - w.y) < 24;
     else if (d.type === 'shape') near = nearShape(sceneGrid(ctx), d, w, tol);
