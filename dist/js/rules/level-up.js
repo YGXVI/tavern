@@ -1,7 +1,7 @@
 // TASK-186 / #202: «что поднимать этому герою» — один вызов для окна повышения уровня (вид — sol0139).
 // Чистая функция без DOM, хранилища и случайности: строит план из неизменяемого блока creation героя
 // и движка конструктора. Запись результата — отдельная команда листа (growth), не здесь.
-import { createDraft, evaluateBuild, defaultCreationContext, DEFAULT_PORTS } from './character-builder.js';
+import { createDraft, evaluateBuild, defaultCreationContext, toCharacterData, DEFAULT_PORTS } from './character-builder.js';
 import { creationHitPoints } from '../views/table/sheet-rules.js';
 
 const HP_PORT = { creationHitPoints };
@@ -71,6 +71,54 @@ export function levelUpPlan(character, classId, catalogues, { policy = null, por
     supported: true, fromLevel, toLevel, classId, classLevel, hitDie: def.class.hitDie,
     // Средние хиты при текущей Телосложении; прибавка Телосложения на этом уровне пересчитывает их (план — для показа).
     hp: { gain: hpBefore !== null && hpAfter !== null ? hpAfter - hpBefore : null, maxAfter: hpAfter, method: context.hpMethod },
-    choices, features, errors, warnings: evaluation.warnings, evaluation, nextDraft,
+    choices, features, errors, warnings: evaluation.warnings, evaluation, nextDraft, context,
   };
+}
+
+/** Поля сборки, которые меняет повышение (тот же список проверяет сервер, level_up_character). */
+export const GROWTH_FIELDS = Object.freeze(['level', 'classes', 'classId', 'className', 'stats', 'proficiencies', 'speed', 'darkvision',
+  'hitDicePools', 'slotPools', 'resources', 'spellSources', 'knownSpells', 'featureEntries']);
+// Записи списков сопоставляются со старыми, чтобы сохранить их ID и потраченное: кость хитов — по кости,
+// ячейки — по виду и кругу, остальное — по ссылке на справочник или имени.
+const MATCH = {
+  hitDicePools: e => `d${e.die}`, slotPools: e => `${e.kind}:${e.circle}`,
+  resources: e => e.ref ?? e.name, spellSources: e => e.ref ?? e.name, knownSpells: e => `${e.sourceId ?? ''}:${e.ref ?? e.name}`, featureEntries: e => e.ref ?? e.name,
+};
+function keepIdentity(field, next, prev) {
+  const key = MATCH[field];
+  if (!key || !Array.isArray(next) || !Array.isArray(prev)) return next;
+  const old = new Map(prev.filter(Boolean).map(e => [key(e), e]));
+  return next.map(e => {
+    const o = old.get(key(e));
+    if (!o) return e;
+    const kept = { ...e, id: o.id ?? e.id };
+    if (Number.isInteger(o.spent)) kept.spent = Math.min(o.spent, e.max ?? e.total ?? o.spent);
+    return kept;
+  });
+}
+
+/**
+ * Тело команды level_up_character из плана, в котором окно приняло все выборы (plan.nextDraft после confirmBuildChange).
+ * Хиты не передаются — их прибавляет сервер. Бросает ошибку, если сборка ещё не полная.
+ */
+export function levelUpPayload(character, plan, catalogues, { makeId, ports = {} } = {}) {
+  if (!plan?.supported) throw new TypeError(plan?.reason || 'Нет плана повышения');
+  const p = { ...DEFAULT_PORTS, ...HP_PORT, ...ports };
+  const ev = evaluateBuild(plan.context, catalogues, plan.nextDraft, p);
+  if (ev.status !== 'valid') {
+    const first = [...ev.errors, ...ev.missing][0];
+    throw Object.assign(new Error(first?.message || 'Сборка не завершена'), { evaluation: ev });
+  }
+  const { data } = toCharacterData(ev, plan.nextDraft, catalogues, { makeId }, p);
+  const patch = {};
+  const sourceIds = new Map(); // новый ID источника магии → сохранённый прежний: на него ссылаются заклинания
+  for (const f of GROWTH_FIELDS) {
+    if (!(f in data)) continue;
+    let next = data[f];
+    if (f === 'knownSpells' && Array.isArray(next)) next = next.map(e => (sourceIds.has(e.sourceId) ? { ...e, sourceId: sourceIds.get(e.sourceId) } : e));
+    const value = keepIdentity(f, next, character[f]);
+    if (f === 'spellSources' && Array.isArray(value)) value.forEach((e, i) => sourceIds.set(data[f][i].id, e.id));
+    if (JSON.stringify(value) !== JSON.stringify(character[f])) patch[f] = value;
+  }
+  return { creation: data.creation, patch };
 }
