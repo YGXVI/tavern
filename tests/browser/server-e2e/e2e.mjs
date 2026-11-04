@@ -22,7 +22,7 @@ async function newCtx() {
   return ctx;
 }
 const watch = (p, tag) => {
-  p.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !m.text().includes('ERR_FAILED') && !m.text().includes('ERR_ABORTED')) errors.push(`${tag} [${m.type()}] ${m.text()}`); });
+  p.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !m.text().includes('ERR_FAILED') && !m.text().includes('ERR_ABORTED') && !m.text().includes('GL Driver Message')) errors.push(`${tag} [${m.type()}] ${m.text()}`); });
   p.on('pageerror', (e) => errors.push(`${tag} [pageerror] ${e.message} ${e.stack?.split('\n')[1] || ''}`));
 };
 const shot = async (p, n) => { await p.waitForTimeout(250); await p.screenshot({ path: `${OUT}/${n}.png` }); };
@@ -261,7 +261,9 @@ await step('door: master adds door, player opens it', async () => {
 
 await step('map upload by master (storage)', async () => {
   await M.keyboard.press('Escape'); await M.keyboard.press('Escape'); await wait(M, 200);
-  await M.click('[data-act="add:map"]');
+  // Сцена уже есть: «Создать сцену» (add:map) — только на пустом столе; новая сцена — из панели «Сцены».
+  if (!(await M.locator('[data-act="scene-new"]').count())) await M.click('[data-act="scenes"]');
+  await M.click('[data-act="scene-new"]');
   await M.waitForSelector('.modal [data-upload]', { state: 'attached' });
   const { readFileSync } = await import('node:fs');
   await M.setInputFiles('.modal [data-upload]', { name: 'map.webp', mimeType: 'image/webp', buffer: readFileSync(new URL('../../../dist/assets/maps/cave.webp', import.meta.url)) });

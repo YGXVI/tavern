@@ -4,7 +4,7 @@ import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMod
 import { currentUser } from '../../core/auth.js';
 import {
   getCampaign, membership, roleIn, sceneOf, sceneIdFor, characterOf, canControlToken, ownsToken, updateCampaign, updateScene,
-  tokenStats, userById,
+  tokenStats, userById, isMasterOf,
 } from '../../core/campaign.js';
 import { Camera } from './camera.js';
 import {
@@ -15,6 +15,12 @@ import { computeVision, isVisible, visibleCells } from './fog.js';
 import { cellOf, gridSize, key } from '../../rules/geometry.js';
 import { initiativeOrder, turnTokenIds } from './combat.js';
 import { packMarks } from './packs.js';
+import { safeColor } from './draw-style.js';
+
+// Чужие сообщения шины: координаты — только конечные числа, точки — не больше 200.
+const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const cleanPts = (a) => (Array.isArray(a) ? a.slice(0, 200).map((p) => ({ x: num(p?.x), y: num(p?.y) })) : null);
+const cleanPath = (p) => (p && typeof p === 'object' ? { pts: cleanPts(p.pts) || [], label: String(p.label ?? '').slice(0, 120), over: !!p.over, blocked: !!p.blocked, quiet: !!p.quiet, waypoints: num(p.waypoints) } : null);
 import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar, fitDrawBar } from './drawings.js';
@@ -27,6 +33,7 @@ import { toast, closePopover, userAvatar } from '../../ui/kit.js';
 import { History } from './history.js';
 import { activeSight, sightRadius } from './sight.js';
 import { trackSight, onSightOff } from './sight-ui.js';
+import { trackPending, pendingHidden } from './own-creature.js';
 import { go } from '../screens.js';
 import { icon } from '../../icons.js';
 
@@ -77,6 +84,8 @@ export function mountTable(root, cid) {
   ctx.owns = (t) => !!t && ownsToken(ctx.c, ctx.userId, t);
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
+  // За кого игрок ходит в бою: свой герой, герой отсутствующего игрока, свой токен и призыв (#198: группа призывов).
+  ctx.actsFor = (t) => ctx.playsFor(t) || ctx.owns(t);
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
   ctx.ownerAway = (t) => {
     if (!t?.characterId || ctx.isMine(t)) return false;
@@ -140,6 +149,7 @@ export function mountTable(root, cid) {
   ctx.tokenShown = (t) => {
     if (ctx.isMasterView) return true;
     if (t.hidden) return false;
+    if (pendingHidden(ctx, t)) return false; // своё существо игрока ждёт мастера — видит только владелец (#190 E)
     if (ctx.fogView() !== 'player') return true;
     // Герои, свои токены и призывы игроков видны всем, как герои (TASK-183): владелец не теряет их в тумане.
     if (t.kind === 'hero' || t.ownerId) return true;
@@ -210,7 +220,7 @@ export function mountTable(root, cid) {
     // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
     // каждый кадр пересчитываются только те, что сейчас тащат.
     if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
-    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); if (trackSight(ctx)) { dirty.add('chrome'); ctx.panels.refreshWidget(); } }
+    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); if (trackSight(ctx)) { dirty.add('chrome'); ctx.panels.refreshWidget(); } trackPending(ctx); }
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);
@@ -311,10 +321,16 @@ export function mountTable(root, cid) {
     bus.send('ping', { cid: ctx.cid, sceneId: ctx.sceneId, x, y, look, userId: ctx.userId, master: ctx.isMaster });
     if (look) ctx.toast({ title: 'Игроки смотрят сюда', body: 'Камеры отряда переехали к этой точке', icon: 'location-01', action: { label: 'Отпустить', onClick: () => bus.send('look-release', { cid: ctx.cid }) } });
   };
-  bus.on('ping', (p) => {
-    if (p.cid !== ctx.cid || p.sceneId !== ctx.sceneId) return;
+  // Сообщения других участников — чужие данные: числа приводим к числам, цвета — через safeColor, «смотрите сюда»
+  // принимаем только от мастера (иначе игрок мог бы вставить разметку в карту или заморозить чужой экран).
+  const offs = [];
+  const on = (type, fn) => offs.push(bus.on(type, fn));
+  const fromMaster = (p) => !!p.userId && isMasterOf(ctx.c, p.userId);
+  on('ping', (p0) => {
+    if (p0.cid !== ctx.cid || p0.sceneId !== ctx.sceneId) return;
+    const p = { ...p0, x: num(p0.x), y: num(p0.y), look: !!p0.look && fromMaster(p0) };
     const u = userById(p.userId);
-    const color = p.master ? 'var(--ping-master)' : 'var(--ping-player)';
+    const color = fromMaster(p) ? 'var(--ping-master)' : 'var(--ping-player)';
     pingAt(L, p.x, p.y, color, u?.name || '', p.look);
     if (p.look && !ctx.isMaster) {
       ctx.ui.lookLock = { x: p.x, y: p.y };
@@ -325,10 +341,10 @@ export function mountTable(root, cid) {
       updateEdges();
     }
   });
-  bus.on('look-release', (p) => { if (p.cid === ctx.cid) { ctx.ui.lookLock = null; renderChrome(ctx); } });
+  on('look-release', (p) => { if (p.cid === ctx.cid && fromMaster(p)) { ctx.ui.lookLock = null; renderChrome(ctx); } });
 
   // ——— Перетаскивание и линейки других вкладок ———
-  bus.on('drag', (p) => {
+  on('drag', (p) => {
     if (p.cid !== ctx.cid) return;
     if (p.end) {
       for (const id of p.ids || []) ctx.remote.drags.delete(id);
@@ -337,15 +353,16 @@ export function mountTable(root, cid) {
       if (mine && p.moved && ctx.inCombat()) { const u = userById(p.userId); ctx.toast({ title: `${u?.name || 'Кто-то'} подвинул вашего героя`, body: 'Ctrl+Z у него отменит перемещение', icon: 'cursor-hold-01', timeout: 3500 }); }
     }
     // by — кто тащит (TASK-162): у остальных токен в его цвете и с его именем; lead — ведущий токен группы.
-    else for (const [id, pos] of Object.entries(p.positions)) ctx.remote.drags.set(id, { ...pos, sceneId: p.sceneId, path: id === p.leader ? p.path : null, by: p.userId, lead: id === p.leader || Object.keys(p.positions).length === 1 });
+    else for (const [id, pos] of Object.entries(p.positions || {})) ctx.remote.drags.set(id, { x: num(pos?.x), y: num(pos?.y), sceneId: p.sceneId, path: id === p.leader ? cleanPath(p.path) : null, by: p.userId, lead: id === p.leader || Object.keys(p.positions).length === 1 });
     ctx.invalidate('tokens');
   });
-  bus.on('ruler', (p) => {
+  on('ruler', (p) => {
     if (p.cid !== ctx.cid) return;
-    if (!p.pts) ctx.remote.rulers.delete(p.userId); else ctx.remote.rulers.set(p.userId, p);
+    const pts = cleanPts(p.pts);
+    if (!pts?.length) ctx.remote.rulers.delete(p.userId); else ctx.remote.rulers.set(p.userId, { ...p, pts, color: p.color ? safeColor(p.color, '') || null : null, label: String(p.label ?? '').slice(0, 80) });
     ctx.invalidate('overlay');
   });
-  bus.on('target', (p) => {
+  on('target', (p) => {
     if (p.cid !== ctx.cid) return;
     if (!p.ids?.length) ctx.remote.targets.delete(p.userId); else ctx.remote.targets.set(p.userId, { sceneId: p.sceneId, ids: new Set(p.ids) });
     ctx.invalidate('tokens');
@@ -357,14 +374,16 @@ export function mountTable(root, cid) {
     for (const [uid2, v] of ctx.remote.targets) if (v.sceneId === ctx.sceneId && v.ids.has(id)) { const u = userById(uid2); if (u) out.push(u); }
     return out;
   };
-  bus.on('template', (p) => {
+  on('template', (p) => {
     if (p.cid !== ctx.cid) return;
-    if (!p.tpl) ctx.remote.templates.delete(p.userId); else ctx.remote.templates.set(p.userId, { ...p.tpl, sceneId: p.sceneId });
+    const t = p.tpl;
+    if (!t || !/^[a-z-]{1,20}$/.test(String(t.type))) ctx.remote.templates.delete(p.userId);
+    else ctx.remote.templates.set(p.userId, { type: t.type, size: Math.max(0, Math.min(1000, num(t.size))), origin: { x: num(t.origin?.x), y: num(t.origin?.y) }, angle: num(t.angle), owner: p.userId, sceneId: p.sceneId });
     ctx.invalidate('areas');
   });
   ctx.sendDrag = throttle((payload) => bus.send('drag', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ...payload }), 40);
   // ——— Чужое выделение (TASK-164): кто какие токены выделил ———
-  bus.on('select', (p) => {
+  on('select', (p) => {
     if (p.cid !== ctx.cid || !p.userId || p.userId === ctx.userId) return;
     if (!p.ids?.length) ctx.remote.selects.delete(p.userId); else ctx.remote.selects.set(p.userId, { sceneId: p.sceneId, ids: new Set(p.ids) });
     ctx.invalidate('tokens');
@@ -486,7 +505,7 @@ export function mountTable(root, cid) {
     unmount() {
       gone = true;
       if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
-      unsub(); offPresence(); offNet(); offErr(); offSight(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },

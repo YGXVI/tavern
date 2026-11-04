@@ -129,6 +129,12 @@ function topCenter(ctx) {
     const left = movementLeft(ctx, mine);
     return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${combatRound(c, sc)} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
   }
+  // Ход своей группы призывов или своего токена (#198 §4): закончить его игрок может сам.
+  const own = cur && !mine && ctx.owns(cur.token) ? cur : null;
+  if (own) {
+    const left = movementLeft(ctx, own.token);
+    return banner('sword-03', `Ход: ${ctx.nameOf(own.token)}${(own.slotSize || 1) > 1 ? ` и ещё ${own.slotSize - 1}` : ''}`, `Раунд ${combatRound(c, sc)}${left != null ? ` · ${left} фт движения у каждого` : ''}`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
+  }
   const eyes = sightBanner(ctx, banner);
   if (eyes) return eyes;
   const m = membership(c, ctx.userId);

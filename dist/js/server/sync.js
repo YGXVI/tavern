@@ -114,6 +114,7 @@ async function loadAll() {
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 
 const loading = new Map(); // cid → {events, n}: изменения, пришедшие, пока кампания грузится
+let hasCreatures = false; // таблица campaign_creatures есть на сервере (видно по первой загрузке)
 
 /**
  * Загрузить кампанию целиком (то, что сервер разрешает видеть) и подписаться на её изменения.
@@ -143,7 +144,7 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
       secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
       saves: must(saves), portals: must(portals), combat: must(combat),
       // Снимки существ (TASK-179): таблицы ещё нет на живой базе (миграция #150 не применена) — кампания грузится без них.
-      creatures: noTable(creatures.error) ? null : must(creatures),
+      creatures: noTable(creatures.error) ? null : (hasCreatures = true, must(creatures)),
     });
   } finally {
     ld.n -= 1;
@@ -185,7 +186,9 @@ export function afterCommit(before, after) {
       const sc = a0.scenes.find((s) => s.id === a0.combat.sceneId) || a0.scenes.find((s) => s.id === a0.activeSceneId);
       a0.combat.current = turnTokenId(a0, sc);
     }
-    const a = explode(b0, rows), b = explode(a0, rows);
+    // Одно «сейчас» на обе раскладки: иначе ord нового токена в них разный и уходит лишняя правка (review C14).
+    const now = Date.now();
+    const a = explode(b0, rows, now), b = explode(a0, rows, now);
     let ops = diffRows(a, b, { isMaster: master });
     if (!master) ops = playerCombatOps(ops, rows);
     ops = stamp(ops);
@@ -193,10 +196,44 @@ export function afterCommit(before, after) {
     // Мастер скрыл токены — игрокам изменение не придёт (RLS), поэтому сообщаем id отдельно.
     const hiddenNow = ops.filter((o) => o.table === 'tokens' && o.op === 'update' && o.row.hidden && !o.prev?.hidden).map((o) => o.key);
     applyOps(rows, ops);
+    // Пока изменение в очереди, эхо прежней своей записи из Realtime не должно его стереть (review C3).
+    const mark = holdInflight(cid, ops);
     // Перемещение нескольких токенов одним действием — один вызов move_tokens (TASK-173).
     const out = groupTokenMoves(ops);
-    enqueue(cid, () => send(cid, out).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }));
+    enqueue(cid, () => { mark.started = true; return send(cid, out).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }).finally(() => releaseInflight(cid, mark)); });
   }
+}
+
+// ——— Неподтверждённые изменения (review C3) ———
+// Своё изменение уже в кэше, но ещё не дошло до сервера. Событие Realtime о предыдущей записи той же строки кладёт в
+// кэш её старую версию — без наложения очередь «забывала» бы следующую правку, а новый commit строился бы от неё.
+const inflight = new Map(); // cid → [{id, ops}]
+let inflightSeq = 0;
+function holdInflight(cid, ops) {
+  // Журнал только добавляется; бой и спасброски игрока сверяются с сервером сами (rebasePlayerRow) — их не накладываем.
+  const skip = (o) => o.table === 'log_entries' || o.table === 'log_secrets' || o.want || (o.table === 'save_requests' && !isMasterOf(cid));
+  const mark = { id: ++inflightSeq, started: false, ops: structuredClone(ops.filter((o) => !skip(o))) };
+  if (!inflight.has(cid)) inflight.set(cid, []);
+  inflight.get(cid).push(mark);
+  return mark;
+}
+function releaseInflight(cid, mark) {
+  const list = inflight.get(cid); if (!list) return;
+  const i = list.indexOf(mark); if (i >= 0) list.splice(i, 1);
+  if (!list.length) inflight.delete(cid);
+}
+const opKey = (o) => `${o.table}|${o.table === 'campaigns' || o.table === 'campaign_invites' || o.table === 'combats' ? '' : o.key}`;
+const changeKey = (table, row) => `${table}|${table === 'campaigns' || table === 'campaign_invites' || table === 'combats' ? '' : table === 'campaign_members' ? row?.user_id : table === 'scene_secrets' || table === 'scene_explored' ? row?.scene_id : row?.id}`;
+/**
+ * Наложить свои неподтверждённые операции этой строки поверх пришедшей версии. Токены — только ещё не отправленные:
+ * их пишут частичной правкой, и эхо уже отправляемой содержит нашу правку вместе с чужими, слитыми сервером; другие
+ * таблицы пишутся целой строкой — наша версия и есть то, что окажется на сервере.
+ */
+function reapplyInflight(cid, rows, table, row) {
+  const list = inflight.get(cid); if (!list?.length) return;
+  const k = changeKey(table, row);
+  const ops = list.filter((x) => !x.started || table !== 'tokens').flatMap((x) => x.ops).filter((o) => opKey(o) === k);
+  if (ops.length) applyOps(rows, ops);
 }
 
 /** Служебные записи («Ася за столом», «принят в кампанию») пишет тот, кто сделал действие: сервер требует author = я. */
@@ -215,19 +252,64 @@ function playerCombatOps(ops, rows) {
   if (i < 0) return ops;
   const server = rows.combat?.data || EMPTY_COMBAT();
   const want = ops[i].row.data;
+  // Что игрок поменял сам — относительно его же «до» (prev), а не кэша: кэш мог уже обновиться чужим (review C1).
+  const base = ops[i].prev?.data || server;
+  const next = mergePlayerCombat(server, want, base, rows);
+  const out = ops.filter((_, k) => k !== i);
+  if (JSON.stringify(next) !== JSON.stringify(server)) out.push({ ...ops[i], row: { ...ops[i].row, data: next }, want, base });
+  return out;
+}
+
+/** Наложить на строку боя server только разрешённые игроку изменения want (относительно его base). */
+function mergePlayerCombat(server, want, base, rows) {
   const tokens = [...rows.tokens.values()];
-  const heroes = new Set(tokens.filter((t) => t.character_id).map((t) => t.id));
+  // За кого игрок может действовать — как actors в guard_combat: любой герой и свои токены (призывы, TASK-123).
+  const actors = new Set(tokens.filter((t) => t.character_id || (me && t.owner_id === me)).map((t) => t.id));
   const visible = new Set(tokens.filter((t) => !t.hidden).map((t) => t.id));
   const next = structuredClone(server);
   (next.entries || []).forEach((e, k) => {
     const w = (want.entries || []).find((x) => x.tokenId === e.tokenId);
-    if (heroes.has(e.tokenId) && e.init == null && w && w.init != null) next.entries[k] = { ...e, init: w.init };
+    const b = (base.entries || []).find((x) => x.tokenId === e.tokenId);
+    const v = w ? Number(w.init) : NaN;
+    if (actors.has(e.tokenId) && e.init == null && b?.init == null && w?.init != null && Number.isFinite(v)) next.entries[k] = { ...e, init: Math.round(v) };
   });
-  for (const id of visible) if (want.moved?.[id] !== undefined && want.moved[id] !== server.moved?.[id]) next.moved = { ...(next.moved || {}), [id]: want.moved[id] };
-  if ((want.turn !== server.turn || want.round !== server.round) && heroes.has(server.current)) next.ended = server.current;
-  const out = ops.filter((_, k) => k !== i);
-  if (JSON.stringify(next) !== JSON.stringify(server)) out.push({ ...ops[i], row: { ...ops[i].row, data: next } });
-  return out;
+  for (const id of visible) {
+    const v = want.moved?.[id];
+    if (v !== undefined && v !== base.moved?.[id] && Number.isFinite(Number(v))) next.moved = { ...(next.moved || {}), [id]: Number(v) };
+  }
+  // «Закончить ход» — явная отметка ended у того, кто ходит (panels.endTurn); по номеру хода не угадываем:
+  // поздний бросок инициативы пересортирует очередь у игрока и закончил бы чужой ход.
+  if (want.ended && want.ended !== base.ended && want.ended === server.current && server.ended !== server.current && actors.has(server.current)) next.ended = server.current;
+  return next;
+}
+
+/**
+ * Игрок пишет строку боя или запроса спасброска целиком. Если кто-то записал раньше (два броска инициативы, два
+ * результата спасброска разом), сервер отклонит устаревшую строку — перечитываем её и накладываем своё ещё раз
+ * (review C2; точечные функции сервера — отдельное решение).
+ */
+async function rebasePlayerRow(cid, o, err) {
+  const rows = cache.get(cid);
+  if (!rows || isNetwork(err)) throw err;
+  if (o.table === 'combats') {
+    const fresh = must(await sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle());
+    if (!fresh) throw err;
+    const next = mergePlayerCombat(fresh.data || EMPTY_COMBAT(), o.want, o.base, rows);
+    const row = { ...fresh, data: next };
+    if (JSON.stringify(next) !== JSON.stringify(fresh.data)) await updateRow(cid, { ...o, row });
+    // Кэш — как теперь на сервере: эха может не быть (своё уже записали другие, писать нечего).
+    applyChange(rows, 'combats', 'UPDATE', row); scheduleAssemble(cid);
+    return;
+  }
+  const fresh = must(await sb.from('save_requests').select('*').eq('id', o.key).maybeSingle());
+  if (!fresh) throw err;
+  const was = o.prev?.data?.results || {}, mine = o.row.data?.results || {};
+  const results = { ...(fresh.data?.results || {}) };
+  let n = 0;
+  for (const [k, v] of Object.entries(mine)) if (!(k in was) && !(k in results)) { results[k] = v; n++; }
+  const row = { ...fresh, data: { ...fresh.data, results } };
+  if (n) await updateRow(cid, { ...o, row });
+  applyChange(rows, 'save_requests', 'UPDATE', row); scheduleAssemble(cid);
 }
 
 /** Дождаться, пока уйдут все изменения кампании (например, перед загрузкой обложки). */
@@ -240,7 +322,8 @@ function enqueue(cid, job) {
 }
 
 async function createCampaign(c) {
-  const rows0 = emptyRows();
+  // Таблица снимков существ есть на сервере — новая кампания сразу с ней, а не «после обновления базы» (review C8).
+  const rows0 = emptyRows(hasCreatures);
   const exploded = explode(c, rows0);
   // Кэш — до вставки: событие «вы мастер новой кампании» из личного канала не должно перезагружать её посреди отправки.
   rows0.campaign = structuredClone(exploded.campaign);
@@ -253,13 +336,16 @@ async function createCampaign(c) {
   subscribe(c.id);
 }
 
-/** Отправить операции по одной. Обрыв сети — ждём и повторяем ту же операцию; отказ сервера — ошибка. */
+/**
+ * Отправить операции по одной. Обрыв сети — ждём и повторяем ту же операцию (до получаса: раньше через минуту без
+ * сети правка считалась отказом сервера и молча пропадала, review C10); отказ сервера — ошибка.
+ */
 async function send(cid, ops) {
   for (const o of ops) {
     for (let attempt = 0; ; attempt++) {
       try { await sendOne(cid, o, attempt); break; }
       catch (err) {
-        if (!isNetwork(err) || attempt >= 8) throw err;
+        if (!isNetwork(err) || attempt >= 130) throw err;
         netState(cid, false);
         await new Promise((r) => setTimeout(r, Math.min(15000, 700 * 2 ** attempt)));
       }
@@ -333,6 +419,7 @@ async function sendOne(cid, o, attempt) {
   const t = sb.from(o.table);
   let res;
   if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
+  else if (o.op === 'replace') res = await t.upsert(o.row);
   else if (o.op === 'delete') res = await t.delete().match(pkOf(o.table, o.prev));
   else if (o.op === 'insert') {
     res = await t.insert(o.row);
@@ -340,6 +427,9 @@ async function sendOne(cid, o, attempt) {
     if (attempt && res.error?.code === '23505') return;
   }
   else if (['campaign_invites', 'combats', 'scene_secrets'].includes(o.table) && isMasterOf(cid)) res = await t.upsert(o.row);
+  else if ((o.table === 'combats' && o.want) || (o.table === 'save_requests' && o.op === 'update' && !isMasterOf(cid))) {
+    try { return await updateRow(cid, o); } catch (err) { return rebasePlayerRow(cid, o, err); }
+  }
   else return updateRow(cid, o);
   if (res.error) throw res.error;
 }
@@ -417,6 +507,7 @@ function onChange(cid, table, p) {
   }
   loading.get(cid)?.events.push({ table, type: p.eventType, row });
   applyChange(rows, table, p.eventType, row);
+  reapplyInflight(cid, rows, table, row);
   if (table === 'campaign_members' && p.eventType !== 'DELETE' && !store.getDB().users[row.user_id]) loadProfiles().catch(() => {});
   scheduleAssemble(cid);
 }
@@ -458,14 +549,26 @@ function masterDuties(cid, c) {
   }
 }
 
-function removed(cid) {
+function removed(cid, { quiet = false } = {}) {
   const ch = channels.get(cid); if (ch) { sb.removeChannel(ch); channels.delete(cid); }
   cache.delete(cid);
   const db = store.getDB();
   const name = db.campaigns[cid]?.name;
+  if (!db.campaigns[cid]) return;
   delete db.campaigns[cid];
-  store.emitLocal('storage-error', { message: `Вы больше не в кампании «${name || ''}».` });
+  if (!quiet) store.emitLocal('storage-error', { message: `Вы больше не в кампании «${name || ''}».` });
   store.setDB(db, { remote: true });
+}
+
+/**
+ * Уйти из кампании самому (игрок; заявка — отменить): служебная запись — пока ещё участник, затем удаление своего
+ * членства. Лист героя не трогаем — владельца меняет мастер, а освободившийся герой и так свободен (claim_character).
+ * Кампания убирается только отсюда: удалить её строку игрок не может, и commit с удалением кампании не нужен.
+ */
+export async function leaveCampaign(cid) {
+  await whenSynced(cid);
+  await deleteMembership(cid);
+  removed(cid, { quiet: true });
 }
 
 /** Личный канал: ждущий одобрения узнаёт, что его приняли; новые кампании подхватываются. */
@@ -499,8 +602,18 @@ function onBus(cid, msg) {
   if (!msg?.type) return;
   if (msg.type === 'hidden-ids') {
     const rows = cache.get(cid); if (!rows || isMasterOf(cid)) return;
-    for (const id of msg.payload.ids || []) rows.tokens.delete(id);
-    scheduleAssemble(cid); return;
+    // Сообщение может прислать любой участник — убираем только то, чего сервер нам правда больше не отдаёт (review C11).
+    const ids = (msg.payload?.ids || []).filter((id) => typeof id === 'string' && rows.tokens.has(id)).slice(0, 200);
+    if (!ids.length) return;
+    sb.from('tokens').select('id').eq('campaign_id', cid).in('id', ids).then(({ data, error }) => {
+      if (error) return;
+      const still = new Set((data || []).map((r) => r.id));
+      const r2 = cache.get(cid); if (!r2) return;
+      let n = 0;
+      for (const id of ids) if (!still.has(id) && r2.tokens.delete(id)) n++;
+      if (n) scheduleAssemble(cid);
+    });
+    return;
   }
   if (msg.type === 'roll' && msg.payload?.entry?.redacted) {
     // Тайная часть броска приходит изменением log_secrets — подождём её, если она нам положена.

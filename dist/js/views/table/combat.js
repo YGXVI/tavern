@@ -144,6 +144,39 @@ export function turnTokenId(c, scene) {
   return order[slotStart(order, c.combat.turn % Math.max(1, order.length))]?.tokenId || null;
 }
 
+/**
+ * Изменить участников боя (fn), сохранив, чей ход: у пачки — за пачкой, даже если её ведущего отделили (#198).
+ * Если того, кто ходил, убрали — ход переходит к следующему живому слоту, как при «Следующий ход»: с новым
+ * раундом, если круг замкнулся, и свежим движением. Пустая очередь заканчивает бой.
+ */
+export function keepTurnWith(c, sc, fn) {
+  if (!c.combat?.active) { fn(c, sc); return; }
+  const order0 = initiativeOrder(c, sc);
+  const before = currentEntry(c, sc, { raw: true })?.tokenId;
+  const group = c.combat.entries.find((e) => e.tokenId === before)?.group;
+  const i0 = turnIndexOf(order0, before);
+  // Кто ходит следом, по кругу: на случай, если текущего уберут. wrap — уже следующий раунд.
+  const after = i0 < 0 ? [] : order0.map((e, k) => ({ id: e.tokenId, k })).filter((x) => x.k > i0 && order0[x.k].slot !== order0[i0].slot)
+    .concat(order0.map((e, k) => ({ id: e.tokenId, k, wrap: true })).filter((x) => x.k < i0));
+  fn(c, sc);
+  if (!c.combat.entries.length) { endCombat(c); return; }
+  const order = initiativeOrder(c, sc);
+  if (!order.length) return;
+  const stay = (group && order.find((e) => e.group === group)?.tokenId) || before;
+  let i = turnIndexOf(order, stay);
+  if (i < 0 && after.length) {
+    const live = after.map((x) => ({ ...x, i: turnIndexOf(order, x.id) })).filter((x) => x.i >= 0);
+    const next = live.find((x) => !slotFallen(order, x.i)) || live[0];
+    if (next) {
+      i = next.i;
+      if (next.wrap) c.combat.round = (c.combat.round || 1) + 1;
+      c.combat.moved = c.combat.moved || {};
+      for (const m of order) if (m.slot === order[i].slot) c.combat.moved[m.tokenId] = 0;
+    }
+  }
+  c.combat.turn = i >= 0 ? i : Math.max(0, Math.min(c.combat.turn || 0, order.length - 1));
+}
+
 /** Токены, чей сейчас ход: одиночка или вся пачка. */
 export function turnTokenIds(c, scene) {
   const cur = currentEntry(c, scene);

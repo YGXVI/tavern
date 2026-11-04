@@ -93,14 +93,17 @@ export function assemble(rows0) {
  * Кампания → строки таблиц (те же формы, что в rows). ord токенов и рисунков берётся из прежних строк
  * (индекс в массиве у игрока и мастера разный — игрок не видит скрытого), у новых — время создания.
  */
+/** Время строки: прежняя строка сервера, если момент тот же (формат ISO у сервера свой), иначе новое значение. */
+const keepTime = (prevIso, msValue) => (prevIso != null && (msValue == null || ms(prevIso) === msValue) ? prevIso : iso(msValue));
+
 export function explode(c, prev = emptyRows(true), now = Date.now()) {
   const rows = emptyRows();
   const data = omit(c, CAMPAIGN_SKIP);
   rows.campaign = { id: c.id, owner_id: c.ownerId, name: c.name, data };
   for (const m of c.members || []) {
-    rows.members.set(m.userId, withDefault({ campaign_id: c.id, user_id: m.userId, role: m.role, status: m.status, character_id: m.characterId || null, scene_id: m.sceneId || null, joined_at: prev.members.get(m.userId)?.joined_at ?? iso(m.joinedAt) }, 'joined_at'));
+    rows.members.set(m.userId, withDefault({ campaign_id: c.id, user_id: m.userId, role: m.role, status: m.status, character_id: m.characterId || null, scene_id: m.sceneId || null, joined_at: keepTime(prev.members.get(m.userId)?.joined_at, m.joinedAt) }, 'joined_at'));
   }
-  if (c.invite?.code) rows.invite = withDefault({ campaign_id: c.id, code: c.invite.code, expires_at: iso(c.invite.expiresAt), manual: !!c.invite.manual, revoked: !!c.invite.revoked, created_at: prev.invite?.created_at ?? iso(c.invite.createdAt) }, 'created_at');
+  if (c.invite?.code) rows.invite = withDefault({ campaign_id: c.id, code: c.invite.code, expires_at: iso(c.invite.expiresAt), manual: !!c.invite.manual, revoked: !!c.invite.revoked, created_at: keepTime(prev.invite?.created_at, c.invite.createdAt) }, 'created_at');
   for (const ch of c.characters || []) {
     const { id, ownerId, ...rest } = ch;
     rows.characters.set(id, { id, campaign_id: c.id, owner_id: ownerId || null, data: rest });
@@ -184,9 +187,15 @@ export function diffRows(a, b, { isMaster = false } = {}) {
   cmpMap('characters', a.characters, b.characters);
   cmpMap('scenes', a.scenes, b.scenes);
   if (isMaster) cmpMap('scene_secrets', a.secrets, b.secrets, { del: false });
-  // Исследованные клетки — только добавление, функцией add_explored.
+  // Исследованные клетки — добавление функцией add_explored. Мастер, стерев клетки («Скрыть всё», новая сетка),
+  // перезаписывает строку целиком (политика explored_master): иначе сервер вернул бы старые клетки (review C5).
   for (const [sid, row] of b.explored) {
     const had = new Set(a.explored.get(sid)?.cells || []);
+    const now = new Set(row.cells);
+    if (isMaster && [...had].some((x) => !now.has(x))) {
+      ops.push({ table: 'scene_explored', op: 'replace', key: sid, row: { scene_id: sid, campaign_id: row.campaign_id, cells: [...now] } });
+      continue;
+    }
     const add = row.cells.filter((x) => !had.has(x));
     if (add.length) ops.push({ table: 'scene_explored', op: 'rpc', key: sid, row: { p_scene: sid, p_cells: add } });
   }
@@ -261,6 +270,7 @@ export function applyOps(rows, ops0) {
     if (o.table === 'campaigns') { rows.campaign = o.row; continue; }
     if (o.table === 'campaign_invites') { rows.invite = o.row; continue; }
     if (o.table === 'combats') { rows.combat = o.row; continue; }
+    if (o.table === 'scene_explored' && o.op === 'replace') { rows.explored.set(o.key, { ...o.row, cells: [...o.row.cells] }); continue; }
     if (o.table === 'scene_explored') {
       const cur = rows.explored.get(o.key) || { scene_id: o.key, campaign_id: rows.campaign?.id, cells: [] };
       rows.explored.set(o.key, { ...cur, cells: [...new Set([...cur.cells, ...o.row.p_cells])] });

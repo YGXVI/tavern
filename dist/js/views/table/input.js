@@ -201,7 +201,7 @@ export function attachInput(ctx) {
     if (e.key === 'Enter' && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
     // Группа из рамки (TASK-169): токены (мастер) и рисунки — одним шагом отмены.
     const grpDraws = [...ctx.ui.selDrawings].filter((id) => ctx.scene?.drawings.some((d) => d.id === id));
-    if ((e.key === 'Delete' || e.key === 'Backspace') && grpDraws.length) { ctx.panels.deleteTokens(ctx.isMasterView ? [...ctx.ui.selection] : [], grpDraws); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && grpDraws.length) { ctx.panels.deleteTokens(ctx.isMasterView ? [...ctx.ui.selection] : [...ctx.ui.selection].filter((id) => ctx.owns(ctx.scene?.tokens.find((t) => t.id === id))), grpDraws); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) {
       deleteDrawing(ctx, ctx.ui.selDrawing); // закреплённый и чужой не удаляются — проверка внутри (canDeleteDrawing)
       ctx.invalidate('drawings'); return;
@@ -225,7 +225,10 @@ export function attachInput(ctx) {
     }
     if (e.key.startsWith('Arrow') && ctx.ui.selection.size) { e.preventDefault(); nudge(ctx, e.key); return; }
     // Tab — следующий токен (Shift+Tab — предыдущий): выделить и показать.
-    if (e.key === 'Tab' && ctx.scene && !hasModal()) {
+    // Только когда фокус на карте или ни на чём: иначе Tab ходит по кнопкам листа и панелей, как положено.
+    const ae = document.activeElement;
+    const onMap = !ae || ae === document.body || ae.closest?.('.viewport, .table-viewport, .world') ;
+    if (e.key === 'Tab' && ctx.scene && !hasModal() && onMap) {
       const list = ctx.scene.tokens.filter((t) => ctx.tokenShown(t) && t.kind !== 'item' && (ctx.isMasterView || t.kind === 'hero' || ctx.canControl(t)));
       if (list.length) {
         e.preventDefault();
@@ -386,11 +389,33 @@ function nudge(ctx, k) {
   for (const id of ctx.ui.selection) {
     const t = ctx.scene.tokens.find((x) => x.id === id);
     if (!t || !ctx.canControl(t) || t.locked) continue;
-    const to = { x: t.x + d[0] * s, y: t.y + d[1] * s };
+    const to = clampToMap(ctx, { x: t.x + d[0] * s, y: t.y + d[1] * s }, cellsOfToken(t));
+    if (to.x === t.x && to.y === t.y) continue; // край карты
     if (moveBlocked(t, to, ctx.scene.walls)) { ctx.toast({ title: 'Там стена', body: ctx.isMaster ? 'Сквозь стену — перетащить с Alt' : '', icon: 'path' }); continue; }
     moves.push({ id, from: { x: t.x, y: t.y }, to });
   }
-  if (moves.length) commitMoves(ctx, moves, null);
+  if (!moves.length) return;
+  // Шаг стрелкой — тот же ход, что перетаскивание: расход движения, ловушки, переходы, атака по возможности.
+  const leader = ctx.scene.tokens.find((t) => t.id === moves[0].id);
+  const cost = ownCost(ctx, moves[0]);
+  const trapHit = !ctx.ui.viewAs && moves.length === 1 && findTrapOnPath(ctx, leader, { cells: cellsAlong(g, [moves[0].from, moves[0].to], cellsOfToken(leader)) });
+  const threats = ctx.inCombat() && !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
+  const commit = () => {
+    commitMoves(ctx, moves, cost);
+    if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader);
+    if (threats.length) bus.send('opportunity', { cid: ctx.cid, tokenId: leader.id, foes: threats.map((t) => t.id) });
+    checkPortal(ctx, leader, moves[0].to);
+    updateReach(ctx);
+  };
+  if (threats.length && !leader.disengaged) {
+    ctx.panels.opportunityWarning(leader, threats, {
+      go: () => commit(),
+      disengage: () => { ctx.mutateScene((sc) => { const t = sc.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); commitMoves(ctx, moves, cost); checkPortal(ctx, leader, moves[0].to); updateReach(ctx); },
+      cancel: () => {},
+    });
+    return;
+  }
+  commit();
 }
 
 /** Путь члена группы (#198): прямой отрезок от старта до финиша по клеткам, с труднопроходимой местностью. */
@@ -402,18 +427,23 @@ function ownCost(ctx, m) {
 }
 
 /** Записать перемещение (с отменой) и расход движения в бою. */
-function commitMoves(ctx, moves0, leaderCost, draw = null) {
+function commitMoves(ctx, moves0, leaderCost, draw = null, leaderId = moves0[0]?.id) {
   // Езда (TASK-187): с ездовым едут всадники; всадник, сдвинутый без ездового, спешивается.
-  const moves = expandRideMoves(ctx.scene, moves0);
-  const leader = moves[0];
+  const moves = expandRideMoves(ctx.scene, moves0, { keepLocked: !ctx.isMaster });
+  // Путь (leaderCost) посчитан для того, за кого тащили группу, — ему он и списывается; остальным — свой путь.
+  const leader = moves.find((m) => m.id === leaderId) || moves[0];
   const rode = new Map(moves.filter((m) => m.dismount).map((m) => [m.id, ctx.scene.tokens.find((t) => t.id === m.id)?.riding]));
   // Рисунки группы из рамки (TASK-169) едут в той же записи: один шаг отмены.
   const dz = draw?.ids?.size && (draw.dx || draw.dy) ? drawingsShift(ctx.scene, draw.ids, draw.dx, draw.dy) : null;
   if (!moves.length && !dz) return;
   // Кого двигали последним — тот рисуется поверх остальных (порядок одинаковый у всех участников).
   const at = Date.now();
+  const charged = {}; // сколько футов списано каждому — отмена их вернёт, повтор спишет снова
+  const spend = (c, sign) => { if (!c.combat?.active) return; for (const [id, ft] of Object.entries(charged)) c.combat.moved[id] = Math.max(0, (c.combat.moved[id] || 0) + sign * ft); };
   ctx.mutateScene((s, c) => {
-    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; if (m.dismount) delete t.riding; } }
+    // Спешенный на месте (закреплённый всадник) не «двигался»: место и movedAt не трогаем — их закрепил мастер.
+    const still = (m) => m.to.x === m.from.x && m.to.y === m.from.y;
+    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (!still(m)) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; } if (m.dismount) delete t.riding; } }
     if (dz) applyDrawingPos(s, dz.after);
     if (leader && leaderCost != null && c.combat.active) {
       // Расход — каждому, чей сейчас ход: одиночке или каждому члену пачки (#198) — его же путь (сдвиг общий).
@@ -422,13 +452,15 @@ function commitMoves(ctx, moves0, leaderCost, draw = null) {
       const turn = new Set(cur ? slotMembers(initiativeOrder(c, s), cur.tokenId).map((e) => e.tokenId) : []);
       for (const m of moves) {
         if (!turn.has(m.id) || m.carried) continue;
-        c.combat.moved[m.id] = (c.combat.moved[m.id] || 0) + (m.id === leader.id ? leaderCost : ownCost(ctx, m));
+        const ft = m.id === leader.id ? leaderCost : ownCost(ctx, m);
+        charged[m.id] = ft;
+        c.combat.moved[m.id] = (c.combat.moved[m.id] || 0) + ft;
       }
     }
   }, {
     label: moves.length ? 'Перемещение' : 'Сдвинуть рисунки',
-    undo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.from.x; t.y = m.from.y; if (rode.get(m.id)) t.riding = rode.get(m.id); } } if (dz) applyDrawingPos(s, dz.before); },
-    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); if (m.dismount) delete t.riding; } } if (dz) applyDrawingPos(s, dz.after); },
+    undo: (s, c) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (m.to.x !== m.from.x || m.to.y !== m.from.y) { t.x = m.from.x; t.y = m.from.y; } if (rode.get(m.id)) t.riding = rode.get(m.id); } } if (dz) applyDrawingPos(s, dz.before); if (c) spend(c, -1); },
+    redo: (s, c) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (m.to.x !== m.from.x || m.to.y !== m.from.y) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); } if (m.dismount) delete t.riding; } } if (dz) applyDrawingPos(s, dz.after); if (c) spend(c, 1); },
   });
 }
 export { commitMoves };
@@ -671,26 +703,31 @@ function finishDrag(ctx, g) {
   const leader = ctx.scene.tokens.find((t) => t.id === g.drag.leader.id);
   // Ловушка на пути: токен останавливается на ней.
   const trapHit = !ctx.ui.viewAs && findTrapOnPath(ctx, leader, g.path);
+  let cost = g.cost ?? null;
   if (trapHit && moves.length === 1) {
     const n = cellsOfToken(leader);
     const p = footprintCenter(sceneGrid(ctx), trapHit.cell.c, trapHit.cell.r, n);
     moves[0].to = p;
+    // Остановился на ловушке — списываем путь до неё, а не весь задуманный.
+    if (cost != null) cost = Math.min(cost, ownCost(ctx, moves[0]));
   }
+  const lm = moves.find((m) => m.id === leader.id) || moves[0];
   // Атака по возможности: игрок уходит из досягаемости врага.
   const threats = ctx.inCombat() && !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
   const commit = () => {
-    commitMoves(ctx, moves, g.cost ?? null, drawShift());
+    commitMoves(ctx, moves, cost, drawShift(), leader.id);
     done(true);
     if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader);
     if (threats.length) bus.send('opportunity', { cid: ctx.cid, tokenId: leader.id, foes: threats.map((t) => t.id) });
-    checkPortal(ctx, leader, moves[0].to);
+    checkPortal(ctx, leader, lm.to);
     updateReach(ctx);
   };
   if (threats.length && !leader.disengaged) {
     ctx.ui.threat = threats.flatMap((t) => { const n = cellsOfToken(t); const fp = footprintAt(sceneGrid(ctx), t.x, t.y, n); return footprintCells(fp.c, fp.r, n).map((x) => key(x.c, x.r)); });
     ctx.panels.opportunityWarning(leader, threats, {
       go: () => { ctx.ui.threat = null; commit(); },
-      disengage: () => { ctx.ui.threat = null; ctx.mutateScene((s) => { const t = s.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); moves.length && commitMoves(ctx, moves, g.cost ?? null, drawShift()); done(); },
+      // «Отход»: тот же ход, что «Всё равно идти» (ловушка, переход, досягаемость), только без атаки вслед.
+      disengage: () => { ctx.ui.threat = null; ctx.mutateScene((s) => { const t = s.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); if (moves.length) commitMoves(ctx, moves, cost, drawShift(), leader.id); done(true); if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader); checkPortal(ctx, leader, lm.to); updateReach(ctx); },
       cancel: () => { ctx.ui.threat = null; done(); },
     });
     ctx.invalidate('areas');

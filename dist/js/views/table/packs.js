@@ -37,6 +37,15 @@ export function packByProximity(tokens, sizes) {
 export const packKind = (t) => (t && t.kind === 'foe' && !t.ownerId && !t.summonedBy && t.monsterId ? t.monsterId : null);
 
 /**
+ * Группа призывов игрока (#198 §2, §4): одинаковые призывы одного владельца и одного призывателя — «Призыв
+ * животных» велит бросать за них одну инициативу. Фамильяр или скакун — один, группы не будет.
+ */
+export const summonKind = (t) => (t && t.kind !== 'hero' && t.kind !== 'item' && (t.summonedBy || t.ownerId) && t.monsterId ? `s:${t.ownerId || ''}:${t.summonedBy || ''}:${t.monsterId}` : null);
+/** Вид для группировки в бою: пачка мастера или группа призывов. */
+export const groupKind = (t) => packKind(t) || summonKind(t);
+export const isSummonKind = (k) => typeof k === 'string' && k.startsWith('s:');
+
+/**
  * Пачки для одного вида: mode 'auto' — по правилу packSizes, 'one' — одной группой, 'each' — каждый отдельно.
  * Скрытые и видимые — всегда в разных пачках (засада не связывается с видимыми). Возвращает массивы id;
  * массив из одного id — одиночка.

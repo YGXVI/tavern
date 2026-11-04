@@ -1,15 +1,16 @@
 // Лист героя (базовый шаблон) и блок характеристик существа. Детали листа — следующая задача (TASK-004).
-import { esc, fmtMod, debounce, el } from '../../core/dom.js';
+import { esc, fmtMod, el } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { characterOf, updateCampaign, ownerOfCharacter, isMasterOf, tokenStats, monsterOf } from '../../core/campaign.js';
 import { ABILITIES, SKILLS, mod, profBonus, CONDITIONS, conditionById } from '../../data/rules.js';
-import { doRoll, parseFormula } from './dice.js';
+import { doRoll, parseFormula, poolVis } from './dice.js';
+import { isDead, isStable } from '../../rules/attack.js';
 
 let drawer = null;
 let state = { kind: null, id: null, tab: 'main' };
 
-export function closeSheet() { drawer?.remove(); drawer = null; state = { kind: null, id: null, tab: 'main' }; }
+export function closeSheet() { flushSheet(); drawer?.remove(); drawer = null; shown = ''; state = { kind: null, id: null, tab: 'main' }; }
 export const sheetOpenFor = () => state;
 
 export function openCharacterSheet(ctx, chId, tab) {
@@ -38,19 +39,32 @@ function ensureDrawer(ctx) {
   return drawer;
 }
 
+let shown = '', lastHtml = ''; // что сейчас в ящике: тот же лист и вкладка — сохраняем прокрутку
 function renderSheet(ctx, soft = false) {
   const d = ensureDrawer(ctx);
   // Не перерисовываем поле, в котором сейчас печатают.
   if (soft && d.contains(document.activeElement) && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  let html;
   if (state.kind === 'character') {
     const ch = characterOf(ctx.c, state.id);
     if (!ch) { closeSheet(); return; }
-    d.innerHTML = characterHTML(ctx, ch);
+    html = characterHTML(ctx, ch);
   } else {
     const t = ctx.scene?.tokens.find((x) => x.id === state.id);
     if (!t) { closeSheet(); return; }
-    d.innerHTML = monsterHTML(ctx, t);
+    html = monsterHTML(ctx, t);
   }
+  // Любое изменение кампании (чужой ход, бросок) перерисовывает лист — без этого он прыгал бы к началу.
+  const key = `${state.kind}:${state.id}:${state.tab}`;
+  const same = key === shown;
+  if (same && lastHtml === html && d.childElementCount) return;
+  const top = same ? d.querySelector('.sheet-body')?.scrollTop || 0 : 0;
+  const left = d.querySelector('.sheet-tabs')?.scrollLeft || 0;
+  d.innerHTML = html;
+  lastHtml = html;
+  shown = key;
+  const body = d.querySelector('.sheet-body'); if (body && top) body.scrollTop = top;
+  const tabs = d.querySelector('.sheet-tabs'); if (tabs && left) tabs.scrollLeft = left;
 }
 
 const TABS = [['main', 'Основное'], ['skills', 'Навыки'], ['combat', 'Бой'], ['spells', 'Заклинания'], ['gear', 'Снаряжение'], ['notes', 'Заметки']];
@@ -68,10 +82,10 @@ function characterHTML(ctx, ch) {
     body = `<div class="abilities">${ABILITIES.map((a) => {
       const m = mod(ch.stats[a.id]);
       const save = m + (ch.saves.includes(a.id) ? pb : 0);
-      return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="check" data-ab="${a.id}" data-tip="Проверка ${a.name}">${fmtMod(m)}</button>${num(`stats.${a.id}`, ch.stats[a.id], 'ab-score')}<button class="ab-save ${ch.saves.includes(a.id) ? 'prof' : ''}" data-roll="save" data-ab="${a.id}" data-tip="Спасбросок ${a.name}">спас ${fmtMod(save)}</button></div>`;
+      return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="check" data-ab="${a.id}" data-tip="Проверка ${AB_NAMES[a.id] || a.name}">${fmtMod(m)}</button>${num(`stats.${a.id}`, ch.stats[a.id], 'ab-score')}<button class="ab-save ${ch.saves.includes(a.id) ? 'prof' : ''}" data-roll="save" data-ab="${a.id}" data-tip="Спасбросок ${AB_NAMES[a.id] || a.name}">спас ${fmtMod(save)}</button></div>`;
     }).join('')}</div>
     <div class="sheet-grid3"><div class="stat-box"><small>Пассивное Восприятие</small><b>${passive}</b></div><div class="stat-box"><small>Бонус мастерства</small><b>${fmtMod(pb)}</b></div><div class="stat-box"><small>Тёмное зрение</small><b>${ch.darkvision ? `${ch.darkvision} фт` : '—'}</b></div></div>
-    <div class="sheet-sect"><div class="section-label">Спасброски от смерти</div><div class="death-row"><span class="t-sm muted">Успехи</span>${[0, 1, 2].map((i) => `<button class="pip ok ${ch.deathSaves.s > i ? 'on' : ''}" data-ds="s" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="t-sm muted" style="margin-left:12px">Провалы</span>${[0, 1, 2].map((i) => `<button class="pip bad ${ch.deathSaves.f > i ? 'on' : ''}" data-ds="f" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="spacer"></span><button class="btn btn-sm btn-secondary" data-roll="death">${icon('dice-faces-06', 14)}Бросить</button></div></div>
+    <div class="sheet-sect"><div class="section-label">Спасброски от смерти</div><div class="death-row"><span class="t-sm muted">Успехи</span>${[0, 1, 2].map((i) => `<button class="pip ok ${ch.deathSaves.s > i ? 'on' : ''}" data-ds="s" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="t-sm muted" style="margin-left:12px">Провалы</span>${[0, 1, 2].map((i) => `<button class="pip bad ${ch.deathSaves.f > i ? 'on' : ''}" data-ds="f" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="spacer"></span>${isDead(ch.deathSaves) ? `<span class="chip chip-negative">${icon('skull', 12)}Погиб</span>` : isStable(ch.deathSaves) ? `<span class="chip chip-success">${icon('heart-check', 12)}Стабилен</span>` : ch.hp <= 0 ? `<button class="btn btn-sm btn-secondary" data-roll="death">${icon('dice-faces-06', 14)}Бросить</button>` : '<span class="t-xs tertiary">бросают при 0 хитов</span>'}</div></div>
     <div class="sheet-sect"><div class="section-label">Состояния</div><div class="cond-chips">${CONDITIONS.map((c) => `<button class="chip ${ch.conditions.includes(c.id) ? 'chip-accent' : ''}" data-cond="${c.id}" ${edit || ctx.isMaster ? '' : 'disabled'} data-tip="${esc(c.text)}">${icon(c.icon, 12)}${esc(c.name)}</button>`).join('')}</div></div>`;
   } else if (state.tab === 'skills') {
     body = `<div class="skills">${SKILLS.map((s) => {
@@ -81,7 +95,8 @@ function characterHTML(ctx, ch) {
       return `<div class="skill-row"><button class="prof-dot ${prof ? 'on' : ''}" data-skillprof="${s.id}" ${edit ? '' : 'disabled'} aria-label="Владение"></button><span class="grow">${esc(s.name)} <small class="tertiary">${ab.short}</small></span><button class="skill-mod" data-roll="skill" data-skill="${s.id}">${fmtMod(v)}</button></div>`;
     }).join('')}</div>`;
   } else if (state.tab === 'combat') {
-    body = `<div class="attacks">${ch.attacks.map((a, i) => `<div class="attack-row"><div class="grow"><b>${esc(a.name)}</b><small class="muted">${esc(a.type || '')}${a.note ? ` · ${esc(a.note)}` : ''}</small></div><button class="btn btn-sm btn-secondary" data-roll="attack" data-i="${i}">${a.bonus ? `${fmtMod(a.bonus)} к попаданию` : 'Попадание'}</button><button class="btn btn-sm btn-secondary" data-roll="damage" data-i="${i}">${esc(a.damage)}</button></div>`).join('') || '<p class="muted t-sm">Атак пока нет.</p>'}</div>
+    body = `<div class="attacks">${ch.attacks.map((a, i) => `<div class="attack-row ${edit && state.editAttack === i ? 'editing' : ''}"><div class="grow"><b>${esc(a.name)}</b><small class="muted">${esc(a.type || '')}${a.note ? ` · ${esc(a.note)}` : ''}</small></div><button class="btn btn-sm btn-secondary" data-roll="attack" data-i="${i}">${Number(a.bonus) ? `${esc(fmtMod(Number(a.bonus)))} к попаданию` : 'Попадание'}</button><button class="btn btn-sm btn-secondary" data-roll="damage" data-i="${i}">${esc(a.damage)}</button>${edit ? `<button class="icon-btn icon-btn-xs" data-act-sheet="edit-attack" data-i="${i}" aria-expanded="${state.editAttack === i}" data-tip="Изменить" aria-label="Изменить атаку «${esc(a.name)}»">${icon('pencil-edit-02', 14)}</button>` : ''}</div>
+      ${edit && state.editAttack === i ? `<div class="attack-edit"><label class="field"><span class="label">Название</span><input class="sheet-line" data-f="attacks.${i}.name" value="${esc(a.name)}"></label><label class="field"><span class="label">К попаданию</span><input class="sheet-line" type="number" data-f="attacks.${i}.bonus" value="${esc(Number(a.bonus) || 0)}"></label><label class="field"><span class="label">Урон</span><input class="sheet-line" data-f="attacks.${i}.damage" value="${esc(a.damage)}" placeholder="1d8+3"></label><label class="field"><span class="label">Тип</span><input class="sheet-line" data-f="attacks.${i}.type" value="${esc(a.type || '')}" placeholder="рубящий"></label><button class="btn btn-sm btn-ghost danger" data-act-sheet="del-attack" data-i="${i}">${icon('delete-02', 14)}Удалить атаку</button></div>` : ''}`).join('') || '<p class="muted t-sm">Атак пока нет.</p>'}</div>
       ${edit ? `<button class="btn btn-sm btn-ghost" data-act-sheet="add-attack">${icon('plus-sign', 14)}Добавить атаку</button>` : ''}
       <div class="sheet-sect"><div class="section-label">Особенности</div><textarea class="sheet-text" data-f="features" rows="5" ${ro}>${esc(ch.features)}</textarea></div>`;
   } else if (state.tab === 'spells') {
@@ -96,13 +111,13 @@ function characterHTML(ctx, ch) {
   }
   return `<header class="sheet-head">
       <span class="sheet-portrait" style="background-image:url(&quot;${esc(srcOf(ch.portrait))}&quot;)"></span>
-      <div class="titles grow"><input class="sheet-name" data-f="name" value="${esc(ch.name)}" ${ro}><div class="t-sm muted">${esc(ch.className)} · <input class="sheet-num inline" type="number" min="1" max="20" data-f="level" value="${ch.level}" ${ro}> ур. · ${esc(ch.raceName)}</div><div class="t-xs tertiary">${owner ? `Играет ${esc(owner.name)}` : 'Без игрока'}${edit ? '' : ' · только просмотр'}</div></div>
+      <div class="titles grow"><input class="sheet-name" data-f="name" value="${esc(ch.name)}" ${ro}><div class="t-sm muted">${esc(ch.className)} · <input class="sheet-num inline" type="number" min="1" max="20" data-f="level" value="${esc(ch.level)}" ${ro}> ур. · ${esc(ch.raceName)}</div><div class="t-xs tertiary">${owner ? `Играет ${esc(owner.name)}` : 'Без игрока'}${edit ? '' : ' · только просмотр'}</div></div>
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
-      <button class="vital hp" data-act-sheet="hp"><small>Хиты</small><b>${ch.hp}<span>/${ch.hpMax}</span></b>${ch.tempHp ? `<em>+${ch.tempHp} врем.</em>` : ''}<span class="hp-bar ${hpFrac > 0.5 ? 'ok' : ''}"><i style="width:${hpFrac * 100}%"></i></span></button>
+      <button class="vital hp" data-act-sheet="hp"><small>Хиты</small><b>${esc(ch.hp)}<span>/${esc(ch.hpMax)}</span></b>${ch.tempHp ? `<em>+${esc(ch.tempHp)} врем.</em>` : ''}<span class="hp-bar ${hpFrac > 0.5 ? 'ok' : ''}"><i style="width:${hpFrac * 100}%"></i></span></button>
       <label class="vital"><small>КД</small>${num('ac', ch.ac)}</label>
-      <button class="vital" data-roll="init"><small>Инициатива</small><b>${fmtMod(ch.initBonus ?? mod(ch.stats.dex))}</b></button>
+      <button class="vital" data-roll="init"><small>Инициатива</small><b>${fmtMod(initOf(ch))}</b></button>
       <label class="vital"><small>Скорость</small><span class="row">${num('speed', ch.speed)}<span class="t-xs muted">фт</span></span></label>
     </div>
     <nav class="sheet-tabs">${TABS.map(([id, n]) => `<button class="tab" data-tab="${id}" aria-selected="${state.tab === id}">${n}</button>`).join('')}</nav>
@@ -151,7 +166,7 @@ function monsterHTML(ctx, t) {
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
-      <div class="vital hp"><small>Хиты</small><b>${isM ? `${st.hp}<span>/${st.hpMax}</span>` : '?'}</b><small class="tertiary">${esc(m.hpDice)}</small></div>
+      <div class="vital hp"><small>Хиты</small><b>${isM ? `${esc(st.hp)}<span>/${esc(st.hpMax)}</span>` : '?'}</b><small class="tertiary">${esc(m.hpDice)}</small></div>
       <div class="vital"><small>КД</small><b>${isM ? m.ac : '?'}</b></div>
       <div class="vital"><small>Скорость</small><b>${m.speed ?? '—'}<span> фт</span></b></div>
       <div class="vital"><small>Иниц.</small><b>${fmtMod(m.init ?? 0)}</b></div>
@@ -174,7 +189,23 @@ function setPath(obj, path, value) {
   o[parts.at(-1)] = value;
 }
 
-const saveText = debounce((ctx, chId, f, v) => updateCampaign(ctx.cid, (c) => { const ch = c.characters.find((x) => x.id === chId); if (ch) setPath(ch, f, v); }), 400);
+/** Инициатива идёт за Ловкостью: прочие бонусы (черта «Бдительный» и т. п.) сохраняются. */
+const initOf = (ch) => ch.initBonus ?? mod(ch.stats.dex);
+function writeField(c, chId, f, v) {
+  const ch = c.characters.find((x) => x.id === chId); if (!ch) return;
+  if (f === 'stats.dex') ch.initBonus = initOf(ch) - mod(ch.stats.dex) + mod(v);
+  setPath(ch, f, v);
+}
+// Своя задержка у каждого поля: правка одного и сразу другого не теряет первую (раньше таймер был общий).
+const timers = new Map();
+function saveText(ctx, chId, f, v) {
+  const k = `${chId}|${f}`;
+  clearTimeout(timers.get(k)?.t);
+  const run = () => { timers.delete(k); updateCampaign(ctx.cid, (c) => writeField(c, chId, f, v)); };
+  timers.set(k, { t: setTimeout(run, 400), run });
+}
+/** Дописать отложенные правки сразу (лист закрывают или уходят со стола). */
+export function flushSheet() { for (const { t, run } of [...timers.values()]) { clearTimeout(t); run(); } }
 
 function onInput(ctx, e, final = false) {
   const f = e.target.dataset.f;
@@ -182,7 +213,12 @@ function onInput(ctx, e, final = false) {
   const ch = characterOf(ctx.c, state.id);
   if (!ch || !canEdit(ctx, ch)) return;
   let v = e.target.value;
-  if (e.target.type === 'number') { v = Number(v); if (!Number.isFinite(v)) return; if (f === 'level') v = Math.min(20, Math.max(1, v)); }
+  if (e.target.type === 'number') {
+    if (v.trim() === '') return; // пустое поле — не ноль: ничего не пишем, пока не впишут число
+    v = Number(v); if (!Number.isFinite(v)) return;
+    if (f === 'level') v = Math.min(20, Math.max(1, Math.round(v)));
+    if (f.startsWith('stats.')) v = Math.min(30, Math.max(1, Math.round(v)));
+  }
   if (e.target.type === 'number' && !final) return;
   saveText(ctx, ch.id, f, v);
   if (f === 'level') setTimeout(() => updateCampaign(ctx.cid, (c) => { const x = c.characters.find((y) => y.id === ch.id); if (x) x.profBonus = profBonus(x.level); }), 450);
@@ -211,7 +247,9 @@ function onClick(ctx, e) {
   const slot = e.target.closest('[data-slot]');
   if (slot) { const lv = slot.dataset.slot, i = Number(slot.dataset.i); upd((x) => { const s = x.slots[lv]; const avail = s.max - s.used; s.used = i < avail ? s.max - i : s.max - i - 1; s.used = Math.max(0, Math.min(s.max, s.used)); }); return; }
   const act = e.target.closest('[data-act-sheet]')?.dataset.actSheet;
-  if (act === 'add-attack') upd((x) => x.attacks.push({ name: 'Новая атака', bonus: pbAttack(x), damage: '1d6', type: 'рубящий' }));
+  if (act === 'add-attack') { state.editAttack = ch.attacks.length; upd((x) => x.attacks.push({ name: 'Новая атака', bonus: pbAttack(x), damage: '1d6', type: 'рубящий' })); }
+  if (act === 'edit-attack') { const i = Number(e.target.closest('[data-i]').dataset.i); state.editAttack = state.editAttack === i ? null : i; renderSheet(ctx); }
+  if (act === 'del-attack') { const i = Number(e.target.closest('[data-i]').dataset.i); state.editAttack = null; upd((x) => { x.attacks.splice(i, 1); }); }
   if (act === 'hp') { const t = ctx.scene?.tokens.find((q) => q.characterId === ch.id); if (t) ctx.panels.hpEditor(t.id, e.target.closest('[data-act-sheet]')); }
 }
 
@@ -223,23 +261,25 @@ function sheetRoll(ctx, b) {
     const t = ctx.scene.tokens.find((x) => x.id === state.id);
     const m = monsterOf(ctx.c, t?.monsterId);
     if (!m) return;
-    const hidden = !!ctx.ui.dicePool?.hidden;
-    if (kind === 'mcheck') { const ab = ABILITIES.find((a) => a.id === b.dataset.ab); doRoll(ctx, { label: `${t.name}: проверка ${ab.name}`, dice: { 20: 1 }, mod: mod(m.stats[ab.id]), hidden }); }
+    const vis = poolVis(ctx, !!t?.hidden);
+    const who = ctx.nameOf ? ctx.nameOf(t) : t.name;
+    if (kind === 'mcheck') { const ab = ABILITIES.find((a) => a.id === b.dataset.ab); doRoll(ctx, { label: `${who}: проверка ${AB_NAMES[ab.id] || ab.name}`, dice: { 20: 1 }, mod: mod(m.stats[ab.id]), vis }); }
     const a = (m[b.dataset.list] || m.actions)[Number(b.dataset.i)];
-    if (kind === 'mattack' && a) doRoll(ctx, { label: `${t.name}: ${a.name}`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack', hidden });
-    if (kind === 'mdamage' && a) { const f = parseFormula(a.damage); if (f) doRoll(ctx, { label: `${t.name}: ${a.name} — урон${a.type ? ` (${a.type})` : ''}`, ...f, hidden }); }
+    if (kind === 'mattack' && a) doRoll(ctx, { label: `${who}: ${a.name}`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack', vis });
+    if (kind === 'mdamage' && a) { const f = parseFormula(a.damage); if (f) doRoll(ctx, { label: `${who}: ${a.name} — урон${a.type ? ` (${a.type})` : ''}`, ...f, vis }); }
     return;
   }
   const ch = characterOf(ctx.c, state.id);
   if (!ch) return;
   const pb = profBonus(ch.level);
   const ab = ABILITIES.find((a) => a.id === b.dataset.ab);
-  if (kind === 'check') doRoll(ctx, { label: `${ch.name}: проверка ${ab.name}`, dice: { 20: 1 }, mod: mod(ch.stats[ab.id]) });
-  if (kind === 'save') doRoll(ctx, { label: `${ch.name}: спасбросок ${ab.name}`, dice: { 20: 1 }, mod: mod(ch.stats[ab.id]) + (ch.saves.includes(ab.id) ? pb : 0), kind: 'save' });
-  if (kind === 'skill') { const s = SKILLS.find((x) => x.id === b.dataset.skill); doRoll(ctx, { label: `${ch.name}: ${s.name}`, dice: { 20: 1 }, mod: mod(ch.stats[s.ab]) + (ch.skills.includes(s.id) ? pb : 0) }); }
-  if (kind === 'init') doRoll(ctx, { label: `${ch.name}: инициатива`, dice: { 20: 1 }, mod: ch.initBonus ?? mod(ch.stats.dex) });
-  if (kind === 'attack') { const a = ch.attacks[Number(b.dataset.i)]; doRoll(ctx, { label: `${ch.name}: ${a.name}`, dice: { 20: 1 }, mod: a.bonus || 0, kind: 'attack' }); }
-  if (kind === 'damage') { const a = ch.attacks[Number(b.dataset.i)]; const f = parseFormula(a.damage); if (f) doRoll(ctx, { label: `${ch.name}: урон ${a.name}`, ...f }); else ctx.toast({ title: 'Не понимаю формулу урона', body: a.damage, icon: 'alert-circle' }); }
+  const vis = poolVis(ctx);
+  if (kind === 'check') doRoll(ctx, { label: `${ch.name}: проверка ${AB_NAMES[ab.id] || ab.name}`, dice: { 20: 1 }, mod: mod(ch.stats[ab.id]), vis });
+  if (kind === 'save') doRoll(ctx, { label: `${ch.name}: спасбросок ${AB_NAMES[ab.id] || ab.name}`, dice: { 20: 1 }, mod: mod(ch.stats[ab.id]) + (ch.saves.includes(ab.id) ? pb : 0), kind: 'save', vis });
+  if (kind === 'skill') { const s = SKILLS.find((x) => x.id === b.dataset.skill); doRoll(ctx, { label: `${ch.name}: ${s.name}`, dice: { 20: 1 }, mod: mod(ch.stats[s.ab]) + (ch.skills.includes(s.id) ? pb : 0), vis }); }
+  if (kind === 'init') doRoll(ctx, { label: `${ch.name}: инициатива`, dice: { 20: 1 }, mod: initOf(ch), vis });
+  if (kind === 'attack') { const a = ch.attacks[Number(b.dataset.i)]; doRoll(ctx, { label: `${ch.name}: ${a.name}`, dice: { 20: 1 }, mod: Number(a.bonus) || 0, kind: 'attack', vis }); }
+  if (kind === 'damage') { const a = ch.attacks[Number(b.dataset.i)]; const f = parseFormula(a.damage); if (f) doRoll(ctx, { label: `${ch.name}: урон ${a.name}`, ...f, vis }); else ctx.toast({ title: 'Не понимаю формулу урона', body: a.damage, icon: 'alert-circle' }); }
   if (kind === 'death') ctx.panels.deathSave(ch.id);
 }
 

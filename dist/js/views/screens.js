@@ -276,7 +276,7 @@ function pasteInvite() {
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);
   const submit = () => {
     const v = m.box.querySelector('[data-v]').value.trim();
-    const code = (v.match(/RSP-[A-Z0-9]{4}/i) || [])[0];
+    const code = (v.match(/RSP-[A-Z0-9]{4,8}/i) || [])[0];
     if (!code) { m.box.querySelector('.input').classList.add('error'); return; }
     m.close(); go(`#/join/${code.toUpperCase()}`);
   };
@@ -377,7 +377,7 @@ export function mountJoin(root, code, { onSignedIn }) {
           ${user
             ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button><button class="btn btn-ghost btn-sm" data-switch style="align-self:center">Это не я — сменить аккаунт</button>`
             : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
-          <p class="fineprint" style="text-align:center">Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.</p>
+          <p class="fineprint" style="text-align:center">${c.invite?.manual === false ? 'Возьмём только ник и аватар — и сразу за стол.' : 'Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.'}</p>
         </div>
       </div></div></div>`);
     const join = (uidv) => {
@@ -392,6 +392,8 @@ export function mountJoin(root, code, { onSignedIn }) {
         });
       }
       onSignedIn?.(uidv);
+      const now = membership(findByCode(code), uidv);
+      if (now?.status === 'active') { toast({ title: `${u.name}, вы в кампании`, icon: 'tick-02' }); go(`#/c/${cc.id}`); return; }
       toast({ title: `Заявка от ${u.name} отправлена`, icon: 'hourglass' });
       render();
     };
@@ -470,8 +472,7 @@ export function mountWaiting(root, c, user) {
     </div></div></div>`);
   root.querySelector('[data-cancel]').addEventListener('click', async () => {
     if (isServerMode()) {
-      try { await (await server()).deleteMembership(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
-      commit((db) => { delete db.campaigns[c.id]; });
+      try { await (await server()).leaveCampaign(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
       go('#/campaigns'); return;
     }
     commit((db) => { const cc = db.campaigns[c.id]; cc.members = cc.members.filter((m) => m.userId !== user.id); });

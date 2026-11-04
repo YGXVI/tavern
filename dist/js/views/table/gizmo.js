@@ -71,7 +71,7 @@ export function renderGizmo(L, ctx) {
       btn('more', 'more-vertical', 'Ещё'),
     ].join('')
     : [
-      btn('layer', 'layers-01', 'Слой: поверх или под всеми'),
+      t.locked ? '' : btn('layer', 'layers-01', 'Слой: поверх или под всеми'), // закреплённый сервер двигать не даст
       r.own ? btn('name', 'text-font', 'Имя на карте') : '',
       r.own ? btn('del', 'delete-02', 'Удалить', 'danger') : '',
       btn('more', 'more-vertical', 'Ещё'),

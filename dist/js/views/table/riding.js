@@ -34,7 +34,7 @@ export const ridersOf = (scene, mountId) => (scene?.tokens || []).filter((t) => 
  * Перемещения с учётом езды: тянут ездовое — всадники едут в ту же точку (`carried`); всадника двигают без его
  * ездового — он спешивается (`dismount`). Возвращает новый список, исходный не меняет.
  */
-export function expandRideMoves(scene, moves) {
+export function expandRideMoves(scene, moves, { keepLocked = false } = {}) {
   const byId = new Map(moves.map((m) => [m.id, m]));
   const out = moves.map((m) => ({ ...m, to: { ...m.to } }));
   for (const m of out) {
@@ -46,6 +46,8 @@ export function expandRideMoves(scene, moves) {
   for (const m of moves) {
     for (const r of ridersOf(scene, m.id)) {
       if (byId.has(r.id)) continue;
+      // Закреплённого мастером всадника игрок не везёт: тот спешивается на месте, ездовое уходит (review C6).
+      if (keepLocked && r.locked) { out.push({ id: r.id, from: { x: r.x, y: r.y }, to: { x: r.x, y: r.y }, carried: true, dismount: true }); byId.set(r.id, m); continue; }
       out.push({ id: r.id, from: { x: r.x, y: r.y }, to: { ...m.to }, carried: true });
       byId.set(r.id, m);
     }
@@ -78,16 +80,30 @@ export function mountsNear(ctx, rider) {
 }
 
 // ——— Действия (с отменой) ———
-function edit(ctx, ids, label, fn) {
-  const before = new Map(ids.map((id) => [id, structuredClone(ctx.scene.tokens.find((t) => t.id === id))]).filter(([, t]) => t));
-  if (!before.size) return;
-  const apply = (s) => { for (const id of before.keys()) { const t = s.tokens.find((x) => x.id === id); if (t) fn(t, s); } };
-  ctx.mutateScene(apply, {
-    label,
-    undo: (s) => { for (const [id, t0] of before) { const i = s.tokens.findIndex((x) => x.id === id); if (i >= 0) s.tokens[i] = structuredClone(t0); } },
-    redo: apply,
-  });
+/**
+ * Правка токенов с отменой только тех полей, что поменяла fn: отмена не возвращает чужие правки (хиты мастера,
+ * перемещение) поверх снимка всего токена. Общая для езды и своих токенов (p-token.js).
+ */
+export function editFields(ctx, ids, label, fn) {
+  const sc = ctx.scene; if (!sc) return;
+  const plan = [];
+  for (const id of ids) {
+    const cur = sc.tokens.find((t) => t.id === id); if (!cur) continue;
+    const probe = structuredClone(cur);
+    fn(probe, sc);
+    const keys = [...new Set([...Object.keys(cur), ...Object.keys(probe)])].filter((k) => JSON.stringify(cur[k]) !== JSON.stringify(probe[k]));
+    if (keys.length) plan.push({ id, before: Object.fromEntries(keys.map((k) => [k, structuredClone(cur[k])])), after: Object.fromEntries(keys.map((k) => [k, structuredClone(probe[k])])) });
+  }
+  if (!plan.length) return;
+  const put = (s, which) => {
+    for (const p of plan) {
+      const t = s.tokens.find((x) => x.id === p.id); if (!t) continue;
+      for (const [k, v] of Object.entries(p[which])) { if (v === undefined) delete t[k]; else t[k] = structuredClone(v); }
+    }
+  };
+  ctx.mutateScene((s) => put(s, 'after'), { label, undo: (s) => put(s, 'before'), redo: (s) => put(s, 'after') });
 }
+const edit = editFields;
 
 /** Сесть верхом: всадник встаёт в точку ездового и рисуется поверх него. */
 export function seat(ctx, riderId, mountId) {
