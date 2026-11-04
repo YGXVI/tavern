@@ -6,7 +6,7 @@
 |---|---|---|
 | Сайт | Vercel `rasputye`, токен `VERCEL_TOKEN` | Vercel `dropdice-test` в отдельной команде `drop-dice`, токен `VERCEL_TOKEN_TEST` |
 | База | Supabase `ilsuespohsuligyiqjsx` | свой проект Supabase, адрес — переменная `TEST_SUPABASE_URL` |
-| Вход | Discord-приложение «Распутье» | своё Discord-приложение «Распутье (тест)», гости по `?guest=1` |
+| Вход | Discord-приложение «Распутье» | своё Discord-приложение «Drop Dice (тест)» (Client ID `1567615482448715896`), гость — кнопкой без `?guest=1` |
 | Миграции | вручную, после бэкапа | сами из CI при каждом пуше в `test` |
 | Данные | настоящие | только тестовые; базу можно очистить в любой момент |
 
@@ -35,9 +35,9 @@
 
 **2. Discord — отдельное приложение для теста**
 
-1. discord.com/developers → New Application «Распутье (тест)».
+1. discord.com/developers → New Application «Drop Dice (тест)» (сделано 05.11, ID `1567615482448715896`).
 2. OAuth2 → Redirects: `https://<ref тестового проекта>.supabase.co/auth/v1/callback`.
-3. Client ID и Client Secret ввести в Supabase → Authentication → Providers → Discord. Секрет прода не переиспользовать.
+3. Client ID и Client Secret ввести в Supabase → Authentication → Providers → Discord и включить «Allow users without an email» (сайт просит у Discord только `identify`, без почты). Секрет прода не переиспользовать.
 
 **3. Vercel — проект и токен стенда**
 
@@ -55,7 +55,7 @@
 
 **5. Запуск**
 
-Actions → «Тесты и деплой» → Re-run для последнего запуска `test` (или любой пуш в `test`). Ожидание в логе: миграции применены, «Проверки прав: N ok», адрес выкладки; на стенде — плашка, вход через Discord и `?guest=1`.
+Actions → «Тесты и деплой» → Re-run для последнего запуска `test` (или любой пуш в `test`). Ожидание в логе: миграции применены, «Проверки прав: N ok», адрес выкладки; на стенде — плашка, вход через Discord и кнопка гостя.
 
 ## Обслуживание
 
