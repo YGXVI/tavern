@@ -475,7 +475,7 @@ export function evaluateBuild(context, catalogues, draft, ports = DEFAULT_PORTS)
       selected: choices.filter(c => c.kind === 'spell').map(c => ({ choiceId: c.id, refs: Array.isArray(c.selected) ? c.selected : c.selected ? [c.selected] : [] })),
       expandedList: grants.filter(g => g.kind === 'spell_list_addition').map(g => g.ref), slots: spellSlots,
       pact: pact ? { slots: defs.get(pact.classId).progression[pact.levels - 1].values.pactSlots, slotLevel: defs.get(pact.classId).progression[pact.levels - 1].values.pactSlotLevel } : null },
-    hitPointInputs: first ? { method: context.hpMethod, firstLevelHitDie: first.class.hitDie, hitDice: classes.map(c => ({ die: c.hitDie, count: c.levels })),
+    hitPointInputs: first ? { method: context.hpMethod, firstLevelHitDie: first.class.hitDie, hitDice: classes.map(c => ({ classId: c.classId, die: c.hitDie, count: c.levels })),
       perLevelBonus: grants.filter(g => g.kind === 'hit_points').map(g => ({ perClassLevel: g.perClassLevel ? defs.get(g.origin.definitionId)?.classId ?? null : null, perCharacterLevel: Boolean(g.perCharacterLevel), origin: g.origin })) } : null,
     equipment: { items, currency },
   };

@@ -50,7 +50,7 @@ test('multiclass: off by default; prerequisites at the event; Fighter 2 / Wizard
   assert.equal(ev.choices.filter(c => c.kind === 'asi_or_feat').length, 0, 'ASI follows class level, not character level');
   assert.ok(!ev.choices.some(c => c.id === 'srd51:class:wizard:skills'), 'multiclass gains no class level-1 skill package');
   assert.ok(ev.choices.some(c => c.id === 'srd51:class:wizard:spells:spellbook'));
-  assert.deepEqual(ev.derivedInputs.hitPointInputs.hitDice, [{ die: 10, count: 2 }, { die: 6, count: 2 }]);
+  assert.deepEqual(ev.derivedInputs.hitPointInputs.hitDice, [{ classId: 'srd51:class:fighter', die: 10, count: 2 }, { classId: 'srd51:class:wizard', die: 6, count: 2 }]);
 });
 
 test('extra ASI levels: Fighter 6 and 14, Rogue 10', () => {
