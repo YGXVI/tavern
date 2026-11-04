@@ -7,6 +7,7 @@ import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_CO
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry, keepTurnWith } from './combat.js';
 import { ridingItems, editFields } from './riding.js';
+import { pickImageFile } from '../creature-img.js';
 import { sightMenuItems } from './sight-ui.js';
 import { mobAttack } from './mob-attack.js';
 import { pendingItems, creatureCard } from './own-creature.js';
@@ -691,15 +692,16 @@ function renameToken(ctx, t, done) {
   inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') closePopover(); });
 }
 
-/** Выбрать картинку своего токена: PNG, JPEG или WebP до 5 МБ; в песочнице — в браузер, на сервере — в бакет tokens. */
+/** Выбрать картинку своего токена; в песочнице — в браузер, на сервере — в бакет tokens. done(ref, file). */
 export function pickTokenImage(ctx, done) {
-  const input = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp' });
-  input.addEventListener('change', async () => {
-    const f = input.files?.[0]; if (!f) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type) || f.size > 5 * 1024 * 1024) { ctx.toast({ title: 'Нужна картинка PNG, JPEG или WebP до 5 МБ', icon: 'alert-circle' }); return; }
-    try { done(await storeTokenImage(ctx, f)); } catch (err) { ctx.toast({ title: 'Картинка не загрузилась', body: err.message, icon: 'alert-circle' }); }
+  pickImageFile(ctx.toast, async (f) => {
+    try { done(await storeTokenImage(ctx, f), f); } catch (err) { ctx.toast({ title: 'Картинка не загрузилась', body: err.message, icon: 'alert-circle' }); }
   });
-  input.click();
+}
+
+/** Мастер: своя картинка для существа на карте (#190 E) — у одного токена, с отменой. */
+export function setTokenImage(ctx, id) {
+  pickTokenImage(ctx, (ref) => editFields(ctx, [id], 'Картинка', (x) => { x.img = ref; }));
 }
 export async function storeTokenImage(ctx, file) {
   if (isServerMode()) return (await import('../../server/sync.js')).uploadTokenImage(ctx.cid, file);
@@ -745,6 +747,8 @@ export function contextMenu(ctx, target, w, screen) {
         'divider',
         t.ownerId ? { icon: 'user', label: `${t.summonedBy ? 'Призыв' : 'Токен'} игрока: ${userById(t.ownerId)?.name || 'вышел из кампании'}`, disabled: true } : null,
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
+        // Своя картинка существа (#190 E): у героя — портрет из листа, у предмета — значок.
+        ids.length === 1 && !t.characterId && t.kind !== 'item' ? { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) } : null,
         t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
         { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) },
         !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,

@@ -13,7 +13,8 @@ import { gridDims, gridSize, freeSpots, moveBlocked, footprintAt, footprintCells
 import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
-import { pickTokenImage } from './p-token.js';
+import { pickTokenImage, storeTokenImage } from './p-token.js';
+import { creatureImgTag, hydrateCreatureImages, campaignImage, isLibRef } from '../creature-img.js';
 import { roll } from '../../../engine.js';
 
 // ——— Общее ———
@@ -22,6 +23,7 @@ export function hydrateImages(root) {
     if (img.getAttribute('src')) continue;
     resolveSrc(img.dataset.ref).then((u) => { if (u) img.src = u; });
   }
+  hydrateCreatureImages(root); // свои картинки «Моих существ» (#190 E)
 }
 const mapImg = (ref, cls = '') => { const s = srcOf(ref); return `<img class="${cls}" alt="" draggable="false" data-ref="${esc(ref)}" ${s ? `src="${esc(s)}"` : ''}>`; };
 
@@ -159,7 +161,7 @@ function libList(ctx) {
     const n = ctx.scene?.tokens.filter((t) => ids.has(t.monsterId)).length || 0;
     const pick = `libsrc:${x.id}`;
     const sub = [x.type, x.cr != null ? `КО ${x.cr}` : '', x.ac != null ? `КД ${x.ac}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · ');
-    return `<button class="list-row b-row ${st.pick === pick ? 'current' : ''}" data-act="b-pick" data-id="${esc(pick)}"><span class="avatar sm foe"><img src="${esc(srcOf(x.img && !String(x.img).startsWith('library:') ? x.img : `ini:${x.name}`))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(x.name)}</span><span class="secondary ellipsis">${esc(sub || 'Своё существо')}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
+    return `<button class="list-row b-row ${st.pick === pick ? 'current' : ''}" data-act="b-pick" data-id="${esc(pick)}"><span class="avatar sm foe">${creatureImgTag(x.img, x.name)}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(x.name)}</span><span class="secondary ellipsis">${esc(sub || 'Своё существо')}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
   }).join('');
 }
 
@@ -404,17 +406,40 @@ export function newSceneModal(ctx) {
 }
 
 // ——— Существа ———
+/**
+ * Своя картинка шаблона из «Моих существ» (#190 E). Песочница: ссылка общая — ставим как есть. Сервер: личный бакет
+ * игрокам не виден, поэтому сразу — инициалы (или картинка, уже скопированная в кампанию), а копия — следом.
+ */
+function libImageNow(tpl, have, name) {
+  if (have?.img && !have.img.startsWith('ini:') && !isLibRef(have.img)) return { now: have.img, later: null };
+  if (isLibRef(tpl.img)) return { now: `ini:${name}`, later: isServerMode() ? tpl.img : null };
+  return { now: tpl.img || `ini:${name}`, later: null };
+}
+/** Копия личной картинки в кампании: заменить инициалы у только что поставленных; мастеру — и у копии существа. */
+function fillLibImage(ctx, later, placeholder, ids, copyId, master) {
+  if (!later) return;
+  campaignImage(ctx.cid, later, (b) => storeTokenImage(ctx, b)).then((ref) => {
+    if (!ref) return;
+    updateCampaign(ctx.cid, (c) => {
+      for (const s of c.scenes) for (const t of s.tokens) if (ids.has(t.id) && t.img === placeholder) t.img = ref;
+      const cp = c.creatures?.[copyId];
+      if (master && cp && (!cp.img || cp.img.startsWith('ini:'))) cp.img = ref;
+    });
+  }).catch((err) => ctx.toast({ title: 'Своя картинка не перенеслась', body: `${err.message || err}. На карте пока инициалы — картинку можно поставить: ПКМ → «Картинка…»`, icon: 'alert-circle' }));
+}
+
 export function placeCreatures(ctx, monsterId) {
   const tpl = libTemplate(ctx, monsterId);
   const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
   if (!m || !ctx.scene) return;
   if (tpl && libOffline(ctx)) return;
   // Своё существо: копия шаблона в кампании (одна на шаблон — правки библиотеки её не меняют), токен ссылается на неё.
-  let copyId = null, newCopy = null;
+  let copyId = null, newCopy = null, pic = null;
   if (tpl) {
     const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && !x.ownerId);
     copyId = have ? have.id : uid('cc-');
     if (!have) newCopy = snapshotOf(tpl, copyId);
+    pic = libImageNow(tpl, have, m.name);
   }
   const tokenMonsterId = tpl ? `lib:${copyId}` : m.id;
   const st = bState(ctx);
@@ -431,7 +456,7 @@ export function placeCreatures(ctx, monsterId) {
       let hp = m.hp;
       if (st.rollHp) { try { hp = Math.max(1, roll(m.hpDice.replace(/\s/g, '')).total); } catch { /* среднее */ } }
       const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-      const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp }, m);
+      const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp, ...(pic ? { img: pic.now } : {}) }, m);
       sc.tokens.push(t);
       made.push(t);
     }
@@ -441,6 +466,7 @@ export function placeCreatures(ctx, monsterId) {
     redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); for (const t of made) sc.tokens.push(structuredClone(t)); },
   });
   ctx.select(made.map((t) => t.id));
+  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set(made.map((t) => t.id)), copyId, true);
   if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({
@@ -579,19 +605,20 @@ function summonPicker(ctx, anchor) {
       if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
       const mine = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
       if (!mine.length) return `<p class="t-sm muted b-empty">${L.list.length ? 'Никого не нашлось.' : 'В библиотеке пусто — соберите существо на главной, во вкладке «Существа».'}</p>`;
-      return mine.slice(0, 40).map((x) => row(`libsrc:${x.id}`, x.name, [x.type, x.cr != null ? `КО ${x.cr}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · '), x.img && !String(x.img).startsWith('library:') ? x.img : `ini:${x.name}`)).join('');
+      return mine.slice(0, 40).map((x) => row(`libsrc:${x.id}`, x.name, [x.type, x.cr != null ? `КО ${x.cr}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · '), x.img || `ini:${x.name}`)).join('');
     }
     const found = BESTIARY.filter((m) => bMatch(m, q)).slice(0, 40);
     if (!found.length) return '<p class="t-sm muted b-empty">Никого не нашлось.</p>';
     return found.map((m) => row(m.id, m.name, `${m.type} · КО ${m.cr} · ${m.hp} хп`, m.img)).join('');
   };
-  const row = (id, name, sub, img) => `<button class="list-row b-row" data-summon="${esc(id)}"><span class="avatar sm foe"><img src="${esc(srcOf(img))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(name)}</span><span class="secondary ellipsis">${esc(sub)}</span></span></button>`;
+  const row = (id, name, sub, img) => `<button class="list-row b-row" data-summon="${esc(id)}"><span class="avatar sm foe">${creatureImgTag(img, name)}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(name)}</span><span class="secondary ellipsis">${esc(sub)}</span></span></button>`;
   const pop = popover(`<div class="pick-pop summon-pop"><div class="panel-header"><div class="titles"><div class="title">Призыв</div><div class="subtitle">${hero ? `Встанет союзником рядом с вашим героем (${esc(hero.name)}); в бой его добавляет мастер` : 'Нужен ваш герой на сцене'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
     <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-src="srd" aria-selected="true">Бестиарий</button><button class="tab" role="tab" data-src="lib" aria-selected="false">Мои</button></div>
       <div class="input">${icon('search-01', 18)}<input data-q placeholder="Боевой конь, wolf, КО 1…" aria-label="Поиск существ"></div></div>
     <div class="w-list scroll summon-list" data-list>${rows()}</div></div>`, anchor, { placement: 'top' });
   const n = pop.node;
-  const list = () => { n.querySelector('[data-list]').innerHTML = rows(); };
+  const list = () => { n.querySelector('[data-list]').innerHTML = rows(); hydrateImages(n); };
+  hydrateImages(n);
   const qIn = n.querySelector('[data-q]');
   qIn.focus();
   qIn.addEventListener('input', () => { st.q = qIn.value; list(); });
@@ -614,23 +641,26 @@ export function placeSummon(ctx, pick, at = null) {
   const tpl = libTemplate(ctx, pick);
   const m = tpl ? safeMonster(tpl) : monsterById(pick);
   if (!m || (tpl && libOffline(ctx))) return false;
-  let copyId = null, newCopy = null;
+  let copyId = null, newCopy = null, pic = null;
   if (tpl) {
     const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && x.ownerId === ctx.userId);
     copyId = have ? have.id : uid('cc-');
     if (!have) newCopy = { ...snapshotOf(tpl, copyId), ownerId: ctx.userId };
+    pic = libImageNow(tpl, have, m.name);
   }
   const n = sizeById(m.size).cells;
   const p = spotNear(ctx, at || { x: hero.x, y: hero.y }, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly' }, m);
+  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly', ...(pic ? { img: pic.now } : {}) }, m);
   ctx.mutateScene((sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(t); }, {
     label: 'Призыв',
     undo: (sc, c) => { sc.tokens = sc.tokens.filter((x) => x.id !== t.id); if (newCopy && c.creatures) delete c.creatures[copyId]; },
     redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(structuredClone(t)); },
   });
   ctx.select([t.id]);
+  // Копию существа в кампании правит мастер — игрок меняет картинку только у своего токена.
+  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set([t.id]), copyId, ctx.isMaster);
   ctx.toast({ title: `Призыв: ${t.name}`, body: 'Стоит рядом с вашим героем. В бой его добавляет мастер', icon: 'monster' });
   return true;
 }
