@@ -1,6 +1,6 @@
 # Тесты на каждый пуш в main и test и на каждый пул-реквест.
 # Пуш в main с зелёными тестами сам выкатывается на https://rasputye.vercel.app,
-# пуш в test — на тестовый стенд https://rasputye-test.vercel.app (отдельные проекты
+# пуш в test — на тестовый стенд https://dropdice-test.vercel.app (отдельные проекты
 # Vercel и Supabase, плашка «Тестовый стенд»; настройка — docs/test-environment.md).
 # Секреты: VERCEL_TOKEN (сайт), VERCEL_TOKEN_TEST и TEST_DATABASE_URL (стенд);
 # переменные стенда: TEST_SUPABASE_URL, TEST_SUPABASE_KEY. Settings → Secrets and variables → Actions.
@@ -109,7 +109,7 @@ jobs:
           TEST_SUPABASE_URL: ${{ vars.TEST_SUPABASE_URL }}
           TEST_SUPABASE_KEY: ${{ vars.TEST_SUPABASE_KEY }}
         run: node tools/mark-test-stand.mjs dist "test ${GITHUB_SHA::7}"
-      - name: Выкатить test на rasputye-test.vercel.app
+      - name: Выкатить test на dropdice-test.vercel.app
         if: steps.cfg.outputs.deploy == 'true'
         working-directory: dist
         env:
