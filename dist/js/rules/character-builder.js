@@ -534,3 +534,117 @@ export function toCreationProposal(evaluation, draft, { operationId, characterId
     rollReceipts: structuredClone(draft.rollReceipts), manualOverrides: structuredClone(draft.manualOverrides),
   };
 }
+
+const SPELL_MODE_RU = { known: 'известные', prepared: 'подготовленные', spellbook: 'книга заклинаний', pact: 'магия договора', innate: 'врождённые' };
+const ARMOR_RU = { light: 'лёгкие', medium: 'средние', heavy: 'тяжёлые', shield: 'щиты' };
+const WEAPON_RU = { simple: 'простое', martial: 'воинское' };
+const RESOURCES = [['rages', 'Ярость', 'long'], ['kiPoints', 'Ки', 'short'], ['sorceryPoints', 'Очки чародейства', 'long']];
+
+/**
+ * Character.data for the agreed create command (#61 task186-p4-create-dto-answers-1), in the TASK-004 sheet
+ * vocabulary. Instance IDs are stable per key: pass back the returned `ids` (kept with the draft) so a retry sends
+ * the same payload. `makeId` is injected; HP comes from the sheet rules port `creationHitPoints` or stays null.
+ * Not filled on purpose: ac, attacks, initBonus, profBonus (the sheet computes or keeps them manual).
+ */
+export function toCharacterData(evaluation, draft, catalogues, { ids = {}, makeId }, ports = DEFAULT_PORTS) {
+  if (evaluation.status !== 'valid') throw new Error('Сборка не завершена: исправьте ошибки и заполните выборы.');
+  if (typeof makeId !== 'function') throw new TypeError('Нужен генератор ID экземпляров.');
+  const cat = indexCatalogues(catalogues), { defs, names } = cat, d = evaluation.derivedInputs;
+  const used = { ...ids }, id = key => (used[key] ??= makeId(key));
+  const ru = ref => cat.spellById.get(ref)?.name.ru || cat.spellById.get(ref)?.name.en || names(ref);
+  const race = defs.get(draft.ancestry.raceId), subrace = draft.ancestry.subraceId ? defs.get(draft.ancestry.subraceId) : null;
+  const background = defs.get(draft.background.backgroundId);
+  const first = defs.get(d.classes[0].classId);
+  const legacyId = def => def.aliases.find(a => /^[a-z-]+$/.test(a)) ?? null;
+  const vocab = catalogues.options.vocabularies.languages, langName = l => vocab.standard[l] || vocab.exotic[l] || vocab.secret[l] || l;
+  const ownerClass = definitionId => { const def = defs.get(definitionId); return def?.kind === 'subclass' ? def.classId : def?.kind === 'class' ? def.id : null; };
+
+  const classes = d.classes.map(c => {
+    const sub = c.subclassId ? defs.get(c.subclassId) : null;
+    return { id: id(`class:${c.classId}`), name: names(c.classId), subclass: sub ? names(sub.id) : '', levels: c.levels, ref: c.classId, ...(sub ? { subclassRef: sub.id } : {}) };
+  });
+  const hitDicePools = d.classes.map(c => ({ id: id(`hitDice:${c.classId}`), name: `d${c.hitDie} · ${names(c.classId)}`, die: c.hitDie, total: c.levels, spent: 0 }));
+  const slotPools = (d.spells.slots || []).map((max, i) => max ? { id: id(`slots:${i + 1}`), name: 'Ячейки заклинаний', circle: i + 1, kind: 'spellcasting', max, spent: 0, recovery: 'long' } : null).filter(Boolean);
+  if (d.spells.pact) slotPools.push({ id: id('slots:pact'), name: 'Магия договора', circle: d.spells.pact.slotLevel, kind: 'pact', max: d.spells.pact.slots, spent: 0, recovery: 'short' });
+  const resources = [];
+  for (const c of d.classes) {
+    const values = defs.get(c.classId).progression[c.levels - 1].values;
+    // Unlimited rages (Barbarian 20) and unknown values are not turned into numbers.
+    for (const [key, name, recovery] of RESOURCES) if (Number.isInteger(values[key])) resources.push({ id: id(`resource:${c.classId}:${key}`), name, max: values[key], spent: 0, recovery });
+  }
+
+  // Spells: one source per casting class and one for innate (race/subrace) magic.
+  const sources = new Map(), knownSpells = new Map();
+  const sourceFor = definitionId => {
+    const classId = ownerClass(definitionId);
+    if (classId) {
+      const sc = defs.get(classId).class.spellcasting;
+      if (!sources.has(classId)) sources.set(classId, { id: id(`spellSource:${classId}`), name: names(classId), ability: sc?.ability ?? null, kind: SPELL_MODE_RU[sc?.slots === 'pact' ? 'pact' : sc?.mode] ?? '', attackOverride: null, dcOverride: null });
+      return sources.get(classId);
+    }
+    const key = `innate:${definitionId}`;
+    if (!sources.has(key)) sources.set(key, { id: id(`spellSource:${key}`), name: names(definitionId), ability: null, kind: SPELL_MODE_RU.innate, attackOverride: null, dcOverride: null });
+    return sources.get(key);
+  };
+  const addSpell = (ref, definitionId, prepared, ability) => {
+    const source = sourceFor(definitionId);
+    if (ability && !source.ability) source.ability = ability;
+    const key = `spell:${source.id}:${ref}`, spell = cat.spellById.get(ref), prior = knownSpells.get(key);
+    if (prior) { prior.prepared ||= prepared; return; }
+    knownSpells.set(key, { id: id(`spell:${definitionId}:${ref}`), name: ru(ref), circle: spell?.level ?? null, sourceId: source.id, prepared, ritual: Boolean(spell?.ritual), description: null, ref });
+  };
+  const preparedSel = new Set(d.spells.selected.filter(s => s.choiceId.endsWith(':spells:prepared')).flatMap(s => s.refs));
+  for (const s of d.spells.selected) {
+    const choice = evaluation.choices.find(c => c.id === s.choiceId), definitionId = choice.origin.definitionId;
+    if (s.choiceId.endsWith(':spells:prepared') && defs.get(definitionId)?.class.spellcasting.mode === 'spellbook') continue; // marks spellbook entries
+    const book = s.choiceId.endsWith(':spells:spellbook');
+    if (choice.dependsOnSpellbook) continue; // Spell Mastery / Signature Spells pick spells already in the book
+    s.refs.forEach(ref => addSpell(ref, definitionId, book ? preparedSel.has(ref) : true, choice.ability));
+  }
+  for (const g of d.spells.granted) addSpell(g.ref, g.origin.definitionId, true, g.ability);
+
+  // Features: one entry per feature ref, labelled by where it first came from.
+  const featureEntries = new Map();
+  for (const f of d.features) if (!featureEntries.has(f.ref)) {
+    const o = f.origin, where = o.classLevel ? `${names(o.definitionId)}, ${o.classLevel}-й уровень` : names(o.definitionId);
+    featureEntries.set(f.ref, { id: id(`feature:${f.ref}`), name: names(f.ref), source: where, description: null, ref: f.ref });
+  }
+
+  // Equipment: packs open into their contents; the same item from several lines is one stack.
+  const stacks = new Map();
+  const put = (ref, quantity, fromPack) => {
+    const key = `${ref}|${fromPack ?? ''}`, e = cat.equipmentById.get(ref);
+    if (stacks.has(key)) { stacks.get(key).quantity += quantity; return; }
+    stacks.set(key, { id: id(`item:${key}`), name: e.name.ru || e.name.en, quantity, weight: e.weight ? e.weight.lb / (e.bundleSize || 1) : null, equipped: false, attuned: false, description: '', ref, ...(fromPack ? { fromPack } : {}) });
+  };
+  for (const item of d.equipment.items) {
+    const e = cat.equipmentById.get(item.ref);
+    if (e.kind === 'pack') for (let n = 0; n < item.quantity; n++) e.contents.forEach(c => put(c.ref, c.quantity, item.ref));
+    else put(item.ref, item.quantity);
+  }
+
+  const p = d.proficiencies;
+  const toolNames = p.tools.map(t => cat.equipmentById.get(`srd51:equipment:${t}`)?.name.en || t);
+  const weaponNames = p.weapons.map(w => WEAPON_RU[w] || cat.equipmentById.get(`srd51:equipment:${w}`)?.name.en || w);
+  const toolsText = [p.armor.length ? `Доспехи: ${p.armor.map(a => ARMOR_RU[a] || a).join(', ')}` : '', weaponNames.length ? `Оружие: ${weaponNames.join(', ')}` : '', toolNames.length ? `Инструменты: ${toolNames.join(', ')}` : ''].filter(Boolean).join('\n');
+  const hpMax = typeof ports.creationHitPoints === 'function' ? ports.creationHitPoints({ ...d.hitPointInputs, constitution: d.abilityScores.con }) : null;
+
+  const data = {
+    name: draft.identity.name, profile: 'pc', alignment: draft.identity.alignment ?? '', notes: draft.identity.notes ?? '', portrait: draft.identity.portrait ?? null,
+    level: d.characterLevel, classes,
+    classId: legacyId(first), className: names(first.id), raceId: legacyId(race), raceName: names((subrace || race).id), background: names(background.id),
+    stats: { ...d.abilityScores },
+    proficiencies: { saves: Object.fromEntries(p.savingThrows.map(a => [a, 1])), skills: Object.fromEntries(p.skills.map(s => [s, p.expertise.includes(s) ? 2 : 1])), languages: d.languages.map(langName).join(', '), tools: toolsText },
+    speed: d.speed, darkvision: d.senses.find(s => s.sense === 'darkvision')?.range ?? null,
+    hp: Number.isInteger(hpMax) ? hpMax : null, hpMax: Number.isInteger(hpMax) ? hpMax : null, tempHp: 0,
+    hitDicePools, slotPools, resources,
+    spellSources: [...sources.values()], knownSpells: [...knownSpells.values()],
+    featureEntries: [...featureEntries.values()],
+    inventoryItems: [...stacks.values()], coins: { cp: 0, sp: 0, ep: 0, gp: 0, pp: 0, ...d.equipment.currency },
+    creation: { schemaVersion: 1, edition: '5e-2014', verified: 'client', rulesRevision: draft.rulesRevision, policyRevision: draft.policyRevision,
+      ancestry: structuredClone(draft.ancestry), background: structuredClone(draft.background), levelHistory: structuredClone(draft.levelHistory),
+      selections: structuredClone(draft.selections), abilityInput: { method: draft.abilityMethod, scores: structuredClone(draft.baseScores) },
+      rollReceipts: structuredClone(draft.rollReceipts), manualOverrides: structuredClone(draft.manualOverrides) },
+  };
+  return { data, ids: used };
+}

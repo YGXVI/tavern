@@ -80,6 +80,11 @@ await deleteCatalogueTemplate(changed.id, changed.revision);
 - `proposeBuildChange(draft, change, …)` — предпросмотр изменения (setRace/setSubrace/setBackground/setLevelHistory/setAbilityMethod/setBaseScores/setRollReceipts/setSelection/setIdentity/rebase): затронутые решения и что сохранено. Ничего не удаляется. `confirmBuildChange(proposal)` убирает затронутые выборы в `invalidationLog` с прежним значением.
 - `toCreationProposal(evaluation, draft, {operationId, characterId})` — DTO порта P4 (план r1 D6); только при `valid`. ID задаёт вызывающий и хранит для повтора; производные значения в DTO не передаются. Это не готовая серверная команда: формат и идемпотентность согласуются с «Правилами» (#61).
 
+- `toCharacterData(evaluation, draft, catalogues, {ids, makeId}, ports?)` — библиотечная сторона контракта создания (#61, task186-p4-create-dto-answers-1): `Character.data` в словаре листа TASK-004.
+  - Поля: legacy-поля `classId/raceId` через aliases, `classes` со ссылками `ref`, итоговые `stats`, `proficiencies` (множитель 2 — компетентность; языки и инструменты текстом), `hitDicePools`, `slotPools` (общие ячейки и отдельный пул договора с восстановлением на коротком отдыхе), `resources` из таблиц класса, `spellSources`/`knownSpells` (класс или врождённая магия), `featureEntries` со ссылкой на каталог без копии текста, `inventoryItems` (наборы раскрыты, `fromPack`), `coins` и неизменяемый `creation` (`verified:'client'`).
+  - Не заполняет КД, атаки, инициативу и бонус мастерства. HP приходят только из порта `ports.creationHitPoints` листа «Правил», без него `null`.
+  - ID экземпляров стабильны по ключу: вызывающий хранит возвращённую карту `ids` в черновике до ACK, и повтор даёт тот же payload. `makeId` передаётся извне, своего RNG у движка нет.
+
 `manualOverrides` переносятся в черновике и DTO, но движок их не применяет: мастерские исключения — часть P4 с серверной проверкой. Проекция заклинаний: `loadCatalogue('spell')` → `dist/js/data/spells-2014.json` (без текста; `srd` отмечает 319 заклинаний SRD 5.1: 308 по ссылке API, 11 по проверенным псевдонимам).
 
 
