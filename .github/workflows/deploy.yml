@@ -1,11 +1,12 @@
-# Тесты на каждый пуш и пул-реквест. Пуш в main с зелёными тестами
-# сам выкатывается на https://rasputye.vercel.app.
+# Тесты на каждый пуш в main и test и на каждый пул-реквест. Пуш в main
+# с зелёными тестами сам выкатывается на https://rasputye.vercel.app;
+# test не выкатывается (deploy ниже — только для main).
 # Нужен секрет репозитория VERCEL_TOKEN (Settings → Secrets and variables → Actions).
 name: Тесты и деплой
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
   pull_request:
   workflow_dispatch:
 
