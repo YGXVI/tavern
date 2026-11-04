@@ -17,6 +17,7 @@ const AUTHORED = new Set(['log_entries', 'log_secrets', 'portal_requests']);
 
 let sb = null;
 let me = null;
+let guest = false; // вошли гостем (#194): анонимная сессия Supabase
 let store = null; // {getDB, setDB, deliver, emitLocal, commit}
 const cache = new Map();       // cid → rows
 const channels = new Map();    // cid → RealtimeChannel
@@ -54,6 +55,7 @@ export async function startServer(api) {
   }
   if (!session) return { user: null, error: oauthError ? 'Вход через Discord отменён' : null };
   me = session.user.id;
+  guest = !!session.user.is_anonymous;
   sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') location.reload(); });
   await sb.realtime.setAuth?.(session.access_token);
   await loadAll();
@@ -66,6 +68,19 @@ export async function signInWithDiscord(returnHash = location.hash) {
   const client = await supabase();
   const { error } = await client.auth.signInWithOAuth({ provider: 'discord', options: { redirectTo: `${location.origin}${location.pathname}`, scopes: 'identify' } });
   if (error) throw error;
+}
+
+/**
+ * Вход гостем (#194): анонимная сессия Supabase с ником в метаданных — профиль создаёт триггер profile_from_auth.
+ * После входа вызывающий перезагружает страницу: startServer подхватит сессию и вернёт на returnHash.
+ */
+export async function signInAsGuest(name, returnHash = location.hash) {
+  const nick = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  if (nick.length < 2) throw new Error('Ник — хотя бы две буквы');
+  try { sessionStorage.setItem('rasputye-v2-return', returnHash || '#/campaigns'); } catch { /* */ }
+  const client = await supabase();
+  const { error } = await client.auth.signInAnonymously({ options: { data: { name: nick } } });
+  if (error) throw /anonymous/i.test(error.message || '') ? new Error('Гостевой вход выключен в Supabase (Auth → Allow anonymous sign-ins)') : error;
 }
 
 export function takeReturnHash() {
@@ -83,7 +98,7 @@ async function loadProfiles() {
   const { data, error } = await sb.from('profiles').select('id,name,handle,avatar_url,hue');
   if (error) throw error;
   const db = store.getDB();
-  for (const p of data) db.users[p.id] = { id: p.id, name: p.name, handle: p.handle || p.name, hue: p.hue, avatar: p.avatar_url || null, provider: 'discord' };
+  for (const p of data) db.users[p.id] = { id: p.id, name: p.name, handle: p.handle || p.name, hue: p.hue, avatar: p.avatar_url || null, provider: p.id === me && guest ? 'guest' : 'discord' };
 }
 
 async function loadAll() {

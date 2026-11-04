@@ -56,6 +56,7 @@
 | localStorage | `rasputye-server-preview` | `'1'` | Предпросмотр сервера до включения флага (`?server=1` / `?server=0`). |
 | sessionStorage | `rasputye-v2-mode` | `'server'`/`'sandbox'` | Режим вкладки: «Попробовать без входа» переключает на песочницу. |
 | sessionStorage | `rasputye-v2-return` | hash | Куда вернуться после Discord (например, ссылка-приглашение). |
+| sessionStorage | `rasputye-guest` | `'1'` | Вкладку открыли по ссылке `?guest=1` — показывать «Войти гостем» (#194, вариант А; `GUEST_ENABLED` в `server/config.js`). Гость — анонимный пользователь Supabase Auth (`signInAnonymously`, ник в `raw_user_meta_data.name` → профиль триггером `profile_from_auth`), права как у обычного участника. Нужна настройка «Allow anonymous sign-ins». **Блокер публичного запуска:** выключить флаг и настройку, удалить гостей, убрать код. |
 | localStorage | `rasputye-v2-prefs:<userId>` | `{diceSkin}` | Тот же ключ, что в песочнице: личные настройки этого устройства, на сервер не уходят и между устройствами не синхронизируются (TASK-104). |
 
 ### Таблицы (схема `public`, RLS на всех)

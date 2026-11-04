@@ -297,6 +297,7 @@ export function fakeServer({ names = {} } = {}) {
   }
 
   const net = { down: false };
+  const auth = { anonymous: true, n: 0 }; // auth.anonymous = false — анонимный вход выключен в Supabase
   async function handle(page, msg) {
     log.push(msg.op === 'query' ? `${msg.q.action} ${msg.q.table}` : msg.op);
     // Обрыв сети: supabase-js не бросает, а возвращает ошибку без кода.
@@ -306,6 +307,14 @@ export function fakeServer({ names = {} } = {}) {
       case 'query': return query(msg.uid, msg.q);
       case 'rpc': return rpc(msg.uid, msg.name, msg.args || {});
       case 'oauth': oauth.push(msg.o); return null;
+      case 'anon': {
+        // Как настоящий Supabase: без «Allow anonymous sign-ins» — отказ; иначе новый пользователь, ник из метаданных.
+        if (!auth.anonymous) return { error: { message: 'Anonymous sign-ins are disabled', code: 'anonymous_provider_disabled' } };
+        const id = `00000000-0000-4000-8000-${String(++auth.n).padStart(12, '0')}`;
+        names[id] = String(msg.name || '').slice(0, 40) || 'Игрок';
+        ensureProfile(id);
+        return { id };
+      }
       case 'join': {
         if (msg.priv) {
           const [kind, id] = [msg.topic.split(':')[0], msg.topic.split(':').slice(1).join(':')];
@@ -342,5 +351,5 @@ export function fakeServer({ names = {} } = {}) {
     });
   }
 
-  return { T, attach, log, oauth, files, subs, pres, sysInsert, ensureProfile, net };
+  return { T, attach, log, oauth, files, subs, pres, sysInsert, ensureProfile, net, auth };
 }

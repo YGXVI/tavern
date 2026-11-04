@@ -10,6 +10,15 @@ export const SUPABASE_KEY = 'sb_publishable_DFLExjmVBTpbWHkk6UTMrw_n56O6eQw';
 /** supabase-js с точной версией (вышла 15.10.2026), ES-модулем с jsDelivr — сборщик не нужен (DEC-002). */
 export const SUPABASE_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
 
+/**
+ * Вход гостем (#194, вариант А, одобрен Ярой 02.11): ник без Discord — для тестовых партий с агентами.
+ * Кнопка видна только по ссылке `?guest=1`; гость — обычный участник (те же права RLS). Нужна настройка Supabase
+ * Auth «Allow anonymous sign-ins». БЛОКЕР ПУБЛИЧНОГО ЗАПУСКА: до релиза — false, выключить настройку, удалить
+ * гостей из базы и убрать этот код.
+ */
+export const GUEST_ENABLED = true;
+const GUEST_KEY = 'rasputye-guest';
+
 const PREVIEW_KEY = 'rasputye-server-preview';
 const MODE_KEY = 'rasputye-v2-mode';
 
@@ -20,10 +29,19 @@ const MODE_KEY = 'rasputye-v2-mode';
 export function serverAllowed() {
   try {
     const q = new URLSearchParams(location.search).get('server');
-    if (q === '1') localStorage.setItem(PREVIEW_KEY, '1');
+    if (q === '1' || guestAllowed()) localStorage.setItem(PREVIEW_KEY, '1'); // гости бывают только на сервере
     if (q === '0') { localStorage.removeItem(PREVIEW_KEY); sessionStorage.removeItem(MODE_KEY); }
     return SERVER_ENABLED || localStorage.getItem(PREVIEW_KEY) === '1';
   } catch { return SERVER_ENABLED; }
+}
+
+/** Показывать ли «Войти гостем»: флаг включён и вкладку открыли по ссылке `?guest=1` (запоминается до закрытия). */
+export function guestAllowed() {
+  if (!GUEST_ENABLED) return false;
+  try {
+    if (new URLSearchParams(location.search).get('guest') === '1') sessionStorage.setItem(GUEST_KEY, '1');
+    return sessionStorage.getItem(GUEST_KEY) === '1';
+  } catch { return false; }
 }
 
 /** Режим вкладки: 'server' — настоящий вход и данные на сервере; 'sandbox' — локальная песочница. */
