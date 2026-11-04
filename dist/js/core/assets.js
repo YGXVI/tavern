@@ -1,5 +1,6 @@
-// Картинки: встроенные (карты и портреты из макетов) и загруженные пользователем (IndexedDB).
-// Загруженные файлы живут только в этом браузере, как и остальные демо-данные.
+// Картинки: встроенные (карты и портреты из макетов) и загруженные пользователем.
+// Песочница: файлы в IndexedDB этого браузера (idb:). Серверная кампания (TASK-002): файлы в хранилище
+// кампании (sb:<кампания>/<файл>), адрес — подписанная ссылка, которую выдаёт серверный слой.
 import { icon } from '../icons.js';
 import { initials, hueOf, esc } from './dom.js';
 
@@ -14,6 +15,10 @@ const PORTRAITS = new Set(['lira', 'torin', 'elian', 'mira', 'garr', 'goblin', '
 
 const urlCache = new Map();
 let dbPromise = null;
+let remote = null; // {get(ref), resolve(ref), upload(campaignId, blob)} — серверный режим
+
+/** Подключить хранилище сервера (вызывает main.js в серверном режиме). */
+export function useRemoteAssets(r) { remote = r; }
 
 function idb() {
   if (dbPromise) return dbPromise;
@@ -31,6 +36,7 @@ export function srcOf(ref) {
   if (!ref) return '';
   if (ref.startsWith('map:')) return BUILTIN_MAPS[ref.slice(4)] || '';
   if (ref.startsWith('idb:')) return urlCache.get(ref) || '';
+  if (ref.startsWith('sb:')) return remote?.get(ref) || '';
   if (PORTRAITS.has(ref)) return `assets/portraits/${ref}.webp`;
   if (ref.startsWith('item:')) return itemSrc(ref.slice(5));
   if (ref.startsWith('ini:')) return initialsSrc(ref.slice(4));
@@ -62,6 +68,7 @@ function initialsSrc(name) {
 
 /** Асинхронно получить адрес (загружает idb:-картинки в кэш). */
 export async function resolveSrc(ref) {
+  if (ref?.startsWith('sb:')) return remote ? remote.resolve(ref) : '';
   if (!ref?.startsWith('idb:')) return srcOf(ref);
   if (urlCache.has(ref)) return urlCache.get(ref);
   try {
@@ -77,8 +84,11 @@ export async function resolveSrc(ref) {
   } catch { return ''; }
 }
 
-/** Сохранить загруженный файл карты. Возвращает {ref, width, height}. */
-export async function storeImage(file) {
+/**
+ * Сохранить загруженный файл карты. Возвращает {ref, width, height}.
+ * С campaignId в серверном режиме файл уходит в хранилище кампании (загружать может только мастер).
+ */
+export async function storeImage(file, { campaignId = null } = {}) {
   if (!file || !/^image\//.test(file.type)) throw new Error('Нужна картинка: JPG, PNG или WebP.');
   if (file.size > 25 * 1024 * 1024) throw new Error('Файл больше 25 МБ — уменьшите карту.');
   const bitmap = await createImageBitmap(file);
@@ -93,6 +103,7 @@ export async function storeImage(file) {
     blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
   }
   bitmap.close?.();
+  if (remote && campaignId) return { ref: await remote.upload(campaignId, blob), width, height };
   const id = crypto.randomUUID();
   const db = await idb();
   await new Promise((res, rej) => {

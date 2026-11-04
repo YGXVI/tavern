@@ -1,12 +1,13 @@
-// Имитация входа через Discord. Это демо: личность не проверяется, пароля и токена нет.
-// Настоящий провайдер выбирается в DEC-008 / TASK-002; сюда тогда придёт ответ OAuth.
-import { getDB, commit } from './store.js';
+// Вход. Песочница — имитация Discord: личность не проверяется, пароля и токена нет.
+// Серверный режим (TASK-002, DEC-014) — настоящий вход через Discord в Supabase; кто вошёл, знает sync.js.
+import { getDB, commit, isServerMode, backendUserId } from './store.js';
 import { uid, hueOf } from './dom.js';
 
 const SESSION_KEY = 'rasputye-v2-session';   // sessionStorage: у каждой вкладки свой человек
 const LAST_KEY = 'rasputye-v2-last-user';     // localStorage: кого подставить в новой вкладке
 
 export function currentUserId() {
+  if (isServerMode()) return backendUserId(); // серверный режим: вход через Discord (TASK-002)
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
     if (s?.userId && getDB().users[s.userId]) return s.userId;
@@ -43,6 +44,7 @@ export function signIn({ userId, name }) {
 }
 
 export function restoreFromLast() {
+  if (isServerMode()) return null;
   const id = lastUserId();
   if (id) { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ userId: id, at: Date.now() })); } catch { /* */ } }
   return id;

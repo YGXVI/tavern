@@ -1,0 +1,15 @@
+{
+  "source_page_count": 403,
+  "all_pages_present": true,
+  "nonempty_page_count": 403,
+  "blank_pages": [],
+  "all_nonblank_pages_have_text": true,
+  "missing_alphanumeric_total": 0,
+  "added_alphanumeric_total": 0,
+  "character_check": "Comparison of casefolded alphanumeric multisets against PDF body characters, excluding footer; not a semantic or reading-order check.",
+  "pages_with_character_differences": [],
+  "visual_spot_check_pages": [
+    11
+  ],
+  "visual_spot_check_scope": "Compared source page layout and extraction: full-width Bard progression table must remain intact. Full-corpus visual comparison not performed."
+}

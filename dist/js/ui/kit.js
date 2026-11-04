@@ -7,7 +7,9 @@ import { srcOf } from '../core/assets.js';
 export function userAvatar(u, cls = '', status = null) {
   const hue = u?.hue ?? 210;
   const st = status === null ? '' : `<span class="status ${status ? 'online' : ''}"></span>`;
-  return raw(`<span class="avatar ${cls}" style="background:hsl(${hue} 42% 38%)" title="${esc(u?.name || '')}">${esc(initials(u?.name))}${st}</span>`);
+  // Аватар из Discord (серверный режим) — картинкой поверх инициалов: не загрузится — останутся инициалы.
+  const img = u?.avatar && /^https:\/\/cdn\.discordapp\.com\//.test(u.avatar) ? `<img class="av-img" src="${esc(u.avatar)}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
+  return raw(`<span class="avatar ${cls}" style="background:hsl(${hue} 42% 38%)" title="${esc(u?.name || '')}">${esc(initials(u?.name))}${img}${st}</span>`);
 }
 
 export function portrait(ref, cls = '', title = '', status = null) {
@@ -132,12 +134,23 @@ function place(node, rect, placement, gap) {
 // ——— Меню ———
 /** items: [{icon, label, hint, danger, onClick} | 'divider'] */
 export function menu(items, anchor, opts = {}) {
-  const body = items.map((it, i) => it === 'divider' ? '<hr>' : `<button class="menu-item ${it.danger ? 'danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}>${it.icon ? icon(it.icon, 18) : ''}<span>${esc(it.label)}</span>${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}</button>`).join('');
-  const p = popover(`<div class="menu">${body}</div>`, anchor, { placement: opts.placement || 'bottom', gap: 6, ...opts });
+  // it.href — пункт-ссылка: Ctrl/Cmd/Shift-клик и средняя кнопка открывают его в новой вкладке (TASK-094).
+  const body = items.map((it, i) => {
+    if (it === 'divider') return '<hr>';
+    const inner = `${it.icon ? icon(it.icon, 18) : ''}<span>${esc(it.label)}</span>${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}`;
+    return it.href && !it.disabled
+      ? `<a class="menu-item ${it.danger ? 'danger' : ''}" data-i="${i}" href="${esc(it.href)}">${inner}</a>`
+      : `<button class="menu-item ${it.danger ? 'danger' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}>${inner}</button>`;
+  }).join('');
+  // opts.header — разметка над пунктами (например, параметры токена), opts.onOpen(node) — навесить её события.
+  const p = popover(`<div class="menu">${opts.header || ''}${body}</div>`, anchor, { placement: opts.placement || 'bottom', gap: 6, ...opts });
+  opts.onOpen?.(p.node);
   p.node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-i]');
     if (!b) return;
     const it = items[Number(b.dataset.i)];
+    if (it.href && (e.ctrlKey || e.metaKey || e.shiftKey)) { closePopover(); return; } // браузер откроет новую вкладку
+    if (it.href && it.onClick) e.preventDefault();
     closePopover();
     it.onClick?.();
   });

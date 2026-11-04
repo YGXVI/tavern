@@ -70,13 +70,22 @@ export function tokenStats(c, t) {
 
 export const tokenCells = (t) => sizeById(t.size).cells;
 
-/** Может ли пользователь управлять токеном (интерфейсная проверка демо). */
+/**
+ * Может ли пользователь двигать токен (интерфейсная проверка демо).
+ * Мастер — любой; игрок — своего героя, а при открытом перемещении (по умолчанию) — любой видимый токен.
+ * Править хиты, состояния и лист чужого токена это не разрешает.
+ */
 export function canControlToken(c, userId, t) {
   if (!t) return false;
   if (isMasterOf(c, userId)) return true;
   const m = membership(c, userId);
-  return !!(m && m.status === 'active' && t.characterId && t.characterId === m.characterId);
+  if (!m || m.status !== 'active') return false;
+  if (t.characterId && t.characterId === m.characterId) return true;
+  return openMovement(c) && !t.hidden;
 }
+
+/** Открытое перемещение: игроки двигают любые видимые токены (настройка кампании, по умолчанию включена). */
+export const openMovement = (c) => c?.settings?.openMovement !== false;
 
 // ——— Изменения ———
 export function updateCampaign(cid, fn) {

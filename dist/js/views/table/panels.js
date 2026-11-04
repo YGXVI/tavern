@@ -2,16 +2,18 @@
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
 import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
 import { icon } from '../../icons.js';
-import { bus, emitLocal } from '../../core/store.js';
+import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { monsterById } from '../../data/bestiary.js';
-import { popover, closePopover, modal, panelHeader } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, rollInitiative, initiativeOrder } from './combat.js';
-import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll } from './dice.js';
+import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
+import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
+import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
 import { applyCalibPreview } from './input.js';
+import * as C from './chrome.js';
 import { widgetHTML } from './p-widgets.js';
 import * as T from './p-token.js';
 import * as M from './p-map.js';
@@ -20,7 +22,20 @@ import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 
-const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-clear', 'dice-reroll', 'dice-roll']);
+const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
+
+/** Вкладка в фоне: «⚔ Ваш ход» в заголовке, пока игрок не вернётся. */
+let baseTitle = null;
+function flagTab(text) {
+  if (!text) return;
+  baseTitle ??= document.title;
+  document.title = text;
+  const back = () => { if (!document.hidden) { document.title = baseTitle; baseTitle = null; document.removeEventListener('visibilitychange', back); } };
+  document.addEventListener('visibilitychange', back);
+}
+
+/** Сколько длится пауза: «3:42». */
+export function pauseElapsed(p) { const sec = Math.max(0, Math.floor((Date.now() - (p?.at || Date.now())) / 1000)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
 
 export class Panels {
   constructor(ctx) {
@@ -35,6 +50,7 @@ export class Panels {
     this.side.addEventListener('click', clickAct);
     this.floats.addEventListener('click', clickAct);
     this.side.addEventListener('input', (e) => S.sideInput(ctx, e));
+    this.pauseTick = setInterval(() => this.tickPause(), 1000);
     const chromeRoot = ctx.root.querySelector('.chrome');
     chromeRoot.addEventListener('contextmenu', (e) => {
       const d = e.target.closest('[data-act="die-add"]');
@@ -42,7 +58,22 @@ export class Panels {
     });
     const mine = (p) => p?.cid === ctx.cid;
     this.offs = [
-      bus.on('roll', (p) => { if (!mine(p)) return; showRollToast(ctx, p.entry); if (ctx.ui.widget === 'dice') this.refreshWidget(true); }),
+      bus.on('roll', (p) => {
+        if (!mine(p)) return;
+        showRollToast(ctx, p.entry);
+        // Открытый бросок другого участника падает на наш стол — его кубы в его наборе (TASK-092/093).
+        if (p.dice?.length && canSeeRoll(ctx, p.entry)) diceFloor(ctx)?.roll({ entry: p.entry, results: p.dice, dropped: p.dropped, skin: p.skin });
+        if (ctx.ui.widget === 'dice') this.refreshWidget(true);
+      }),
+      // Инициатива мастера: к20 видимых участников падают и на наш стол, у каждого — имя и итог.
+      bus.on('init-dice', (p) => {
+        if (!mine(p) || p.sceneId !== ctx.sceneId) return;
+        const items = (p.items || []).map((x) => {
+          const t = ctx.scene?.tokens.find((y) => y.id === x.tokenId);
+          return t && ctx.tokenShown(t) ? { name: ctx.nameOf(t), natural: x.natural, total: x.total } : null;
+        }).filter(Boolean);
+        diceFloor(ctx)?.rollGroup({ id: p.id, userId: p.userId, title: 'Инициатива', items, skin: p.skin });
+      }),
       bus.on('read-aloud', (p) => { if (mine(p) && p.sceneId === ctx.sceneId && !ctx.isMaster) this.readAloud({ title: p.title, text: p.text }); }),
       bus.on('lockpick', (p) => { if (mine(p)) M.lockpickResult(ctx, p); }),
       bus.on('door-ask', (p) => { if (mine(p) && ctx.isMaster) ctx.toast({ title: `${p.name} спрашивает про ключ`, body: 'Есть ли у отряда ключ от этой двери?', icon: 'key-01', timeout: 10000 }); }),
@@ -51,6 +82,8 @@ export class Panels {
         if (!mine(p) || p.sceneId !== ctx.sceneId) return;
         const tr = ctx.scene?.traps.find((x) => x.id === p.trapId), t = ctx.scene?.tokens.find((x) => x.id === p.tokenId);
         if (tr && t) M.trapTriggered(ctx, tr, t, true);
+        // Сервер: ловушку у игрока не видно — сработавшую на его герое заметил мастер.
+        else if (!tr && t && ctx.isMine(t)) ctx.toast({ title: 'Под ногой щёлкнуло!', body: 'Мастер решает, что будет дальше', icon: 'danger' });
       }),
       bus.on('template-share', (p) => {
         if (!mine(p) || !ctx.isMaster) return;
@@ -70,15 +103,21 @@ export class Panels {
     if (ctx.isMaster) {
       const pending = c.members.filter((m) => m.status === 'pending');
       if (pending.length) ctx.toast({ title: `${plural(pending.length, 'Заявка', 'Заявки', 'Заявок')} в кампанию: ${pending.length}`, body: pending.map((m) => userById(m.userId)?.name).filter(Boolean).join(', '), icon: 'user-add-01', action: { label: 'Открыть', onClick: () => D.inviteModal(ctx) } });
-    } else if (ctx.scene && !ctx.scene.tokens.some((t) => ctx.isMine(t))) {
-      ctx.toast({ title: 'Вашего героя пока нет на карте', body: 'Мастер поставит его, когда начнётся сцена', icon: 'chess-pawn' });
+    } else {
+      // С сервера токен только что выбранного героя приходит чуть позже стола — проверяем, когда всё доехало.
+      const noHero = () => ctx.c && ctx.scene && !ctx.scene.tokens.some((t) => ctx.isMine(t));
+      if (noHero()) setTimeout(() => { if (!this.gone && noHero()) ctx.toast({ title: 'Вашего героя пока нет на карте', body: 'Мастер поставит его, когда начнётся сцена', icon: 'chess-pawn' }); }, isServerMode() ? 1500 : 0);
     }
     this.refresh();
   }
 
   destroy() {
+    this.gone = true;
+    clearInterval(this.pauseTick);
     for (const off of this.offs) off();
     closeSheet();
+    diceTray(this.ctx)?.destroy();
+    diceFloor(this.ctx)?.destroy();
   }
 
   snapshot() {
@@ -86,7 +125,8 @@ export class Panels {
     const cur = ctx.scene ? currentEntry(c, ctx.scene) : null;
     return {
       combat: c.combat.active,
-      turnKey: c.combat.active ? `${c.combat.round}:${c.combat.turn}:${cur?.tokenId}` : null,
+      // Раунд и чей ход — как видно за столом (номер хода в записи может догонять current с задержкой).
+      turnKey: c.combat.active ? `${ctx.scene ? combatRound(c, ctx.scene) : c.combat.round}:${cur?.tokenId}` : null,
       curToken: cur?.tokenId || null,
       pending: new Set(c.members.filter((m) => m.status === 'pending').map((m) => m.userId)),
       portals: new Set((c.portalRequests || []).map((r) => r.id)),
@@ -115,7 +155,8 @@ export class Panels {
       const t = ctx.scene?.tokens.find((x) => x.id === now.curToken);
       const free = ['move', 'select'].includes(ctx.ui.tool) && !ctx.dragging?.size;
       if (t && !ctx.isMaster && ctx.isMine(t)) {
-        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${c.combat.round} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
+        ctx.toast({ title: `Ваш ход, ${tokenStats(c, t).name}`, body: `Раунд ${combatRound(c, ctx.scene)} · ${tokenStats(c, t).speed} фт движения`, icon: 'sword-03' });
+        flagTab(document.hidden ? `⚔ Ваш ход — ${tokenStats(c, t).name}` : null);
         if (free) { queueMicrotask(() => ctx.select([t.id])); this.centerIfAway(t); }
       } else if (t && ctx.isMasterView && t.kind === 'foe' && free) {
         queueMicrotask(() => ctx.select([t.id]));
@@ -156,12 +197,19 @@ export class Panels {
       const scroll = host.querySelector('.scroll')?.scrollTop || 0;
       host.innerHTML = html; host.__html = html;
       const sc = host.querySelector('.scroll'); if (sc) sc.scrollTop = scroll;
+      // Очередь боя: текущий ход всегда в поле зрения.
+      host.querySelector('.init-row.current')?.scrollIntoView({ block: 'nearest' });
       // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
       if (this.lastWidget !== this.ctx.ui.widget) {
         this.lastWidget = this.ctx.ui.widget;
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
       }
     }
+    // Лоток закрыли вместе с виджетом «Кубы» — преимущество и помеха сбрасываются.
+    if (this.diceOpen && this.ctx.ui.widget !== 'dice' && this.ctx.ui.dicePool) setAdv(this.ctx.ui.dicePool, null);
+    this.diceOpen = this.ctx.ui.widget === 'dice';
+    // Лоток с объёмными кубами стоит рядом с виджетом «Кубы» и держит выбранные кубы (TASK-092).
+    diceTray(this.ctx)?.syncPool(this.ctx.ui.dicePool);
   }
 
   openWidget(w, force = false) {
@@ -189,10 +237,10 @@ export class Panels {
     if (force || this.side.__html !== html) {
       const body = this.side.querySelector('.side-body');
       const top = body?.scrollTop || 0;
-      const focusSearch = document.activeElement?.matches?.('[data-bsearch]');
+      const focusSearch = document.activeElement?.matches?.('[data-bsearch], [data-ssearch]') ? (document.activeElement.matches('[data-ssearch]') ? '[data-ssearch]' : '[data-bsearch]') : null;
       this.side.innerHTML = html; this.side.__html = html;
       const nb = this.side.querySelector('.side-body'); if (nb) nb.scrollTop = top;
-      if (focusSearch) { const i = this.side.querySelector('[data-bsearch]'); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
+      if (focusSearch) { const i = this.side.querySelector(focusSearch); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }
       S.hydrateImages(this.side);
     }
   }
@@ -234,7 +282,14 @@ export class Panels {
     if (this.pauseEl.__key === key) return;
     this.pauseEl.__key = key;
     const by = userById(p.by);
-    this.pauseEl.innerHTML = `<div class="pause-card"><span class="hourglass-big">${icon('hourglass', 40)}</span><h2>Пауза</h2><p>${esc(p.message || 'Мастер ненадолго остановил игру')}</p><small>${esc(by?.name || 'Мастер')} вернёт стол — продолжим с того же места</small></div>`;
+    this.pauseEl.innerHTML = `<div class="pause-card"><span class="hourglass-big">${icon('hourglass', 40)}</span><h2>Мастер поставил стол на паузу</h2>${p.message ? `<p>«${esc(p.message)}»</p>` : '<p>Мастер ненадолго остановил игру</p>'}<b class="pause-timer" data-pause-timer>${pauseElapsed(p)}</b><small>${esc(by?.name || 'Мастер')} вернёт стол — продолжим с того же места. Лист героя и кубы работают.</small></div>`;
+  }
+
+  /** Раз в секунду обновлять таймеры паузы на экране. */
+  tickPause() {
+    const p = this.ctx.c?.paused;
+    if (!p) return;
+    for (const n of this.ctx.root.querySelectorAll('[data-pause-timer]')) n.textContent = pauseElapsed(p);
   }
 
   // ——— Чтение вслух ———
@@ -271,6 +326,12 @@ export class Panels {
         const m = this.saveMod(t, r.ability);
         cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${r.dc}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
       }
+      // Герой товарища, которого нет за столом: тихая карточка «бросить за него».
+      for (const r of reqs) for (const t of this.friendSaveTokens(r)) {
+        const ab = ABILITIES.find((a) => a.id === r.ability);
+        const name = tokenStats(c, t).name;
+        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${r.dc} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
+      }
     }
     const html = cards.join('');
     if (this.floats.__html !== html) {
@@ -299,6 +360,12 @@ export class Panels {
   mySaveTokens(r) {
     const ctx = this.ctx;
     return r.tokenIds.map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter((t) => t && ctx.isMine(t) && !r.results[t.id]);
+  }
+
+  /** Герои других игроков, которых нет за столом: за них можно бросить (решение 30.10). */
+  friendSaveTokens(r) {
+    const ctx = this.ctx;
+    return r.tokenIds.map((id) => ctx.scene?.tokens.find((t) => t.id === id)).filter((t) => t && !r.results[t.id] && ctx.playsFor(t) && ctx.ownerAway(t));
   }
 
   saveMod(t, ability) {
@@ -367,6 +434,10 @@ export class Panels {
 
   // ——— Хиты и смерть ———
   hpEditor(tokenId, anchor, mode) { T.hpEditor(this.ctx, Array.isArray(tokenId) ? tokenId : [tokenId], anchor, mode); }
+  commitHp(tokenId, text) { return T.commitHpInput(this.ctx, tokenId, text); }
+  copyTokens(ids) { T.copyTokens(this.ctx, ids); }
+  auraPopover(id, anchor) { T.auraPopover(this.ctx, id, anchor); }
+  pasteTokens(at) { T.pasteTokens(this.ctx, at); }
   applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
 
   deathSave(chId) {
@@ -418,10 +489,16 @@ export class Panels {
     if (!c.combat.active) { D.combatSetup(ctx, ids); return; }
     const inCombat = new Set(c.combat.entries.map((e) => e.tokenId));
     const removeAll = ids.every((id) => inCombat.has(id));
-    this.keepTurn((cc, sc) => {
+    // Новых участников бросаем до записи — их к20 падают на стол.
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
+      const t = ctx.scene?.tokens.find((x) => x.id === id);
+      return t && t.kind !== 'item' ? { tokenId: id, ...rollInitiative(c, t) } : null;
+    }).filter(Boolean);
+    this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
-      else for (const id of ids) if (!inCombat.has(id)) { const t = sc.tokens.find((x) => x.id === id); if (t && t.kind !== 'item') cc.combat.entries.push({ tokenId: id, init: rollInitiative(cc, t).init }); }
+      else for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
     });
+    initiativeDice(ctx, rolled);
     ctx.toast({ title: removeAll ? 'Убраны из боя' : 'В бою', body: `${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}`, icon: 'sword-03' });
   }
 
@@ -430,7 +507,7 @@ export class Panels {
     const ctx = this.ctx, sid = ctx.sceneId;
     updateCampaign(ctx.cid, (c) => {
       const sc = c.scenes.find((s) => s.id === sid);
-      const before = currentEntry(c, sc)?.tokenId;
+      const before = currentEntry(c, sc, { raw: true })?.tokenId;
       fn(c, sc);
       if (!c.combat.entries.length) { endCombat(c); return; }
       const order = initiativeOrder(c, sc);
@@ -459,8 +536,22 @@ export class Panels {
     const ctx = this.ctx;
     const cur = currentEntry(ctx.c, ctx.scene);
     if (!cur) return;
-    if (!ctx.isMaster && !ctx.isMine(cur.token)) return;
+    if (!ctx.isMaster && !ctx.playsFor(cur.token)) return;
     this.nextTurn(1);
+  }
+
+  /** Открыть виджет «Зрение» с настройкой света и тёмного зрения героя (TASK-046). */
+  openVisionFor(tokenId) {
+    this.ctx.ui.visionEdit = tokenId;
+    this.ctx.ui.widget = 'vision';
+    this.refreshWidget(true);
+    this.ctx.invalidate('chrome');
+  }
+
+  /** Свет и тёмное зрение правит мастер (любой токен) и игрок — своего героя. */
+  canSetVision(tokenId) {
+    const t = this.ctx.scene?.tokens.find((x) => x.id === tokenId);
+    return !!t && (this.ctx.isMaster || this.ctx.isMine(t));
   }
 
   centerIfAway(t) {
@@ -472,7 +563,7 @@ export class Panels {
   // ——— Мосты для ввода и токенов ———
   tokenBar() { return T.tokenBarHTML(this.ctx); }
   contextMenu(target, w, screen) { T.contextMenu(this.ctx, target, w, screen); }
-  deleteTokens(ids) { T.deleteTokens(this.ctx, ids); }
+  deleteTokens(ids, drawIds) { T.deleteTokens(this.ctx, ids, drawIds); }
   toggleHidden(ids, force) { T.toggleHidden(this.ctx, ids, force); }
   deleteWall(id) { M.deleteWall(this.ctx, id); }
   deleteLight(id) { M.deleteLight(this.ctx, id); }
@@ -490,7 +581,7 @@ export class Panels {
   trapTriggered(tr, t) { M.trapTriggered(this.ctx, tr, t); }
   templatePopover(a) { M.templatePopover(this.ctx, a); }
   opportunityWarning(t, foes, h) { M.opportunityWarning(this.ctx, t, foes, h); }
-  textPrompt(w, a) { M.textPrompt(this.ctx, w, a); }
+  textPrompt(w, a, d) { M.textPrompt(this.ctx, w, a, d); }
   help() { D.helpModal(this.ctx); }
 
   openSheetFor(t) {
@@ -534,6 +625,8 @@ export class Panels {
     const after = { ...structuredClone(ctx.scene.grid), calibrated: true };
     const moved = {};
     ctx.ui.gridBefore = null;
+    // Подгонка показывалась вживую в самой сцене. Вернуть «до», иначе запись не увидит разницы (TASK-166).
+    Object.assign(ctx.scene.grid, structuredClone(before));
     ctx.mutateScene((s) => {
       Object.assign(s.grid, after);
       // Токены встают в центры новых клеток; исследованное по старой сетке сбрасываем.
@@ -553,6 +646,16 @@ export class Panels {
     const ctx = this.ctx, c = ctx.c;
     if (!c) return;
     if (DICE_ACTS.has(act)) { diceAction(ctx, act, b, e); return; }
+    // Слой мастера (TASK-088): выбрать настройку карты; повторный клик закрывает её, слой остаётся.
+    if (act.startsWith('layer:')) {
+      const [, tool, sub] = act.split(':');
+      if (C.layerItemActive(ctx, act)) { ctx.setTool('move'); return; }
+      const cur = ctx.ui.sub.walls;
+      const door = (v) => v === 'door' || v === 'secret';
+      const s = tool !== 'walls' ? sub : sub === 'door' ? (door(cur) ? cur : 'door') : (cur && !door(cur) ? cur : 'wall');
+      ctx.setTool(tool, s);
+      return;
+    }
     if (act.startsWith('tool:')) { ctx.setTool(act.slice(5)); if (act === 'tool:measure') ctx.ui.sub.measure = ctx.ui.sub.measure || 'ruler'; return; }
     if (act.startsWith('sub:')) {
       const [, tool, v] = act.split(':');
@@ -575,6 +678,9 @@ export class Panels {
       case 'pause': D.pausePopover(ctx, b); break;
       case 'exit-viewas': ctx.setViewAs(null); break;
       case 'viewas': ctx.setViewAs(ctx.ui.viewAs === b.dataset.id ? null : b.dataset.id); break;
+      case 'vision-edit': ctx.ui.visionEdit = ctx.ui.visionEdit === b.dataset.id ? null : b.dataset.id; this.refreshWidget(true); break;
+      case 'v-light': if (this.canSetVision(b.dataset.id)) T.setTokenLight(ctx, b.dataset.id, b.dataset.v); break;
+      case 'v-dv': if (this.canSetVision(b.dataset.id)) T.setDarkvision(ctx, b.dataset.id, Number(b.dataset.v) || 0); break;
       case 'preview-players': ctx.ui.previewPlayers = !ctx.ui.previewPlayers; ctx.ui.viewAs = null; ctx.select([]); if (ctx.ui.previewPlayers && !['move', 'measure', 'draw'].includes(ctx.ui.tool)) ctx.setTool('move'); ctx.invalidate('all'); break;
       case 'exit-preview': ctx.ui.previewPlayers = false; ctx.invalidate('all'); break;
       case 'look-back': {
@@ -595,7 +701,21 @@ export class Panels {
       case 'statblock': if (one) this.openSheetFor(one); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
-      case 'done': ctx.setTool('move'); break;
+      case 'reference': D.referenceModal(this.ctx); break;
+      case 'layer': ctx.setLayer(!ctx.ui.layer); break;
+      // «Готово» слоя: подогнанная сетка сохраняется, а не теряется.
+      case 'done': case 'layer-close': {
+        // Сетку, которую подгоняли, «Готово» сохраняет; нетронутую не перезаписываем (токены не прыгают).
+        const b = ctx.ui.gridBefore;
+        if (ctx.ui.tool === 'grid' && b && ctx.ui.calib) {
+          applyCalibPreview(ctx);
+          const g = ctx.scene.grid, near = (x, y) => Math.abs((x || 0) - (y || 0)) < 0.01;
+          if (!near(g.size, b.size) || !near(g.offsetX, b.offsetX) || !near(g.offsetY, b.offsetY) || (g.feet || 5) !== (b.feet || 5) || (g.visible !== false) !== (b.visible !== false)) this.gridDone();
+        }
+        ctx.setLayer(false);
+        break;
+      }
+      case 'focus-toggle': ctx.ui.focusOff = !ctx.ui.focusOff; ctx.applyFocus(); ctx.invalidate('chrome'); break;
       case 'toggle-dark': {
         const before = ctx.scene.lighting, after = before === 'dark' ? 'bright' : 'dark';
         ctx.mutateScene((s) => { s.lighting = after; }, { label: 'Освещение', undo: (s) => { s.lighting = before; }, redo: (s) => { s.lighting = after; } });
@@ -633,15 +753,6 @@ export class Panels {
       case 'grid-toggle': ctx.scene.grid.visible = ctx.scene.grid.visible === false; ctx.invalidate('grid', 'chrome'); break;
       case 'grid-cancel': ctx.setTool('move'); break;
       case 'grid-done': this.gridDone(); break;
-      case 'tpl-smaller': case 'tpl-bigger': {
-        const s = ctx.ui.sub.measure;
-        const sizes = ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {});
-        const cur = sizes[s] || ({ cone: 15, line: 30, cube: 15, sphere: 20 }[s] || 15);
-        sizes[s] = Math.max(5, Math.min(120, cur + (act === 'tpl-bigger' ? 5 : -5)));
-        if (ctx.ui.template?.type === s) { ctx.ui.template.size = sizes[s]; if (ctx.ui.shareRuler) ctx.sendTemplate(ctx.ui.template); }
-        ctx.invalidate('chrome', 'areas');
-        break;
-      }
       case 'share-ruler': ctx.ui.shareRuler = !ctx.ui.shareRuler; if (!ctx.ui.shareRuler) { ctx.sendRuler(null); ctx.sendTemplate(null); } ctx.invalidate('chrome'); break;
       case 'measure-clear': ctx.clearMeasure(); break;
       case 'draw-clear': {
@@ -665,6 +776,7 @@ export class Panels {
         break;
       }
       case 'combat-start': D.combatSetup(ctx, sel); break;
+      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
       case 'combat-next': this.nextTurn(1); break;
       case 'combat-prev': this.nextTurn(-1); break;
       case 'combat-end': updateCampaign(ctx.cid, (cc) => endCombat(cc)); ctx.toast({ title: 'Бой окончен', icon: 'sword-03' }); break;
@@ -693,6 +805,8 @@ export class Panels {
       case 'token-delete': T.deleteTokens(ctx, sel); break;
       case 'deselect': ctx.select([]); break;
       case 'ping-token': if (one) ctx.ping(one.x, one.y); break;
+      case 'copy-code': copyText(ctx.c.invite?.code || '').then(() => ctx.toast({ title: 'Код скопирован', body: ctx.c.invite?.code, icon: 'copy-01' })); break;
+      case 'target': if (one) T.toggleTarget(ctx, one.id); break;
       // Карточки сверху
       case 'save-roll': this.rollSave(b.dataset.id, b.dataset.token, b.dataset.adv || null); break;
       case 'save-auto': this.rollSave(b.dataset.id, b.dataset.token, null, true); break;
