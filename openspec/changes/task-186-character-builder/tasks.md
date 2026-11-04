@@ -40,14 +40,14 @@
 - [ ] 4.4 Проверить loader error/retry/empty и все required-choice переходы; доP4 нет optimistic fallback создания, состояние unavailable объяснено, preview не называется полной готовностью функции.
 - [ ] 4.5 Обновить документы и матрицу готовности data/engine/UI отдельно; опубликовать SHA/скриншоты/проверенные и непроверенные сценарии P3.
 
-## 5. P4 — Character и доверенная серверная проверка (после отдельного стыка)
+## 5. P4 — Character и серверная проверка (r2: P4a и P4b, design D6a)
 
-- [ ] 5.1 Совместно с Rules зафиксировать конкретный DTO/create command/ACK, разрешённые Character поля, доверенный rules artifact registry/проверки и optional claim transaction; получить конкретную L2-ревизию до реализации.
-- [ ] 5.2 Подключить adapter к единственному Rules command; tests same operation/payload replay, lost ACK, different payload, newer sheet after historical ACK и полные отказные сценарии проходят.
-- [ ] 5.3 Реализовать/проверить серверные policy/revision/choice/prerequisite validations с Rules и conformance fixtures; прямой forged API отклоняет invalid builds, owner/campaign атаки, полусозданных записей нет.
-- [ ] 5.4 Согласовать новые только неисполненные migration versions/порядок/rollback; local PostgreSQL/RLS/races/stubs и двухпользовательские сценарии проходят, production SQL этим не разрешается.
-- [ ] 5.5 Пройти end-to-end создание/reload/два аккаунта/policy race/смена аккаунта/двойное подтверждение и согласованное создание+место; явно отделить fake/local от live Supabase проверки.
-- [ ] 5.6 Документировать итоговый command/поля/права и обновить матрицу создания; включить кнопку только при доступном серверном контракте, проверить существующих героев/legacy без потерь.
+- [ ] 5.1 P4a: в `codex/rules5e` миграция `create_character_sheet` (одна транзакция, повтор по operationId, `23505` на занятый ID, owner из auth.uid, только `pc`, проверка формы `creation`, уровни, HP по формуле, claim в той же транзакции), `character_creation_hp`, клиент `makeCreateRequest`/`create`, `creationHitPoints` в `sheet-rules.js`; тесты local PostgreSQL и Node, как в прототипе D6a.
+- [ ] 5.2 P4a: подключить `toCharacterData` к `create` в окне P3 с пометкой «проверено в браузере»; тесты lost ACK, повтор, другой payload, отказ без частичного листа, второй герой игрока.
+- [ ] 5.3 P4a: согласовать номер и порядок миграции (#153), откат; production SQL этим не разрешается.
+- [ ] 5.4 P4b: отдельная ревизия плана — хранилище политики кампании, реестр ревизий справочника, серверная проверка выборов и prerequisites на общих fixtures; прямой поддельный запрос отклоняется.
+- [ ] 5.5 Пройти end-to-end создание/reload/два аккаунта/смена политики/смена аккаунта/двойное подтверждение и создание+место; явно отделить local от live Supabase.
+- [ ] 5.6 Документировать итоговую команду, поля и права, обновить матрицу создания; проверить существующих героев и legacy без потерь.
 
 ## 6. P5 — реальные не-SRD материалы и покрытие книг (отдельный контракт)
 
