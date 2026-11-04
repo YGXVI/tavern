@@ -24,6 +24,8 @@ import { renderChrome } from './chrome.js';
 import { Panels } from './panels.js';
 import { toast, closePopover, userAvatar } from '../../ui/kit.js';
 import { History } from './history.js';
+import { activeSight, sightRadius } from './sight.js';
+import { trackSight, onSightOff } from './sight-ui.js';
 import { go } from '../screens.js';
 import { icon } from '../../icons.js';
 
@@ -50,6 +52,8 @@ export function mountTable(root, cid) {
       tool: 'move', sub: {}, selection: new Set(), selDrawings: new Set(), reach: null, threat: null, marquee: null, template: null, ruler: null,
       drag: null, viewAs: null, previewPlayers: false, selectedWall: null, selectedLight: null, brush: null,
       wallGhost: null, liveStroke: null, calib: null, shareRuler: true, widget: null, trapCells: null, layer: false,
+      // Глаза существ (#190 C): sightOff — отключённые игроком у себя, sightPreview — круг в окне мастера.
+      sightOff: new Set(), sightPreview: null, sightSeen: null,
     },
     remote: { rulers: new Map(), drags: new Map(), templates: new Map(), targets: new Map(), selects: new Map() },
     dragging: null,
@@ -93,6 +97,16 @@ export function mountTable(root, cid) {
     return mine;
   };
 
+  // Глаза существ, выданные мастером (#190 C). sightTo — чьи глаза считаются «моими»: герой, глазами которого смотрит
+  // мастер, или герой игрока; у мастера — все. С общим обзором игрок видит и чужие выданные глаза.
+  ctx.sightTo = () => (ctx.ui.viewAs ? new Set([ctx.ui.viewAs]) : ctx.isMaster ? null : new Set([ctx.myCharacterId].filter(Boolean)));
+  ctx.sightEyes = () => {
+    const sc = ctx.scene; if (!sc) return [];
+    const shared = !ctx.isMaster && ctx.c.settings.sharedVision;
+    return activeSight(ctx.c, sc, shared ? null : ctx.sightTo(), ctx.isMaster ? null : ctx.ui.sightOff)
+      .map((g) => ({ t: g.t, r: sightRadius(sc, g.t, g.ft) }));
+  };
+
   let visCache = null;
   // Обзор и свет идут за токеном в том же кадре (TASK-133): и за своим перетаскиванием, и за чужим (drag по шине).
   const movingNow = () => {
@@ -102,7 +116,7 @@ export function mountTable(root, cid) {
     return pos;
   };
   ctx.vision = () => {
-    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), movingNow());
+    if (!visCache) visCache = computeVision(ctx.c, ctx.scene, ctx.eyes(), movingNow(), ctx.sightEyes());
     return visCache;
   };
   ctx.invalidateVision = () => { visCache = null; };
@@ -198,7 +212,7 @@ export function mountTable(root, cid) {
     // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
     // каждый кадр пересчитываются только те, что сейчас тащат.
     if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
-    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); }
+    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); if (trackSight(ctx)) { dirty.add('chrome'); ctx.panels.refreshWidget(); } }
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);
@@ -437,6 +451,7 @@ export function mountTable(root, cid) {
     else ctx.toast({ title: 'Связь восстановлена', icon: 'wifi-01', timeout: 2500 });
   });
   const offErr = bus.on('storage-error', (p) => ctx.toast({ title: 'Не сохранилось', body: p.message, icon: 'alert-circle' }));
+  const offSight = bus.on('sight-off', (p) => onSightOff(ctx, p));
 
   // ——— Старт ———
   // Полный бестиарий SRD (TASK-083) — отдельным файлом после открытия стола: подписи, листы и список существ дорисуются.
@@ -473,7 +488,7 @@ export function mountTable(root, cid) {
     unmount() {
       gone = true;
       if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
-      unsub(); offPresence(); offNet(); offErr(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offNet(); offErr(); offSight(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },
