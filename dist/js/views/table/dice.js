@@ -115,7 +115,7 @@ export function initiativeDice(ctx, rolls) {
   const id = uid('i-');
   const items = list.map((r) => {
     const t = ctx.scene?.tokens.find((x) => x.id === r.tokenId);
-    return t && { tokenId: r.tokenId, name: ctx.nameOf(t), natural: r.natural, total: r.init, hidden: !!t.hidden };
+    return t && { tokenId: r.tokenId, name: r.name || ctx.nameOf(t), natural: r.natural, total: r.init, hidden: !!t.hidden };
   }).filter(Boolean);
   diceFloor(ctx)?.rollGroup({ id, userId: ctx.userId, title: 'Инициатива', items, skin, mine: true });
   const open = items.filter((x) => !x.hidden).map(({ tokenId, natural, total }) => ({ tokenId, natural, total }));

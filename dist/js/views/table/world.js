@@ -286,7 +286,8 @@ export function renderTokens(L, ctx) {
   const seen = new Set();
   const layer = stackOrder(scene.tokens);
   const top = scene.tokens.length + 10;
-  const currentId = ctx.currentTurnTokenId();
+  const turnIds = ctx.turnIds();
+  const marks = ctx.packMarks(); // пачки в инициативе (#198): цветная метка с номером
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
     seen.add(t.id);
@@ -313,7 +314,14 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
-    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    const pk = marks.get(t.id);
+    const pkSig = pk ? `${pk.n}|${pk.color}` : '';
+    if (node.dataset.pk !== pkSig) {
+      node.querySelector('.tok-pack')?.remove();
+      if (pk) node.insertAdjacentHTML('beforeend', `<span class="tok-badge tok-pack" style="--pc:${pk.color}" title="Пачка ${pk.n}">${pk.n}</span>`);
+      node.dataset.pk = pkSig;
+    }
     // Прицелы: кто отметил этот токен целью.
     const tg = ctx.targetersOf?.(t.id) || [];
     const tgSig = tg.map((u) => u.id).join(',');

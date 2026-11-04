@@ -7,7 +7,7 @@
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
 import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, tokenPatch, groupTokenMoves, UNFILTERED_DELETES, ownsDeleted } from './model.js';
-import { advanceTurn, turnTokenId, initiativeOrder } from '../views/table/combat.js';
+import { advanceTurn, turnTokenId, initiativeOrder, turnIndexOf } from '../views/table/combat.js';
 
 const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
 const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'], campaign_creatures: ['campaign_id', 'id'] };
@@ -429,7 +429,7 @@ function masterDuties(cid, c) {
     // Инициатива игрока пересортировала очередь: номер хода догоняет того, кто ходит (current), иначе
     // следующий commit мастера передал бы ход не тому.
     const sc = c.scenes.find((s) => s.id === cb.sceneId) || c.scenes.find((s) => s.id === c.activeSceneId);
-    const i = initiativeOrder(c, sc).findIndex((e) => e.tokenId === cb.current);
+    const i = turnIndexOf(initiativeOrder(c, sc), cb.current); // у пачки — начало её слота (#198)
     if (i >= 0 && i !== cb.turn) store.commit((db) => { const cc = db.campaigns[cid]; if (cc?.combat?.active) cc.combat.turn = i; });
   }
   if (cb?.active && cb.ended && cb.ended === cb.current) {

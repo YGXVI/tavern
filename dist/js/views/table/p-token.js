@@ -657,6 +657,24 @@ export async function storeTokenImage(ctx, file) {
   return (await storeImage(file)).ref;
 }
 
+/** Пачки в бою (#198): сделать или влить, выделить, отделить, разгруппировать. */
+function packItems(ctx, t, ids) {
+  const entries = ctx.c.combat.entries;
+  const of = (id) => entries.find((e) => e.tokenId === id);
+  const e = of(t.id), out = [];
+  const slots = new Set(ids.map((id) => of(id)?.group || id));
+  if (ids.length > 1 && ids.every(of) && slots.size > 1) {
+    const one = [...new Set(ids.map((id) => of(id).group).filter(Boolean))].length === 1;
+    out.push({ icon: 'group-items', label: one ? `Влить в пачку (${ids.length})` : `Сделать пачкой (${ids.length})`, onClick: () => ctx.panels.packMake(ids) });
+  }
+  if (e?.group && entries.filter((x) => x.group === e.group).length > 1) {
+    if (ids.length === 1) out.push({ icon: 'cursor-rectangle-selection-01', label: 'Выделить пачку', onClick: () => ctx.panels.packSelect(t.id) });
+    if (ids.length === 1) out.push({ icon: 'link-04', label: 'Отделить от пачки', onClick: () => ctx.panels.packSplit(t.id) });
+    out.push({ icon: 'user-group', label: 'Разгруппировать пачку', onClick: () => ctx.panels.packUngroup(t.id) });
+  }
+  return out;
+}
+
 export function contextMenu(ctx, target, w, screen) {
   const anchor = { x: screen.x, y: screen.y };
   if (target.kind === 'token') {
@@ -671,6 +689,7 @@ export function contextMenu(ctx, target, w, screen) {
         { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
         ...(ids.length === 1 ? sightMenuItems(ctx, t, anchor) : []),
         { icon: 'sword-03', label: ctx.c.combat.active ? (ctx.c.combat.entries.some((e) => e.tokenId === t.id) ? 'Убрать из боя' : 'Добавить в бой') : 'Начать бой с выделенными', onClick: () => ctx.panels.combatToggle(ids) },
+        ...(ctx.c.combat.active ? packItems(ctx, t, ids) : []),
         ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
         'divider',
         t.ownerId ? { icon: 'user', label: `${t.summonedBy ? 'Призыв' : 'Токен'} игрока: ${userById(t.ownerId)?.name || 'вышел из кампании'}`, disabled: true } : null,

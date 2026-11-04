@@ -2,20 +2,52 @@
 import { roll } from '../../../engine.js';
 import { tokenStats, addLog } from '../../core/campaign.js';
 
-/** Порядок ходов на текущей сцене: инициатива по убыванию, ничья — по бонусу, затем по имени. */
+/** Павший враг (0 хитов) пропускает ход; герой с 0 хитов ходит — бросает спасброски от смерти. */
+const fallenFoe = (e) => e.token?.kind === 'foe' && e.stats?.hpMax > 0 && e.stats.hp <= 0;
+
+/**
+ * Порядок ходов на текущей сцене. Очередь — слоты (#198): одиночка или пачка — записи с одним `group`, у них одна
+ * инициатива и один ход. Слоты — по инициативе, ничья — по бонусу, затем по имени (у пачки — по её члену с первым
+ * именем). Члены пачки идут подряд: живые видимые, скрытые, павшие — первый из них «ведёт» ход пачки.
+ * Каждая строка: запись + name, bonus, token, stats, slot (ключ слота), slotSize, lead (первый в слоте).
+ */
 export function initiativeOrder(c, scene) {
   const cb = c.combat;
   if (!cb?.entries?.length || !scene) return [];
-  const ids = new Set(scene.tokens.map((t) => t.id));
-  return cb.entries
-    .filter((e) => ids.has(e.tokenId))
-    .map((e) => {
-      const t = scene.tokens.find((x) => x.id === e.tokenId);
-      const st = tokenStats(c, t);
-      return { ...e, name: st.name, bonus: st.initBonus ?? 0, token: t, stats: st };
-    })
-    .sort((a, b) => (b.init ?? -99) - (a.init ?? -99) || b.bonus - a.bonus || a.name.localeCompare(b.name, 'ru'));
+  const byId = new Map(scene.tokens.map((t) => [t.id, t]));
+  const slots = new Map();
+  for (const e of cb.entries) {
+    const t = byId.get(e.tokenId);
+    if (!t) continue;
+    const st = tokenStats(c, t);
+    const key = e.group ? `g:${e.group}` : `t:${e.tokenId}`;
+    if (!slots.has(key)) slots.set(key, []);
+    slots.get(key).push({ ...e, name: st.name, bonus: st.initBonus ?? 0, token: t, stats: st, slot: key });
+  }
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ru') || (a.tokenId < b.tokenId ? -1 : a.tokenId > b.tokenId ? 1 : 0);
+  const rank = (r) => (fallenFoe(r) ? 2 : r.token.hidden ? 1 : 0);
+  const list = [...slots.values()].map((ms) => ({ ref: [...ms].sort(byName)[0], ms: ms.sort((a, b) => rank(a) - rank(b) || byName(a, b)) }));
+  list.sort(({ ref: a }, { ref: b }) => (b.init ?? -99) - (a.init ?? -99) || b.bonus - a.bonus || byName(a, b));
+  return list.flatMap(({ ms }) => ms.map((r, i) => ({ ...r, slotSize: ms.length, lead: i === 0 })));
 }
+
+/** Начало слота, в котором стоит строка i (−1, если строки нет). */
+function slotStart(order, i) {
+  if (i < 0 || i >= order.length) return -1;
+  while (i > 0 && order[i - 1].slot === order[i].slot) i--;
+  return i;
+}
+/** Номер хода (начало слота) для токена в очереди: −1, если его там нет. */
+export const turnIndexOf = (order, tokenId) => slotStart(order, order.findIndex((e) => e.tokenId === tokenId));
+/** Все строки слота, где стоит токен (пачка целиком или одиночка). */
+export function slotMembers(order, tokenId) {
+  const e = order.find((x) => x.tokenId === tokenId);
+  return e ? order.filter((x) => x.slot === e.slot) : [];
+}
+/** Начала слотов по порядку. */
+const slotStarts = (order) => order.map((e, i) => (i === 0 || order[i - 1].slot !== e.slot ? i : -1)).filter((i) => i >= 0);
+/** Слот целиком из павших врагов — пропускается. */
+const slotFallen = (order, start) => order.filter((e) => e.slot === order[start].slot).every(fallenFoe);
 
 export function rollInitiative(c, t) {
   const st = tokenStats(c, t);
@@ -23,11 +55,14 @@ export function rollInitiative(c, t) {
   return { init: r.total, natural: r.rolls[0] };
 }
 
-export function startCombat(c, scene, tokenIds, rolls = {}) {
+/** groups — {tokenId: id пачки} (#198): у членов пачки одна инициатива (её передают в rolls). */
+export function startCombat(c, scene, tokenIds, rolls = {}, groups = {}) {
   const entries = tokenIds.map((id) => {
     const t = scene.tokens.find((x) => x.id === id);
     // null — игрок бросит сам; до броска стоит в конце очереди.
-    return { tokenId: id, init: id in rolls ? rolls[id] : rollInitiative(c, t).init };
+    const e = { tokenId: id, init: id in rolls ? rolls[id] : rollInitiative(c, t).init };
+    if (groups[id]) e.group = groups[id];
+    return e;
   });
   c.combat = { active: true, sceneId: scene.id, round: 1, turn: 0, entries, moved: {}, startedAt: Date.now() };
   addLog(c, { kind: 'combat', text: `Бой начался: ${entries.length} участников` });
@@ -38,24 +73,25 @@ export function endCombat(c) {
   addLog(c, { kind: 'combat', text: 'Бой окончен' });
 }
 
-/** Павший враг (0 хитов) пропускает ход; герой с 0 хитов ходит — бросает спасброски от смерти. */
-const fallenFoe = (e) => e.token?.kind === 'foe' && e.stats?.hpMax > 0 && e.stats.hp <= 0;
-
 export function advanceTurn(c, scene, dir = 1) {
   const order = initiativeOrder(c, scene);
   if (!order.length) return;
-  let turn = c.combat.turn;
+  let turn = slotStart(order, Math.min(Math.max(0, c.combat.turn || 0), order.length - 1));
   // Сервер: очередь могла пересортироваться чужой инициативой — считаем от того, кто реально ходит.
-  if (c.combat.current) { const i = order.findIndex((e) => e.tokenId === c.combat.current); if (i >= 0) turn = i; }
-  for (let step = 0; step < order.length; step++) {
-    turn += dir;
-    if (turn >= order.length) { turn = 0; c.combat.round += 1; }
-    if (turn < 0) { turn = order.length - 1; c.combat.round = Math.max(1, c.combat.round - 1); }
-    if (!fallenFoe(order[turn])) break;
+  if (c.combat.current) { const i = turnIndexOf(order, c.combat.current); if (i >= 0) turn = i; }
+  const starts = slotStarts(order);
+  let si = Math.max(0, starts.indexOf(turn));
+  for (let step = 0; step < starts.length; step++) {
+    si += dir;
+    if (si >= starts.length) { si = 0; c.combat.round += 1; }
+    if (si < 0) { si = starts.length - 1; c.combat.round = Math.max(1, c.combat.round - 1); }
+    if (!slotFallen(order, starts[si])) break;
   }
+  turn = starts[si];
   c.combat.turn = turn;
   const cur = order[turn];
-  if (cur) c.combat.moved[cur.tokenId] = 0;
+  // В начале хода движение обнуляется у всех членов пачки.
+  for (const m of order) if (m.slot === cur?.slot) c.combat.moved[m.tokenId] = 0;
   if ('current' in c.combat) c.combat.current = cur?.tokenId || null;
 }
 
@@ -71,7 +107,7 @@ export function currentEntry(c, scene, { raw = false } = {}) {
   // В серверной кампании игрок не видит скрытых участников боя, и индекс хода у него разъехался бы
   // с мастерским; поэтому мастер записывает, чей ход, полем current (TASK-002).
   if (c.combat.current) cur = order.find((x) => x.tokenId === c.combat.current) || null;
-  else cur = order[c.combat.turn % Math.max(1, order.length)] || null;
+  else cur = order[slotStart(order, c.combat.turn % Math.max(1, order.length))] || null;
   if (raw || !cur || !turnEnded(c)) return cur;
   return nextInOrder(order, cur.tokenId).entry;
 }
@@ -85,21 +121,31 @@ export function combatRound(c, scene) {
 
 const turnEnded = (c) => !!c.combat.ended && c.combat.ended === c.combat.current;
 
-/** Следующий по очереди после id (павшие враги пропускаются, как в advanceTurn); wrapped — начался новый раунд. */
+/** Следующий слот после id (павшие пропускаются, как в advanceTurn); wrapped — начался новый раунд. */
 function nextInOrder(order, id) {
-  const i = order.findIndex((e) => e.tokenId === id);
+  const i = turnIndexOf(order, id);
   if (i < 0 || !order.length) return { entry: null, wrapped: false };
-  let turn = i, wrapped = false;
-  for (let step = 0; step < order.length; step++) {
-    turn += 1;
-    if (turn >= order.length) { turn = 0; wrapped = true; }
-    if (!fallenFoe(order[turn])) break;
+  const starts = slotStarts(order);
+  let si = starts.indexOf(i), wrapped = false;
+  for (let step = 0; step < starts.length; step++) {
+    si += 1;
+    if (si >= starts.length) { si = 0; wrapped = true; }
+    if (!slotFallen(order, starts[si])) break;
   }
-  return { entry: order[turn] || null, wrapped };
+  return { entry: order[starts[si]] || null, wrapped };
 }
 
-/** Чей ход по очереди мастера (без учёта current) — мастер пишет это в current перед отправкой. */
+/**
+ * Чей ход по очереди мастера (без учёта current) — мастер пишет это в current перед отправкой. У пачки —
+ * её ведущий: первый живой видимый член, иначе первый живой (#198) — так игроки видят ход пачки и при скрытом первом.
+ */
 export function turnTokenId(c, scene) {
   const order = initiativeOrder(c, scene);
-  return order[c.combat.turn % Math.max(1, order.length)]?.tokenId || null;
+  return order[slotStart(order, c.combat.turn % Math.max(1, order.length))]?.tokenId || null;
+}
+
+/** Токены, чей сейчас ход: одиночка или вся пачка. */
+export function turnTokenIds(c, scene) {
+  const cur = currentEntry(c, scene);
+  return new Set(cur ? slotMembers(initiativeOrder(c, scene), cur.tokenId).map((e) => e.tokenId) : []);
 }

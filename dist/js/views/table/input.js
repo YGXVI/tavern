@@ -11,7 +11,7 @@ import {
 import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
-import { currentEntry } from './combat.js';
+import { currentEntry, initiativeOrder, slotMembers } from './combat.js';
 import { expandRideMoves, ridersOf } from './riding.js';
 import { renderChrome } from './chrome.js';
 import { moveDrawing, deleteDrawing, DRAW_SHAPES, BOX_SHAPES, shapeFromDrag, nearShape, aimShape, canEditDrawing, drawingTouchesRect, drawingsShift, applyDrawingPos, validDrawing } from './drawings.js';
@@ -357,10 +357,10 @@ function moveOpts(ctx, t, { ignoreWalls = false } = {}) {
   return { walls: ignoreWalls ? [] : s.walls, difficult: new Set(s.terrain?.difficult || []), blocked, cols, rows, n: cellsOfToken(t), rule: ctx.c.settings.diagonal || '5' };
 }
 
-/** Сколько футов осталось у токена в текущем ходу (null — не его ход / не бой). */
+/** Сколько футов осталось у токена в текущем ходу (null — не его ход / не бой). У пачки (#198) запас — у каждого. */
 export function movementLeft(ctx, t) {
   const cur = currentEntry(ctx.c, ctx.scene);
-  if (!cur || cur.tokenId !== t.id) return null;
+  if (!cur || (cur.tokenId !== t.id && !slotMembers(initiativeOrder(ctx.c, ctx.scene), cur.tokenId).some((e) => e.tokenId === t.id))) return null;
   const st = tokenStats(ctx.c, t);
   return Math.max(0, (st.speed || 30) - (ctx.c.combat.moved?.[t.id] || 0));
 }
@@ -393,6 +393,14 @@ function nudge(ctx, k) {
   if (moves.length) commitMoves(ctx, moves, null);
 }
 
+/** Путь члена группы (#198): прямой отрезок от старта до финиша по клеткам, с труднопроходимой местностью. */
+function ownCost(ctx, m) {
+  const t = ctx.scene.tokens.find((x) => x.id === m.id);
+  if (!t) return 0;
+  const g = sceneGrid(ctx), o = moveOpts(ctx, t);
+  return Math.round(pathCost(g, [m.from, m.to], { difficult: o.difficult, rule: o.rule, n: o.n })) * (g.feet || 5);
+}
+
 /** Записать перемещение (с отменой) и расход движения в бою. */
 function commitMoves(ctx, moves0, leaderCost, draw = null) {
   // Езда (TASK-187): с ездовым едут всадники; всадник, сдвинутый без ездового, спешивается.
@@ -408,8 +416,14 @@ function commitMoves(ctx, moves0, leaderCost, draw = null) {
     for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; if (m.dismount) delete t.riding; } }
     if (dz) applyDrawingPos(s, dz.after);
     if (leader && leaderCost != null && c.combat.active) {
+      // Расход — каждому, чей сейчас ход: одиночке или каждому члену пачки (#198) — его же путь (сдвиг общий).
+      // Всадник, которого везёт ездовое, не тратит своё движение.
       const cur = currentEntry(c, s);
-      if (cur?.tokenId === leader.id) c.combat.moved[leader.id] = (c.combat.moved[leader.id] || 0) + leaderCost;
+      const turn = new Set(cur ? slotMembers(initiativeOrder(c, s), cur.tokenId).map((e) => e.tokenId) : []);
+      for (const m of moves) {
+        if (!turn.has(m.id) || m.carried) continue;
+        c.combat.moved[m.id] = (c.combat.moved[m.id] || 0) + (m.id === leader.id ? leaderCost : ownCost(ctx, m));
+      }
     }
   }, {
     label: moves.length ? 'Перемещение' : 'Сдвинуть рисунки',
