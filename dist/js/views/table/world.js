@@ -314,7 +314,12 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
-    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''} ${t.pending ? 'pending' : ''}`;
+    // Своё существо игрока ждёт мастера (#190 E): полупрозрачное, с пометкой.
+    if (!!node.querySelector('.tok-pending') !== !!t.pending) {
+      node.querySelector('.tok-pending')?.remove();
+      if (t.pending) node.insertAdjacentHTML('beforeend', '<span class="tok-pending">ждёт мастера</span>');
+    }
     const pk = marks.get(t.id);
     const pkSig = pk ? `${pk.n}|${pk.color}` : '';
     if (node.dataset.pk !== pkSig) {

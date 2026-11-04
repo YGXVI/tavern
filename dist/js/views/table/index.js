@@ -27,6 +27,7 @@ import { toast, closePopover, userAvatar } from '../../ui/kit.js';
 import { History } from './history.js';
 import { activeSight, sightRadius } from './sight.js';
 import { trackSight, onSightOff } from './sight-ui.js';
+import { trackPending, pendingHidden } from './own-creature.js';
 import { go } from '../screens.js';
 import { icon } from '../../icons.js';
 
@@ -142,6 +143,7 @@ export function mountTable(root, cid) {
   ctx.tokenShown = (t) => {
     if (ctx.isMasterView) return true;
     if (t.hidden) return false;
+    if (pendingHidden(ctx, t)) return false; // своё существо игрока ждёт мастера — видит только владелец (#190 E)
     if (ctx.fogView() !== 'player') return true;
     // Герои, свои токены и призывы игроков видны всем, как герои (TASK-183): владелец не теряет их в тумане.
     if (t.kind === 'hero' || t.ownerId) return true;
@@ -212,7 +214,7 @@ export function mountTable(root, cid) {
     // Туман и свет — в том же кадре, что и токены (TASK-133): неподвижные источники берутся из кэша fog.js,
     // каждый кадр пересчитываются только те, что сейчас тащат.
     if (all || dirty.has('fog') || dirty.has('tokens')) { renderFog(L, ctx); trackExplored(); }
-    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); if (trackSight(ctx)) { dirty.add('chrome'); ctx.panels.refreshWidget(); } }
+    if (all || dirty.has('tokens')) { renderTokens(L, ctx); ctx.syncSelection(); if (trackSight(ctx)) { dirty.add('chrome'); ctx.panels.refreshWidget(); } trackPending(ctx); }
     if (all || dirty.has('markers') || dirty.has('fog') || dirty.has('tokens')) renderMarkers(L, ctx);
     if (all || dirty.has('areas') || dirty.has('tokens')) { renderAreas(L, ctx); renderAuras(L, ctx); }
     if (all || dirty.has('overlay') || dirty.has('tokens')) renderOverlay(L, ctx);

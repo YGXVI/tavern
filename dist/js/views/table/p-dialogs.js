@@ -252,7 +252,7 @@ export function pausePopover(ctx, anchor) {
  */
 export function combatSetup(ctx, preselect = []) {
   const sc = ctx.scene;
-  const toks = sc.tokens.filter(canFight);
+  const toks = sc.tokens.filter((t) => canFight(t) && !t.pending); // «ждёт мастера» — не в бой (#190 E)
   const pre = new Set(preselect);
   // Свои токены и призывы игроков сами в бой не попадают — мастер отмечает их в списке (TASK-183).
   const on = toks.filter((t) => (pre.size ? pre.has(t.id) || t.kind === 'hero' : t.kind === 'hero' || (!t.hidden && !t.ownerId && !t.summonedBy))).map((t) => t.id);

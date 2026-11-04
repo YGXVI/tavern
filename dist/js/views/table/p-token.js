@@ -9,6 +9,7 @@ import { currentEntry } from './combat.js';
 import { ridingItems } from './riding.js';
 import { sightMenuItems } from './sight-ui.js';
 import { mobAttack } from './mob-attack.js';
+import { pendingItems, creatureCard } from './own-creature.js';
 import { movementLeft } from './input.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
@@ -686,6 +687,7 @@ export function contextMenu(ctx, target, w, screen) {
     const ids = [...ctx.ui.selection];
     if (ctx.isMasterView) {
       const items = [
+        ...(ids.length === 1 ? pendingItems(ctx, t) : []),
         { icon: 'first-aid-kit', label: 'Хиты…', onClick: () => hpEditor(ctx, ids, anchor) },
         { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, ids, anchor) },
         { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
@@ -709,6 +711,7 @@ export function contextMenu(ctx, target, w, screen) {
     } else {
       const own = ctx.owns(t);
       const items = [
+        ...pendingItems(ctx, t),
         ...(own ? ownTokenItems(ctx, t, anchor) : []),
         own && t.monsterId ? { icon: 'book-open-01', label: 'Статблок', onClick: () => ctx.panels.openSheetFor(t) } : null,
         ...ridingItems(ctx, t, anchor, menu),
@@ -734,6 +737,7 @@ export function contextMenu(ctx, target, w, screen) {
     ctx.isMasterView && ctx.ui.clipboard?.items.length ? { icon: 'copy-link', label: `Вставить (${ctx.ui.clipboard.items.length})`, hint: 'Ctrl V', onClick: () => pasteTokens(ctx, w) } : null,
     ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
     { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); const p = ctx.snapCenter(w); ctx.ui.ruler = { pts: [p, p], label: '' }; ctx.invalidate('overlay'); } },
+    !ctx.isMasterView && ctx.scene ? { icon: 'monster', label: 'Поставить своё существо…', onClick: () => creatureCard(ctx, { at: w, anchor }) } : null,
     ctx.isMasterView ? { icon: 'monster', label: 'Поставить существо', onClick: () => { ctx.ui.placeAt = w; ctx.panels.openBestiary(); } } : null,
     ctx.isMasterView ? { icon: 'fire', label: 'Свет здесь', onClick: () => { ctx.setTool('lights'); ctx.panels.addLight(w, 'torch', anchor); } } : null,
   ].filter(Boolean);

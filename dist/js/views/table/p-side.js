@@ -25,7 +25,7 @@ export function hydrateImages(root) {
 }
 const mapImg = (ref, cls = '') => { const s = srcOf(ref); return `<img class="${cls}" alt="" draggable="false" data-ref="${esc(ref)}" ${s ? `src="${esc(s)}"` : ''}>`; };
 
-function viewCenter(ctx) {
+export function viewCenter(ctx) {
   const v = ctx.camera.viewRect();
   const sc = ctx.scene;
   return { x: Math.min(sc.map.width - 1, Math.max(0, v.x + v.w / 2)), y: Math.min(sc.map.height - 1, Math.max(0, v.y + v.h / 2)) };
@@ -104,11 +104,13 @@ function bestiaryList(ctx) {
   const st = bState(ctx);
   const q = st.q.trim().toLowerCase();
   const list = BESTIARY.filter((m) => bMatch(m, q) && (st.type === 'all' || (st.type === 'other' ? !B_NAMED.includes(m.type) : m.type === st.type)));
-  if (!list.length) return `<p class="t-sm muted b-empty">${srdLoaded() ? 'Никого не нашлось. Здесь существа SRD 5.1 — ищите по-русски, по-английски или «КО 5».' : 'Пока никого — догружаем полный бестиарий…'}</p>`;
+  // Своё существо (#190 E): нет в бестиарии — создать по имени из поиска.
+  const create = q ? `<button class="btn btn-sm btn-secondary b-create" data-act="b-create">${icon('plus-sign', 14)}Создать «${esc(st.q.trim())}»</button>` : '';
+  if (!list.length) return `<p class="t-sm muted b-empty">${srdLoaded() ? 'Никого не нашлось. Здесь существа SRD 5.1 — ищите по-русски, по-английски или «КО 5».' : 'Пока никого — догружаем полный бестиарий…'}</p>${srdLoaded() ? `<div class="b-empty">${create}</div>` : ''}`;
   return list.map((m) => {
     const n = ctx.scene?.tokens.filter((t) => t.monsterId === m.id).length || 0;
     return `<button class="list-row b-row ${st.pick === m.id ? 'current' : ''}" data-act="b-pick" data-id="${esc(m.id)}"><span class="avatar sm foe"><img src="${esc(srcOf(m.img))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(m.name)}</span><span class="secondary ellipsis">${esc(m.type)} · КО ${esc(m.cr)} · КД ${m.ac} · ${m.hp} хп${sizeById(m.size).cells > 1 ? ` · ${sizeById(m.size).cells}×${sizeById(m.size).cells}` : ''}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
-  }).join('');
+  }).join('') + (create ? `<div class="b-empty b-more"><span class="t-sm muted">Нет нужного?</span>${create}</div>` : '');
 }
 
 function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false, src: 'srd' }); }
@@ -197,6 +199,7 @@ export function sideAction(ctx, act, b, e) {
   const st = bState(ctx);
   switch (act) {
     case 'scene-view': ctx.switchScene(b.dataset.id); ctx.panels.renderSide(); return true;
+    case 'b-create': import('./own-creature.js').then((m) => m.creatureCard(ctx, { name: st.q, at: ctx.ui.placeAt || null })); ctx.ui.placeAt = null; return true;
     case 'scene-setup': if (ctx.sceneId !== b.dataset.id) ctx.switchScene(b.dataset.id); ctx.setTool(b.dataset.tool); return true;
     case 'scene-menu': sceneMenu(ctx, b.dataset.id, b); return true;
     case 'scene-new': newSceneModal(ctx); return true;
@@ -482,7 +485,7 @@ const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.h
  * Свободное место вплотную к точке (по клеткам, не шагами размера токена), куда можно дойти по прямой — не за
  * стеной (иначе игрок не вытащит токен сам). Нет такого — как раньше, ближайшее свободное.
  */
-function spotNear(ctx, at, n) {
+export function spotNear(ctx, at, n) {
   const sc = ctx.scene, g = sc.grid;
   const { cols, rows } = gridDims(g, sc.map.width, sc.map.height);
   const taken = new Set(sc.terrain?.blocked || []);
@@ -505,6 +508,7 @@ export function playerAddMenu(ctx, anchor) {
   menu([
     { icon: 'user-add-01', label: 'Свой токен…', onClick: () => ownTokenPicker(ctx, anchor) },
     { icon: 'monster', label: 'Призыв…', onClick: () => summonPicker(ctx, anchor) },
+    { icon: 'chess-pawn', label: 'Своё существо…', onClick: () => import('./own-creature.js').then((m) => m.creatureCard(ctx, { anchor })) },
   ], anchor, { placement: 'top' });
 }
 
