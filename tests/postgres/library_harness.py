@@ -157,10 +157,13 @@ select count(*) from public.creatures c where c.id='race-image'
         sql("delete from auth.users where id='00000000-0000-0000-0000-00000000000e';")
         assert sql('select count(*) from public.creature_library_quota;').stdout.strip() == '0'
         assert sql('select count(*) from public.library_storage_usage;').stdout.strip() == '0'
+        from catalogue_checks import run_catalogue_checks
+        catalogue_checks = run_catalogue_checks(sql)
         print(json.dumps({'rls': count, 'concurrent_inserts': 'one success, one quota rejection',
                           'rows_and_quota': totals, 'cascade_cleanup': 'passed',
                           'file_count_and_byte_races': '200 files and 100 MiB enforced',
                           'save_vs_file_delete': 'one success, one rejection; no dangling reference',
+                          'private_catalogue': catalogue_checks,
                           'scope': 'isolated local PostgreSQL; Supabase service schemas stubbed'}, ensure_ascii=False))
     finally:
         if started:
