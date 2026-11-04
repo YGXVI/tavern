@@ -1,0 +1,24 @@
+{
+  "comment": "TASK-186 P1b (plan r1 task 2.5). Only what the SRD 5.1 tables cannot give mechanically: pack contents (page 70 text) and items named in pack/background text that have no price row. Tables of armor (63-64), weapons (66), adventuring gear (69) and tools (70) are parsed by generate.mjs.",
+  "unpricedItems": {
+    "alms-box": {"name": "Alms box", "page": 70},
+    "censer": {"name": "Censer", "page": 70},
+    "incense-block": {"name": "Block of incense", "page": 70},
+    "vestments": {"name": "Vestments", "page": 70},
+    "string": {"name": "String (10 feet)", "page": 70},
+    "sand-bag": {"name": "Little bag of sand", "page": 70},
+    "small-knife": {"name": "Small knife", "page": 70},
+    "prayer-book": {"name": "Prayer book", "page": 61},
+    "prayer-wheel": {"name": "Prayer wheel", "page": 61},
+    "incense-stick": {"name": "Stick of incense", "page": 61}
+  },
+  "packs": {
+    "burglars-pack": {"name": "Burglar’s Pack", "cost": 16, "contents": [["backpack", 1], ["ball-bearings", 1], ["string", 1], ["bell", 1], ["candle", 5], ["crowbar", 1], ["hammer", 1], ["piton", 10], ["lantern-hooded", 1], ["oil", 2], ["rations", 5], ["tinderbox", 1], ["waterskin", 1], ["rope-hempen", 1]]},
+    "diplomats-pack": {"name": "Diplomat’s Pack", "cost": 39, "contents": [["chest", 1], ["case-map-or-scroll", 2], ["clothes-fine", 1], ["ink", 1], ["ink-pen", 1], ["lamp", 1], ["oil", 2], ["paper", 5], ["perfume", 1], ["sealing-wax", 1], ["soap", 1]]},
+    "dungeoneers-pack": {"name": "Dungeoneer’s Pack", "cost": 12, "contents": [["backpack", 1], ["crowbar", 1], ["hammer", 1], ["piton", 10], ["torch", 10], ["tinderbox", 1], ["rations", 10], ["waterskin", 1], ["rope-hempen", 1]]},
+    "entertainers-pack": {"name": "Entertainer’s Pack", "cost": 40, "contents": [["backpack", 1], ["bedroll", 1], ["clothes-costume", 2], ["candle", 5], ["rations", 5], ["waterskin", 1], ["disguise-kit", 1]]},
+    "explorers-pack": {"name": "Explorer’s Pack", "cost": 10, "contents": [["backpack", 1], ["bedroll", 1], ["mess-kit", 1], ["tinderbox", 1], ["torch", 10], ["rations", 10], ["waterskin", 1], ["rope-hempen", 1]]},
+    "priests-pack": {"name": "Priest’s Pack", "cost": 19, "contents": [["backpack", 1], ["blanket", 1], ["candle", 10], ["tinderbox", 1], ["alms-box", 1], ["incense-block", 2], ["censer", 1], ["vestments", 1], ["rations", 2], ["waterskin", 1]]},
+    "scholars-pack": {"name": "Scholar’s Pack", "cost": 40, "contents": [["backpack", 1], ["book", 1], ["ink", 1], ["ink-pen", 1], ["parchment", 10], ["sand-bag", 1], ["small-knife", 1]]}
+  }
+}
