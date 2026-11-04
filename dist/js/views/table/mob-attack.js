@@ -13,6 +13,7 @@ import { bus, emitLocal } from '../../core/store.js';
 import { footprintAt, footprintGap } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { initiativeOrder, slotMembers } from './combat.js';
+import { attackOutcome, critDamageFormula, heroDamage } from '../../rules/attack.js';
 import { showRollToast } from './dice.js';
 
 // ——— Правила (чистые функции, покрыты тестами) ———
@@ -45,8 +46,8 @@ export function inReach(scene, attacker, target, reach) {
   return { ok: false, disadv: false, ft };
 }
 
-/** Крит удваивает только кубы: «1d6+2» → «2d6+2». */
-export const critDice = (f) => String(f).replace(/(\d*)\s*[dк](\d+)/gi, (_, n, m) => `${(Number(n) || 1) * 2}d${m}`);
+/** Крит удваивает только кубы: «1d6+2» → «2d6+2» (общая функция аудита #197). */
+export const critDice = critDamageFormula;
 
 /** Бросок урона по формуле из нескольких слагаемых («1d8 + 2d6 + 3»): {total, text} или null. */
 export function rollDamage(f, random = Math.random) {
@@ -62,8 +63,8 @@ export function rollDamage(f, random = Math.random) {
   return { total: Math.max(0, total), text: parts.join(' ') };
 }
 
-/** Исход атаки: натуральная 20 — крит, натуральная 1 — промах, иначе итог против КД. */
-export const outcome = (nat, total, ac) => (nat === 20 ? 'crit' : nat === 1 ? 'miss' : total >= ac ? 'hit' : 'miss');
+/** Исход атаки: натуральная 20 — крит, натуральная 1 — промах, иначе итог против КД (общая функция аудита #197). */
+export const outcome = attackOutcome;
 
 /** Урон с учётом отношения цели: сопротивление — половина вниз, уязвимость — вдвое, иммунитет — 0. */
 export const adjust = (dmg, rel) => (rel === 'resist' ? Math.floor(dmg / 2) : rel === 'vuln' ? dmg * 2 : rel === 'immune' ? 0 : dmg);
@@ -79,10 +80,15 @@ export function applyHits(s0, hits, rel, isHero) {
   for (const h of hits) {
     const dmg = adjust(h.damage, rel);
     if (dmg <= 0) continue;
-    if (s.hp <= 0 && isHero) {
-      s.deathSaves = { s: s.deathSaves?.s || 0, f: Math.min(3, (s.deathSaves?.f || 0) + (h.crit ? 2 : 1)) };
+    if (isHero) {
+      // Герой — по общим правилам урона (#197 M1): провалы при 0 хитов, мгновенная смерть.
+      const was = s.hp;
+      const r = heroDamage(s, dmg, { crit: !!h.crit });
+      s.hp = r.hp; s.tempHp = r.tempHp; s.deathSaves = r.deathSaves;
       dealt += dmg;
-      if (s.deathSaves.f >= 3) { notes.push('Три провала спасброска от смерти — герой погибает'); break; }
+      if (was > 0 && s.hp > 0 && s.conditions.includes('concentration')) notes.push(`Проверка концентрации: спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(dmg / 2))}`);
+      if (r.dropped && !s.conditions.includes('unconscious')) { s.conditions = s.conditions.filter((x) => x !== 'concentration'); s.conditions.push('unconscious'); }
+      if (r.dead) { notes.push(was > 0 ? 'Урон не меньше максимума хитов — мгновенная смерть' : 'Три провала спасброска от смерти — герой погибает'); break; }
       continue;
     }
     const absorbed = Math.min(s.tempHp, dmg);
@@ -90,7 +96,6 @@ export function applyHits(s0, hits, rel, isHero) {
     s.hp = Math.max(0, s.hp - (dmg - absorbed));
     dealt += dmg;
     if (s.conditions.includes('concentration')) notes.push(`Проверка концентрации: спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(dmg / 2))}`);
-    if (s.hp === 0 && isHero && !s.conditions.includes('unconscious')) { s.conditions = s.conditions.filter((x) => x !== 'concentration'); s.conditions.push('unconscious'); }
   }
   return { state: s, dealt, notes };
 }

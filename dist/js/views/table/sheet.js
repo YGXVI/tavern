@@ -5,6 +5,7 @@ import { srcOf } from '../../core/assets.js';
 import { characterOf, updateCampaign, ownerOfCharacter, isMasterOf, tokenStats, monsterOf } from '../../core/campaign.js';
 import { ABILITIES, SKILLS, mod, profBonus, CONDITIONS, conditionById } from '../../data/rules.js';
 import { doRoll, parseFormula } from './dice.js';
+import { isDead, isStable } from '../../rules/attack.js';
 
 let drawer = null;
 let state = { kind: null, id: null, tab: 'main' };
@@ -71,7 +72,7 @@ function characterHTML(ctx, ch) {
       return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="check" data-ab="${a.id}" data-tip="Проверка ${a.name}">${fmtMod(m)}</button>${num(`stats.${a.id}`, ch.stats[a.id], 'ab-score')}<button class="ab-save ${ch.saves.includes(a.id) ? 'prof' : ''}" data-roll="save" data-ab="${a.id}" data-tip="Спасбросок ${a.name}">спас ${fmtMod(save)}</button></div>`;
     }).join('')}</div>
     <div class="sheet-grid3"><div class="stat-box"><small>Пассивное Восприятие</small><b>${passive}</b></div><div class="stat-box"><small>Бонус мастерства</small><b>${fmtMod(pb)}</b></div><div class="stat-box"><small>Тёмное зрение</small><b>${ch.darkvision ? `${ch.darkvision} фт` : '—'}</b></div></div>
-    <div class="sheet-sect"><div class="section-label">Спасброски от смерти</div><div class="death-row"><span class="t-sm muted">Успехи</span>${[0, 1, 2].map((i) => `<button class="pip ok ${ch.deathSaves.s > i ? 'on' : ''}" data-ds="s" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="t-sm muted" style="margin-left:12px">Провалы</span>${[0, 1, 2].map((i) => `<button class="pip bad ${ch.deathSaves.f > i ? 'on' : ''}" data-ds="f" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="spacer"></span><button class="btn btn-sm btn-secondary" data-roll="death">${icon('dice-faces-06', 14)}Бросить</button></div></div>
+    <div class="sheet-sect"><div class="section-label">Спасброски от смерти</div><div class="death-row"><span class="t-sm muted">Успехи</span>${[0, 1, 2].map((i) => `<button class="pip ok ${ch.deathSaves.s > i ? 'on' : ''}" data-ds="s" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="t-sm muted" style="margin-left:12px">Провалы</span>${[0, 1, 2].map((i) => `<button class="pip bad ${ch.deathSaves.f > i ? 'on' : ''}" data-ds="f" data-i="${i}" ${edit ? '' : 'disabled'}></button>`).join('')}<span class="spacer"></span>${isDead(ch.deathSaves) ? `<span class="chip chip-negative">${icon('skull', 12)}Погиб</span>` : isStable(ch.deathSaves) ? `<span class="chip chip-success">${icon('heart-check', 12)}Стабилен</span>` : `<button class="btn btn-sm btn-secondary" data-roll="death">${icon('dice-faces-06', 14)}Бросить</button>`}</div></div>
     <div class="sheet-sect"><div class="section-label">Состояния</div><div class="cond-chips">${CONDITIONS.map((c) => `<button class="chip ${ch.conditions.includes(c.id) ? 'chip-accent' : ''}" data-cond="${c.id}" ${edit || ctx.isMaster ? '' : 'disabled'} data-tip="${esc(c.text)}">${icon(c.icon, 12)}${esc(c.name)}</button>`).join('')}</div></div>`;
   } else if (state.tab === 'skills') {
     body = `<div class="skills">${SKILLS.map((s) => {

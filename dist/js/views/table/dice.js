@@ -98,7 +98,8 @@ export function showRollToast(ctx, entry, mine = false) {
     else ctx.toast({ title: `${u?.name || 'Кто-то'} бросил скрыто`, body: vis === 'gm' && !ctx.isMaster ? 'Результат видят он и мастер' : 'Результат видит только мастер', icon: 'view-off' });
     return;
   }
-  const crit = entry.nat === 20 ? ' · критическое попадание!' : entry.nat === 1 ? ' · единица' : '';
+  // #197 R3: крит бывает только у броска атаки; у проверок и спасбросков 20 и 1 — просто натуральные.
+  const crit = entry.nat === 20 ? (entry.kind === 'attack' ? ' · критическое попадание!' : ' · натуральная 20') : entry.nat === 1 ? (entry.kind === 'attack' ? ' · промах' : ' · натуральная 1') : '';
   const tag = vis === 'all' ? '' : ` · ${ROLL_MODES.find((m) => m.id === vis)?.name.toLowerCase()}`;
   ctx.toast({ title: `${mine ? 'Вы' : u?.name || 'Кто-то'} · ${entry.label}${tag}`, body: entry.detail + crit, avatar: userAvatar(u, 'sm'), result: entry.total });
 }

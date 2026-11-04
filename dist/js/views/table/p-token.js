@@ -15,6 +15,7 @@ import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
 import { parseHpInput } from '../../rules/hp.js';
 import { canDeleteDrawing } from './drawings.js';
+import { heroDamage, isDead, isStable } from '../../rules/attack.js';
 
 const ib = (act, name, tip, extra = '') => `<button class="icon-btn" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(name, 22)}</button>`;
 const div = '<span class="divider"></span>';
@@ -113,11 +114,14 @@ export function tokenBarHTML(ctx) {
       middle = `<button class="btn btn-sm btn-secondary" data-act="own-stats">${icon('first-aid-kit', 16)}Статы…</button>`;
     } else if (down && t.kind === 'hero') {
       const ds = st.deathSaves || { s: 0, f: 0 };
-      middle += `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
+      // #197 R4: мёртвый и стабильный не бросают.
+      middle += isDead(ds) ? `${div}<span class="chip chip-md chip-negative">${icon('skull', 12)}Погиб</span>`
+        : isStable(ds) ? `${div}<span class="chip chip-md chip-success">${icon('heart-check', 12)}Стабилен</span>`
+        : `${div}<span class="death-mini"><small>Спасброски от смерти</small><span>${[0, 1, 2].map((i) => `<i class="pip ok ${ds.s > i ? 'on' : ''}"></i>`).join('')}<b> </b>${[0, 1, 2].map((i) => `<i class="pip bad ${ds.f > i ? 'on' : ''}"></i>`).join('')}</span></span><button class="btn btn-sm btn-primary" data-act="death-save">${icon('dice-faces-06', 16)}Спасбросок</button>`;
     } else {
       middle += `${div}<span class="chip chip-md">КД ${st.ac}</span><span class="chip chip-md">${left !== null ? `${left}/${st.speed} фт` : `${st.speed} фт`}</span>${master && t.kind === 'foe' ? `<span class="chip chip-md">Иниц. ${fmtMod(st.initBonus)}</span>` : ''}`;
     }
-    return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${esc(down ? `Без сознания${mine ? ' · ваш ход' : ''}` : sub)}</small></span>${div}${middle}${div}
+    return `<div class="toolbar token-bar">${avatar}<span class="tb-titles"><b>${esc(st.name)}</b><small>${esc(down ? (t.kind === 'hero' && isDead(st.deathSaves) ? 'Погиб' : `Без сознания${mine ? ' · ваш ход' : ''}`) : sub)}</small></span>${div}${middle}${div}
       ${ib('conditions', 'sparkles', `Состояния${st.conditions.length ? ` · ${st.conditions.length}` : ''}`)}${master ? ib('visibility', t.hidden ? 'view-off' : 'view', t.hidden ? 'Скрыт от игроков' : 'Виден игрокам', t.hidden ? 'aria-pressed="true"' : '') : ''}
       ${t.characterId ? ib('sheet', 'book-open-01', 'Лист героя') : t.monsterId || master ? ib('statblock', 'book-open-01', 'Статблок') : ''}
       ${mine ? ib('quick-roll', 'dice-faces-06', 'Кубы') : ''}
@@ -183,9 +187,14 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   }
 }
 
-/** Применить урон (<0) или лечение (>0) с временными хитами, без сознания и концентрацией. */
-export function applyHp(ctx, ids, delta) {
+/**
+ * Применить урон (<0) или лечение (>0) с временными хитами, без сознания и концентрацией. Урон по герою — по
+ * правилам 5e 2014 (#197 M1): при 0 хитов провал спасброска от смерти (крит — два), мгновенная смерть от урона
+ * не меньше максимума. opts.crit — урон критического попадания.
+ */
+export function applyHp(ctx, ids, delta, { crit = false } = {}) {
   const notes = [];
+  const deathNotes = [];
   const before = {}, after = {};
   const pick = (x) => ({ hp: x.hp, tempHp: x.tempHp || 0, conditions: [...(x.conditions || [])], ...(x.deathSaves ? { deathSaves: { ...x.deathSaves } } : {}) });
   ctx.mutateScene((s, c) => {
@@ -196,17 +205,26 @@ export function applyHp(ctx, ids, delta) {
         before[id] = pick(x);
         let hp = x.hp, temp = x.tempHp || 0;
         const conds = new Set(x.conditions || []);
-        if (delta < 0) {
+        let ds = x.deathSaves;
+        if (delta < 0 && t.kind === 'hero') {
+          const was = hp;
+          const r = heroDamage({ hp, hpMax: x.hpMax, tempHp: temp, deathSaves: x.deathSaves }, -delta, { crit });
+          hp = r.hp; temp = r.tempHp; ds = r.deathSaves;
+          const nm = x.name || t.name;
+          if (hp > 0 && conds.has('concentration')) notes.push(`${nm}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`);
+          if (r.dropped) { conds.add('unconscious'); conds.delete('concentration'); }
+          if (r.dead && !isDead(x.deathSaves)) deathNotes.push(was > 0 ? `${nm}: урон не меньше максимума хитов — мгновенная смерть` : `${nm}: три провала спасброска от смерти — погибает`);
+          else if (was === 0 && !r.dead && r.deathSaves.f > (x.deathSaves?.f || 0)) deathNotes.push(`${nm}: урон по лежащему — ${crit ? 'два провала' : 'провал'} спасброска от смерти (${r.deathSaves.f} из 3)`);
+        } else if (delta < 0) {
           let dmg = -delta;
           const absorbed = Math.min(temp, dmg); temp -= absorbed; dmg -= absorbed;
           hp = Math.max(0, hp - dmg);
           if (conds.has('concentration')) notes.push(`${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`);
-          if (hp === 0 && t.kind === 'hero') { conds.add('unconscious'); conds.delete('concentration'); }
         } else {
           if (hp === 0 && delta > 0) { conds.delete('unconscious'); if (x.deathSaves) x.deathSaves = { s: 0, f: 0 }; }
           hp = Math.min(x.hpMax, hp + delta);
         }
-        const out = { hp, tempHp: temp, conditions: [...conds] };
+        const out = { hp, tempHp: temp, conditions: [...conds], ...(ds && ds !== x.deathSaves ? { deathSaves: ds } : {}) };
         after[id] = { ...pick(x), ...out };
         return out;
       });
@@ -219,6 +237,7 @@ export function applyHp(ctx, ids, delta) {
     redo: (s, c) => { for (const id of ids) if (after[id]) patchTokenStats(c, s, id, () => structuredClone(after[id])); },
   });
   for (const n of notes) ctx.toast({ title: 'Концентрация', body: n, icon: 'brain-02' });
+  for (const n of deathNotes) ctx.toast({ title: 'Спасброски от смерти', body: n, icon: 'skull' });
   bus.send('hp-flash', { cid: ctx.cid, ids, delta });
   emitLocal('hp-flash', { cid: ctx.cid, ids, delta });
 }

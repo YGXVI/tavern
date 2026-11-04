@@ -8,6 +8,7 @@ import { LIGHTS, LIGHT_COLORS, ABILITIES, mod, profBonus, TEMPLATES } from '../.
 import { WALL_KINDS, cellOf, footprintAt, gridSize, gridDims, templateCells, footprintCells, key, cellCenter } from '../../rules/geometry.js';
 import { popover, closePopover, confirmDialog } from '../../ui/kit.js';
 import { doRoll, parseFormula, rollPool, describeRoll } from './dice.js';
+import { attackOutcome, critDamageFormula } from '../../rules/attack.js';
 import { ridersOf } from './riding.js';
 import { sizeById } from '../../data/rules.js';
 import { hpEditor } from './p-token.js';
@@ -495,7 +496,15 @@ export function opportunityForMaster(ctx, p) {
     const a = m?.actions.find((x) => x.bonus);
     ctx.toast({
       title: `${st.name} выходит из досягаемости`, body: `${fs.name} может атаковать по возможности`, icon: 'sword-03', timeout: 12000,
-      action: a ? { label: 'Атаковать', onClick: () => { const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack' }); const ac = tokenStats(ctx.c, t).ac; if (r.total >= ac || r.entry.nat === 20) { const f2 = parseFormula(a.damage); if (f2) { const d = doRoll(ctx, { label: `${fs.name}: урон`, ...f2 }); ctx.panels.applyHp([t.id], -(r.entry.nat === 20 ? d.total * 2 : d.total)); } } else ctx.toast({ title: 'Промах', body: `${r.total} против КД ${ac}`, icon: 'shield-01' }); } } : null,
+      // #197 R1/R2: натуральная 1 — промах, на крите удваиваются только кости урона (модификатор — один раз).
+      action: a ? { label: 'Атаковать', onClick: () => {
+        const r = doRoll(ctx, { label: `${fs.name}: ${a.name} (по возможности)`, dice: { 20: 1 }, mod: a.bonus, kind: 'attack' });
+        const ac = tokenStats(ctx.c, t).ac;
+        const res = attackOutcome(r.entry.nat, r.total, ac);
+        if (res === 'miss') { ctx.toast({ title: 'Промах', body: r.entry.nat === 1 ? 'Натуральная 1' : `${r.total} против КД ${ac}`, icon: 'shield-01' }); return; }
+        const f2 = parseFormula(res === 'crit' ? critDamageFormula(a.damage) : a.damage);
+        if (f2) { const d = doRoll(ctx, { label: `${fs.name}: урон${res === 'crit' ? ' (крит)' : ''}`, ...f2 }); ctx.panels.applyHp([t.id], -d.total, { crit: res === 'crit' }); }
+      } } : null,
     });
   }
 }

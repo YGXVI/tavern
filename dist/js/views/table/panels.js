@@ -9,6 +9,7 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers } from './combat.js';
 import { packKind, summonKind } from './packs.js';
+import { deathSaveStep, isDead, isStable } from '../../rules/attack.js';
 import { mobAttack } from './mob-attack.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
@@ -442,25 +443,27 @@ export class Panels {
   copyTokens(ids) { T.copyTokens(this.ctx, ids); }
   auraPopover(id, anchor) { T.auraPopover(this.ctx, id, anchor); }
   pasteTokens(at) { T.pasteTokens(this.ctx, at); }
-  applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
+  applyHp(ids, delta, opts) { T.applyHp(this.ctx, ids, delta, opts); }
 
   deathSave(chId) {
     const ctx = this.ctx;
     const ch = characterOf(ctx.c, chId);
     if (!ch || ch.hp > 0) return;
+    // #197 R4: мёртвый (три провала) и стабильный (три успеха) больше не бросают.
+    if (isDead(ch.deathSaves)) { ctx.toast({ title: `${ch.name} погиб`, body: 'Три провала — спасброски от смерти больше не бросают', icon: 'skull' }); return; }
+    if (isStable(ch.deathSaves)) { ctx.toast({ title: `${ch.name} стабилен`, body: 'Без сознания, но не умирает. Урон снова начнёт спасброски', icon: 'heart-check' }); return; }
     const r = doRoll(ctx, { label: `${ch.name}: спасбросок от смерти`, dice: { 20: 1 }, kind: 'save' });
     const nat = r.results[0].value;
     let out = null;
     updateCampaign(ctx.cid, (c) => {
       const x = c.characters.find((q) => q.id === chId); if (!x) return;
-      const ds = x.deathSaves || (x.deathSaves = { s: 0, f: 0 });
-      if (nat === 20) { x.hp = 1; x.deathSaves = { s: 0, f: 0 }; x.conditions = (x.conditions || []).filter((q) => q !== 'unconscious'); out = 'up'; }
-      else if (nat === 1) ds.f = Math.min(3, ds.f + 2);
-      else if (nat >= 10) ds.s = Math.min(3, ds.s + 1);
-      else ds.f = Math.min(3, ds.f + 1);
-      if (!out) out = ds.s >= 3 ? 'stable' : ds.f >= 3 ? 'dead' : `${ds.s}:${ds.f}`;
+      const step = deathSaveStep(x.deathSaves, nat);
+      x.deathSaves = step.ds;
+      if (step.out === 'up') { x.hp = 1; x.conditions = (x.conditions || []).filter((q) => q !== 'unconscious'); }
+      out = step.out === 'roll' ? `${step.ds.s}:${step.ds.f}` : step.out;
       addLog(c, { kind: 'save', userId: ctx.userId, text: `${x.name}: спасбросок от смерти — ${nat}` });
     });
+    if (out === 'no') return;
     const msg = {
       up: [`${ch.name} приходит в себя!`, 'Натуральная 20 — 1 хит, можно действовать'],
       stable: [`${ch.name} стабилизирован`, 'Три успеха — без сознания, но больше не умирает'],

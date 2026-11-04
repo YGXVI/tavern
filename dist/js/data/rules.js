@@ -31,7 +31,8 @@ export const SKILLS = [
   { id: 'survival', name: 'Выживание', ab: 'wis' },
 ];
 
-export const mod = (score) => Math.floor((Number(score || 10) - 10) / 2);
+// #197 R5: значение 0 (истощение Силы тенью) даёт −5, пустое — как 10.
+export const mod = (score) => Math.floor((Number(score === null || score === undefined || score === '' ? 10 : score) - 10) / 2);
 export const profBonus = (level) => 2 + Math.floor((Math.max(1, level) - 1) / 4);
 
 export const CONDITIONS = [
