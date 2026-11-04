@@ -14,6 +14,7 @@ import { popover, closePopover } from '../../ui/kit.js';
 import { sizeById } from '../../data/rules.js';
 import { spotNear, viewCenter, hydrateImages } from './p-side.js';
 import { pickTokenImage, deleteTokens } from './p-token.js';
+import { libraryImageFrom } from '../creature-img.js';
 
 export const CARD_SIZES = [
   ['tiny', 'Крош.', 'Крошечный — четверть клетки, может делить её с другими'],
@@ -37,7 +38,8 @@ const bad = (v) => Number.isNaN(v);
 export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) {
   if (!ctx.scene) return;
   const master = ctx.isMasterView;
-  const st = { name: name.trim(), img: '', size: master ? 'medium' : 'tiny', side: 'hostile', ac: '', hp: '', speed: '', fly: '', init: '', save: !master, hidden: true, combat: false };
+  // file — выбранный файл картинки: с ним копия уходит и в «Мои существа» (личный бакет), а не только на карту.
+  const st = { name: name.trim(), img: '', file: null, size: master ? 'medium' : 'tiny', side: 'hostile', ac: '', hp: '', speed: '', fly: '', init: '', save: !master, hidden: true, combat: false };
   const face = () => { const ref = st.img || `ini:${st.name || '?'}`; return `<span class="cc-face ${master ? `disp-${st.side}` : 'disp-friendly'}"><img alt="" data-ref="${esc(ref)}" src="${esc(srcOf(ref))}"></span><span class="cc-face-name">${esc(st.name || 'Без имени')}</span>`; };
   const field = (k, label, ph, extra = '') => `<label class="field"><span class="label">${label}</span><span class="input"><input data-n="${k}" value="${esc(st[k])}" placeholder="${ph}" inputmode="${k === 'hp' ? 'text' : 'numeric'}" autocomplete="off" aria-label="${label}"></span>${extra}</label>`;
   const html = () => `<div class="cc-pop">
@@ -45,7 +47,8 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
     <div class="panel-section cc-body">
       <div class="cc-id"><div class="cc-prev" data-face>${face()}</div><div class="col grow" style="gap:6px">
         <label class="field"><span class="label">Имя</span><span class="input"><input data-name maxlength="40" value="${esc(st.name)}" placeholder="${master ? 'Теневой пёс' : 'Клякса'}" aria-label="Имя существа"></span></label>
-        <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-img>${icon('upload-01', 16)}${st.img ? 'Заменить картинку' : 'Картинка'}</button>${st.img ? '<button class="btn btn-sm btn-ghost" data-noimg>Без картинки</button>' : ''}</div>
+        <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-img>${icon('upload-01', 16)}${st.img ? 'Заменить картинку' : 'Своя картинка'}</button>${st.img ? '<button class="btn btn-sm btn-ghost" data-noimg>Без картинки</button>' : ''}</div>
+        <span class="t-xs tertiary">${st.img ? 'Картинка будет и на карте, и в «Моих существах»' : 'PNG, JPEG или WebP до 5 МБ; без картинки — инициалы'}</span>
       </div></div>
       <div class="cc-sect"><div class="label">${master ? 'Кто это' : 'Чьё'}</div>
         ${master ? `<div class="chips-wrap">${SIDES.map(([v, l]) => `<button class="chip chip-md ${st.side === v ? 'chip-accent' : ''}" data-side="${v}">${l}</button>`).join('')}</div><p class="t-sm muted">${SIDES.find((x) => x[0] === st.side)[2]}</p>`
@@ -78,8 +81,8 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
   n.addEventListener('click', (e) => {
     const sd = e.target.closest('[data-side]'); if (sd) { st.side = sd.dataset.side; rerender(); return; }
     const sz = e.target.closest('[data-size]'); if (sz) { st.size = sz.dataset.size; rerender(); return; }
-    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref) => { st.img = ref; if (n.isConnected) rerender(); }); return; }
-    if (e.target.closest('[data-noimg]')) { st.img = ''; rerender(); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref, file) => { st.img = ref; st.file = file || null; if (n.isConnected) rerender(); }); return; }
+    if (e.target.closest('[data-noimg]')) { st.img = ''; st.file = null; rerender(); return; }
     if (e.target.closest('[data-ok]')) place();
   });
 
@@ -130,9 +133,15 @@ export function placeCreature(ctx, st, at = null, random = undefined) {
 async function saveToLibrary(ctx, st) {
   const f = tokenFields(st, () => 0.5);
   const hp = parseHp(st.hp, () => 0.5);
+  // Картинка в библиотеке — своя копия (на сервере ссылка кампании в другой кампании не откроется).
+  let img = '';
+  if (st.img && !st.img.startsWith('ini:')) {
+    try { img = await libraryImageFrom(st.file, st.img); }
+    catch (err) { ctx.toast({ title: 'Картинка в «Мои существа» не попала', body: `${err.message || err}. Существо сохраним с инициалами — картинку можно добавить на главной`, icon: 'alert-circle' }); }
+  }
   try {
     await saveCreature({
-      name: st.name.trim(), img: st.img && !st.img.startsWith('ini:') ? st.img : '', size: st.size, type: 'своё существо',
+      name: st.name.trim(), img, size: st.size, type: 'своё существо',
       ac: f.ac ?? null, hp: hp && !hp.formula ? hp.hp : null, hpFormula: hp?.formula || '',
       speed: { walk: f.speed ?? null, fly: f.fly ?? null, swim: null, climb: null, burrow: null },
       stats: { str: null, dex: f.initBonus != null ? Math.max(1, Math.min(30, 10 + 2 * f.initBonus)) : null, con: null, int: null, wis: null, cha: null },

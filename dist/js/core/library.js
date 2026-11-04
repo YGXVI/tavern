@@ -78,6 +78,8 @@ export function createLibrary({ getContext, storage, onSandboxWrite = () => {},
       if (!uploadSandbox) throw new Error('Хранилище изображений недоступно.');
       return uploadSandbox(file);
     }),
+    // Убрать свою картинку из бакета (#190 E: заменили или убрали). Занятую сервер не удалит. Песочница — не нужно.
+    removeImage: ref => scoped(async ctx => (ctx.server ? ctx.server.removeImage(ref) : false)),
     resolveImage: ref => scoped(async ctx => {
       if (ctx.server) return ctx.server.resolveImage(ref);
       if (!resolveSandbox) throw new Error('Хранилище изображений недоступно.');
@@ -125,6 +127,7 @@ export const deleteCreature = async id => (await library()).remove(id);
 export const copySrdCreature = async monster => (await library()).copyFromSrd(monster);
 export const uploadLibraryImage = async file => (await library()).uploadImage(file);
 export const resolveLibraryImage = async ref => (await library()).resolveImage(ref);
+export const removeLibraryImage = async ref => (await library()).removeImage(ref);
 export const getLibraryImageUsage = async () => (await library()).imageUsage();
 export const listUnusedLibraryImages = async () => (await library()).unusedImages();
 export const cleanupUnusedLibraryImages = async () => (await library()).cleanupUnusedImages();

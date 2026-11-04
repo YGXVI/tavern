@@ -7,7 +7,8 @@ import { isServerMode, commit } from '../core/store.js';
 import { modal, panelHeader, toast, portrait, confirmDialog } from '../ui/kit.js';
 import { ABILITIES, SKILLS, SIZES, sizeById, mod } from '../data/rules.js';
 import { BESTIARY, loadSrdBestiary } from '../data/bestiary.js';
-import { listCreatures, saveCreature, deleteCreature } from '../core/library.js';
+import { listCreatures, saveCreature, deleteCreature, uploadLibraryImage } from '../core/library.js';
+import { creatureImgTag, hydrateCreatureImages, pickImageFile, dropLibraryImages } from './creature-img.js';
 import { normalizeCreature, fromSrd } from '../rules/creature.js';
 
 const CRS = ['0', '1/8', '1/4', '1/2', ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
@@ -38,7 +39,8 @@ const subtitle = (c) => [c.size ? sizeById(c.size).name : '', c.type].filter(Boo
 function card(c) {
   const vit = [c.ac != null ? `КД ${c.ac}` : '', c.hp != null ? `${c.hp} хит.` : '', c.speed?.walk != null ? `${c.speed.walk} фт` : ''].filter(Boolean).join(' · ');
   const sub = [subtitle(c), c.cr != null ? `ПО ${c.cr}` : ''].filter(Boolean).join(' · ');
-  return `<button class="char-card lib-card" data-cr="${esc(c.id)}">${portrait(c.img || `ini:${c.name}`, 'lg foe', c.name)}
+  // Своя картинка (#190 E) — из личного бакета, поэтому сначала инициалы, затем она сама.
+  return `<button class="char-card lib-card" data-cr="${esc(c.id)}"><span class="avatar lg foe" title="${esc(c.name)}">${creatureImgTag(c.img, c.name)}</span>
     <span class="cc-text"><b>${esc(c.name)}</b><small>${esc(sub || 'Без описания')}</small>${vit ? `<small class="cc-camp">${esc(vit)}</small>` : ''}</span></button>`;
 }
 
@@ -80,6 +82,7 @@ export function bindCreatures(root, user, rerender) {
   root.querySelectorAll('[data-lib-new]').forEach((b) => b.addEventListener('click', () => openEditor(normalizeCreature({ size: 'medium', speed: { walk: 30 } }), reload)));
   root.querySelectorAll('[data-lib-srd]').forEach((b) => b.addEventListener('click', () => pickFromSrd(reload)));
   root.querySelector('[data-lib-retry]')?.addEventListener('click', reload);
+  hydrateCreatureImages(root);
   root.querySelectorAll('[data-cr]').forEach((b) => b.addEventListener('click', () => {
     const c = lib.list?.find((x) => x.id === b.dataset.cr);
     if (c) openEditor(structuredClone(c), reload);
@@ -201,8 +204,12 @@ function editorBody(d) {
     ${(d.legendary?.actions || []).map((a, i) => abilityCard('legendary.actions', a, i)).join('')}
     <button class="btn btn-sm btn-secondary" data-act="add" data-p="legendary.actions">${icn('plus-sign', 16)}Легендарное действие</button></section>`;
   const prov = d.provenance ? `<p class="t-xs tertiary">Основа — SRD 5.1 (CC BY 4.0), копия ваша: правки не меняют бестиарий.</p>` : '';
+  const own = d.img && !String(d.img).startsWith('ini:');
+  const pic = `<div class="lib-pic"><span class="avatar lib-pic-face foe">${creatureImgTag(d.img, d.name)}</span><div class="col grow" style="gap:6px">
+      <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-act="pic" ${d.picBusy ? 'disabled' : ''}>${icn('upload-01', 16)}${d.picBusy ? 'Загружаю…' : own ? 'Заменить картинку' : 'Своя картинка'}</button>${own ? `<button class="btn btn-sm btn-ghost" data-act="nopic">Без картинки</button>` : ''}</div>
+      <small class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ. Здесь её видите только вы; на карте — все, кто видит существо.</small></div></div>`;
   return `
-    <section class="lib-sec"><h4>Основное</h4>
+    <section class="lib-sec"><h4>Основное</h4>${pic}
       ${field('Имя', 'name', d.name, { ph: 'Жрец Безликого', cls: 'lib-wide' })}
       <div class="lib-grid">${select('Размер', 'size', d.size, [['', '—'], ...SIZES.map((s) => [s.id, s.name])])}${field('Тип', 'type', d.type, { ph: 'гуманоид' })}
         ${field('Мировоззрение', 'alignment', d.alignment, { ph: 'нейтрально-злое' })}${select('Опасность (ПО)', 'cr', d.cr, crs)}</div>${prov}</section>
@@ -244,9 +251,12 @@ function openEditor(c0, reload) {
   const m = modal(`${panelHeader(isNew ? 'Новое существо' : esc(d.name), 'Личная библиотека · видите только вы')}
     <div class="modal-body lib-ed"></div>
     <hr class="panel-divider"><div class="panel-footer">${isNew ? '' : `<button class="btn btn-ghost lib-del" data-del>${icn('delete-02')}Удалить</button>`}<span class="spacer"></span>
-      <button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icn('tick-02')}Сохранить</button></div>`, { wide: true, className: 'lib-modal', dismissable: false });
+      <button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icn('tick-02')}Сохранить</button></div>`, { wide: true, className: 'lib-modal', dismissable: false, onClose: () => { if (!saved) dropLibraryImages([...uploaded].filter((r) => r !== original)); } });
   const body = m.box.querySelector('.lib-ed');
-  const render = () => { const top = body.scrollTop; body.innerHTML = editorBody(d); body.scrollTop = top; };
+  const render = () => { const top = body.scrollTop; body.innerHTML = editorBody(d); body.scrollTop = top; hydrateCreatureImages(body); };
+  // Картинки, загруженные в этом окне, и прежняя — ненужные уберём из личного бакета после сохранения или отмены.
+  const original = d.img || '', uploaded = new Set();
+  let saved = false;
   render();
   body.addEventListener('input', (e) => {
     const t = e.target;
@@ -268,6 +278,17 @@ function openEditor(c0, reload) {
   body.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const p = b.dataset.p, act = b.dataset.act;
+    if (act === 'pic') {
+      pickImageFile(toast, async (file) => {
+        d.picBusy = true; render();
+        try { const ref = await uploadLibraryImage(file); uploaded.add(ref); d.img = ref; }
+        catch (err) { failed('Картинка не загрузилась', err); }
+        delete d.picBusy;
+        if (m.root.isConnected) render();
+      });
+      return;
+    }
+    if (act === 'nopic') { d.img = ''; render(); return; }
     if (act === 'add') getPath(d, p).push({ name: '', text: '' });
     else if (act === 'skill') d.skills.push({ name: 'perception', bonus: null });
     else if (act === 'attack') getPath(d, p).attack = { bonus: null, reach: 5 };
@@ -281,13 +302,16 @@ function openEditor(c0, reload) {
   const save = async () => {
     const ok = m.box.querySelector('[data-ok]');
     body.querySelectorAll('.input.error').forEach((x) => x.classList.remove('error'));
+    if (d.picBusy) { toast({ title: 'Картинка ещё загружается', icon: 'hourglass' }); return; }
     const c = cleaned(d);
     if (!c.name) { mark('name'); toast({ title: 'Нужно имя', icon: 'alert-circle' }); return; }
     ok.disabled = true;
     try {
-      const saved = await saveCreature(c);
+      const out = await saveCreature(c);
+      saved = true;
       m.close();
-      toast({ title: isNew ? 'Существо в библиотеке' : 'Сохранено', body: saved.name, icon: 'tick-02' });
+      toast({ title: isNew ? 'Существо в библиотеке' : 'Сохранено', body: out.name, icon: 'tick-02' });
+      dropLibraryImages([...uploaded, original].filter((r) => r && r !== out.img));
       reload();
     } catch (err) {
       ok.disabled = false;
@@ -304,7 +328,7 @@ function openEditor(c0, reload) {
   m.box.querySelector('[data-del]')?.addEventListener('click', async () => {
     const yes = await confirmDialog({ title: `Удалить «${d.name}»?`, body: 'Существо исчезнет из вашей библиотеки. Уже поставленные на карту копии останутся.', ok: 'Удалить', danger: true });
     if (!yes) return;
-    try { await deleteCreature(d.id); m.close(); toast({ title: 'Удалено из библиотеки', body: d.name, icon: 'delete-02' }); reload(); }
+    try { await deleteCreature(d.id); saved = true; m.close(); toast({ title: 'Удалено из библиотеки', body: d.name, icon: 'delete-02' }); dropLibraryImages([original, ...uploaded]); reload(); }
     catch (err) { failed('Не удалилось', err); }
   });
   return m;

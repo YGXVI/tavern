@@ -206,3 +206,9 @@
 @media (max-width: 420px) { .guest-login .row { flex-direction: column; align-items: stretch; } }
 /* Длинные кнопки приглашения на узком экране переносятся, а не вылезают за карточку */
 .invite-card .btn-lg { white-space: normal; height: auto; min-height: 48px; padding-top: 10px; padding-bottom: 10px; text-align: center; }
+
+/* Своя картинка существа в конструкторе библиотеки (#190 E) */
+.lib-pic { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.lib-pic-face { width: 72px; height: 72px; flex: none; }
+.lib-pic .row { flex-wrap: wrap; }
+@media (max-width: 480px) { .lib-pic { align-items: flex-start; } .lib-pic-face { width: 56px; height: 56px; } }

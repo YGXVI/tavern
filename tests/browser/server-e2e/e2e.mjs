@@ -259,6 +259,21 @@ await step('door: master adds door, player opens it', async () => {
   if (!mOpen) errors.push('мастер не увидел открытую дверь');
 });
 
+// #190 E: своя картинка у существа на карте — мастер, ПКМ → «Картинка…», файл в бакет tokens кампании.
+await step('master: own picture for a creature (tokens bucket)', async () => {
+  await M.keyboard.press('Escape'); await M.keyboard.press('Escape'); await wait(M, 200);
+  const t = fake.T.tokens.find((x) => x.id === 't-ogre1');
+  if (!t) throw new Error('огра нет на сервере');
+  const p = await M.evaluate(([x, y]) => { const w = document.querySelector('.world'); const vp = document.querySelector('.viewport').getBoundingClientRect(); const m = new DOMMatrix(getComputedStyle(w).transform); return { x: vp.left + m.e + x * m.a, y: vp.top + m.f + y * m.d }; }, [t.data.x, t.data.y]);
+  await M.mouse.click(p.x, p.y, { button: 'right' }); await wait(M, 250);
+  const { readFileSync } = await import('node:fs');
+  const [fc] = await Promise.all([M.waitForEvent('filechooser'), M.click('.menu >> text=Картинка…')]);
+  await fc.setFiles({ name: 'ogre.webp', mimeType: 'image/webp', buffer: readFileSync(new URL('../../../dist/assets/maps/cave.webp', import.meta.url)) });
+  const ok = await until(async () => String(fake.T.tokens.find((x) => x.id === 't-ogre1')?.data.img).startsWith('sb:@tokens/'), 5000);
+  console.log('  ogre img', fake.T.tokens.find((x) => x.id === 't-ogre1')?.data.img);
+  if (!ok) throw new Error('картинка огра не дошла до сервера');
+});
+
 await step('map upload by master (storage)', async () => {
   await M.keyboard.press('Escape'); await M.keyboard.press('Escape'); await wait(M, 200);
   // Сцена уже есть: «Создать сцену» (add:map) — только на пустом столе; новая сцена — из панели «Сцены».
