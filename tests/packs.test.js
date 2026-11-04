@@ -8,7 +8,7 @@ globalThis.self ??= {};
 globalThis.window ??= { addEventListener() {}, removeEventListener() {} };
 const realInterval = globalThis.setInterval;
 globalThis.setInterval = () => 0;
-const { packSizes, packByProximity, planPacks, packKind, packMarks, baseName } = await import('../dist/js/views/table/packs.js');
+const { packSizes, packByProximity, planPacks, packKind, packMarks, baseName, summonKind, groupKind, isSummonKind } = await import('../dist/js/views/table/packs.js');
 const { initiativeOrder, advanceTurn, currentEntry, turnTokenId, turnTokenIds, turnIndexOf, slotMembers } = await import('../dist/js/views/table/combat.js');
 globalThis.setInterval = realInterval;
 
@@ -167,4 +167,14 @@ test('атака толпой: сопротивление — на каждое 
   assert.equal(drop.state.hp, 0);
   assert.ok(drop.state.conditions.includes('unconscious') && !drop.state.conditions.includes('concentration'));
   assert.deepEqual(drop.state.deathSaves, { s: 0, f: 1 }, 'второе попадание уже по лежащему — провал');
+});
+
+test('группа призывов игрока: один владелец, один призыватель, один вид', () => {
+  const wolf = (o = {}) => ({ kind: 'foe', monsterId: 'wolf', ownerId: 'u1', summonedBy: 'h1', ...o });
+  assert.equal(summonKind(wolf()), summonKind(wolf({ id: 'x' })));
+  assert.notEqual(summonKind(wolf()), summonKind(wolf({ summonedBy: 'h2' })), 'другой призыватель — другая группа');
+  assert.notEqual(summonKind(wolf()), summonKind(wolf({ monsterId: 'bear' })));
+  assert.equal(summonKind({ kind: 'foe', monsterId: 'wolf' }), null, 'существо мастера — не призыв');
+  assert.equal(isSummonKind(groupKind(wolf())), true);
+  assert.equal(groupKind({ kind: 'foe', monsterId: 'zombie' }), 'zombie');
 });

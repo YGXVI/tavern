@@ -10,7 +10,7 @@ import { makeInviteCode } from '../../data/demo.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog, copyText, userAvatar } from '../../ui/kit.js';
 import { go } from '../screens.js';
 import { startCombat, rollInitiative } from './combat.js';
-import { packKind, planPacks, baseName } from './packs.js';
+import { groupKind, isSummonKind, planPacks, baseName } from './packs.js';
 import { initiativeDice } from './dice.js';
 import { closeSheet } from './sheet.js';
 
@@ -269,7 +269,7 @@ export const hasPlayerHero = (ctx, t) => !!t.characterId && ctx.c.members.some((
 export function setupAction(ctx, act, b) {
   const st = ctx.ui.setup; if (!st) return;
   const sc = ctx.scene;
-  const ofKind = (k) => st.pool.filter((id) => packKind(sc.tokens.find((t) => t.id === id)) === k);
+  const ofKind = (k) => st.pool.filter((id) => groupKind(sc.tokens.find((t) => t.id === id)) === k);
   if (act === 'setup-toggle') { const id = b.dataset.id; st.ids.has(id) ? st.ids.delete(id) : st.ids.add(id); }
   else if (act === 'setup-kind') { const ids = ofKind(b.dataset.kind); const all = ids.every((id) => st.ids.has(id)); for (const id of ids) all ? st.ids.delete(id) : st.ids.add(id); }
   else if (act === 'setup-mode') st.mode[b.dataset.kind] = b.dataset.mode;
@@ -281,14 +281,18 @@ export function setupAction(ctx, act, b) {
     if (!ids.length) return;
     const use = {}, rolled = [], groups = {};
     // Пачки (#198): одинаковые существа мастера — по виду; у каждой пачки свой к20 с бонусом вида.
+    // Группа призывов игрока — по умолчанию одной строкой; с «Игроки бросают сами» бросает их владелец.
     const kinds = new Map();
-    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); const k = packKind(t); if (k) { if (!kinds.has(k)) kinds.set(k, []); kinds.get(k).push(t); } }
+    for (const id of ids) { const t = sc.tokens.find((x) => x.id === id); const k = groupKind(t); if (k) { if (!kinds.has(k)) kinds.set(k, []); kinds.get(k).push(t); } }
+    const playerHere = (uid0) => ctx.c.members.some((m) => m.userId === uid0 && m.status === 'active' && m.role === 'player');
     for (const [k, toks] of kinds) {
-      for (const pack of planPacks(toks, st.mode[k] || 'auto')) {
+      const summon = isSummonKind(k);
+      for (const pack of planPacks(toks, st.mode[k] || (summon ? 'one' : 'auto'))) {
         if (pack.length < 2) continue;
         const lead = sc.tokens.find((x) => x.id === pack[0]);
-        const r = rollInitiative(ctx.c, lead);
         const gid = uid('g-');
+        if (summon && st.self && playerHere(lead.ownerId)) { for (const id of pack) { use[id] = null; groups[id] = gid; } continue; }
+        const r = rollInitiative(ctx.c, lead);
         for (const id of pack) { use[id] = r.init; groups[id] = gid; }
         rolled.push({ tokenId: lead.id, ...r, name: `${baseName(ctx.nameOf(lead))} ×${pack.length}` });
       }

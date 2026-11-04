@@ -8,7 +8,7 @@ import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myC
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers } from './combat.js';
-import { packKind } from './packs.js';
+import { packKind, summonKind } from './packs.js';
 import { mobAttack } from './mob-attack.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
@@ -508,14 +508,23 @@ export class Panels {
       joins.set(id, { group: e.group, init: e.init });
       fill.set(e.group, fill.get(e.group) + 1);
     }
-    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id) && !joins.has(id)).map((id) => {
+    // Призывы одного владельца и вида, добавленные вместе, — одна группа с одним броском (#198 §2).
+    const sumGroups = new Map(); // id → {group, lead}
+    if (!removeAll) {
+      const byKind = new Map();
+      for (const id of ids) { const t = tokOf(id), k = summonKind(t); if (k && !inCombat.has(id) && canFight(t)) { if (!byKind.has(k)) byKind.set(k, []); byKind.get(k).push(id); } }
+      for (const list of byKind.values()) if (list.length > 1) { const g = uid('g-'); for (const id of list) sumGroups.set(id, { group: g, lead: list[0] }); }
+    }
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id) && !joins.has(id) && (!sumGroups.has(id) || sumGroups.get(id).lead === id)).map((id) => {
       const t = tokOf(id);
-      return canFight(t) ? { tokenId: id, ...rollInitiative(c, t) } : null;
+      return canFight(t) ? { tokenId: id, ...rollInitiative(c, t), ...(sumGroups.has(id) ? { name: `${tokenStats(c, t).name.replace(/\s+\d+$/, '')} ×${[...sumGroups.values()].filter((x) => x.group === sumGroups.get(id).group).length}` } : {}) } : null;
     }).filter(Boolean);
+    const initOf = new Map(rolled.map((r) => [r.tokenId, r.init]));
     this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
       else {
-        for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
+        for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init, ...(sumGroups.has(r.tokenId) ? { group: sumGroups.get(r.tokenId).group } : {}) });
+        for (const [id, sg] of sumGroups) if (id !== sg.lead && initOf.has(sg.lead) && !cc.combat.entries.some((e) => e.tokenId === id)) cc.combat.entries.push({ tokenId: id, init: initOf.get(sg.lead), group: sg.group });
         for (const [id, j] of joins) if (!cc.combat.entries.some((e) => e.tokenId === id)) cc.combat.entries.push({ tokenId: id, init: j.init, group: j.group });
       }
     });
@@ -598,7 +607,7 @@ export class Panels {
     const ctx = this.ctx;
     const cur = currentEntry(ctx.c, ctx.scene);
     if (!cur) return;
-    if (!ctx.isMaster && !ctx.playsFor(cur.token)) return;
+    if (!ctx.isMaster && !ctx.actsFor(cur.token)) return;
     this.nextTurn(1);
   }
 

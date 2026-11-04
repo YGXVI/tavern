@@ -9,7 +9,7 @@ import { diceWidget } from './dice.js';
 import { visionFields } from './p-token.js';
 import { currentEntry, combatRound } from './combat.js';
 import { sightWidgetRows, heroSightNote } from './sight-ui.js';
-import { packKind, planPacks, baseName } from './packs.js';
+import { groupKind, isSummonKind, planPacks, baseName } from './packs.js';
 
 const close = `<button class="icon-btn icon-btn-sm" data-act="w-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button>`;
 const head = (title, sub) => `<div class="panel-header"><div class="titles"><div class="title">${esc(title)}</div>${sub ? `<div class="subtitle">${esc(sub)}</div>` : ''}</div>${close}</div>`;
@@ -115,10 +115,10 @@ function setupPanel(ctx) {
   };
   // Одинаковые существа мастера (двое и больше) — одной строкой «Гоблин ×N» с выбором пачек (#198).
   const byKind = new Map();
-  for (const t of toks) { const k = packKind(t); if (k) { if (!byKind.has(k)) byKind.set(k, []); byKind.get(k).push(t); } }
+  for (const t of toks) { const k = groupKind(t); if (k) { if (!byKind.has(k)) byKind.set(k, []); byKind.get(k).push(t); } }
   const done = new Set();
   const rows = toks.map((t) => {
-    const k = packKind(t), kin = k && byKind.get(k);
+    const k = groupKind(t), kin = k && byKind.get(k);
     if (!kin || kin.length < 2) return row(t);
     if (done.has(k)) return '';
     done.add(k);
@@ -135,17 +135,21 @@ const PACK_MODES = [['auto', 'Пачками', 'По 10 и меньше, ряд�
 function kindRow(ctx, k, kin, row) {
   const st = ctx.ui.setup;
   const on = kin.filter((t) => st.ids.has(t.id));
-  const mode = st.mode[k] || 'auto';
+  const summon = isSummonKind(k);
+  const mode = st.mode[k] || (summon ? 'one' : 'auto');
   const sizes = planPacks(on, mode).map((p) => p.length);
   const packs = sizes.filter((x) => x > 1);
   const split = mode !== 'each' && on.some((t) => t.hidden) && on.some((t) => !t.hidden);
   const summary = !on.length ? 'не участвуют'
     : mode === 'each' || !packs.length ? 'каждый ходит отдельно'
-    : `${packs.length === 1 ? 'одна пачка' : `${packs.length} ${plural(packs.length, 'пачка', 'пачки', 'пачек')}`}: ${sizes.join(' + ')}${split ? ' · скрытые отдельно' : ''}`;
+    : `${packs.length === 1 ? (summon ? 'одна группа' : 'одна пачка') : `${packs.length} ${plural(packs.length, 'пачка', 'пачки', 'пачек')}`}: ${sizes.join(' + ')}${split ? ' · скрытые отдельно' : ''}`;
   const lead = kin[0], s = tokenStats(ctx.c, lead);
   const open = st.open.has(k);
+  const by = summon ? ctx.scene.tokens.find((t) => t.id === lead.summonedBy) : null;
+  const whose = summon ? ` · призыв: ${by ? ctx.nameOf(by) : 'игрок'}` : '';
+  const selfRoll = summon && st.self && ctx.c.members.some((m) => m.userId === lead.ownerId && m.status === 'active' && m.role === 'player');
   return `<div class="setup-kind ${on.length ? '' : 'off'}">
-    <div class="list-row setup-row"><input type="checkbox" class="check-input" data-act="setup-kind" data-kind="${esc(k)}" ${on.length ? 'checked' : ''} aria-label="${esc(baseName(s.name))}: ${on.length === kin.length ? 'убрать всех' : 'все в бой'}">${avatarImg(lead.img, lead.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(baseName(ctx.nameOf(lead, s)))} ×${kin.length}</span><span class="secondary ellipsis">${on.length && on.length < kin.length ? `в бою ${on.length} · ` : ''}${esc(summary)}</span></span><span class="init-roll-hint" data-tip="Бросок на пачку при «Начать бой»">к20 ${fmtMod(s.initBonus || 0)}</span><button class="icon-btn icon-btn-xs" data-act="setup-kind-open" data-kind="${esc(k)}" aria-expanded="${open}" data-tip="${open ? 'Свернуть' : 'Выбрать по одному'}" aria-label="${open ? 'Свернуть' : 'Выбрать по одному'}">${icon(open ? 'arrow-up-01' : 'arrow-down-01', 14)}</button></div>
+    <div class="list-row setup-row"><input type="checkbox" class="check-input" data-act="setup-kind" data-kind="${esc(k)}" ${on.length ? 'checked' : ''} aria-label="${esc(baseName(s.name))}: ${on.length === kin.length ? 'убрать всех' : 'все в бой'}">${avatarImg(lead.img, lead.kind)}<span class="grow col-tight"><span class="primary ellipsis">${esc(baseName(ctx.nameOf(lead, s)))} ×${kin.length}${esc(whose)}</span><span class="secondary ellipsis">${on.length && on.length < kin.length ? `в бою ${on.length} · ` : ''}${esc(summary)}</span></span>${selfRoll && mode !== 'each' ? '<span class="chip chip-accent">бросает игрок</span>' : `<span class="init-roll-hint" data-tip="Бросок на пачку при «Начать бой»">к20 ${fmtMod(s.initBonus || 0)}</span>`}<button class="icon-btn icon-btn-xs" data-act="setup-kind-open" data-kind="${esc(k)}" aria-expanded="${open}" data-tip="${open ? 'Свернуть' : 'Выбрать по одному'}" aria-label="${open ? 'Свернуть' : 'Выбрать по одному'}">${icon(open ? 'arrow-up-01' : 'arrow-down-01', 14)}</button></div>
     <div class="setup-modes" role="radiogroup" aria-label="Как ходят">${PACK_MODES.map(([v, l, tip]) => `<button class="chip chip-md ${mode === v ? 'chip-accent' : ''}" data-act="setup-mode" data-kind="${esc(k)}" data-mode="${v}" role="radio" aria-checked="${mode === v}" data-tip="${tip}">${l}</button>`).join('')}</div>
     ${open ? `<div class="setup-members">${kin.map(row).join('')}</div>` : ''}
   </div>`;
@@ -168,7 +172,7 @@ function initiative(ctx) {
   for (const e of shown) { const last = slots.at(-1); if (last && last.key === e.slot) last.ms.push(e); else slots.push({ key: e.slot, ms: [e] }); }
   const marks = ctx.packMarks();
   const rows = slots.map((s) => (s.ms.length > 1 && s.ms[0].group ? packRow(ctx, s, cur, marks) : s.ms.map((e) => entryRow(ctx, e, cur)).join(''))).join('');
-  const myTurn = cur && ctx.isMine(cur.token);
+  const myTurn = cur && (ctx.isMine(cur.token) || ctx.owns(cur.token)); // свой герой или своя группа призывов (#198)
   const curPack = cur && slots.find((s) => s.key === cur.slot && s.ms.length > 1 && s.ms[0].group);
   const curName = curPack ? packTitle(ctx, curPack.ms, marks) : cur ? ctx.nameOf(cur.token, cur.stats) : '';
   return `<div class="widget panel init-widget">${head(`Бой · раунд ${combatRound(c, sc)}`, cur ? `Ходит ${curName}` : '')}
@@ -195,7 +199,7 @@ function entryRow(ctx, e, cur) {
   return `<div class="init-row ${isCur ? 'current' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${t.kind}">
       ${initCell}<button class="init-who" data-act="init-focus" data-id="${esc(e.tokenId)}">${avatarImg(t.img, `${t.kind} ${mine ? 'mine' : ''}`)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, st))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span><span class="secondary ellipsis">${esc(hp)}${(st.conditions || []).length ? ` · ${st.conditions.map((x) => conditionById(x)?.name).filter(Boolean).join(', ')}` : ''}</span></span></button>
       ${mine && e.init == null ? `<button class="btn btn-sm btn-primary" data-act="init-roll" data-id="${esc(e.tokenId)}">${icon('dice-faces-06', 14)}Бросить</button>`
-        : !ctx.isMaster && e.init == null && ctx.playsFor(t) ? `<button class="icon-btn icon-btn-xs" data-act="init-roll" data-id="${esc(e.tokenId)}" data-tip="Бросить за ${esc(ctx.nameOf(t, st))}" aria-label="Бросить инициативу за ${esc(ctx.nameOf(t, st))}">${icon('dice-faces-06', 14)}</button>` : ''}
+        : !ctx.isMaster && e.init == null && ctx.actsFor(t) ? `<button class="icon-btn icon-btn-xs" data-act="init-roll" data-id="${esc(e.tokenId)}" data-tip="Бросить за ${esc(ctx.nameOf(t, st))}" aria-label="Бросить инициативу за ${esc(ctx.nameOf(t, st))}">${icon('dice-faces-06', 14)}</button>` : ''}
       ${ctx.isMaster ? `<button class="icon-btn icon-btn-xs" data-act="init-remove" data-id="${esc(e.tokenId)}" data-tip="Убрать из боя">${icon('cancel-01', 14)}</button>` : ''}
     </div>`;
 }
@@ -215,9 +219,12 @@ function packRow(ctx, s, cur, marks) {
   const alive = ms.filter((e) => !fallen(e)).length;
   const mk = marks.get(t.id);
   const open = !!ctx.ui.packOpen?.has(s.key);
+  const pend = lead.init == null ? 'pending' : '';
   const initCell = ctx.isMaster
-    ? `<button class="init-num" data-act="init-set" data-id="${esc(lead.tokenId)}" data-tip="Инициатива пачки">${lead.init ?? '?'}</button>`
-    : `<span class="init-num">${lead.init ?? '?'}</span>`;
+    ? `<button class="init-num ${pend}" data-act="init-set" data-id="${esc(lead.tokenId)}" data-tip="Инициатива пачки">${lead.init ?? '?'}</button>`
+    : `<span class="init-num ${pend}">${lead.init ?? '?'}</span>`;
+  // Группа призывов игрока (#198 §4): один к20 владельца пишется во все записи группы.
+  const roll = !ctx.isMaster && lead.init == null && ctx.actsFor(t) ? `<button class="btn btn-sm btn-primary" data-act="init-roll" data-id="${esc(lead.tokenId)}">${icon('dice-faces-06', 14)}Бросить</button>` : '';
   const members = open ? `<div class="pack-members">${ms.map((e) => {
     const st = e.stats, showExact = ctx.isMasterView || ctx.c.settings.playersSeeHp === 'exact';
     const hp = st.hpMax ? (showExact ? `${st.hp}/${st.hpMax}` : woundLabel(st.hp, st.hpMax)) : '';
@@ -225,7 +232,7 @@ function packRow(ctx, s, cur, marks) {
   }).join('')}</div>` : '';
   return `<div class="init-row pack ${isCur ? 'current' : ''} ${ms.every((e) => e.token.hidden) ? 'is-hidden' : ''} ${alive ? '' : 'downed'} foe">
       ${initCell}<button class="init-who" data-act="pack-open" data-slot="${esc(s.key)}" aria-expanded="${open}"><span class="pack-ava">${avatarImg(t.img, t.kind)}${mk ? `<b style="--pc:${mk.color}">${mk.n}</b>` : ''}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(packTitle(ctx, ms, marks))}</span><span class="secondary ellipsis">${ctx.isMasterView ? `в строю ${alive} из ${ms.length}` : `в строю ${alive}`}</span></span>${icon(open ? 'arrow-up-01' : 'arrow-down-01', 14)}</button>
-      ${ctx.isMaster ? `${isCur || open ? `<button class="icon-btn icon-btn-xs" data-act="pack-attack" data-id="${esc(lead.tokenId)}" data-tip="Атака толпой" aria-label="Атака толпой">${icon('sword-03', 14)}</button><button class="icon-btn icon-btn-xs" data-act="pack-select" data-id="${esc(lead.tokenId)}" data-tip="Выделить пачку" aria-label="Выделить пачку">${icon('cursor-rectangle-selection-01', 14)}</button>` : ''}<button class="icon-btn icon-btn-xs" data-act="pack-remove" data-id="${esc(lead.tokenId)}" data-tip="Убрать пачку из боя" aria-label="Убрать пачку из боя">${icon('cancel-01', 14)}</button>` : ''}
+      ${roll}${ctx.isMaster ? `${isCur || open ? `<button class="icon-btn icon-btn-xs" data-act="pack-attack" data-id="${esc(lead.tokenId)}" data-tip="Атака толпой" aria-label="Атака толпой">${icon('sword-03', 14)}</button><button class="icon-btn icon-btn-xs" data-act="pack-select" data-id="${esc(lead.tokenId)}" data-tip="Выделить пачку" aria-label="Выделить пачку">${icon('cursor-rectangle-selection-01', 14)}</button>` : ''}<button class="icon-btn icon-btn-xs" data-act="pack-remove" data-id="${esc(lead.tokenId)}" data-tip="Убрать пачку из боя" aria-label="Убрать пачку из боя">${icon('cancel-01', 14)}</button>` : ''}
     </div>${members}`;
 }
 

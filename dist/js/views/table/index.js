@@ -77,6 +77,8 @@ export function mountTable(root, cid) {
   ctx.owns = (t) => !!t && ownsToken(ctx.c, ctx.userId, t);
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
+  // За кого игрок ходит в бою: свой герой, герой отсутствующего игрока, свой токен и призыв (#198: группа призывов).
+  ctx.actsFor = (t) => ctx.playsFor(t) || ctx.owns(t);
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
   ctx.ownerAway = (t) => {
     if (!t?.characterId || ctx.isMine(t)) return false;
