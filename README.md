@@ -1,4 +1,4 @@
-# Распутье
+# Drop Dice
 Браузерный стол D&D 5e 2014. Запуск: `npm run dev`, затем http://localhost:4173. Проверки: `npm test`.
 
 Сайт: https://rasputye.vercel.app. Обновляется сам: каждый commit в `main` с зелёными тестами выкатывается через GitHub Actions (`.github/workflows/deploy.yml`, нужен секрет `VERCEL_TOKEN`).
