@@ -1,6 +1,7 @@
-# Тесты на каждый пуш в main и test и на каждый пул-реквест. Пуш в main
-# с зелёными тестами сам выкатывается на https://rasputye.vercel.app;
-# test не выкатывается (deploy ниже — только для main).
+# Тесты на каждый пуш в main и test и на каждый пул-реквест.
+# Пуш в main с зелёными тестами сам выкатывается на https://rasputye.vercel.app,
+# пуш в test — на тестовый стенд https://rasputye-test.vercel.app (отдельный проект
+# Vercel, только песочница, с плашкой «Тестовый стенд»).
 # Нужен секрет репозитория VERCEL_TOKEN (Settings → Secrets and variables → Actions).
 name: Тесты и деплой
 
@@ -55,6 +56,34 @@ jobs:
             exit 1
           fi
       - name: Выкатить dist на rasputye.vercel.app
+        working-directory: dist
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@64.1.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+
+  deploy-test:
+    name: Тестовый стенд
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_PROJECT_ID: prj_zkprAhi4TwEii6GylM8i1ltaP1VN
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Проверить токен
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Нет секрета VERCEL_TOKEN. Добавьте его в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+      - name: Песочница и плашка стенда
+        run: node tools/mark-test-stand.mjs dist "test ${GITHUB_SHA::7}"
+      - name: Выкатить test на rasputye-test.vercel.app
         working-directory: dist
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
