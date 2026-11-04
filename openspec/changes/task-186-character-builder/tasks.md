@@ -42,9 +42,9 @@
 
 ## 5. P4 — Character и серверная проверка (r2: P4a и P4b, design D6a)
 
-- [ ] 5.1 P4a: в `codex/rules5e` миграция `create_character_sheet` (одна транзакция, повтор по operationId, `23505` на занятый ID, owner из auth.uid, только `pc`, проверка формы `creation`, уровни, HP по формуле, claim в той же транзакции), `character_creation_hp`, клиент `makeCreateRequest`/`create`, `creationHitPoints` в `sheet-rules.js`; тесты local PostgreSQL и Node, как в прототипе D6a.
+- [x] 5.1 P4a (05.11, миграция `20261105100000_character_create`, ветка `rules5e`): в `codex/rules5e` миграция `create_character_sheet` (одна транзакция, повтор по operationId, `23505` на занятый ID, owner из auth.uid, только `pc`, проверка формы `creation`, уровни, HP по формуле, claim в той же транзакции), `character_creation_hp`, клиент `makeCreateRequest`/`create`, `creationHitPoints` в `sheet-rules.js`; тесты local PostgreSQL и Node, как в прототипе D6a.
 - [ ] 5.2 P4a: подключить `toCharacterData` к `create` в окне P3 с пометкой «проверено в браузере»; тесты lost ACK, повтор, другой payload, отказ без частичного листа, второй герой игрока.
-- [ ] 5.3 P4a: согласовать номер и порядок миграции (#153), откат; production SQL этим не разрешается.
+- [x] 5.3 P4a: номер `20261105100000` — после миграций листа и слияния 05.11; на тестовую базу применяется CI, откат — новой миграцией (`drop function` трёх функций создания); production SQL этим не разрешается — только после бэкапа (`tools/backup-db.py`).
 - [ ] 5.4 P4b: отдельная ревизия плана — хранилище политики кампании, реестр ревизий справочника, серверная проверка выборов и prerequisites на общих fixtures; прямой поддельный запрос отклоняется.
 - [ ] 5.5 Пройти end-to-end создание/reload/два аккаунта/смена политики/смена аккаунта/двойное подтверждение и создание+место; явно отделить local от live Supabase.
 - [ ] 5.6 Документировать итоговую команду, поля и права, обновить матрицу создания; проверить существующих героев и legacy без потерь.

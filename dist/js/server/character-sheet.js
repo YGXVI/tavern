@@ -9,6 +9,7 @@ const MESSAGES = {
   validation: 'Проверьте введённые значения.', unavailable: 'Серверный путь листа ещё не установлен.',
   network: 'Ответ сервера не получен. Повторите тот же запрос или проверьте данные.',
   protocol: 'Сервер вернул неожиданный ответ.', server: 'Сервер отклонил операцию.',
+  duplicate: 'ID героя уже занят. Начните новую попытку создания.',
 };
 
 export class SheetCommandError extends Error {
@@ -51,10 +52,20 @@ export function makeSheetCommand({ campaignId, characterId, version, kind, paylo
   return freeze({ campaignId, characterId, version: versionString(version), kind, payload: structuredClone(payload), operationId: operationId.toLowerCase() });
 }
 
+/** Character and operation IDs are made once by the caller and kept with the draft until ACK. */
+export function makeCreateRequest({ campaignId, characterId, operationId, data, claim = false }) {
+  if (typeof campaignId !== 'string' || !campaignId) throw new TypeError('Нужен ID кампании');
+  if (!UUID.test(characterId || '') || !UUID.test(operationId || '') || characterId.toLowerCase() === operationId.toLowerCase()) throw new TypeError('Нужны разные UUID героя и операции');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new TypeError('Нужен объект листа');
+  assertJson(data);
+  for (const key of ['id', 'ownerId', 'version', 'managed', 'controllers', 'archivedAt']) if (Object.hasOwn(data, key)) throw new TypeError(`Поле ${key} задаёт сервер`);
+  return freeze({ kind: 'create', campaignId, characterId: characterId.toLowerCase(), operationId: operationId.toLowerCase(), data: structuredClone(data), claim: Boolean(claim) });
+}
+
 function serverError(error, request) {
   const kind = ({ '40001': 'conflict', '42501': 'forbidden', P0002: 'not_found', P0001: 'archived',
     '22023': 'validation', '22P02': 'validation', '22003': 'validation', '23503': 'validation', '42883': 'unavailable',
-    PGRST202: 'unavailable', PGRST301: 'forbidden', PGRST302: 'forbidden', PGRST303: 'forbidden',
+    '23505': 'duplicate', PGRST202: 'unavailable', PGRST301: 'forbidden', PGRST302: 'forbidden', PGRST303: 'forbidden',
     PGRST000: 'network', PGRST001: 'network', PGRST002: 'network', PGRST003: 'network' })[error?.code]
     || (!error?.code ? 'network' : 'server');
   let details = error?.details ?? null;
@@ -95,9 +106,19 @@ export function createCharacterSheetClient(getClient = supabase) {
     try { return { ...data, appliedVersion, sheet: await read(request.campaignId, request.characterId) }; }
     catch (error) { if (error instanceof SheetCommandError) error.request = request; throw error; }
   }
+  // TASK-186 P4a: create (+ optional claim) in one transaction. Keep the frozen request until ACK; a retry resends it unchanged.
+  async function create(input) {
+    const request = makeCreateRequest(input);
+    const data = await rpc('create_character_sheet', {
+      p_campaign: request.campaignId, p_character: request.characterId, p_operation: request.operationId, p_payload: request.data, p_claim: request.claim,
+    }, request);
+    if (data?.ok !== true || data.operationId !== request.operationId || typeof data.replayed !== 'boolean') throw new SheetCommandError('protocol', { request });
+    checkedSheet(data.sheet, request);
+    return data;
+  }
   async function retry(error) {
     if (!(error instanceof SheetCommandError) || !error.retryable || !error.request?.operationId) throw new TypeError('Нет безопасного запроса для повтора');
-    return execute(error.request);
+    return error.request.kind === 'create' ? create(error.request) : execute(error.request);
   }
-  return { read, execute, retry };
+  return { read, execute, create, retry };
 }

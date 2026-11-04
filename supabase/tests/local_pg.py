@@ -100,6 +100,90 @@ def concurrency_checks(psql, run):
     print('concurrency OK: archive leaves no active token', flush=True)
 
 
+def create_checks(psql, run):
+    """TASK-186 P4a: create_character_sheet — replay, conflicts, atomic claim, HP formula, two real sessions."""
+    fixtures = json.loads((ROOT / 'supabase/tests/character_create_fixtures.json').read_text())
+    master, player, other, outsider = ('50000000-0000-0000-0000-00000000000' + c for c in 'abcd')
+    run(psql, input=f"""
+      insert into auth.users(id,raw_user_meta_data) values ('{master}','{{"full_name":"M"}}'),('{player}','{{"full_name":"P"}}'),('{other}','{{"full_name":"O"}}'),('{outsider}','{{"full_name":"X"}}');
+      select set_config('request.jwt.claims','{{"sub":"{master}","role":"authenticated"}}',false);
+      insert into public.campaigns(id,owner_id,name) values('c-create','{master}','Create');
+      insert into public.campaign_members(campaign_id,user_id,role,status) values('c-create','{player}','player','active'),('c-create','{other}','player','active');
+    """)
+    def q(sql):
+        return run(psql + ['-qAt', '-c', sql]).strip()
+    def call(who, fixture, payload=None, claim=True, operation=None, character=None):
+        body = json.dumps(payload if payload is not None else fixture['data']).replace("'", "''")
+        statement = (f"select public.create_character_sheet('c-create','{character or fixture['characterId']}',"
+                     f"'{operation or fixture['operationId']}','{body}'::jsonb,{str(claim).lower()});")
+        args = psql + ['-qAt', '-v', 'VERBOSITY=verbose', '-c', 'begin;', '-c',
+            f"select set_config('request.jwt.claims','{{\"sub\":\"{who}\",\"role\":\"authenticated\"}}',true); set local role authenticated;",
+            '-c', statement, '-c', 'commit;']
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        reply = next((json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')), None)
+        return result.returncode, reply, result.stderr
+    def rows():
+        return q("select (select count(*) from public.characters where campaign_id='c-create') || ':' || (select count(*) from public.character_operations where campaign_id='c-create')")
+    fighter = fixtures[0]
+    code, reply, err = call(player, fighter)
+    assert code == 0 and reply['ok'] and reply['replayed'] is False, err
+    sheet = reply['sheet']
+    assert sheet['ownerId'] == player and sheet['managed'] is True and sheet['data']['creation']['verified'] == 'client', sheet
+    assert q(f"select character_id from public.campaign_members where campaign_id='c-create' and user_id='{player}'") == fighter['characterId']
+    assert q(f"select kind from public.character_history where character_id='{fighter['characterId']}' order by version limit 1") == 'create'
+    assert rows() == '1:1'
+    code, again, err = call(player, fighter)
+    assert code == 0 and again['replayed'] is True and again['sheet'] == sheet, (err, again)
+    assert rows() == '1:1'
+    print('create OK: claim, history, exact replay', flush=True)
+
+    renamed = dict(fighter['data'], name='Другое имя')
+    def refused(expect, *args, **kwargs):
+        before = rows()
+        code, reply, err = call(*args, **kwargs)
+        assert code != 0 and expect in err, (expect, code, reply, err[-400:])
+        assert rows() == before, 'nothing written on refusal'
+    refused('22023', player, fighter, payload=renamed)                      # same operation, other payload
+    refused('23505', player, fighter, operation='60000000-0000-4000-8000-000000000001')  # character id already used
+    bad_hp = dict(fighter['data'], hpMax=fighter['data']['hpMax'] + 1, hp=fighter['data']['hp'] + 1)
+    fresh = lambda n: dict(operation=f'60000000-0000-4000-8000-0000000000{n:02d}', character=f'70000000-0000-4000-8000-0000000000{n:02d}')
+    refused('22023', player, fighter, payload=bad_hp, **fresh(2))
+    refused('22023', player, fighter, payload=dict(fighter['data'], ownerId=other), **fresh(3))
+    refused('22023', player, fighter, payload={k: v for k, v in fighter['data'].items() if k != 'creation'}, **fresh(4))
+    refused('22023', player, fighter, payload=dict(fighter['data'], profile='creature'), **fresh(5))
+    refused('22023', player, fighter, payload=dict(fighter['data'], deathSaves={'s': 5, 'f': 0}), **fresh(6))  # sheet guard, whole call rolls back
+    refused('42501', outsider, fighter, **fresh(7))
+    refused('42501', master, fighter, claim=True, **fresh(8))
+    refused('22023', player, fighter, character='not-a-uuid', operation='60000000-0000-4000-8000-000000000009')
+    print('create OK: conflicts, forbidden fields, HP, guard and rights refuse without writes', flush=True)
+
+    for fixture in fixtures[1:]:
+        code, reply, err = call(other if fixture is fixtures[1] else player, fixture)
+        assert code == 0 and reply['sheet']['data']['hpMax'] == fixture['data']['hpMax'], (fixture['name'], err[-400:])
+    assert q(f"select character_id from public.campaign_members where campaign_id='c-create' and user_id='{player}'") == fighter['characterId'], 'second hero keeps the main seat'
+    print('create OK: sorcerer/cleric/multiclass/barbarian fixtures and HP formula', flush=True)
+
+    racer = dict(fighter, characterId='80000000-0000-4000-8000-000000000001', operationId='80000000-0000-4000-8000-000000000002')
+    def race(calls):
+        processes = []
+        for who, fixture, operation, character in calls:
+            body = json.dumps(fixture['data']).replace("'", "''")
+            statement = f"select public.create_character_sheet('c-create','{character}','{operation}','{body}'::jsonb,false);"
+            processes.append(subprocess.Popen(psql + ['-qAt', '-v', 'VERBOSITY=verbose', '-c', 'begin;', '-c',
+                f"select set_config('request.jwt.claims','{{\"sub\":\"{who}\",\"role\":\"authenticated\"}}',true); set local role authenticated;",
+                '-c', statement, '-c', 'select pg_sleep(0.2);', '-c', 'commit;'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        return [(p.wait(30), *p.communicate()) for p in processes]
+    outcomes = race([(other, racer, racer['operationId'], racer['characterId'])] * 2)
+    assert all(code == 0 for code, _, _ in outcomes), outcomes
+    replies = [json.loads(next(l for l in out.splitlines() if l.startswith('{'))) for _, out, _ in outcomes]
+    assert sorted(r['replayed'] for r in replies) == [False, True], replies
+    outcomes = race([(other, racer, '80000000-0000-4000-8000-000000000003', '80000000-0000-4000-8000-000000000009'),
+                     (player, racer, '80000000-0000-4000-8000-000000000004', '80000000-0000-4000-8000-000000000009')])
+    assert sorted(code == 0 for code, _, _ in outcomes) == [False, True] and any('23505' in e for _, _, e in outcomes), outcomes
+    assert q("select count(*) from public.characters where id in ('80000000-0000-4000-8000-000000000001','80000000-0000-4000-8000-000000000009')") == '2'
+    print('create OK: concurrent same operation applied once; concurrent same ID one winner', flush=True)
+
+
 def main():
     programs = {name: shutil.which(name) for name in ('initdb', 'pg_ctl', 'psql')}
     if not all(programs.values()):
@@ -128,6 +212,7 @@ def main():
                 '-c', "select 'TASK004_RESULT=' || count(*) from _r;", '-c', 'rollback;'])
             print('\n'.join(line for line in output.splitlines() if 'TASK004_RESULT=' in line), flush=True)
             concurrency_checks(psql, run)
+            create_checks(psql, run)
         finally:
             if (cluster / 'postmaster.pid').exists():
                 run([programs['pg_ctl'], '-D', str(cluster), '-m', 'immediate', '-w', 'stop'])
