@@ -7,7 +7,7 @@ import { srcOf } from '../../core/assets.js';
 import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf, canFight } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers, keepTurnWith } from './combat.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers, keepTurnWith, moveTied } from './combat.js';
 import { packKind, summonKind } from './packs.js';
 import { deathSaveStep, isDead, isStable, adjustDamage } from '../../rules/attack.js';
 import { saveRule, saveAdvantage, saveResult } from '../../rules/saves.js';
@@ -884,6 +884,7 @@ export class Panels {
       case 'combat-add': this.combatToggle(sel); break;
       case 'init-set': D.initEdit(ctx, b.dataset.id, b); break;
       case 'init-remove': this.keepTurn((cc) => { cc.combat.entries = cc.combat.entries.filter((x) => x.tokenId !== b.dataset.id); }); break;
+      case 'init-tie-up': case 'init-tie-down': this.keepTurn((cc, sc) => { moveTied(cc, sc || ctx.scene, b.dataset.id, act === 'init-tie-up' ? -1 : 1); }); break;
       case 'pack-open': { ctx.ui.packOpen ||= new Set(); const k = b.dataset.slot; ctx.ui.packOpen.has(k) ? ctx.ui.packOpen.delete(k) : ctx.ui.packOpen.add(k); this.refreshWidget(); break; }
       case 'pack-select': this.packSelect(b.dataset.id); break;
       case 'pack-attack': mobAttack(ctx, b.dataset.id); break;

@@ -136,12 +136,25 @@ export function pickMonster(ctx, pick) {
   const tpl = libTemplate(ctx, pick);
   return tpl ? safeMonster(tpl) : null;
 }
-/** Копия шаблона для кампании: без владельца и приватных картинок библиотеки. */
+/**
+ * Копия шаблона для кампании: без владельца и приватных картинок библиотеки. Картинку статблока (TASK-097 4.2) из
+ * личного бакета копия получает позже — мастер переносит файл в бакет кампании (fillStatblockImage); до того копия
+ * «ручная». Ссылка не из библиотеки (песочница) остаётся как есть.
+ */
 function snapshotOf(tpl, id) {
   const { ownerId, updatedAt, statblockImage, ...rest } = structuredClone(tpl);
   if (String(rest.img || '').startsWith('library:')) rest.img = '';
-  if (rest.source === 'image') rest.source = 'manual';
+  const keep = rest.source === 'image' && typeof statblockImage === 'string' && statblockImage && !isLibRef(statblockImage);
+  if (keep) rest.statblockImage = statblockImage; else if (rest.source === 'image') rest.source = 'manual';
   return { ...rest, id, sourceId: tpl.id, ownerId: null };
+}
+/** Картинка статблока из личной библиотеки — в бакет кампании, затем в копию существа (правит снимок только мастер). */
+function fillStatblockImage(ctx, tpl, copyId) {
+  if (!isServerMode() || tpl.source !== 'image' || !isLibRef(tpl.statblockImage)) return;
+  campaignImage(ctx.cid, tpl.statblockImage, (b) => storeTokenImage(ctx, b)).then((ref) => {
+    if (!ref) return;
+    updateCampaign(ctx.cid, (c) => { const cp = c.creatures?.[copyId]; if (cp && !cp.statblockImage) { cp.statblockImage = ref; cp.source = 'image'; } });
+  }).catch((err) => ctx.toast({ title: 'Картинка статблока не перенеслась', body: `${err.message || err}. Статблок за столом пока без картинки.`, icon: 'alert-circle' }));
 }
 /** В серверном режиме снимки живут в таблице campaign_creatures — без неё (#153) ставить свои существа нельзя. */
 const libOffline = (ctx) => isServerMode() && ctx.c.creatures === undefined;
@@ -467,6 +480,7 @@ export function placeCreatures(ctx, monsterId) {
   });
   ctx.select(made.map((t) => t.id));
   if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set(made.map((t) => t.id)), copyId, true);
+  if (newCopy) fillStatblockImage(ctx, tpl, copyId);
   if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({

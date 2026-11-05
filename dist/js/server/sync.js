@@ -6,7 +6,7 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot, tokenPatch, groupTokenMoves, UNFILTERED_DELETES, ownsDeleted } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot, tokenPatch, groupTokenMoves, groupPlacements, UNFILTERED_DELETES, ownsDeleted } from './model.js';
 import { createCharacterSheetClient, SheetCommandError } from './character-sheet.js';
 import { commandFromCharacterChange, sameSheetValue, rebaseCharacterDraft } from './character-sheet-ops.js';
 import { advanceTurn, turnTokenId, initiativeOrder, turnIndexOf } from '../views/table/combat.js';
@@ -275,7 +275,7 @@ export function afterCommit(before, after) {
     // Пока изменение в очереди, эхо прежней своей записи из Realtime не должно его стереть (review C3).
     const mark = holdInflight(cid, ops);
     // Перемещение нескольких токенов одним действием — один вызов move_tokens (TASK-173).
-    const out = groupTokenMoves(ops);
+    const out = groupPlacements(groupTokenMoves(ops));
     enqueue(cid, () => { mark.started = true; return send(cid, out).then(() => { if (hiddenNow.length) broadcast(cid, 'hidden-ids', { ids: hiddenNow }); }).finally(() => releaseInflight(cid, mark)); });
   }
 }
@@ -465,6 +465,30 @@ async function sendMoves(cid, o, attempt) {
  * вернёт назад — версий и порядка команд пока нет. Хиты прибавкой (adjust_token) не используются: повтор применил
  * бы дельту дважды (аудит #57).
  */
+/** Хиты прибавкой (TASK-097 2.6): только hp/tempHp числами у токена не-героя — разница к серверу, не итог. */
+let hpRpc = true;
+function hpDeltas(o, cols, set, unset) {
+  if (!hpRpc || Object.keys(cols).length || unset.length || o.row.character_id) return null;
+  const keys = Object.keys(set);
+  if (!keys.length || keys.some((k) => !['hp', 'tempHp'].includes(k))) return null;
+  const d = {};
+  for (const k of keys) {
+    const a = o.prev?.data?.[k], b = o.row.data?.[k];
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    d[k] = b - a;
+  }
+  return d;
+}
+
+/** Ни одна строка не изменилась: токен удалили или нет прав — различаем, чтобы сказать игроку по-человечески. */
+async function noRowsError(o) {
+  if (o.table === 'tokens') {
+    const r = await sb.from('tokens').select('id').match({ id: o.key });
+    if (!r.error && !r.data?.length) return Object.assign(new Error('Токен удалён мастером'), { code: 'P0002' });
+  }
+  return new Error('нет доступа к изменению');
+}
+
 async function sendTokenPatch(cid, o) {
   const { cols, set, unset } = tokenPatch(o.prev, o.row);
   const hasCols = Object.keys(cols).length > 0, hasData = Object.keys(set).length > 0 || unset.length > 0;
@@ -472,8 +496,17 @@ async function sendTokenPatch(cid, o) {
   if (!hasData) {
     const res = await sb.from('tokens').update(cols).match({ id: o.key }).select('id');
     if (res.error) throw res.error;
-    if (!res.data?.length) throw new Error('нет доступа к изменению');
+    if (!res.data?.length) throw await noRowsError(o);
     return;
+  }
+  // Урон и лечение складываются с чужими: прибавка с ключом повтора — повтор после обрыва не применит её дважды.
+  const deltas = hpDeltas(o, cols, set, unset);
+  if (deltas) {
+    o.operationId ||= crypto.randomUUID();
+    const { error } = await sb.rpc('adjust_token_once', { p_id: o.key, p_deltas: deltas, p_operation: o.operationId });
+    if (!error) return;
+    if (!missingFn(error)) throw error;
+    hpRpc = false;
   }
   if (hasCols || !tokenRpc) return updateRow(cid, o);
   const { error } = await sb.rpc('patch_token', { p_id: o.key, p_set: set, p_unset: unset });
@@ -486,7 +519,35 @@ async function sendTokenPatch(cid, o) {
 async function updateRow(cid, o) {
   const res = await sb.from(o.table).update(o.row).match(pkOf(o.table, o.row)).select(PK[o.table]?.[0] || 'id');
   if (res.error) throw res.error;
-  if (!res.data?.length) throw new Error('нет доступа к изменению');
+  if (!res.data?.length) throw await noRowsError(o);
+}
+
+/** Своё существо на карту одной транзакцией (place_creature); без функции на сервере — двумя вставками, как раньше. */
+let placeRpc = true;
+async function sendPlacement(cid, o, attempt) {
+  if (placeRpc) {
+    const { error } = await sb.rpc('place_creature', { p_creature: o.creature, p_token: o.token });
+    if (!error || (attempt && error.code === '23505')) return; // повтор после обрыва: токен уже стоит
+    if (!missingFn(error)) throw error;
+    placeRpc = false;
+  }
+  for (const p of o.parts) await sendOne(cid, p, attempt);
+}
+
+/**
+ * Картинка удалённого токена (TASK-097): файл своего бакета tokens убираем, если на него больше ничто в кампании
+ * не ссылается (токены, снимки существ, листы). Удаляет мастер или хозяин папки; отказ не мешает удалению токена.
+ */
+async function dropTokenImage(cid, row) {
+  const ref = row?.data?.img;
+  if (typeof ref !== 'string' || !ref.startsWith(TOKEN_REF)) return;
+  const rows = cache.get(cid);
+  const used = (m) => [...(m?.values() || [])].some((r) => JSON.stringify(r.data || {}).includes(ref));
+  if (!rows || used(rows.tokens) || used(rows.creatures) || used(rows.characters)) return;
+  const path = ref.slice(TOKEN_REF.length);
+  if (!isMasterOf(cid) && path.split('/')[1] !== me) return;
+  const { error } = await sb.storage.from('tokens').remove([path]);
+  if (error) console.warn('Картинка токена осталась в хранилище', error);
 }
 
 async function sendOne(cid, o, attempt) {
@@ -512,12 +573,16 @@ async function sendOne(cid, o, attempt) {
     return;
   }
   if (o.op === 'move') return sendMoves(cid, o, attempt);
+  if (o.op === 'place') return sendPlacement(cid, o, attempt);
   if (o.table === 'tokens' && o.op === 'update' && o.prev) return sendTokenPatch(cid, o);
   const t = sb.from(o.table);
   let res;
   if (o.op === 'rpc') res = await sb.rpc('add_explored', o.row);
   else if (o.op === 'replace') res = await t.upsert(o.row);
-  else if (o.op === 'delete') res = await t.delete().match(pkOf(o.table, o.prev));
+  else if (o.op === 'delete') {
+    res = await t.delete().match(pkOf(o.table, o.prev));
+    if (!res.error && o.table === 'tokens') dropTokenImage(cid, o.prev).catch((e) => console.warn(e));
+  }
   else if (o.op === 'insert') {
     res = o.table === 'characters' ? await t.insert(o.row).select('*') : await t.insert(o.row);
     if (!res.error && o.table === 'characters' && res.data?.[0]) rememberSheet(cid, res.data[0]);
@@ -549,7 +614,9 @@ function netState(cid, ok) {
 async function failed(cid, err) {
   console.warn('Сервер отклонил изменение', err);
   const msg = String(err?.message || err || '').replace(/^.*?: /, '');
-  store.emitLocal('storage-error', { message: `Сервер не принял изменение${msg ? `: ${msg}` : ''}. Показываем, как сейчас на сервере.` });
+  // Правили токен, который мастер уже убрал (TASK-097 2.4): не «отказ сервера», а понятная причина.
+  const gone = err?.code === 'P0002' && /Токен удалён/.test(msg);
+  store.emitLocal('storage-error', { message: gone ? 'Токен удалён мастером — ваша правка не сохранена.' : `Сервер не принял изменение${msg ? `: ${msg}` : ''}. Показываем, как сейчас на сервере.` });
   for (const op of err.sheetOperations || []) {
     // Отклонённый ввод сохраняется и без открытого окна листа.
     try {
@@ -587,6 +654,12 @@ function subscribe(cid) {
   for (const t of UNFILTERED_DELETES) ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: t }, (p) => {
     if (loading.has(cid) || ownsDeleted(cache.get(cid), t, p.old)) onChange(cid, t, p);
   });
+  // Снимки существ кампании (TASK-097): только если таблица есть на сервере — подписка на несуществующую ломает канал.
+  // Ключ удаления содержит campaign_id, поэтому удаление фильтруем сами.
+  if (hasCreatures) {
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_creatures', filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, 'campaign_creatures', p));
+    ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'campaign_creatures' }, (p) => { if (p.old?.campaign_id === cid) onChange(cid, 'campaign_creatures', p); });
+  }
   ch.on('broadcast', { event: 'bus' }, ({ payload }) => onBus(cid, payload));
   ch.on('presence', { event: 'sync' }, () => {
     const map = new Map();
@@ -594,8 +667,12 @@ function subscribe(cid) {
     presence.set(cid, map);
     store.deliver('presence-change', {});
   });
+  // Аудит #57 (B2): кампанию читают до подписки — изменения между чтением и SUBSCRIBED иначе потерялись бы.
+  // После первой подписки перечитываем: события, пришедшие во время чтения, копятся и накладываются (loading).
+  let fresh = true;
   ch.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
+      if (fresh) { fresh = false; loadCampaign(cid, { silent: true }).catch(() => {}); }
       if (myPresence?.campaignId === cid) ch.track(myPresence);
       if (ch.__wasDown) { ch.__wasDown = false; netState(cid, true); loadCampaign(cid).catch(() => {}); }
     }
@@ -670,6 +747,12 @@ function masterDuties(cid, c) {
 function removed(cid, { quiet = false } = {}) {
   const ch = channels.get(cid); if (ch) { sb.removeChannel(ch); channels.delete(cid); }
   cache.delete(cid);
+  // Аудит #57: после исключения в вкладке не остаётся ничего из кампании — очереди, подтверждённые листы, черновики.
+  inflight.delete(cid); loading.delete(cid); confirmedSheets.delete(cid); pendingSheets.delete(cid);
+  try {
+    const prefix = `rasputye:sheet-draft:server:${me}:${cid}:`;
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith(prefix)) sessionStorage.removeItem(k);
+  } catch { /* хранилище недоступно — чистить нечего */ }
   const db = store.getDB();
   const name = db.campaigns[cid]?.name;
   if (!db.campaigns[cid]) return;

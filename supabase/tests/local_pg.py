@@ -184,6 +184,87 @@ def create_checks(psql, run):
     print('create OK: concurrent same operation applied once; concurrent same ID one winner', flush=True)
 
 
+def level_up_checks(psql, run):
+    """#202: level_up_character — рост на уровень, хиты сервера, повтор, версия, права и отказы без записи."""
+    fixture = json.loads((ROOT / 'supabase/tests/character_level_up_fixture.json').read_text())
+    created = next(f for f in json.loads((ROOT / 'supabase/tests/character_create_fixtures.json').read_text()) if f['name'] == fixture['from'])
+    master, player, other = ('50000000-0000-0000-0000-00000000000' + c for c in 'abc')
+    hero, op = '90000000-0000-4000-8000-000000000001', fixture['operationId']
+    def as_user(who, statement):
+        args = psql + ['-qAt', '-v', 'VERBOSITY=verbose', '-c', 'begin;', '-c',
+            f"select set_config('request.jwt.claims','{{\"sub\":\"{who}\",\"role\":\"authenticated\"}}',true); set local role authenticated;",
+            '-c', statement, '-c', 'commit;']
+        result = subprocess.run(args, capture_output=True, text=True, timeout=30)
+        reply = next((json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')), None)
+        return result.returncode, reply, result.stderr
+    q = lambda sql: run(psql + ['-qAt', '-c', sql]).strip()
+    body = lambda v: json.dumps(v).replace("'", "''")
+    code, reply, err = as_user(player, f"select public.create_character_sheet('c-create','{hero}','90000000-0000-4000-8000-000000000002','{body(created['data'])}'::jsonb,false);")
+    assert code == 0, err[-400:]
+    def level_up(who, payload=None, version=None, operation=op, character=hero):
+        v = version if version is not None else q(f"select sheet_version from public.characters where id='{character}'")
+        return as_user(who, f"select public.level_up_character('c-create','{character}',{v},'{operation}','{body(payload or fixture['payload'])}'::jsonb);")
+    state = lambda: q(f"select sheet_version || ':' || (data->>'level') || ':' || (data->>'hpMax') from public.characters where id='{hero}'")
+    def refused(expect, *args, **kwargs):
+        before = state()
+        code, reply, err = level_up(*args, **kwargs)
+        assert code != 0 and expect in err, (expect, code, reply, err[-400:])
+        assert state() == before, 'nothing written on refusal'
+
+    v0 = q(f"select sheet_version from public.characters where id='{hero}'")
+    refused('40001', player, version=int(v0) + 5, operation='90000000-0000-4000-8000-000000000010')
+    refused('42501', other, operation='90000000-0000-4000-8000-000000000011')
+    two = json.loads(json.dumps(fixture['payload'])); two['creation']['levelHistory'].append(two['creation']['levelHistory'][-1])
+    refused('22023', player, payload=two, operation='90000000-0000-4000-8000-000000000012')
+    moved = json.loads(json.dumps(fixture['payload'])); moved['creation']['ancestry'] = {'raceId': 'srd51:race:elf', 'subraceId': None}
+    refused('22023', player, payload=moved, operation='90000000-0000-4000-8000-000000000013')
+    with_hp = json.loads(json.dumps(fixture['payload'])); with_hp['patch']['hpMax'] = 99
+    refused('22023', player, payload=with_hp, operation='90000000-0000-4000-8000-000000000014')
+    rewritten = json.loads(json.dumps(fixture['payload'])); rewritten['creation']['levelHistory'][0] = {'classId': 'srd51:class:wizard'}
+    refused('22023', player, payload=rewritten, operation='90000000-0000-4000-8000-000000000015')
+    print('level_up OK: stale version, rights, two levels, ancestry, hp and old levels refuse without writes', flush=True)
+
+    hp_before = created['data']['hpMax']
+    code, reply, err = level_up(player)
+    assert code == 0 and reply['ok'] and reply['replayed'] is False and reply['hpGain'] == fixture['hpGain'], err[-400:]
+    data = reply['sheet']['data']
+    assert data['level'] == 2 and data['hpMax'] == hp_before + fixture['hpGain'] and data['hp'] == data['hpMax'], data
+    assert len(data['creation']['levelHistory']) == 2 and data['creation']['verified'] == 'client'
+    assert q(f"select kind from public.character_history where character_id='{hero}' order by version desc limit 1") == 'level_up'
+    after = state()
+    code, again, err = level_up(player, version=v0)
+    assert code == 0 and again['replayed'] is True and state() == after, err[-400:]
+    refused('22023', player, payload=two, version=v0)  # тот же operationId, другой запрос
+    print('level_up OK: level 2, server HP gain, history, exact replay', flush=True)
+
+    # Простое повышение старого героя (без creation): только уровень, классы и кости; хиты считает сервер.
+    old = '90000000-0000-4000-8000-000000000020'
+    legacy = {'name': 'Торин', 'classId': 'fighter', 'className': 'Воин', 'level': 5, 'stats': {'str': 16, 'dex': 12, 'con': 16, 'int': 10, 'wis': 12, 'cha': 8}, 'hp': 30, 'hpMax': 44}
+    code, _, err = as_user(player, f"insert into public.characters(id,campaign_id,owner_id,data) values('{old}','c-create','{player}','{body(legacy)}'::jsonb);")
+    assert code == 0, err[-400:]
+    simple = {'patch': {'level': 6, 'classes': [{'ref': 'srd51:class:fighter', 'levels': 6}], 'hitDicePools': [{'id': 'p1', 'name': 'd10', 'die': 10, 'total': 6, 'spent': 0}]}}
+    old_state = lambda: q(f"select sheet_version || ':' || (data->>'level') || ':' || (data->>'hpMax') from public.characters where id='{old}'")
+    def refused_old(expect, payload, operation):
+        before = old_state()
+        code, reply, err = level_up(player, payload=payload, operation=operation, character=old)
+        assert code != 0 and expect in err, (expect, code, reply, err[-400:])
+        assert old_state() == before, 'nothing written on refusal'
+    refused_old('22023', {'patch': dict(simple['patch'], stats={'con': 20})}, '90000000-0000-4000-8000-000000000021')
+    refused_old('22023', {'patch': dict(simple['patch'], level=7, classes=[{'ref': 'srd51:class:fighter', 'levels': 7}])}, '90000000-0000-4000-8000-000000000022')
+    refused_old('22023', {'patch': dict(simple['patch'], classes=[{'ref': 'srd51:class:wizard', 'levels': 6}])}, '90000000-0000-4000-8000-000000000023')
+    refused_old('22023', {'creation': fixture['payload']['creation'], 'patch': simple['patch']}, '90000000-0000-4000-8000-000000000024')
+    code, reply, err = level_up(player, payload=simple, operation='90000000-0000-4000-8000-000000000025', character=old)
+    assert code == 0 and reply['hpGain'] == 9, err[-400:]
+    data = reply['sheet']['data']
+    assert data['level'] == 6 and data['hpMax'] == 53 and data['hp'] == 39 and 'creation' not in data, data
+    assert q(f"select sheet_managed from public.characters where id='{old}'") == 't', 'after a command the sheet is managed'
+    multi = {'patch': {'level': 7, 'classes': [{'ref': 'srd51:class:fighter', 'levels': 6}, {'ref': 'srd51:class:wizard', 'levels': 1}],
+                       'hitDicePools': [{'id': 'p1', 'name': 'd10', 'die': 10, 'total': 6, 'spent': 0}, {'id': 'p2', 'name': 'd6', 'die': 6, 'total': 1, 'spent': 0}]}}
+    code, reply, err = level_up(player, payload=multi, operation='90000000-0000-4000-8000-000000000026', character=old)
+    assert code == 0 and reply['hpGain'] == 7 and reply['sheet']['data']['hpMax'] == 60, err[-400:]  # d6: 4 + 3
+    print('level_up OK: simple level-up for legacy heroes (class, multiclass, server HP) and refusals', flush=True)
+
+
 def main():
     programs = {name: shutil.which(name) for name in ('initdb', 'pg_ctl', 'psql')}
     if not all(programs.values()):
@@ -213,6 +294,7 @@ def main():
             print('\n'.join(line for line in output.splitlines() if 'TASK004_RESULT=' in line), flush=True)
             concurrency_checks(psql, run)
             create_checks(psql, run)
+            level_up_checks(psql, run)
         finally:
             if (cluster / 'postmaster.pid').exists():
                 run([programs['pg_ctl'], '-D', str(cluster), '-m', 'immediate', '-w', 'stop'])

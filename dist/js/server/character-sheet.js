@@ -62,6 +62,16 @@ export function makeCreateRequest({ campaignId, characterId, operationId, data, 
   return freeze({ kind: 'create', campaignId, characterId: characterId.toLowerCase(), operationId: operationId.toLowerCase(), data: structuredClone(data), claim: Boolean(claim) });
 }
 
+/** #202: повышение героя на один уровень — тело от levelUpPayload; запрос хранится до ACK, повтор — тем же запросом. */
+export function makeLevelUpRequest({ campaignId, characterId, version, operationId, payload }) {
+  if (typeof campaignId !== 'string' || !campaignId || typeof characterId !== 'string' || !characterId) throw new TypeError('Нужны ID кампании и листа');
+  if (!UUID.test(operationId || '')) throw new TypeError('Нужен UUID операции');
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some(k => !['creation', 'patch'].includes(k))
+    || !payload.creation || !payload.patch) throw new TypeError('Нужны creation и patch');
+  assertJson(payload);
+  return freeze({ kind: 'level_up', campaignId, characterId, version: versionString(version), operationId: operationId.toLowerCase(), payload: structuredClone(payload) });
+}
+
 function serverError(error, request) {
   const kind = ({ '40001': 'conflict', '42501': 'forbidden', P0002: 'not_found', P0001: 'archived',
     '22023': 'validation', '22P02': 'validation', '22003': 'validation', '23503': 'validation', '42883': 'unavailable',
@@ -116,9 +126,20 @@ export function createCharacterSheetClient(getClient = supabase) {
     checkedSheet(data.sheet, request);
     return data;
   }
+  async function levelUp(input) {
+    const request = makeLevelUpRequest(input);
+    const data = await rpc('level_up_character', {
+      p_campaign: request.campaignId, p_character: request.characterId, p_expected_version: request.version,
+      p_operation: request.operationId, p_payload: request.payload,
+    }, request);
+    if (data?.ok !== true || data.operationId !== request.operationId || typeof data.replayed !== 'boolean') throw new SheetCommandError('protocol', { request });
+    checkedSheet(data.sheet, request);
+    return data;
+  }
   async function retry(error) {
     if (!(error instanceof SheetCommandError) || !error.retryable || !error.request?.operationId) throw new TypeError('Нет безопасного запроса для повтора');
-    return error.request.kind === 'create' ? create(error.request) : execute(error.request);
+    const { kind } = error.request;
+    return kind === 'create' ? create(error.request) : kind === 'level_up' ? levelUp(error.request) : execute(error.request);
   }
-  return { read, execute, create, retry };
+  return { read, execute, create, levelUp, retry };
 }

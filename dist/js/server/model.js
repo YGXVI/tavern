@@ -280,6 +280,25 @@ export function groupTokenMoves(ops) {
   return out.map((o) => (o.op === 'move' && o.parts.length === 1 ? o.parts[0] : o));
 }
 
+/**
+ * Своё существо на карту (TASK-097 1.2b): вставку снимка campaign_creatures и вставку ссылающегося на него токена
+ * той же кампании — одной операцией place (функция place_creature, одна транзакция). Остальное — как было.
+ */
+export function groupPlacements(ops) {
+  const out = [...ops];
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (c.table !== 'campaign_creatures' || c.op !== 'insert') continue;
+    const j = out.findIndex((o, k) => k > i && o.table === 'tokens' && o.op === 'insert' && o.row?.campaign_id === c.row.campaign_id
+      && o.row?.data?.monsterId === `lib:${c.row.id}`);
+    if (j < 0) continue;
+    const t = out[j];
+    out.splice(j, 1);
+    out[i] = { table: 'tokens', op: 'place', key: t.key, creature: c.row, token: t.row, parts: [c, t] };
+  }
+  return out;
+}
+
 /** Применить операции к кэшу строк (оптимистично — до ответа сервера). */
 export function applyOps(rows, ops0) {
   // Копии: строки операций собраны из живой кампании, и её дальнейшие правки не должны менять кэш.

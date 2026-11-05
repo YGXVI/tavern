@@ -220,6 +220,39 @@ select pg_temp.err('library: нельзя перенести файл в чуж�
 select pg_temp.rows('library: нельзя удалить чужую картинку', $q$delete from storage.objects where bucket_id='library' and name='00000000-0000-0000-0000-00000000000a/stat.webp'$q$,0);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+-- TASK-097 (остаток): существо на карту одной транзакцией и хиты прибавкой с ключом повтора.
+select pg_temp.cnt('097: снимок и токен одной транзакцией', $q$select 1 where public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097","owner_id":"00000000-0000-0000-0000-00000000000a","data":{"name":"Волк","source":"manual"}}',
+  '{"id":"t-097a","campaign_id":"c-rls","scene_id":"s-1","ord":90,"data":{"kind":"foe","name":"Волк","monsterId":"lib:cr-097","x":10,"y":10,"hp":11,"hpMax":11}}') = 't-097a'$q$, 1);
+select pg_temp.cnt('097: второй токен того же существа не трогает снимок', $q$select 1 where public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097","owner_id":"00000000-0000-0000-0000-00000000000a","data":{"name":"Другое имя","source":"manual"}}',
+  '{"id":"t-097b","campaign_id":"c-rls","scene_id":"s-1","ord":91,"data":{"kind":"foe","name":"Волк","monsterId":"lib:cr-097","x":20,"y":20,"hp":11,"hpMax":11}}') = 't-097b'
+  and (select data->>'name' from public.campaign_creatures where campaign_id='c-rls' and id='cr-097') = 'Волк'$q$, 1);
+select pg_temp.err('097: токен на чужое существо отклоняется', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097x","data":{"name":"Х","source":"manual"}}',
+  '{"id":"t-097x","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:другое"}}')$q$);
+select pg_temp.err('097: отказ токена откатывает снимок', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097y","data":{"name":"Y","source":"manual"}}',
+  '{"id":"t-097a","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:cr-097y"}}')$q$);
+select pg_temp.cnt('097: после отказа снимка нет', $q$select 1 from public.campaign_creatures where id='cr-097y'$q$, 0);
+select pg_temp.cnt('097: урон прибавкой', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'false'$q$, 1);
+select pg_temp.cnt('097: повтор той же операции не бьёт второй раз', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'true'
+  and (select data->>'hp' from public.tokens where id='t-097a') = '7'$q$, 1);
+select pg_temp.err('097: тот же ID операции с другой дельтой', $q$select public.adjust_token_once('t-097a','{"hp":-1}','97000000-0000-0000-0000-000000000001')$q$);
+select pg_temp.err('097: хиты героя прибавкой токена — нельзя', $q$select public.adjust_token_once((select id from public.tokens where character_id is not null limit 1),'{"hp":-1}','97000000-0000-0000-0000-000000000002')$q$);
+select pg_temp.ok('097: мастер удаляет токен', $q$delete from public.tokens where id='t-097b'$q$);
+select pg_temp.err('097: правка удалённого токена — «Токен удалён мастером»', $q$select public.adjust_token_once('t-097b','{"hp":-1}','97000000-0000-0000-0000-000000000003')$q$);
+select pg_temp.cnt('097: существа кампании в Realtime', $q$select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='campaign_creatures'$q$, 1);
+select pg_temp.ok('097: убрать за собой токен', $q$delete from public.tokens where id='t-097a'$q$);
+select pg_temp.ok('097: убрать за собой снимок', $q$delete from public.campaign_creatures where campaign_id='c-rls' and id='cr-097'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.err('097: посторонний не ставит существо', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097z","owner_id":"00000000-0000-0000-0000-00000000000c","data":{"name":"Z","source":"manual"}}',
+  '{"id":"t-097z","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:cr-097z"}}')$q$);
+select pg_temp.err('097: чужой журнал операций не читается', $q$select 1/count(*) from public.token_operations$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.cnt('library: мастер не читает личную библиотеку игрока', $q$select 1 from public.creatures where owner_id='00000000-0000-0000-0000-00000000000b'$q$,0);
 select pg_temp.cnt('library: мастер видит обе копии кампании', $q$select 1 from public.campaign_creatures where campaign_id='c-rls'$q$,2);
 select pg_temp.rows('library: мастер может править копию', $q$update public.campaign_creatures set data=data||'{"hp":8}' where id='summon'$q$,1);
@@ -417,6 +450,7 @@ select pg_temp.cnt('скрытую свою сову владелец не ви�
 select pg_temp.err('и не правит', $q$select public.patch_token('t-owl', '{"x":1}')$q$);
 select pg_temp.err('TASK-123 (review): id своих токенов снаружи не запросить — в том числе скрытой совы (И7)', $q$select public.owned_token_ids('c-rls')$q$);
 select pg_temp.err('TASK-123 (review): и id героев тоже', $q$select public.hero_token_ids('c-rls')$q$);
+select pg_temp.err('аудит #57: видимые токены напрямую не перечислить', $q$select public.visible_token_ids('c-rls')$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер показывает сову', $q$update public.tokens set hidden = false where id = 't-owl'$q$, 1);
@@ -486,6 +520,12 @@ select pg_temp.code('лист: ownerId не поле patch', $q$select public.ch
 select pg_temp.code('лист: булево число недопустимо', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000004','adjust','{"hp":true}') from public.characters where id = 'ch-p'$q$,'22023');
 select pg_temp.code('лист: отрицательный остаток откатывает весь расход', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000005','adjust','{"hp":-2,"counters":[{"field":"resources","id":"rage","delta":4}]}') from public.characters where id = 'ch-p'$q$,'22023');
 select pg_temp.cnt('лист: после отказа HP и заряд прежние', $q$select 1 from public.characters where id = 'ch-p' and data -> 'hp' = '7' and data #> '{resources,0,spent}' = '0'$q$,1);
+-- TASK-004 2.2: нормализация — дробный счётчик, расход сверх максимума, пустая строка и строка вместо числа отклоняются целиком.
+select pg_temp.code('лист: дробный расход ресурса недопустим', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000041','patch','{"resources":[{"id":"rage","max":3,"spent":1.5}]}') from public.characters where id = 'ch-p'$q$,'22023');
+select pg_temp.code('лист: расход сверх максимума недопустим', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000042','patch','{"resources":[{"id":"rage","max":3,"spent":4}]}') from public.characters where id = 'ch-p'$q$,'22023');
+select pg_temp.code('лист: пустая строка — не число', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000043','patch','{"hpMax":""}') from public.characters where id = 'ch-p'$q$,'22023');
+select pg_temp.code('лист: повторяющийся ID ресурса недопустим', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000044','patch','{"resources":[{"id":"rage","max":3,"spent":0},{"id":"rage","max":1,"spent":0}]}') from public.characters where id = 'ch-p'$q$,'22023');
+select pg_temp.cnt('лист: после отказов ресурс прежний', $q$select 1 from public.characters where id = 'ch-p' and data #> '{resources,0,spent}' = '0' and jsonb_array_length(data -> 'resources') = 1$q$,1);
 select pg_temp.code('лист: владелец не меняет уровень Sidekick', $q$select public.character_command('c-rls','ch-sk',sheet_version,'10000000-0000-0000-0000-000000000006','patch','{"level":6}') from public.characters where id = 'ch-sk'$q$,'42501');
 select pg_temp.code('лист: вложенный уровень Sidekick также защищён', $q$select public.character_command('c-rls','ch-sk',sheet_version,'10000000-0000-0000-0000-000000000007','patch','{"sidekick":{"level":6}}') from public.characters where id = 'ch-sk'$q$,'42501');
 select pg_temp.ok('лист: владелец назначает управляющего', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000008','controller','{"userId":"00000000-0000-0000-0000-00000000000c","enabled":true}') from public.characters where id = 'ch-p'$q$);
@@ -564,6 +604,13 @@ select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.ok('edit: отдельный лист для передачи', $q$insert into public.characters(id,campaign_id,owner_id,data) values('ch-edit','c-rls','00000000-0000-0000-0000-00000000000b','{"name":"До","hp":10,"hpMax":20,"tempHp":3}')$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+-- TASK-004 3.2: хиты листа без токена — лечение не выше максимума, урон сначала снимает временные.
+select pg_temp.ok('лист 3.2: герой без токена', $q$insert into public.characters(id,campaign_id,owner_id,data) values('ch-heal','c-rls','00000000-0000-0000-0000-00000000000b','{"name":"Без токена","hp":5,"hpMax":12,"tempHp":4}')$q$);
+select pg_temp.ok('лист 3.2: урон 6 — сначала 4 временных', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000001','adjust','{"hp":-6}') from public.characters where id = 'ch-heal'$q$);
+select pg_temp.cnt('лист 3.2: осталось 3 хита и 0 временных', $q$select 1 from public.characters where id='ch-heal' and data->'hp'='3' and data->'tempHp'='0'$q$,1);
+select pg_temp.ok('лист 3.2: лечение 100', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000002','adjust','{"hp":100}') from public.characters where id = 'ch-heal'$q$);
+select pg_temp.cnt('лист 3.2: лечение остановилось на максимуме', $q$select 1 from public.characters where id='ch-heal' and data->'hp'='12'$q$,1);
+select pg_temp.cnt('лист 3.2: токена у героя нет', $q$select 1 from public.tokens where character_id='ch-heal'$q$,0);
 select pg_temp.ok('edit: dirty patch и уже рассчитанный урон атомарны', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000001','edit','{"patch":{"name":"После"},"adjust":{"currentHp":-2,"tempHp":-3}}') from public.characters where id='ch-edit'$q$);
 select pg_temp.cnt('edit: temp не поглощает урон второй раз', $q$select 1 from public.characters where id='ch-edit' and data->>'name'='После' and data->'hp'='8' and data->'tempHp'='0'$q$,1);
 select pg_temp.code('edit: владелец не передаёт права себе произвольно', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000002','edit','{"ownerId":null}') from public.characters where id='ch-edit'$q$,'42501');
