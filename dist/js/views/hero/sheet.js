@@ -3,6 +3,7 @@
 // Корнеры и варианты — после «?»: down, concentration, noSlots, multiclass, unfinished, roll, stub, ask, levelup.
 import { html, raw } from '../../core/dom.js';
 import { modal, popover, closePopover, toast } from '../../ui/kit.js';
+import { CONDITIONS } from '../../data/rules.js';
 import { heroView, heroActions, gearCatalog } from './contract.js';
 import { ic, chip, caps, rowIcon, segmented, check, pips } from './parts.js';
 import { previewNote } from './index.js';
@@ -24,6 +25,8 @@ export function mount(root, { parts, query, page, L }) {
     page(html`<main class="page h-page"><div class="h-center h-missing">${ic('user', 32)}<h1>Героя не найти</h1><p class="muted">Его могли удалить или перенести, а может, это герой кампании, где вас нет.</p><a class="btn btn-primary" href="#/heroes">${ic('arrow-left-02')}Ко всем героям</a></div></main>`);
     return;
   }
+  // Лист на карте у настоящего героя — это стол кампании с панелью листа (#203), а не картинка-образец.
+  if (sub === 'table' && v.live) { const [cid, chid] = String(v.id).split('~'); location.replace(`#/c/${cid}/sheet/${encodeURIComponent(chid)}`); return; }
   const tab = TABS.some((t) => t.id === sub) ? sub : 'combat';
   // Перерисовка на месте: слушатели делегированы на корень и переживают её.
   const render = () => {
@@ -44,12 +47,13 @@ const slotOf = (v, lv) => v.resources.find((r) => r.kind === 'slot' && (r.circle
 const hpOf = (v) => { const h = v.vitals.hp; const now = Math.max(0, Math.min(h.max, h.now + (v.live ? 0 : local.hpDelta[v.id] || 0))); return { ...h, now }; };
 
 function sheetHead(v, mode) {
-  const back = mode === 'table' ? '' : html`<a class="icon-btn" href="#/heroes" aria-label="К героям">${ic('arrow-left-02')}</a>`;
+  const back = mode === 'table' || mode === 'drawer' ? '' : html`<a class="icon-btn" href="#/heroes" aria-label="К героям">${ic('arrow-left-02')}</a>`;
   return html`<header class="s-head">${back}
     <span class="s-portrait ${v.isMine === false ? 'other' : ''}"><img src="${v.portrait}" alt=""></span>
     <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}</small></span>
     <span class="spacer"></span>
-    ${mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
+    ${mode === 'drawer' ? html`<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${ic('cancel-01', 18)}</button>`
+      : mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
       : html`${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
   </header>`;
 }
@@ -70,7 +74,7 @@ const pills = (v) => html`<div class="s-pills">${[['кд', v.vitals.ac.value, 'a
 function concRow(v) {
   const c = v.concentration;
   const notice = v.notice ? html`<span class="s-note">${v.notice}</span>` : '';
-  const conds = (v.conditions || []).map((x) => html`<span class="s-cond">${x.name}</span>`);
+  const conds = (v.conditions || []).map((x) => html`<button class="s-cond" data-cond-chip="${x.id}" title="Снять">${x.name}${ic('cancel-01', 12)}</button>`);
   return html`<div class="s-conc">${conds}${c ? html`<span class="s-conc-chip">${ic('sparkles', 14)}Концентрация: ${c.spell}<button data-drop-conc aria-label="Снять">${ic('cancel-01', 12)}</button></span>` : ''}${notice}${v.down ? '' : html`<button class="s-add" data-add-cond>${ic('plus-sign', 14)}Состояние</button>`}</div>`;
 }
 
@@ -302,35 +306,69 @@ function otherDrawer(v) {
     <div class="s-group">${caps('Скрыто')}<small>видят Яра и мастер</small></div>${s.hidden.map((t) => html`<div class="s-hidden">${ic('square-lock-02', 14)}${t}</div>`)}</aside>`;
 }
 
+// «…» листа: другие виды, повышение, кампания; на столе — ещё «Все поля» (подробный редактор Яры) и «Открыть полностью».
+function sheetMenu(v, anchor, opts) {
+  const [cid] = String(v.id).split('~');
+  const a = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
+  const pop = popover(html`<div class="menu">${opts.edit ? html`<button class="menu-item" data-menu-edit>${ic('pencil-edit-02', 16)}Все поля листа</button>${a(`#/hero/${v.id}`, 'maximize-01', 'Открыть полностью')}` : ''}
+    ${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}</div>`, anchor, { placement: 'auto' });
+  pop.node.addEventListener('click', (e) => { if (e.target.closest('[data-menu-edit]')) { closePopover(); opts.edit?.(); } });
+}
+
+/**
+ * Лист героя в выезжающей панели стола (61–63): тот же лист в узком виде — хиты, характеристики, бой, магия, навыки,
+ * сумка. Вкладки переключаются кнопками (адрес стола не меняется).
+ */
+export function drawerHTML(v, tab = 'combat') {
+  const t = TABS.slice(0, 4).some((x) => x.id === tab) ? tab : 'combat';
+  return html`${sheetHead(v, 'drawer')}${hpCard(v)}${v.down ? deathPanel(v) : ''}${pills(v)}${concRow(v)}${statsGrid(v, 'row6')}
+    <nav class="s-tabs small">${TABS.slice(0, 4).map((x) => html`<button data-dtab="${x.id}" aria-selected="${x.id === t}">${ic(x.icon, 16)}${x.name}</button>`)}</nav>
+    <div class="s-tab">${tabBody(v, t, { narrow: true })}</div>${t === 'combat' ? html`<div class="s-res-mini">${resources(v)}${restBtns()}</div>` : ''}`;
+}
+export { shortRest };
+
 // ——— обработчики ———
-function bindSheet(root, L, v, redraw) {
-  L('click', '[data-hp]', (e, b) => { local.hpDelta[v.id] = (local.hpDelta[v.id] || 0) + +b.dataset.hp; heroActions.setHp({ heroId: v.id, delta: +b.dataset.hp }); refreshHp(root, v); });
-  L('click', '[data-roll]', (e, b) => {
+/**
+ * Обработчики листа. src — герой или функция, отдающая свежего героя (лист на столе перерисовывается по данным).
+ * opts.roll(what, formula) — бросок столом (кубы и журнал кампании) вместо подсказки страницы листа.
+ */
+export function bindSheet(root, L0, src, redraw, opts = {}) {
+  const V = () => (typeof src === 'function' ? src() : src);
+  const L = (type, sel, fn) => L0(type, sel, (e, b) => { const v = V(); if (v) fn(e, b, v); });
+  L('click', '[data-hp]', (e, b, v) => { local.hpDelta[v.id] = (local.hpDelta[v.id] || 0) + +b.dataset.hp; heroActions.setHp({ heroId: v.id, delta: +b.dataset.hp }); refreshHp(root, v); });
+  L('click', '[data-roll]', (e, b, v) => {
     if (b.hasAttribute('data-blocked')) return;
     const [what, formula] = b.dataset.roll.split('|');
-    heroActions.roll({ heroId: v.id, what, formula });
+    if (opts.roll) opts.roll(what, formula, v); else heroActions.roll({ heroId: v.id, what, formula });
   });
-  L('click', '[data-explain]', (e, b) => { e.stopPropagation(); const t = v.explain?.[b.dataset.explain]; if (t) popover(html`<div class="s-explain">${t}</div>`, b, { placement: 'top', className: 'explain-pop' }); });
-  L('click', '[data-res]', (e, b) => { const r = v.resources.find((x) => x.id === b.dataset.res); heroActions.useResource({ heroId: v.id, id: b.dataset.res, name: r?.name, total: r?.total, recovery: r?.recovery }); });
-  L('click', '[data-drop-conc]', () => heroActions.dropConcentration({ heroId: v.id }));
-  L('click', '[data-add-cond]', () => heroActions.toggleCondition({ heroId: v.id }));
-  L('click', '[data-death]', () => heroActions.deathSave({ heroId: v.id }));
-  L('click', '[data-rest]', (e, b) => (b.dataset.rest === 'short' ? shortRest(v) : heroActions.rest({ heroId: v.id, kind: 'long' })));
-  L('click', '[data-mview]', (e, b) => { local.magicView = b.dataset.mview; redraw(); });
-  L('click', '[data-spell-open]', (e, b) => {
+  L('click', '[data-explain]', (e, b, v) => { e.stopPropagation(); const t = v.explain?.[b.dataset.explain]; if (t) popover(html`<div class="s-explain">${t}</div>`, b, { placement: 'top', className: 'explain-pop' }); });
+  L('click', '[data-res]', (e, b, v) => { const r = v.resources.find((x) => x.id === b.dataset.res); heroActions.useResource({ heroId: v.id, id: b.dataset.res, name: r?.name, total: r?.total, recovery: r?.recovery }); });
+  L('click', '[data-drop-conc]', (e, b, v) => heroActions.dropConcentration({ heroId: v.id }));
+  // Состояние: список PHB поповером — отмеченные снимаются повторным нажатием.
+  L('click', '[data-add-cond]', (e, b, v) => {
+    const on = new Set((v.conditions || []).map((c) => c.id));
+    const pop = popover(html`<div class="menu s-cond-menu">${CONDITIONS.filter((c) => c.id !== 'concentration').map((c) => html`<button class="menu-item ${on.has(c.id) ? 'on' : ''}" data-cond="${c.id}">${on.has(c.id) ? ic('tick-02', 14) : ic('plus-sign', 14)}${c.name}</button>`)}</div>`, b, { placement: 'auto' });
+    pop.node.addEventListener('click', (ev) => { const x = ev.target.closest('[data-cond]'); if (x) { heroActions.toggleCondition({ heroId: v.id, id: x.dataset.cond }); closePopover(); } });
+  });
+  L('click', '[data-cond-chip]', (e, b, v) => heroActions.toggleCondition({ heroId: v.id, id: b.dataset.condChip }));
+  L('click', '[data-death]', (e, b, v) => heroActions.deathSave({ heroId: v.id }));
+  L('click', '[data-rest]', (e, b, v) => (b.dataset.rest === 'short' ? shortRest(v) : heroActions.rest({ heroId: v.id, kind: 'long' })));
+  L('click', '[data-mview]', (e, b, v) => { local.magicView = b.dataset.mview; redraw(); });
+  L('click', '[data-spell-open]', (e, b, v) => {
     if (e.target.closest('[data-prep]')) { const id = e.target.closest('[data-prep]').dataset.prep; const s = v.spellcasting.spells.find((x) => x.id === id); if (s.level) { local.prepared[id] = !(local.prepared[id] ?? s.prepared); heroActions.prepare({ heroId: v.id, spellId: id, prepared: local.prepared[id] }); } redraw(); return; }
     local.spellFocus = local.spellFocus === b.dataset.spellOpen ? '' : b.dataset.spellOpen; redraw();
   });
-  L('click', '[data-cast]', (e, b) => heroActions.cast({ heroId: v.id, spellId: b.dataset.cast }));
-  L('click', '[data-slot-pick]', (e, b) => heroActions.cast({ heroId: v.id, spellId: b.dataset.slotPick, pickSlot: true }));
-  L('click', '[data-add-item]', () => addItemModal(v));
-  L('click', '[data-coins]', () => coinsModal(v));
-  L('click', '[data-equip]', (e, b) => { const all = [...v.inventory.equipped, ...v.inventory.pack]; const it = all.find((x) => x.id === b.dataset.equip); heroActions.equip({ heroId: v.id, itemId: b.dataset.equip, name: it?.name, auto: v.inventory.equipped.filter((x) => x.auto).map((x) => x.id) }); });
-  L('click', '[data-unpack]', (e, b) => heroActions.removeItem({ heroId: v.id, itemId: b.dataset.unpack }));
-  L('click', '[data-more],[data-later]', () => heroActions.editField({ heroId: v.id, field: 'menu' }));
-  L('change', '[data-edit]', (e, t) => heroActions.editField({ heroId: v.id, field: t.dataset.edit, value: t.value }));
-  L('click', '[data-search]', () => { const s = root.querySelector('.s-search'); s?.classList.toggle('hidden'); s?.querySelector('input')?.focus(); });
-  L('input', '[data-search-input]', (e, t) => { local.search = t.value.trim().toLowerCase(); clearTimeout(bindSheet.t); bindSheet.t = setTimeout(() => { redraw(); const s = root.querySelector('.s-search'); s?.classList.remove('hidden'); const i = s?.querySelector('input'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); });
+  L('click', '[data-cast]', (e, b, v) => heroActions.cast({ heroId: v.id, spellId: b.dataset.cast }));
+  L('click', '[data-slot-pick]', (e, b, v) => heroActions.cast({ heroId: v.id, spellId: b.dataset.slotPick, pickSlot: true }));
+  L('click', '[data-add-item]', (e, b, v) => addItemModal(v));
+  L('click', '[data-coins]', (e, b, v) => coinsModal(v));
+  L('click', '[data-equip]', (e, b, v) => { const all = [...v.inventory.equipped, ...v.inventory.pack]; const it = all.find((x) => x.id === b.dataset.equip); heroActions.equip({ heroId: v.id, itemId: b.dataset.equip, name: it?.name, auto: v.inventory.equipped.filter((x) => x.auto).map((x) => x.id) }); });
+  L('click', '[data-unpack]', (e, b, v) => heroActions.removeItem({ heroId: v.id, itemId: b.dataset.unpack }));
+  L('click', '[data-later]', (e, b) => b.closest('.s-banner')?.remove());
+  L('click', '[data-more]', (e, b, v) => sheetMenu(v, b, opts));
+  L('change', '[data-edit]', (e, t, v) => heroActions.editField({ heroId: v.id, field: t.dataset.edit, value: t.value }));
+  L('click', '[data-search]', (e, b, v) => { const s = root.querySelector('.s-search'); s?.classList.toggle('hidden'); s?.querySelector('input')?.focus(); });
+  L('input', '[data-search-input]', (e, t, v) => { local.search = t.value.trim().toLowerCase(); clearTimeout(bindSheet.t); bindSheet.t = setTimeout(() => { redraw(); const s = root.querySelector('.s-search'); s?.classList.remove('hidden'); const i = s?.querySelector('input'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); });
 }
 
 function refreshHp(root, v) {

@@ -10,15 +10,49 @@ import { catalogueAttackBonus } from './sheet-fields.js';
 import { createSheetEditor } from './sheet-editor.js';
 const knownNumber = value => Number.isFinite(value) ? value : '—';
 const knownBonus = value => Number.isSafeInteger(value) ? fmtMod(value) : '—';
-let drawer=null, editor=null;
+let drawer=null, editor=null, hero=null;
 let state={kind:null,id:null,tab:'main'};
-export function closeSheet(){editor?.close();editor=null;drawer?.remove();drawer=null;state={kind:null,id:null,tab:'main'};}
+export function closeSheet(){editor?.close();editor=null;hero?.off();hero=null;drawer?.remove();drawer=null;state={kind:null,id:null,tab:'main'};}
 export const sheetOpenFor=()=>({...state,tab:editor?.tab||state.tab});
+// Вкладки подробного редактора (sheet-editor.js) — по ним понятно, что открыть его, а не лист игры.
+const EDITOR_TABS=new Set(['edit','main','skills','spells','gear','features','notes','creature']);
+/**
+ * Лист героя на столе (#203, макеты 61–63): по умолчанию — лист игры (тот же, что #/hero/…, в узкой панели), броски —
+ * кубами стола. «Все поля листа» в «…» открывает подробный редактор (TASK-004) — tab 'edit' или вкладка редактора.
+ */
 export function openCharacterSheet(ctx,id,tab){
-  if(editor&&state.id===id&&!tab)return;
-  closeSheet();state={kind:'character',id,tab:tab||'main'};
-  drawer=el('<aside class="sheet-drawer panel sheet-editor" aria-label="Лист персонажа"></aside>');ctx.root.append(drawer);
-  editor=createSheetEditor(ctx,drawer,id,state.tab,closeSheet,nextId=>openCharacterSheet(ctx,nextId));
+  if((editor||hero)&&state.id===id&&!tab)return;
+  if(tab&&EDITOR_TABS.has(tab)){
+    closeSheet();state={kind:'character',id,tab:tab==='edit'?'main':tab};
+    drawer=el('<aside class="sheet-drawer panel sheet-editor" aria-label="Лист персонажа"></aside>');ctx.root.append(drawer);
+    editor=createSheetEditor(ctx,drawer,id,state.tab,closeSheet,nextId=>openCharacterSheet(ctx,nextId,'edit'));
+    return;
+  }
+  closeSheet();state={kind:'hero',id,tab:tab||'combat'};
+  drawer=el('<aside class="sheet-drawer panel hero-drawer" aria-label="Лист героя"></aside>');ctx.root.append(drawer);
+  openHeroDrawer(ctx,id,drawer);
+}
+async function openHeroDrawer(ctx,id,box){
+  const [{drawerHTML,bindSheet},{heroView,heroKey},{on}]=await Promise.all([import('../hero/sheet.js'),import('../hero/contract.js'),import('../../core/dom.js')]);
+  if(drawer!==box)return; // закрыли, пока грузилось
+  const key=heroKey(ctx.cid,id),offs=[];
+  const render=()=>{const v=heroView(key);if(!v){closeSheet();return;}const y=box.querySelector('.s-drawer-scroll')?.scrollTop||0;box.innerHTML=`<div class="s-drawer-scroll">${drawerHTML(v,state.tab)}</div>`;box.querySelector('.s-drawer-scroll').scrollTop=y;};
+  const L=(type,sel,fn)=>offs.push(on(box,type,sel,fn));
+  hero={render,off:()=>offs.forEach(f=>f?.())};
+  L('click','[data-close-sheet]',()=>closeSheet());
+  L('click','[data-dtab]',(e,b)=>{state.tab=b.dataset.dtab;render();});
+  bindSheet(box,L,()=>heroView(key),render,{roll:(what,formula,v)=>heroRoll(ctx,v,what,formula),edit:()=>openCharacterSheet(ctx,id,'edit')});
+  render();
+}
+/** Бросок из листа героя — кубами стола: «к20 +5» — проверка/атака, «2к8+3» — урон или лечение. */
+function heroRoll(ctx,v,what,formula){
+  const f=String(formula||'').replace(/\s+/g,'').replace(/[−–]/g,'-');
+  const d20=/^к20([+-]\d+)?$/i.exec(f);
+  if(d20){doRoll(ctx,{label:`${v.name}: ${what}`,dice:{20:1},mod:Number(d20[1]||0),kind:/атак|меч|лук|топор|кинжал|булав|посох|арбалет/i.test(what)?'attack':'check',vis:poolVis(ctx)});return;}
+  const p=parseFormula(f.replace(/\+мод\.?/,''));
+  if(p){doRoll(ctx,{label:`${v.name}: ${what}`,dice:p.dice,mod:p.mod,kind:'damage',vis:poolVis(ctx)});return;}
+  if(/^СЛ\d+$/i.test(f)){ctx.toast?.(`${what}: ${f.replace(/^СЛ/i,'СЛ ')} — бросает цель`);return;}
+  ctx.toast?.(`${what}: не понял формулу «${formula}»`);
 }
 export function openStatblock(ctx,id){closeSheet();state={kind:'monster',id,tab:'main'};
   drawer=el('<aside class="sheet-drawer panel" aria-label="Статблок"></aside>');ctx.root.append(drawer);
@@ -28,7 +62,7 @@ export function openStatblock(ctx,id){closeSheet();state={kind:'monster',id,tab:
     const b=e.target.closest('[data-roll]');if(b)monsterRoll(ctx,b);
   });refreshSheet(ctx);
 }
-export function refreshSheet(ctx){if(editor){editor.refresh();return;}if(!drawer)return;
+export function refreshSheet(ctx){if(editor){editor.refresh();return;}if(state.kind==='hero'){hero?.render();return;}if(!drawer)return;
  const t=ctx.scene?.tokens.find(x=>x.id===state.id);if(!t){closeSheet();return;}drawer.innerHTML=monsterHTML(ctx,t);
 }
 // Статблок существа. Ручные существа: особенности — строки; SRD (TASK-083): { name, en, desc } с английским текстом SRD.
