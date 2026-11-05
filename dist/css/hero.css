@@ -406,9 +406,9 @@
 .s-srd { color: var(--text-secondary); font-style: italic; }
 .s-tabbar { display: flex; align-items: center; gap: 12px; }
 .s-tabs { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 4px; border-radius: var(--r-full); box-shadow: inset 0 0 0 1px var(--stroke-divider); }
-.s-tabs a { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; border-radius: var(--r-full); color: var(--text-secondary); font: 600 12px/14px var(--font-text); white-space: nowrap; }
-.s-tabs a[aria-selected="true"] { background: var(--bg-control); color: var(--text-primary); }
-.s-tabs.small a { height: 30px; gap: 6px; font-size: 11px; }
+.s-tabs a, .s-tabs button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; border-radius: var(--r-full); color: var(--text-secondary); font: 600 12px/14px var(--font-text); white-space: nowrap; }
+.s-tabs a[aria-selected="true"], .s-tabs button[aria-selected="true"] { background: var(--bg-control); color: var(--text-primary); }
+.s-tabs.small a, .s-tabs.small button { height: 30px; gap: 6px; font-size: 11px; }
 .s-dot { position: absolute; top: 6px; right: 14%; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
 .s-search .input { height: 36px; }
 .s-tab { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -767,3 +767,23 @@
 .h-drop:hover, .h-drop.over { border-color: var(--stroke-accent); background: var(--bg-accent-subtle); color: var(--text-primary); }
 .h-drop b { font: 600 16px/20px var(--font-text); }
 .h-import-art { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; }
+/* Лист героя на столе (#203, 61–63): узкая панель справа вместо формы-редактора */
+.sheet-drawer.hero-drawer { padding: 0; }
+.hero-drawer .s-drawer-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 16px; scrollbar-width: thin; }
+.hero-drawer .s-head { gap: 10px; }
+.hero-drawer .s-head .s-portrait { width: 44px; height: 44px; }
+.hero-drawer .s-name { font-size: 20px; line-height: 24px; max-width: 220px; }
+.hero-drawer .s-tabs { flex: none; }
+.hero-drawer .s-tab { display: flex; flex-direction: column; gap: 8px; }
+.hero-drawer .s-res-mini { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.s-cond { display: inline-flex; align-items: center; gap: 4px; }
+.s-cond .ic { opacity: .6; }
+.s-cond-menu { max-height: 320px; overflow: auto; }
+.s-cond-menu .menu-item.on { color: var(--text-accent); }
+/* Телефон: имя героя в шапке листа не прячется за «Новый уровень» (кнопка — значком) */
+@media (max-width: 720px) {
+  .sheet-page .s-head > .btn-sm { font-size: 0; gap: 0; width: 36px; padding: 0; justify-content: center; flex: none; }
+  .sheet-page .s-head .s-who { flex: 1; min-width: 0; }
+  .sheet-page .s-head .s-name { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .sheet-page .s-head .s-who small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
