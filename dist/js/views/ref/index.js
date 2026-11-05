@@ -16,9 +16,12 @@ import { wireRx } from './rx.js';
 import * as CREATURES from './sec-creatures.js';
 import * as SPELLS from './sec-spells.js';
 import * as RULES_PAGE from './sec-rules.js';
+import * as GEAR from './sec-gear.js';
+import * as ITEMS from './sec-items.js';
+import { races as RACES_PAGE, backgrounds as BG_PAGE } from './sec-races.js';
 
 /** Разделы со своей галереей и страницей записи (как у классов). */
-const PAGES = { creatures: CREATURES, spells: SPELLS, rules: RULES_PAGE };
+const PAGES = { creatures: CREATURES, spells: SPELLS, rules: RULES_PAGE, equipment: GEAR, items: ITEMS, races: RACES_PAGE, backgrounds: BG_PAGE };
 
 const ic = (n, s = 16) => raw(icon(n, s));
 const STORE = 'rasputye-ref-v1';
@@ -189,6 +192,8 @@ export function mountRef(root, hash) {
     const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? `#/ref/${s.id}` : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return PAGES[s.id].gallery(items, st.q, text, top);
+    // Снаряжение показывает, какие классы начинают с предмета, — подгружаем классы и перерисовываем.
+    if (s.id === 'equipment' && !sectionNow('classes')) loadSection('classes').then(() => { if (st.section === 'equipment') render(); }, () => {});
     const key = `${s.id}/${it.id}`;
     return html`<main class="page cls-wrap">${top}${PAGES[s.id].page(it, items, st.q, { key, fav: prefs().fav.includes(key), actions: footActions(it) })}</main>`;
   }

@@ -79,21 +79,27 @@ export function gallery(items, q, text, top) {
 const ORD = (n) => Number(String(n).replace(/\D/g, ''));
 export function powerOf(it) {
   const t = it.srdText; if (!t) return null;
-  const body = t.text.join(' ');
+  const body = t.text.slice(0, 2).join(' '); // урон из побочных эффектов дальше по тексту (как у «Исполнения желаний») не считаем
   const m = body.match(/(\d+)d(\d+)(?:\s*\+\s*(\d+))?\s+(?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\s+)?damage/i)
     || body.match(/regains? (?:a number of )?hit points equal to (\d+)d(\d+)(?:\s*\+\s*(?:your spellcasting ability modifier|(\d+)))?/i);
   if (!m) return null;
   const heal = /hit points/i.test(m[0]);
   const base = { n: Number(m[1]), d: Number(m[2]), plus: Number(m[3]) || 0, type: heal ? null : (m[4] || '').toLowerCase(), heal, mod: heal && /spellcasting ability modifier/i.test(m[0]) };
   if (!it.level) {
-    const c = body.match(/increases by (\d+)d(\d+) when you reach 5th level/i) || body.match(/damage increases by (\d+)d(\d+) when you reach 5th level/i);
+    const all = t.text.join(' ');
+    const c = /increases by (\d+)d(\d+) when you reach 5th level/i.test(all) || /two beams at 5th level/i.test(all);
     return c ? { ...base, cantrip: true } : { ...base, cantrip: true, flat: true };
   }
+  // Несколько снарядов: «три дротика», «три луча» — и ещё по одному за круг выше.
+  const many = body.match(/\b(two|three|four)\s+(?:glowing\s+)?(darts|rays)\b/i);
+  const more = (t.higher || '').match(/one (?:more|additional) (?:dart|ray) for each slot level above (\d+)/i);
+  if (many && more) return { ...base, darts: { base: { two: 2, three: 3, four: 4 }[many[1].toLowerCase()], from: ORD(more[1]), word: /dart/i.test(many[2]) ? 'дротик' : 'луч' } };
   const h = (t.higher || '').match(/increases by (\d+)d(\d+) for (?:each|every) (?:(two) )?slot levels? above (\d+)/i);
   return { ...base, step: h ? { n: Number(h[1]), every: h[3] ? 2 : 1, from: ORD(h[4]) } : null };
 }
 const DMG = { acid: 'кислота', bludgeoning: 'дробящий', cold: 'холод', fire: 'огонь', force: 'силовое поле', lightning: 'электричество', necrotic: 'некротическая энергия', piercing: 'колющий', poison: 'яд', psychic: 'психическая энергия', radiant: 'излучение', slashing: 'рубящий', thunder: 'звук' };
 function diceAt(p, it, v) {
+  if (p.darts) { const k = p.darts.base + Math.max(0, v - p.darts.from); return { n: p.n * k, d: p.d, plus: p.plus * k, avg: k * (p.n * (p.d + 1) / 2 + p.plus), k }; }
   let n = p.n;
   if (p.cantrip && !p.flat) n = p.n * (1 + (v >= 5) + (v >= 11) + (v >= 17));
   else if (p.step && v > p.step.from) n = p.n + p.step.n * Math.floor((v - p.step.from) / p.step.every);
@@ -112,9 +118,9 @@ TOOLS.spells = {
     const all = st.cantrip ? [1, 5, 11, 17].map((l) => [l, diceAt(p, it, l)]) : Array.from({ length: 10 - it.level }, (_, i) => [it.level + i, diceAt(p, it, it.level + i)]);
     const max = Math.max(...all.map(([, y]) => y.avg));
     return html`<div class="sp-power"><button class="sp-big ref-dice" data-roll="${f}">${x.n}к${x.d}${x.plus ? ` + ${x.plus}` : ''}${p.mod ? ' + мод.' : ''}</button>
-      <span>${p.heal ? 'лечение' : DMG[p.type] || 'урон'} · в среднем <b>${Math.round(x.avg * 10) / 10}</b></span><small>Нажмите — бросок</small></div>
+      <span>${x.k ? `${x.k} × ${p.n}к${p.d}${p.plus ? ` + ${p.plus}` : ''} · ` : ''}${p.heal ? 'лечение' : DMG[p.type] || 'урон'} · в среднем <b>${Math.round(x.avg * 10) / 10}</b>${x.k ? ' если всё попадёт' : ''}</span><small>Нажмите — бросок</small></div>
       <div class="sp-bars">${all.map(([l, y]) => html`<span class="${l === st.v || (st.cantrip && l <= st.v && (all.find(([k]) => k > l)?.[0] || 99) > st.v) ? 'on' : ''}" data-rx-set="v:${l}"><i style="height:${Math.max(8, (y.avg / max) * 100)}%"></i><em>${st.cantrip ? l : ROMAN[l]}</em><small>${y.n}к${y.d}</small></span>`)}</div>
-      <p class="t-xs tertiary">${st.cantrip ? 'Заговор растёт с уровнем героя: 5, 11 и 17.' : p.step ? `+${p.step.n}к${p.d} за ${p.step.every > 1 ? 'каждые два круга' : 'каждый круг'} выше ${p.step.from}-го.` : 'На больших ячейках урон не растёт — смотрите текст «на больших уровнях».'}</p>`;
+      <p class="t-xs tertiary">${st.cantrip ? (p.flat ? 'Этот заговор с уровнем не растёт.' : 'Заговор растёт с уровнем героя: 5, 11 и 17.') : p.darts ? `Ещё один ${p.darts.word} за каждый круг выше ${p.darts.from}-го.` : p.step ? `+${p.step.n}к${p.d} за ${p.step.every > 1 ? 'каждые два круга' : 'каждый круг'} выше ${p.step.from}-го.` : 'На больших ячейках урон не растёт — смотрите текст «на больших уровнях».'}</p>`;
   },
 };
 

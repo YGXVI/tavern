@@ -10,6 +10,9 @@ import { classPage, classPreview } from './classes.js';
 import * as CREATURES from './sec-creatures.js';
 import * as SPELLS from './sec-spells.js';
 import * as RULES_PAGE from './sec-rules.js';
+import * as GEAR from './sec-gear.js';
+import * as ITEMS from './sec-items.js';
+import { races as RACES_PAGE, backgrounds as BG_PAGE } from './sec-races.js';
 import { sectionNow } from './data.js';
 
 const ic = (n, s = 16) => raw(icon(n, s));
@@ -138,7 +141,8 @@ function rule(it, o) {
     <p class="ref-note">Пересказ правил D&amp;D 5e 2014 своими словами по SRD 5.1.</p>`;
 }
 
-const RENDER = { rules: (it) => RULES_PAGE.page(it, sectionNow('rules') || [it], new URLSearchParams(), { modal: true }), spells: (it) => SPELLS.page(it, sectionNow('spells') || [it], new URLSearchParams(), { modal: true }), creatures: (it) => CREATURES.page(it, sectionNow('creatures') || [it], new URLSearchParams(), { modal: true }), classes: klass, races: race, backgrounds: background, equipment: gear, items: magicItem };
+const modalPage = (mod, sectionId) => (it) => mod.page(it, sectionNow(sectionId) || [it], new URLSearchParams(), { modal: true });
+const RENDER = { equipment: modalPage(GEAR, 'equipment'), items: modalPage(ITEMS, 'items'), races: modalPage(RACES_PAGE, 'races'), backgrounds: modalPage(BG_PAGE, 'backgrounds'), rules: (it) => RULES_PAGE.page(it, sectionNow('rules') || [it], new URLSearchParams(), { modal: true }), spells: (it) => SPELLS.page(it, sectionNow('spells') || [it], new URLSearchParams(), { modal: true }), creatures: (it) => CREATURES.page(it, sectionNow('creatures') || [it], new URLSearchParams(), { modal: true }), classes: klass };
 export function card(it, o) { return (RENDER[it.section] || rule)(it, o); }
 
 /** Короткое превью для поиска Ctrl K. */

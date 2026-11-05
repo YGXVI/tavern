@@ -3,6 +3,7 @@
 import { BESTIARY, loadSrdBestiary } from '../../data/bestiary.js';
 import { CONDITIONS, CLASSES, RACES, ABILITIES, mod } from '../../data/rules.js';
 import { RULES } from './rules-text.js';
+import { GEAR_RU } from './world-text.js';
 
 const url = (f) => new URL(`../../data/${f}`, import.meta.url);
 const cache = new Map();
@@ -136,29 +137,39 @@ const LOADERS = {
   async races() {
     const [opt, feat] = await Promise.all([json('character-options-2014.json'), json('features-2014.json')]);
     const fById = new Map(feat.entries.map((f) => [f.id, f]));
+    const opts = (id) => feat.entries.filter((f) => f.kind === 'option' && f.scope?.parentId === id).map((f) => ({ id: f.id, name: f.name.ru || f.name.en, en: f.name.en, text: f.text?.en || '' }));
+    const trait = (r) => { const f = fById.get(r); return f && { id: f.id, key: f.id.replace(/^srd51:feature:/, ''), name: f.name.ru || f.name.en, en: f.name.en, text: f.text?.en || '', options: opts(f.id) }; };
+    const incOf = (g) => g.filter((x) => x.kind === 'ability_increase').map((x) => ({ ability: x.ability, value: x.value }));
+    const DESC = /(age|alignment|size|speed|languages|ability-score-increase)$/;
     const list = opt.entries.filter((e) => e.kind === 'race').map((e) => {
       const key = e.id.split(':').pop();
       const g = e.grants || [];
       const speed = g.find((x) => x.kind === 'speed')?.value;
       const dv = g.find((x) => x.kind === 'sense' && x.sense === 'darkvision')?.range || 0;
-      const inc = g.filter((x) => x.kind === 'ability_increase').map((x) => `${ABILITIES.find((a) => a.id === x.ability)?.short || x.ability} +${x.value}`);
-      const traits = (e.featureRefs || []).map((r) => fById.get(r)).filter((f) => f && !/(age|alignment|size|speed|languages|ability-score-increase)$/.test(f.id));
-      const subs = opt.entries.filter((x) => x.kind === 'subrace' && x.raceId === e.id).map((x) => ({ name: x.name.ru || x.name.en, traits: (x.featureRefs || []).map((r) => fById.get(r)).filter(Boolean) }));
+      const inc = incOf(g);
+      const all = (e.featureRefs || []).map(trait).filter(Boolean);
+      const subs = opt.entries.filter((x) => x.kind === 'subrace' && x.raceId === e.id).map((x) => ({ id: x.id.split(':').pop(), name: x.name.ru || x.name.en, en: x.name.en, inc: incOf(x.grants || []),
+        traits: (x.featureRefs || []).map(trait).filter((f) => f && !DESC.test(f.id)) }));
       const size = g.find((x) => x.kind === 'size')?.value;
       const langs = g.filter((x) => x.kind === 'language').map((x) => LANGS[x.value] || x.value);
-      return item({ section: 'races', id: key, name: e.name.ru, en: e.name.en, speed: speed || RACES.find((r) => r.id === key)?.speed, darkvision: dv, inc, traits, subs, langs, size: SIZE_RU[size] || '', sub: `Скорость ${speed || '—'} фт${dv ? ` · тёмное зрение ${dv} фт` : ''}` });
+      const choices = e.choices || [];
+      return item({ section: 'races', id: key, name: e.name.ru, en: e.name.en, speed: speed || RACES.find((r) => r.id === key)?.speed, darkvision: dv, inc,
+        incText: inc.map((x) => `${ABILITIES.find((a) => a.id === x.ability)?.short || x.ability} +${x.value}`), traits: all.filter((f) => !DESC.test(f.id)), desc: all.filter((f) => DESC.test(f.id)), subs, langs, choices,
+        resist: g.filter((x) => x.kind === 'resistance').map((x) => x.damageType), size: SIZE_RU[size] || '', sizeCode: size,
+        sub: `Скорость ${speed || '—'} фт${dv ? ` · тёмное зрение ${dv} фт` : ''}` });
     });
     ready.set('races', list);
     return list;
   },
   async backgrounds() {
-    const [opt, feat] = await Promise.all([json('character-options-2014.json'), json('features-2014.json')]);
+    const [opt, feat, eq] = await Promise.all([json('character-options-2014.json'), json('features-2014.json'), json('equipment-2014.json').catch(() => ({ entries: [] }))]);
+    for (const g of eq.entries) if (!GEAR_NAMES.has(g.id)) GEAR_NAMES.set(g.id, { name: g.name.ru || EQ_RU[g.name.en] || GEAR_RU[g.name.en] || g.name.en, kind: g.kind, section: g.id.split(':').pop() });
     const fById = new Map(feat.entries.map((f) => [f.id, f]));
     const list = opt.entries.filter((e) => e.kind === 'background' || e.kind === 'feat').map((e) => {
       const g = e.grants || [];
       const skills = g.filter((x) => x.kind === 'proficiency' && x.category === 'skill').map((x) => SKILL_RU[x.value] || x.value);
-      return item({ section: 'backgrounds', id: e.id.split(':').pop(), name: e.name.ru || e.name.en, en: e.name.en, kind: e.kind, skills,
-        features: (e.featureRefs || []).map((r) => fById.get(r)).filter(Boolean), sub: e.kind === 'feat' ? 'Черта' : skills.join(', ') || 'Предыстория' });
+      return item({ section: 'backgrounds', id: e.id.split(':').pop(), name: e.name.ru || e.name.en, en: e.name.en, kind: e.kind, skills, choices: e.choices || [], equipment: e.startingEquipment || null,
+        prereq: e.prerequisites || null, features: (e.featureRefs || []).map((r) => fById.get(r)).filter(Boolean), sub: e.kind === 'feat' ? 'Черта' : skills.join(', ') || 'Предыстория' });
     });
     ready.set('backgrounds', list);
     return list;
@@ -167,10 +178,10 @@ const LOADERS = {
     const cat = await json('equipment-2014.json');
     const list = cat.entries.map((e) => {
       const en = e.name.en;
-      const name = e.name.ru || EQ_RU[en] || en;
+      const name = e.name.ru || EQ_RU[en] || GEAR_RU[en] || en;
       const w = e.weapon, a = e.armor;
       const sub = w ? `${w.damage?.dice || '—'} ${DMG_RU[w.damage?.type] || ''}`.trim() : a ? `КД ${a.baseAc}${a.addDex ? (a.dexMax ? ` + ЛОВ (макс ${a.dexMax})` : ' + ЛОВ') : ''}` : e.kind === 'shield' ? 'КД +2' : EQ_KIND[e.kind] || e.kind;
-      return item({ section: 'equipment', id: e.id.split(':').pop(), name, en: name === en ? '' : en, kind: e.kind, kindName: EQ_KIND[e.kind] || e.kind, cost: e.cost, weight: e.weight?.lb, w, a, contents: e.contents || [], sub });
+      return item({ section: 'equipment', id: e.id.split(':').pop(), ref: e.id, group: e.group || '', name, en: name === en ? '' : en, kind: e.kind, kindName: EQ_KIND[e.kind] || e.kind, cost: e.cost, weight: e.weight?.lb, w, a, contents: e.contents || [], sub });
     }).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
     ready.set('equipment', list);
     return list;
@@ -197,7 +208,7 @@ const LOADERS = {
 /** Классы из каталогов проекта — одна модель на класс (чистая функция: её проверяют тесты). */
 export function classItems(opt, feat, eq = { entries: [] }) {
   const fById = new Map(feat.entries.map((f) => [f.id, f]));
-  for (const g of eq.entries) GEAR_NAMES.set(g.id, { name: g.name.ru || EQ_RU[g.name.en] || g.name.en, kind: g.kind, section: g.id.split(':').pop() });
+  for (const g of eq.entries) GEAR_NAMES.set(g.id, { name: g.name.ru || EQ_RU[g.name.en] || GEAR_RU[g.name.en] || g.name.en, kind: g.kind, section: g.id.split(':').pop() });
   const short = (id) => String(id).replace(/^srd51:feature:/, '');
   const featOf = (id) => { const f = fById.get(id); return f && { id: f.id, key: short(f.id), name: f.name.ru || f.name.en, en: f.name.en, text: f.text?.en || '', options: [] }; };
   const options = new Map();

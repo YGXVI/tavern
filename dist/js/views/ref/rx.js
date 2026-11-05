@@ -70,7 +70,7 @@ export function wireRx(host) {
     const g = e.target.closest('[data-rx-goto]');
     if (g) { document.getElementById(g.dataset.rxGoto)?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
     const r = e.target.closest('[data-rx-roll]');
-    if (r) { const el = rootOf(r); if (el) apply(el, r.dataset.rxRoll, 1 + Math.floor(Math.random() * 20)); return; }
+    if (r) { const el = rootOf(r); if (el) apply(el, r.dataset.rxRoll, 1 + Math.floor(Math.random() * (Number(r.dataset.max) || 20))); return; }
     onSet(e);
   };
   const onSet = (e) => { const b = e.target.closest('[data-rx-set]'); if (!b) return; const el = rootOf(b); if (!el) return; const [k, v] = b.dataset.rxSet.split(':'); apply(el, k, Number.isNaN(Number(v)) ? v : Number(v)); };
