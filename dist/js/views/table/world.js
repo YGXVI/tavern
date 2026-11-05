@@ -241,7 +241,7 @@ export function renderAuras(L, ctx) {
   const s = gridSize(scene.grid);
   const out = [], labels = [];
   for (const t of scene.tokens) {
-    if (!t.aura || !ctx.tokenShown(t)) continue;
+    if (t.pending || !t.aura || !ctx.tokenShown(t)) continue;
     const p = ctx.posOf(t);
     const n = sizeById(t.size).cells;
     const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;

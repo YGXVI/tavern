@@ -102,7 +102,9 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
       && T.tokens.some((t) => t.campaign_id === cid && t.character_id === r.character_id && t.id !== r.id)) return 'Этот герой уже на карте — его переносят, второй токен не ставят';
     if (isMaster(uid, cid)) return null;
     if (JSON.stringify(d).length > 65536 && (op === 'insert' || JSON.stringify(d).length > JSON.stringify(o).length)) return 'Слишком много данных в токене';
+    if (T.tokens.some(t => t.campaign_id === cid && t.data?.pending && [d.summonedBy, d.riding].includes(t.id))) return 'Сначала дождитесь разрешения мастера на этот токен';
     if (op === 'insert') {
+      d.pending = true;
       if (r.hidden) return 'Скрывает только мастер';
       if (d.locked) return 'Закрепляет мастер';
       if (d.riding != null) return 'Сесть верхом можно после постановки';
@@ -119,6 +121,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
       } else if (d.kind === 'foe') return 'Существо игрок ставит только как призыв своего героя или токена';
       return null;
     }
+    if (o.pending === true) return 'Токен ждёт разрешения мастера';
     if (cid !== old.campaign_id || (r.character_id || null) !== (old.character_id || null) || (r.owner_id || null) !== (old.owner_id || null) || Number(r.ord) !== Number(old.ord)) return 'Это меняет мастер';
     if (!!r.hidden !== !!old.hidden) return 'Скрывает только мастер';
     if (!sameJ(d.kind, o.kind) || !sameJ(d.monsterId, o.monsterId)) return 'Вид токена после создания не меняется';
@@ -205,7 +208,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
         // RLS tokens_insert / tokens_update / tokens_delete + охранники guard_token, guard_token_delete (own_tokens).
         if (op === 'insert') return A ? tokenGuard(uid, 'insert', r) : rls;
         if (!(M || (A && !old.hidden))) return 'skip';
-        if (op === 'delete') return M || (!old.character_id && ownsTok(uid, old)) ? null : 'Удаляет мастер';
+        if (op === 'delete') return M || ((!old.character_id || old.data?.pending) && ownsTok(uid, old)) ? null : 'Удаляет мастер';
         return tokenGuard(uid, 'update', r, old);
       case 'drawings':
         if (op === 'insert') return A ? null : rls;

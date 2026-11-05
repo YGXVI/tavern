@@ -86,7 +86,7 @@ export function mountTable(root, cid) {
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
   // За кого игрок ходит в бою: свой герой, герой отсутствующего игрока, свой токен и призыв (#198: группа призывов).
-  ctx.actsFor = (t) => ctx.playsFor(t) || ctx.owns(t);
+  ctx.actsFor = (t) => !!t && !t.pending && (ctx.playsFor(t) || ctx.owns(t));
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
   ctx.ownerAway = (t) => {
     if (!t?.characterId || ctx.isMine(t)) return false;
@@ -97,7 +97,7 @@ export function mountTable(root, cid) {
 
   ctx.eyes = () => {
     const sc = ctx.scene; if (!sc) return [];
-    const heroes = sc.tokens.filter((t) => t.kind === 'hero' && t.characterId && !t.hidden);
+    const heroes = sc.tokens.filter((t) => t.kind === 'hero' && t.characterId && !t.hidden && !t.pending);
     if (ctx.ui.viewAs) return heroes.filter((t) => t.characterId === ctx.ui.viewAs);
     if (ctx.isMaster) return heroes;
     const mine = heroes.filter((t) => t.characterId === ctx.myCharacterId);
@@ -194,7 +194,11 @@ export function mountTable(root, cid) {
   // ——— Изменения с историей ———
   ctx.mutateScene = (fn, undo) => {
     const sid = ctx.sceneId;
-    const r = updateScene(ctx.cid, sid, (s, c) => fn(s, c));
+    const r = updateScene(ctx.cid, sid, (s, c) => {
+      const before = new Set(s.tokens.map((t) => t.id));
+      fn(s, c);
+      if (!ctx.isMasterView) for (const t of s.tokens) if (!before.has(t.id)) t.pending = true;
+    });
     if (undo) ctx.history.push({ sceneId: sid, ...undo });
     return r;
   };

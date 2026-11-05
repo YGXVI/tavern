@@ -81,6 +81,7 @@ export function tokenBarHTML(ctx) {
   const toks = selectedTokens(ctx);
   if (!toks.length) return '';
   const c = ctx.c;
+  if (toks.length === 1 && toks[0].pending) return `<div class="toolbar token-bar"><span class="tb-titles"><b>${esc(toks[0].name)}</b><small>Ждёт разрешения мастера</small></span>${ib('token-menu', ctx.isMasterView ? 'hourglass' : 'cancel-01', ctx.isMasterView ? 'Рассмотреть запрос' : 'Отменить запрос')}${ib('deselect', 'cancel-01', 'Снять выделение')}</div>`;
   if (toks.length > 1) {
     if (!ctx.isMasterView) return '';
     const allHidden = toks.every((t) => t.hidden);
@@ -432,7 +433,7 @@ export function hpLogVis(c, toks) {
 export async function deleteTokens(ctx, ids, drawIds = []) {
   // Игрок удаляет только свои токены и призывы (TASK-183); очередь боя меняет мастер — токен из боя убирает он.
   if (!ctx.isMasterView) {
-    ids = ids.filter((id) => ctx.owns(ctx.scene.tokens.find((t) => t.id === id)));
+    ids = ids.filter((id) => { const t = ctx.scene.tokens.find((t) => t.id === id); return ctx.owns(t) || (t?.pending && ctx.isMine(t)); });
     if (ids.some((id) => ctx.c.combat.entries.some((e) => e.tokenId === id))) {
       ctx.toast({ title: 'Этот токен в бою', body: 'Убрать его из очереди и со сцены может мастер', icon: 'alert-circle' });
       return;
@@ -573,7 +574,7 @@ export function auraPopover(ctx, id, anchor) {
 // ——— Параметры в меню токена (TASK-039): хиты/максимум, временные, КД — правятся на месте ———
 /** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
 function canEditStats(ctx, t) {
-  if (!t || t.kind === 'item') return false;
+  if (!t || t.kind === 'item' || (t.pending && !ctx.isMasterView)) return false;
   if (!ctx.isMasterView && statless(t)) return false; // сначала «Статы…»
   return ctx.isMasterView || ctx.isMine(t) || ctx.owns(t);
 }
@@ -758,6 +759,7 @@ export function contextMenu(ctx, target, w, screen) {
   if (target.kind === 'token') {
     const t = ctx.scene.tokens.find((x) => x.id === target.id);
     if (!t) return;
+    if (t.pending && !ctx.isMasterView) { menu(pendingItems(ctx, t), anchor, { placement: 'right' }); return; }
     if (!ctx.ui.selection.has(t.id)) ctx.select([t.id]);
     const ids = [...ctx.ui.selection];
     if (ctx.isMasterView) {

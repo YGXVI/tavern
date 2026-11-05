@@ -72,7 +72,7 @@ export function tokenStats(c, t) {
 export const tokenCells = (t) => sizeById(t.size).cells;
 
 /** Может ли токен участвовать в бою: предмет — нет; свой токен игрока — только со статами (план TASK-097, TASK-183). */
-export const canFight = (t) => !!t && t.kind !== 'item' && !(t.kind === 'custom' && !(t.hpMax > 0));
+export const canFight = (t) => !!t && !t.pending && t.kind !== 'item' && !(t.kind === 'custom' && !(t.hpMax > 0));
 
 /**
  * Может ли пользователь двигать токен (интерфейсная проверка демо).
@@ -83,7 +83,7 @@ export function canControlToken(c, userId, t) {
   if (!t) return false;
   if (isMasterOf(c, userId)) return true;
   const m = membership(c, userId);
-  if (!m || m.status !== 'active') return false;
+  if (!m || m.status !== 'active' || t.pending) return false;
   if (t.characterId && t.characterId === m.characterId) return true;
   if (t.ownerId && t.ownerId === userId) return true; // свой токен и призыв (TASK-183)
   return openMovement(c) && !t.hidden;
