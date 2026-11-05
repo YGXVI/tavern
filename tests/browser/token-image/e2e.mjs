@@ -75,6 +75,10 @@ try {
   await page.evaluate(() => __ctx.history.undo(__ctx)); assert.equal(await token(page, 'image-test'), initial);
   await page.evaluate(() => __ctx.history.redo(__ctx)); assert.equal(await token(page, 'image-test'), cropped);
   await page.reload(); await page.waitForFunction(() => !!window.__ctx?.scene);
+  const reloadedFace = page.locator('[data-token="image-test"] .tok-ring');
+  await reloadedFace.locator('img').waitFor({ timeout: 5000 });
+  assert.equal(await reloadedFace.locator('img').evaluate(async (image) => { await image.decode(); return image.naturalWidth; }), 512);
+  assert.equal(await reloadedFace.locator('.tok-initials').count(), 0);
   await open(page, 'image-test');
   await page.locator('[data-default]').click(); await page.locator('[data-save]:enabled').waitFor();
   await page.locator('[data-save]').click(); await page.locator('.token-image-modal').waitFor({ state: 'detached' });
@@ -82,9 +86,20 @@ try {
   await open(page, 'image-test'); await page.locator('[data-center]').click();
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
   assert.equal(await token(page, 'image-test'), 'assets/portraits/srd/goblin.webp');
+  await page.evaluate((ref) => __ctx.mutateScene((s, c) => {
+    const t = s.tokens.find((x) => x.id === 'image-own');
+    const hero = s.tokens.find((x) => x.characterId === c.members.find((m) => m.userId === 'u-asya')?.characterId);
+    t.img = ref;
+    if (hero) { t.x = hero.x; t.y = hero.y; }
+  }), cropped);
   console.log('мастер: кадрирование, полный рост, сохранение, undo/redo, перезагрузка, стандартный портрет, отмена OK');
   const player = await login('u-asya');
   await player.setViewportSize({ width: 390, height: 844 });
+  await player.reload(); await player.waitForFunction(() => !!window.__ctx?.scene);
+  const playerFace = player.locator('[data-token="image-own"] .tok-ring');
+  await playerFace.locator('img').waitFor({ timeout: 5000 });
+  assert.equal(await playerFace.locator('img').evaluate(async (image) => { await image.decode(); return image.naturalWidth; }), 512);
+  assert.equal(await playerFace.locator('.tok-initials').count(), 0);
   await player.evaluate(async () => (await import('/js/views/table/p-token.js')).setTokenImage(__ctx, 'image-test'));
   assert.equal(await player.locator('.token-image-modal').count(), 0, 'игрок не меняет чужой токен');
   await open(player, 'image-own');
