@@ -780,3 +780,10 @@
 .s-cond .ic { opacity: .6; }
 .s-cond-menu { max-height: 320px; overflow: auto; }
 .s-cond-menu .menu-item.on { color: var(--text-accent); }
+/* Телефон: имя героя в шапке листа не прячется за «Новый уровень» (кнопка — значком) */
+@media (max-width: 720px) {
+  .sheet-page .s-head > .btn-sm { font-size: 0; gap: 0; width: 36px; padding: 0; justify-content: center; flex: none; }
+  .sheet-page .s-head .s-who { flex: 1; min-width: 0; }
+  .sheet-page .s-head .s-name { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+  .sheet-page .s-head .s-who small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
