@@ -7,7 +7,7 @@ import { characterOf, ownerOfCharacter, tokenStats, myCharacter } from '../../co
 import { LIGHTS, conditionById, woundLabel } from '../../data/rules.js';
 import { diceWidget } from './dice.js';
 import { visionFields } from './p-token.js';
-import { currentEntry, combatRound } from './combat.js';
+import { currentEntry, combatRound, tiedMoves } from './combat.js';
 import { sightWidgetRows, heroSightNote } from './sight-ui.js';
 import { groupKind, isSummonKind, planPacks, baseName } from './packs.js';
 
@@ -171,7 +171,7 @@ function initiative(ctx) {
   const slots = [];
   for (const e of shown) { const last = slots.at(-1); if (last && last.key === e.slot) last.ms.push(e); else slots.push({ key: e.slot, ms: [e] }); }
   const marks = ctx.packMarks();
-  const rows = slots.map((s) => (s.ms.length > 1 && s.ms[0].group ? packRow(ctx, s, cur, marks) : s.ms.map((e) => entryRow(ctx, e, cur)).join(''))).join('');
+  const rows = slots.map((s) => (s.ms.length > 1 && s.ms[0].group ? packRow(ctx, s, cur, marks, order) : s.ms.map((e) => entryRow(ctx, e, cur, order)).join(''))).join('');
   const myTurn = cur && (ctx.isMine(cur.token) || ctx.owns(cur.token)); // свой герой или своя группа призывов (#198)
   const curPack = cur && slots.find((s) => s.key === cur.slot && s.ms.length > 1 && s.ms[0].group);
   const curName = curPack ? packTitle(ctx, curPack.ms, marks) : cur ? ctx.nameOf(cur.token, cur.stats) : '';
@@ -186,7 +186,15 @@ function initiative(ctx) {
 }
 
 /** Строка одиночки в очереди. */
-function entryRow(ctx, e, cur) {
+/** Стрелки мастера для ничьей по инициативе (#197 S1): только у равных соседей. */
+function tieButtons(ctx, order, slot, id) {
+  if (!ctx.isMaster) return '';
+  const m = tiedMoves(order, slot);
+  if (!m.up && !m.down) return '';
+  return `<span class="init-tie">${m.up ? `<button class="icon-btn icon-btn-xs" data-act="init-tie-up" data-id="${esc(id)}" data-tip="Выше при равной инициативе" aria-label="Выше при равной инициативе">${icon('arrow-up-01', 12)}</button>` : ''}${m.down ? `<button class="icon-btn icon-btn-xs" data-act="init-tie-down" data-id="${esc(id)}" data-tip="Ниже при равной инициативе" aria-label="Ниже при равной инициативе">${icon('arrow-down-01', 12)}</button>` : ''}</span>`;
+}
+
+function entryRow(ctx, e, cur, order = []) {
   const c = ctx.c, t = e.token, st = e.stats;
   const isCur = !!cur && cur.slot === e.slot;
   const mine = ctx.isMine(t);
@@ -200,7 +208,7 @@ function entryRow(ctx, e, cur) {
       ${initCell}<button class="init-who" data-act="init-focus" data-id="${esc(e.tokenId)}">${avatarImg(t.img, `${t.kind} ${mine ? 'mine' : ''}`)}<span class="grow col-tight"><span class="primary ellipsis">${esc(ctx.nameOf(t, st))}${t.hidden ? ` ${icon('view-off', 12)}` : ''}</span><span class="secondary ellipsis">${esc(hp)}${(st.conditions || []).length ? ` · ${st.conditions.map((x) => conditionById(x)?.name).filter(Boolean).join(', ')}` : ''}</span></span></button>
       ${mine && e.init == null ? `<button class="btn btn-sm btn-primary" data-act="init-roll" data-id="${esc(e.tokenId)}">${icon('dice-faces-06', 14)}Бросить</button>`
         : !ctx.isMaster && e.init == null && ctx.actsFor(t) ? `<button class="icon-btn icon-btn-xs" data-act="init-roll" data-id="${esc(e.tokenId)}" data-tip="Бросить за ${esc(ctx.nameOf(t, st))}" aria-label="Бросить инициативу за ${esc(ctx.nameOf(t, st))}">${icon('dice-faces-06', 14)}</button>` : ''}
-      ${ctx.isMaster ? `<button class="icon-btn icon-btn-xs" data-act="init-remove" data-id="${esc(e.tokenId)}" data-tip="Убрать из боя">${icon('cancel-01', 14)}</button>` : ''}
+      ${tieButtons(ctx, order, e.slot, e.tokenId)}${ctx.isMaster ? `<button class="icon-btn icon-btn-xs" data-act="init-remove" data-id="${esc(e.tokenId)}" data-tip="Убрать из боя">${icon('cancel-01', 14)}</button>` : ''}
     </div>`;
 }
 
@@ -213,7 +221,7 @@ function packTitle(ctx, ms, marks) {
 }
 
 /** Строка пачки в очереди (#198): метка, кто в строю, раскрытие со списком, «Выделить пачку». */
-function packRow(ctx, s, cur, marks) {
+function packRow(ctx, s, cur, marks, order = []) {
   const ms = s.ms, lead = ms[0], t = lead.token;
   const isCur = !!cur && cur.slot === s.key;
   const alive = ms.filter((e) => !fallen(e)).length;
@@ -233,7 +241,7 @@ function packRow(ctx, s, cur, marks) {
   }).join('')}</div>` : '';
   return `<div class="init-row pack ${isCur ? 'current' : ''} ${ms.every((e) => e.token.hidden) ? 'is-hidden' : ''} ${alive ? '' : 'downed'} foe">
       ${initCell}<button class="init-who" data-act="pack-open" data-slot="${esc(s.key)}" aria-expanded="${open}"><span class="pack-ava">${avatarImg(t.img, t.kind)}${mk ? `<b style="--pc:${mk.color}">${mk.n}</b>` : ''}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(packTitle(ctx, ms, marks))}</span><span class="secondary ellipsis">${ctx.isMasterView ? `в строю ${alive} из ${ms.length}` : `в строю ${alive}`}</span></span>${icon(open ? 'arrow-up-01' : 'arrow-down-01', 14)}</button>
-      ${roll}${ctx.isMaster ? `${isCur || open ? `<button class="icon-btn icon-btn-xs" data-act="pack-attack" data-id="${esc(lead.tokenId)}" data-tip="Атака толпой" aria-label="Атака толпой">${icon('sword-03', 14)}</button><button class="icon-btn icon-btn-xs" data-act="pack-select" data-id="${esc(lead.tokenId)}" data-tip="Выделить пачку" aria-label="Выделить пачку">${icon('cursor-rectangle-selection-01', 14)}</button>` : ''}<button class="icon-btn icon-btn-xs" data-act="pack-remove" data-id="${esc(lead.tokenId)}" data-tip="Убрать пачку из боя" aria-label="Убрать пачку из боя">${icon('cancel-01', 14)}</button>` : ''}
+      ${roll}${tieButtons(ctx, order, s.key, lead.tokenId)}${ctx.isMaster ? `${isCur || open ? `<button class="icon-btn icon-btn-xs" data-act="pack-attack" data-id="${esc(lead.tokenId)}" data-tip="Атака толпой" aria-label="Атака толпой">${icon('sword-03', 14)}</button><button class="icon-btn icon-btn-xs" data-act="pack-select" data-id="${esc(lead.tokenId)}" data-tip="Выделить пачку" aria-label="Выделить пачку">${icon('cursor-rectangle-selection-01', 14)}</button>` : ''}<button class="icon-btn icon-btn-xs" data-act="pack-remove" data-id="${esc(lead.tokenId)}" data-tip="Убрать пачку из боя" aria-label="Убрать пачку из боя">${icon('cancel-01', 14)}</button>` : ''}
     </div>${members}`;
 }
 
