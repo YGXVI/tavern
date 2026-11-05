@@ -53,7 +53,7 @@ export function mountWrite(ctx, body, editId) {
       const uid = p.user.id;
       const e = ch.entries.find((x) => x.userId === uid && !x.diary);
       const isPen = ch.pen === uid || (book.pen?.n === n && book.pen.userId === uid);
-      const status = uid === me ? (existing ? 'ты · вписано' : 'ты · черновик') : e ? `вписал · ${new Date(e.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : isPen ? 'летописец · пишет…' : 'ещё не начинал';
+      const status = uid === me ? (existing ? 'ты · вписано' : 'ты · черновик') : e ? `вписано · ${new Date(e.at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : isPen ? 'летописец · пишет…' : 'пока пусто';
       return html`<div class="bk-voice">${raw(String(html`<span class="avatar sm hero">${p.ch.portrait ? html`<img src="${p.ch.portrait.startsWith('assets/') ? p.ch.portrait : `assets/portraits/${p.ch.portrait}.webp`}" alt="" onerror="this.remove()">` : ''}</span>`))}<b>${p.ch.name}</b><small class="${isPen ? 'gold' : ''}">${isPen && e ? 'летописец · вписал' : status}</small></div>`;
     });
   }
@@ -175,7 +175,7 @@ export function mountWrite(ctx, body, editId) {
     const missing = party(c).filter((p) => p.member && p.user.id !== me && !ch.entries.some((e) => e.userId === p.user.id)).map((p) => p.ch.name);
     const ink = chapterOf(book, n)?.inkUntil;
     if (st.vis === 'me') ctx.toast({ title: 'Записано в дневник', body: 'Только вы, на этом устройстве. В книгу кампании не попадёт.', icon: 'note-edit' });
-    else ctx.toast({ title: `Твоя версия вписана в главу ${ROMAN(n)}`, body: `${ink && ink > Date.now() ? `Править можно до ${fmtDate(ink, { time: true })} — потом чернила высохнут.` : 'Править можно, пока мастер не высушит чернила.'}${missing.length ? ` Ещё не написал: ${missing.join(', ')}.` : ''}${st.vis === 'master' ? ' Видите вы и мастер.' : ''}`, icon: 'notification-01', timeout: 9000 });
+    else ctx.toast({ title: `Твоя версия вписана в главу ${ROMAN(n)}`, body: `${ink && ink > Date.now() ? `Править можно до ${fmtDate(ink, { time: true })} — потом чернила высохнут.` : 'Править можно, пока мастер не высушит чернила.'}${missing.length ? ` Ждём версии: ${missing.join(', ')}.` : ''}${st.vis === 'master' ? ' Видите вы и мастер.' : ''}`, icon: 'notification-01', timeout: 9000 });
     ctx.go('book', st.vis === 'me' ? 'mine' : 'ch', ...(st.vis === 'me' ? [] : [n]));
   });
   const onAway = (e) => { const pop = body.querySelector('[data-mpop]'); if (pop && !pop.hidden && !pop.contains(e.target) && !e.target.closest('[data-wbody]')) pop.hidden = true; };
