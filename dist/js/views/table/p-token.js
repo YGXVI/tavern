@@ -2,12 +2,14 @@
 import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, storeImage } from '../../core/assets.js';
-import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById } from '../../core/campaign.js';
+import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById, monsterOf } from '../../core/campaign.js';
 import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry, keepTurnWith } from './combat.js';
 import { ridingItems, editFields } from './riding.js';
-import { pickImageFile } from '../creature-img.js';
+import { tokenImageEditor } from './token-image.js';
+import { loadSrdBestiary } from '../../data/bestiary.js';
+import { campaignImage } from '../creature-img.js';
 import { sightMenuItems } from './sight-ui.js';
 import { mobAttack } from './mob-attack.js';
 import { pendingItems, creatureCard } from './own-creature.js';
@@ -661,7 +663,7 @@ function ownTokenItems(ctx, t, anchor) {
     statless(t) ? { icon: 'first-aid-kit', label: 'Статы…', onClick: () => statsPrompt(ctx, t.id) } : null,
     { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) },
     { icon: 'flag-02', label: 'Союзность…', onClick: () => menu(DISPOSITIONS.map(([v, l]) => ({ icon: (t.disposition || 'friendly') === v ? 'tick-02' : 'circle', label: l, onClick: () => upd('Союзность', (x) => { x.disposition = v; }) })), anchor, { placement: 'right' }) },
-    { icon: 'image-01', label: 'Картинка…', onClick: () => pickTokenImage(ctx, (ref) => upd('Картинка', (x) => { x.img = ref; })) },
+    { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) },
     { icon: 'edit-02', label: 'Имя…', onClick: () => renameOwn(ctx, t.id) },
     { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, [t.id]) },
     'divider',
@@ -704,14 +706,28 @@ function renameToken(ctx, t, done) {
 
 /** Выбрать картинку своего токена; в песочнице — в браузер, на сервере — в бакет tokens. done(ref, file). */
 export function pickTokenImage(ctx, done) {
-  pickImageFile(ctx.toast, async (f) => {
-    try { done(await storeTokenImage(ctx, f), f); } catch (err) { ctx.toast({ title: 'Картинка не загрузилась', body: err.message, icon: 'alert-circle' }); }
-  });
+  tokenImageEditor({ toast: ctx.toast, store: (file) => storeTokenImage(ctx, file), done });
 }
 
 /** Мастер: своя картинка для существа на карте (#190 E) — у одного токена, с отменой. */
-export function setTokenImage(ctx, id) {
-  pickTokenImage(ctx, (ref) => editFields(ctx, [id], 'Картинка', (x) => { x.img = ref; }));
+export async function setTokenImage(ctx, id) {
+  const t = ctx.scene?.tokens.find((x) => x.id === id);
+  if (!t || (!ctx.isMasterView && !ctx.owns(t))) return;
+  if (t.monsterId?.startsWith('srd:')) {
+    try { await loadSrdBestiary(); }
+    catch (err) { ctx.toast({ title: 'Бестиарий не загрузился', body: err.message, icon: 'alert-circle' }); return; }
+  }
+  if (!ctx.scene?.tokens.includes(t)) return;
+  let defaultRef = monsterOf(ctx.c, t.monsterId)?.img || `ini:${t.name}`;
+  try { defaultRef = await campaignImage(ctx.cid, defaultRef, (file) => storeTokenImage(ctx, file)); }
+  catch (err) { ctx.toast({ title: 'Стандартная картинка недоступна', body: err.message, icon: 'alert-circle' }); return; }
+  if (!ctx.scene?.tokens.includes(t)) return;
+  tokenImageEditor({ ref: t.img, defaultRef, toast: ctx.toast, store: (file) => storeTokenImage(ctx, file),
+    done: (ref) => {
+      const current = ctx.scene?.tokens.find((x) => x.id === id);
+      if (current && (ctx.isMasterView || ctx.owns(current))) editFields(ctx, [id], 'Картинка', (x) => { x.img = ref; });
+    },
+  });
 }
 export async function storeTokenImage(ctx, file) {
   if (isServerMode()) return (await import('../../server/sync.js')).uploadTokenImage(ctx.cid, file);

@@ -1096,3 +1096,10 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 
 .sv-reason { display: block; margin-top: 4px; }
 .save-card .damage-relation { margin: 4px 0 10px; }
+/* Кадр картинки токена: размер предпросмотра не зависит от ширины окна. */
+.token-image-modal { width: min(480px, calc(100vw - 24px)); }
+.token-image-editor { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.token-image-editor canvas { width: min(256px, 100%); aspect-ratio: 1; height: auto; flex: none; align-self: center; border-radius: 50%; background: var(--neutral-300); box-shadow: 0 0 0 3px var(--side-foe); cursor: grab; touch-action: none; }
+.token-image-editor canvas:active { cursor: grabbing; }
+.token-image-editor .row { flex-wrap: wrap; }
+.token-image-editor p { margin: 0; }
