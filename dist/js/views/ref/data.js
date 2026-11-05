@@ -103,7 +103,7 @@ export async function loadAll() { await Promise.all(SECTIONS.map((s) => loadSect
 
 const LOADERS = {
   async spells() {
-    const [cat, ref] = await Promise.all([json('spells-2014.json'), json('spells-ref-2014.json')]);
+    const [cat, ref, srd] = await Promise.all([json('spells-2014.json'), json('spells-ref-2014.json'), json('spells-srd-2014.json').catch(() => ({ spells: {} }))]);
     const list = cat.entries.map((e) => {
       const p = ref.spells[e.id] || [];
       const classes = (e.classes?.base || []).map((c) => ref.classes[c]).filter(Boolean);
@@ -111,6 +111,7 @@ const LOADERS = {
         section: 'spells', id: e.id.split(':').pop(), name: e.name.ru || e.name.en, en: e.name.en, level: e.level, school: e.school,
         schoolName: ref.schools[e.school] || e.school, ritual: !!e.ritual, conc: !!e.concentration, classes, srd: !!e.srd,
         time: p[0] || '', range: p[1] || '', duration: p[2] || '', comp: p[3] || '', damage: (p[4] || []).map((d) => ref.damage[d] || d), link: p[5] || '',
+        srdText: (e.srd?.index && srd.spells[e.srd.index]) || null,
         sub: `${e.level ? `${e.level} уровень` : 'Заговор'} · ${ref.schools[e.school] || e.school}`,
       });
     }).sort((a, b) => a.name.localeCompare(b.name, 'ru'));

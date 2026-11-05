@@ -8,6 +8,7 @@ import { loadSection } from './data.js';
 import { card } from './cards.js';
 import { openPalette } from './palette.js';
 import { wireClass } from './classes.js';
+import { wireRx } from './rx.js';
 
 const ic = (n, s = 16) => raw(icon(n, s));
 
@@ -23,7 +24,8 @@ function cardModal(ctx, it0) {
       ${it.section === 'creatures' && ctx.isMaster ? html`<button class="btn btn-primary btn-sm" data-place>${ic('maps')}Поставить на карту</button>` : ''}
       <span class="spacer"></span><span class="t-xs tertiary">${it.section === 'creatures' && !it.m?.srd ? 'Стартовый бестиарий' : 'SRD 5.1 · CC BY 4.0'}</span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></footer></div>`;
   const m = modal(body(), { wide: true, className: 'ref-modal' });
-  wireClass(m.box, { modal: true }); // ползунок уровня и вкладки класса
+  wireClass(m.box, { modal: true }); // ползунок уровня класса
+  wireRx(m.box); // инструменты разделов: опасность существа и т. п.
   const redraw = () => m.set(body());
   m.box.addEventListener('click', async (e) => {
     const roller = e.target.closest('[data-roll]');

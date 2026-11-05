@@ -12,6 +12,12 @@ import { card, ruleById, termOf } from './cards.js';
 import { openPalette, bindPaletteKeys } from './palette.js';
 import { encounters, newEncounter, addToEncounter } from '../camp/encounters.js';
 import { galleryPage, refreshGallery, classPage, wireClass } from './classes.js';
+import { wireRx } from './rx.js';
+import * as CREATURES from './sec-creatures.js';
+import * as SPELLS from './sec-spells.js';
+
+/** Разделы со своей галереей и страницей записи (как у классов). */
+const PAGES = { creatures: CREATURES, spells: SPELLS };
 
 const ic = (n, s = 16) => raw(icon(n, s));
 const STORE = 'rasputye-ref-v1';
@@ -178,6 +184,13 @@ export function mountRef(root, hash) {
         <label class="input ref-search">${ic('search-01', 18)}<input data-text value="${text}" placeholder="Искать в разделе «${s.name.toLowerCase()}»…" aria-label="Поиск в разделе" autocomplete="off"><kbd>/</kbd></label>
       </div>`;
   }
+  function rxPage(s, items) {
+    const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? `#/ref/${s.id}` : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const it = st.id && items.find((x) => x.id === st.id);
+    if (!it) return PAGES[s.id].gallery(items, st.q, text, top);
+    const key = `${s.id}/${it.id}`;
+    return html`<main class="page cls-wrap">${top}${PAGES[s.id].page(it, items, st.q, { key, fav: prefs().fav.includes(key), actions: footActions(it) })}</main>`;
+  }
   // ——— Классы: галерея и страница класса ———
   function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)) }; }
   function classesPage(items) {
@@ -216,7 +229,7 @@ export function mountRef(root, hash) {
     const s = st.section && sectionById(st.section);
     if (!s) { paint(home()); for (const x of SECTIONS) if (!sectionNow(x.id) && x.id !== 'items') loadSection(x.id).then(() => { if (my === token && !st.section) paint(home()); }, () => {}); return; }
     const items = sectionNow(s.id);
-    if (items) { paint(s.id === 'classes' ? classesPage(items) : sectionPage(items)); track(); return; }
+    if (items) { paint(s.id === 'classes' ? classesPage(items) : PAGES[s.id] ? rxPage(s, items) : sectionPage(items)); track(); return; }
     paint(html`<main class="page ref-page"><div class="ref-loading">${ic('hourglass', 24)}<p>Открываю раздел «${s.name}»…</p></div></main>`);
     loadSection(s.id).then(() => { if (my === token) render(); }, (err) => { if (my === token) paint(html`<main class="page ref-page"><div class="ref-loading">${ic('alert-circle', 24)}<p>Раздел не загрузился: ${err.message}</p><button class="btn btn-secondary" data-retry>Ещё раз</button></div></main>`); });
   }
@@ -243,16 +256,23 @@ export function mountRef(root, hash) {
   L('click', '[data-palette]', () => openPalette());
   L('click', '[data-retry]', () => render());
   L('click', '[data-paste]', () => pasteInvite());
-  L('input', '[data-text]', (e) => { text = e.target.value; if (st.section === 'classes') { const items = sectionNow('classes'); if (items && !st.id) refreshGallery(root, items, st.q, text); return; } refreshList(); });
+  L('input', '[data-text]', (e) => {
+    text = e.target.value;
+    if (st.section === 'classes') { const items = sectionNow('classes'); if (items && !st.id) refreshGallery(root, items, st.q, text); return; }
+    if (PAGES[st.section]) { const items = sectionNow(st.section); const box = root.querySelector('[data-rx-grid]'); if (items && box) box.innerHTML = String(PAGES[st.section].grid(items, st.q, text)); return; }
+    refreshList();
+  });
   L('keydown', '[data-text]', (e) => {
     if (e.key !== 'Enter') return;
-    if (st.section === 'classes') { const hit = search(sectionNow('classes') || [], text, 1).list[0]; if (hit) location.hash = hrefOf('classes', hit.id); return; }
+    if (st.section === 'classes' || PAGES[st.section]) { const hit = search(sectionNow(st.section) || [], text, 1).list[0]; if (hit) location.hash = hrefOf(st.section, hit.id); return; }
     const first = root.querySelector('[data-rows] .ref-row-item'); if (first) location.hash = first.getAttribute('href');
   });
   // Подбор класса: значения живут в адресе, как фильтры других разделов.
   L('click', '[data-qtoggle]', (e, b) => setQ((q) => { const k = b.dataset.qtoggle, v = b.dataset.v; if (!v || q.get(k) === v) q.delete(k); else q.set(k, v); }));
   L('change', '[data-qswitch]', (e, b) => setQ((q) => { if (b.checked) q.set(b.dataset.qswitch, '1'); else q.delete(b.dataset.qswitch); }));
+  L('click', '[data-qmulti]', (e, b) => setQ((q) => { const k = b.dataset.qmulti, v = b.dataset.v; const all = q.getAll(k); q.delete(k); (all.includes(v) ? all.filter((x) => x !== v) : [...all, v]).forEach((x) => q.append(k, x)); }));
   L('click', '[data-qclear]', (e, b) => setQ((q) => { for (const k of b.dataset.qclear.split(',')) q.delete(k); }));
+  offs.push(wireRx(root));
   offs.push(wireClass(root, { onState: (cs, it) => {
     const q = new URLSearchParams(st.q);
     if (cs.lvl > 1) q.set('lvl', cs.lvl); else q.delete('lvl');
