@@ -11,6 +11,7 @@ import { createSheetEditor } from './sheet-editor.js';
 const knownNumber = value => Number.isFinite(value) ? value : '—';
 const knownBonus = value => Number.isSafeInteger(value) ? fmtMod(value) : '—';
 let drawer=null, editor=null;
+let statblockLang = 'ru'; // На сессию вкладки; свои существа не переключаются.
 let state={kind:null,id:null,tab:'main'};
 export function closeSheet(){editor?.close();editor=null;drawer?.remove();drawer=null;state={kind:null,id:null,tab:'main'};}
 export const sheetOpenFor=()=>({...state,tab:editor?.tab||state.tab});
@@ -23,6 +24,7 @@ export function openCharacterSheet(ctx,id,tab){
 export function openStatblock(ctx,id){closeSheet();state={kind:'monster',id,tab:'main'};
   drawer=el('<aside class="sheet-drawer panel" aria-label="Статблок"></aside>');ctx.root.append(drawer);
   drawer.addEventListener('click',e=>{
+    const lang=e.target.closest('[data-stat-lang]');if(lang){statblockLang=lang.dataset.statLang;refreshSheet(ctx);return;}
     if(e.target.closest('[data-close-sheet]')){closeSheet();return;}
     const desc=e.target.closest('[data-desc]');if(desc){const k=desc.dataset.desc;if(openDesc.has(k))openDesc.delete(k);else openDesc.add(k);desc.classList.toggle('open',openDesc.has(k));return;}
     const b=e.target.closest('[data-roll]');if(b)monsterRoll(ctx,b);
@@ -42,9 +44,9 @@ function libMeta(a) {
 }
 const openDesc = new Set(); // раскрытые описания: «monsterId:list:i» — переживают перерисовку листа
 
-function traitHTML(x) {
+function traitHTML(x, lib = false) {
   if (typeof x === 'string') return `<p class="t-para trait">${esc(x)}</p>`;
-  return `<p class="t-para trait"><b>${esc(x.name)}.</b> <span lang="en">${esc(x.desc)}</span></p>`;
+  return `<p class="t-para trait"><b>${esc(x.name)}.</b> <span lang="${!lib && statblockLang === 'ru' && x.ru ? 'ru' : 'en'}">${esc(!lib && statblockLang === 'ru' && x.ru ? x.ru : x.desc)}</span></p>`;
 }
 
 function actionHTML(m, list, a, i) {
@@ -55,7 +57,10 @@ function actionHTML(m, list, a, i) {
       : `<span class="chip" title="Урон без броска">${esc(a.damage)} урон</span>` : '');
   const k = `${m.id}:${list}:${i}`;
   // Описание без бросков — единственное, что есть у действия: показываем целиком; у атак — две строки, тап раскрывает.
-  const desc = a.desc ? `<p class="atk-desc ${!rolls || openDesc.has(k) ? 'open' : ''}" lang="en" ${rolls ? `data-desc="${esc(k)}" title="Показать целиком"` : ''}>${esc(a.desc)}</p>` : '';
+  const lib = String(m.id).startsWith('lib:');
+  const text = !lib && statblockLang === 'ru' && a.ru ? a.ru : a.desc;
+  const lang = !lib && statblockLang === 'ru' && a.ru ? 'ru' : 'en';
+  const desc = text ? `<p class="atk-desc ${!rolls || openDesc.has(k) ? 'open' : ''}" lang="${lang}" ${rolls ? `data-desc="${esc(k)}" title="Показать целиком"` : ''}>${esc(text)}</p>` : '';
   return `<div class="attack-row ${desc ? 'has-desc' : ''}"><div class="grow"><b>${esc(a.name)}</b>${meta ? `<small class="muted">${esc(meta)}</small>` : ''}${desc}</div>${rolls}</div>`;
 }
 
@@ -71,6 +76,7 @@ function monsterHTML(ctx, t) {
   return `<header class="sheet-head">
       <span class="sheet-portrait foe" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>
       <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''}${m.type ? ` · ${esc(m.type)}` : ''}${m.cr != null ? ` · КО ${esc(m.cr)}` : ''}</div></div>
+      ${isM && !lib ? `<div class="mob-seg stat-lang" role="group" aria-label="Язык описаний">${['ru', 'en'].map((lang) => `<button class="${statblockLang === lang ? 'on' : ''}" data-stat-lang="${lang}" aria-pressed="${statblockLang === lang}">${lang.toUpperCase()}</button>`).join('')}</div>` : ''}
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
@@ -84,10 +90,10 @@ function monsterHTML(ctx, t) {
       ${isM ? `<div class="abilities">${ABILITIES.map((a) => {const score=m.stats?.[a.id],bonus=abilityModifier(score);return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="mcheck" data-ab="${a.id}" ${bonus===null?'disabled':''}>${knownBonus(bonus)}</button><span class="ab-score">${knownNumber(score)}</span></div>`;}).join('')}</div>
       ${saves ? `<p class="t-sm muted" style="margin:12px 0 0">Спасброски: ${saves}</p>` : ''}
       ${m.senses ? `<p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>` : ''}
-      ${(m.traits||[]).map(traitHTML).join('')}
+      ${(m.traits||[]).map((x) => traitHTML(x, lib)).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
-      ${list === 'reactions' ? m.reactions.map(traitHTML).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
-      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
+      ${list === 'reactions' ? m.reactions.map((x) => traitHTML(x, lib)).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
+      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? (statblockLang === 'ru' ? 'Числа и описания — SRD 5.1 (CC BY 4.0); русские названия и перевод описаний — наши.' : 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.') : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
 

@@ -9,7 +9,8 @@ import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
 import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers, keepTurnWith, moveTied } from './combat.js';
 import { packKind, summonKind } from './packs.js';
-import { deathSaveStep, isDead, isStable } from '../../rules/attack.js';
+import { deathSaveStep, isDead, isStable, adjustDamage } from '../../rules/attack.js';
+import { saveRule, saveAdvantage, saveResult } from '../../rules/saves.js';
 import { mobAttack } from './mob-attack.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
@@ -47,6 +48,7 @@ export class Panels {
     this.ctx = ctx;
     this.prev = null;
     this.shares = new Map();
+    this.saveRelations = new Map(); // Только локальные отметки мастера, не поля результата спасброска.
     this.side = el('<aside class="side-panel panel hidden" aria-label="Боковая панель"></aside>');
     this.floats = el('<div class="float-stack" aria-live="polite"></div>');
     this.pauseEl = el('<div class="pause-screen hidden" role="dialog" aria-label="Пауза"></div>');
@@ -329,13 +331,15 @@ export class Panels {
       for (const r of reqs) for (const t of this.mySaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const m = this.saveMod(t, r.ability);
-        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${esc(r.dc)}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
+        const rule = saveRule(tokenStats(c, t).conditions, r.ability);
+        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${esc(r.dc)}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small>${rule.why ? `<small>${esc(rule.why)}</small>` : ''}</div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis" ${rule.autoFail ? 'disabled' : ''}>Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv" ${rule.autoFail ? 'disabled' : ''}>Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}${rule.autoFail ? 'Записать провал' : 'Бросить к20'}</button></div>`);
       }
       // Герой товарища, которого нет за столом: тихая карточка «бросить за него».
       for (const r of reqs) for (const t of this.friendSaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const name = tokenStats(c, t).name;
-        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${esc(r.dc)} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
+        const rule = saveRule(tokenStats(c, t).conditions, r.ability);
+        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${esc(r.dc)} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small>${rule.why ? `<small>${esc(rule.why)}</small>` : ''}</div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
       }
     }
     const html = cards.join('');
@@ -354,11 +358,14 @@ export class Panels {
     const rows = toks.map((t) => {
       const st = tokenStats(c, t);
       const res = r.results[t.id];
-      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow ellipsis">${esc(st.name)}</span>${res ? `<b class="mono">${esc(res.total)}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">Бросить за него</button>`}</div>`;
+      const rule = saveRule(st.conditions, r.ability);
+      const why = res?.detail || rule.why;
+      const relation = this.saveRelations.get(`${r.id}:${t.id}`) || '';
+      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow">${esc(st.name)}${why ? `<small class="t-xs muted sv-reason">${esc(why)}</small>` : ''}</span>${res ? `<b class="mono">${esc(res.total)}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${rule.autoFail ? 'Записать провал' : 'Бросить за него'}</button>`}</div>${r.damage ? T.damageRelationHTML(relation, `data-act="save-rel" data-id="${esc(r.id)}" data-token="${esc(t.id)}"`) : ''}`;
     }).join('');
     return `<div class="float-card panel save-card" data-key="save-${esc(r.id)}"><div class="sv-head"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>${esc(r.label)} · ${esc(ab.short)} СЛ ${esc(r.dc)}</b><small>${done} из ${toks.length} бросили${r.damage ? ` · урон ${esc(r.damage)}${r.half ? ', при успехе половина' : ''}` : ''}</small></div><button class="icon-btn icon-btn-xs" data-act="save-close" data-id="${esc(r.id)}" aria-label="Закрыть">${icon('cancel-01', 14)}</button></div>
       <div class="sv-list">${rows}</div>
-      ${r.damage ? `<div class="row"><span class="spacer"></span><button class="btn btn-sm btn-danger" data-act="save-apply" data-id="${esc(r.id)}" ${done ? '' : 'disabled'}>${icon('flash', 14)}Бросить урон и применить</button></div>` : ''}</div>`;
+      ${r.damage ? `<div class="row"><span class="spacer"></span><button class="btn btn-sm btn-danger" data-act="save-apply" data-id="${esc(r.id)}" ${done ? '' : 'disabled'}>${icon('flash', 14)}Нанести урон</button></div>` : ''}</div>`;
   }
 
   // ——— Спасброски ———
@@ -392,12 +399,14 @@ export class Panels {
 
   requestSaves({ ability, dc, label, tokenIds, damage = '', half = true }) {
     const ctx = this.ctx;
+    if (!ctx.isMaster) return;
     const req = { id: uid('sv-'), ability, dc, label, tokenIds, damage, half, sceneId: ctx.sceneId, at: Date.now(), by: ctx.userId, results: {}, status: 'open' };
     for (const id of tokenIds) {
       const t = ctx.scene.tokens.find((x) => x.id === id);
       if (!t || this.needsPlayer(t)) continue;
-      const r = rollPool({ dice: { 20: 1 }, mod: this.saveMod(t, ability) });
-      req.results[id] = { total: r.total, nat: r.results[0].value, ok: r.total >= dc, by: 'master', detail: describeRoll(r) };
+      const rule = saveRule(tokenStats(ctx.c, t).conditions, ability);
+      const r = rule.autoFail ? null : rollPool({ dice: { 20: 1 }, mod: this.saveMod(t, ability), adv: rule.adv });
+      req.results[id] = saveResult(rule, r && { total: r.total, nat: r.results[0].value, detail: describeRoll(r) }, dc, 'master');
     }
     updateCampaign(ctx.cid, (c) => {
       c.saveRequests = [...(c.saveRequests || []).filter((x) => x.status === 'open' && Date.now() - x.at < 3600000).slice(-4), req];
@@ -415,24 +424,29 @@ export class Panels {
     if (!r || !t || r.results[tokenId]) return;
     const ab = ABILITIES.find((a) => a.id === r.ability);
     const st = tokenStats(c, t);
-    const rr = doRoll(ctx, { label: `${st.name}: спасбросок ${ab.short} (${r.label})`, dice: { 20: 1 }, mod: this.saveMod(t, r.ability), adv, kind: 'save' });
-    const res = { total: rr.total, nat: rr.entry.nat, ok: rr.total >= r.dc, by: byMaster ? 'master' : 'player', detail: rr.entry.detail };
+    const rule = saveRule(st.conditions, r.ability);
+    const rr = rule.autoFail ? null : doRoll(ctx, { label: `${st.name}: спасбросок ${ab.short} (${r.label})`, dice: { 20: 1 }, mod: this.saveMod(t, r.ability), adv: saveAdvantage(adv, rule), kind: 'save' });
+    const res = saveResult(rule, rr && { total: rr.total, nat: rr.entry.nat, detail: rr.entry.detail }, r.dc, byMaster ? 'master' : 'player');
     updateCampaign(ctx.cid, (cc) => { const x = (cc.saveRequests || []).find((q) => q.id === reqId); if (x && !x.results[tokenId]) x.results[tokenId] = res; });
-    if (!byMaster) ctx.toast({ title: res.ok ? 'Успех!' : 'Провал', body: `${rr.total} против СЛ ${r.dc}`, icon: res.ok ? 'shield-01' : 'flash' });
+    if (!byMaster) ctx.toast({ title: res.ok ? 'Успех!' : 'Провал', body: rule.autoFail ? rule.why : `${res.total} против СЛ ${r.dc}`, icon: res.ok ? 'shield-01' : 'flash' });
   }
 
   applySave(reqId) {
     const ctx = this.ctx, c = ctx.c;
     const r = (c.saveRequests || []).find((x) => x.id === reqId);
-    if (!r) return;
+    if (!ctx.isMaster || !r || r.status !== 'open') return;
     if (r.sceneId !== ctx.sceneId) { ctx.toast({ title: 'Перейдите на сцену запроса', icon: 'maps' }); return; }
     const f = parseFormula(r.damage);
     if (!f) { ctx.toast({ title: 'Не понимаю формулу урона', body: r.damage, icon: 'alert-circle' }); return; }
     const dmg = doRoll(ctx, { label: `${r.label}: урон`, ...f }).total;
-    const fails = [], succ = [], skipped = [];
-    for (const id of r.tokenIds) { const x = r.results[id]; if (!x) skipped.push(id); else (x.ok ? succ : fails).push(id); }
-    if (fails.length) T.applyHp(ctx, fails, -dmg);
-    if (succ.length && r.half && Math.floor(dmg / 2) > 0) T.applyHp(ctx, succ, -Math.floor(dmg / 2));
+    const skipped = [];
+    for (const id of r.tokenIds) {
+      const res = r.results[id];
+      if (!res) { skipped.push(id); continue; }
+      const amount = res.ok && !r.half ? 0 : adjustDamage(dmg, this.saveRelations.get(`${r.id}:${id}`), !!res.ok);
+      if (amount > 0) T.applyHp(ctx, [id], -amount);
+      this.saveRelations.delete(`${r.id}:${id}`);
+    }
     updateCampaign(ctx.cid, (cc) => { const x = (cc.saveRequests || []).find((q) => q.id === reqId); if (x) x.status = 'done'; });
     if (skipped.length) ctx.toast({ title: 'Без броска — урон не применён', body: skipped.map((id) => { const t = ctx.scene.tokens.find((q) => q.id === id); return t ? tokenStats(c, t).name : ''; }).filter(Boolean).join(', '), icon: 'alert-circle' });
   }
@@ -902,6 +916,7 @@ export class Panels {
       case 'copy-code': copyText(ctx.c.invite?.code || '').then(() => ctx.toast({ title: 'Код скопирован', body: ctx.c.invite?.code, icon: 'copy-01' })); break;
       case 'target': if (one) T.toggleTarget(ctx, one.id); break;
       // Карточки сверху
+      case 'save-rel': if (ctx.isMaster) { this.saveRelations.set(`${b.dataset.id}:${b.dataset.token}`, b.dataset.rel); this.renderFloats(); } break;
       case 'save-roll': this.rollSave(b.dataset.id, b.dataset.token, b.dataset.adv || null); break;
       case 'save-auto': this.rollSave(b.dataset.id, b.dataset.token, null, true); break;
       case 'save-apply': this.applySave(b.dataset.id); break;

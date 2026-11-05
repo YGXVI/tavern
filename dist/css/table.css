@@ -465,6 +465,8 @@ button.init-num:hover { background: var(--bg-control-off); }
 .mob-seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-10); background: var(--bg-control); box-shadow: inset 0 0 0 1px var(--stroke-subtle); }
 .mob-seg button { flex: 1; height: 28px; border: 0; border-radius: var(--r-8); background: none; color: var(--text-primary); font: 500 13px/16px var(--font-text); cursor: pointer; white-space: nowrap; }
 .mob-seg button.on { background: var(--bg-accent-subtle); color: var(--text-accent); box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
+.sheet-head .stat-lang { flex: 0 0 auto; }
+.sheet-head .stat-lang button { flex: 0 0 auto; min-width: 36px; padding: 0 8px; }
 .mob-sum { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
 .mob-sum b { font: 600 16px/20px var(--font-text); }
 .mob-sum span { color: var(--text-secondary); }
@@ -1014,9 +1016,11 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .df-tag.out { opacity: 0; }
 @media (max-width: 720px) {
   .ch-widget:has(.dice-widget) { right: auto; }
-  .dice-widget .dice-rail { flex-direction: row; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  .dice-widget .dice-rail { flex-direction: row; flex-wrap: wrap; width: min(520px, calc(100vw - 16px)); max-width: calc(100vw - 16px); overflow: visible; gap: 4px; }
+  .dice-widget .dice-rail .rail-btn { width: 36px; height: 36px; flex: 0 0 36px; }
+  .dice-widget .dice-rail .divider.rail-options-break { flex-basis: 100%; height: 0; margin: 0; border: 0; }
   .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
-  .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
+  .dice-tray { top: 184px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
 
 /* Лист героя (TASK-004) */
@@ -1089,3 +1093,6 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 /* Журнал бросков (меню кампании) */
 .log-modal .log-list { padding: 0 8px 12px; }
 .log-row .log-total { font: 600 16px/1 var(--font-display); min-width: 28px; text-align: right; }
+
+.sv-reason { display: block; margin-top: 4px; }
+.save-card .damage-relation { margin: 4px 0 10px; }
