@@ -12,7 +12,7 @@ const ftToPx = (scene, ft) => (ft / (scene.grid.feet || 5)) * gridSize(scene.gri
 export function sceneLights(scene, positions = {}) {
   const out = scene.lights.map((l) => ({ ...l, x: l.x, y: l.y }));
   for (const t of scene.tokens) {
-    if (!t.light || t.hidden && !positions.includeHidden) continue;
+    if (t.pending || !t.light || t.hidden && !positions.includeHidden) continue;
     const p = positions[t.id] || t;
     out.push({ id: `tok-${t.id}`, x: p.x, y: p.y, bright: t.light.bright, dim: t.light.dim, color: t.light.color || 'warm', flicker: t.light.flicker, fromToken: t.id });
   }

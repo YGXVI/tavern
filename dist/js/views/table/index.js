@@ -25,6 +25,7 @@ import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar, fitDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
+import { attachCreatureFileDrop } from './file-drop.js';
 import { loadSrdBestiary } from '../../data/bestiary.js';
 import { refreshSheet } from './sheet.js';
 import { renderChrome } from './chrome.js';
@@ -35,6 +36,7 @@ import { activeSight, sightRadius } from './sight.js';
 import { trackSight, onSightOff } from './sight-ui.js';
 import { trackPending, pendingHidden } from './own-creature.js';
 import { go } from '../screens.js';
+import { mountHomeHooks } from './home-hooks.js';
 import { icon } from '../../icons.js';
 
 export function mountTable(root, cid) {
@@ -85,7 +87,7 @@ export function mountTable(root, cid) {
   // Игрок может бросать и заканчивать ход за любого видимого героя — товарищ мог зайти в Discord с телефона (30.10).
   ctx.playsFor = (t) => !!t && (ctx.isMine(t) || (!!t.characterId && !t.hidden));
   // За кого игрок ходит в бою: свой герой, герой отсутствующего игрока, свой токен и призыв (#198: группа призывов).
-  ctx.actsFor = (t) => ctx.playsFor(t) || ctx.owns(t);
+  ctx.actsFor = (t) => !!t && !t.pending && (ctx.playsFor(t) || ctx.owns(t));
   // Хозяина героя нет за столом (или у героя нет игрока) — тогда остальным предлагаем бросить за него.
   ctx.ownerAway = (t) => {
     if (!t?.characterId || ctx.isMine(t)) return false;
@@ -96,7 +98,7 @@ export function mountTable(root, cid) {
 
   ctx.eyes = () => {
     const sc = ctx.scene; if (!sc) return [];
-    const heroes = sc.tokens.filter((t) => t.kind === 'hero' && t.characterId && !t.hidden);
+    const heroes = sc.tokens.filter((t) => t.kind === 'hero' && t.characterId && !t.hidden && !t.pending);
     if (ctx.ui.viewAs) return heroes.filter((t) => t.characterId === ctx.ui.viewAs);
     if (ctx.isMaster) return heroes;
     const mine = heroes.filter((t) => t.characterId === ctx.myCharacterId);
@@ -193,7 +195,11 @@ export function mountTable(root, cid) {
   // ——— Изменения с историей ———
   ctx.mutateScene = (fn, undo) => {
     const sid = ctx.sceneId;
-    const r = updateScene(ctx.cid, sid, (s, c) => fn(s, c));
+    const r = updateScene(ctx.cid, sid, (s, c) => {
+      const before = new Set(s.tokens.map((t) => t.id));
+      fn(s, c);
+      if (!ctx.isMasterView) for (const t of s.tokens) if (!before.has(t.id)) t.pending = true;
+    });
     if (undo) ctx.history.push({ sceneId: sid, ...undo });
     return r;
   };
@@ -424,6 +430,7 @@ export function mountTable(root, cid) {
   attachGizmo(L, ctx);
   attachDrawBar(L, ctx);
   const detachCreatureDrag = attachCreatureDrag(ctx);
+  const detachCreatureFileDrop = attachCreatureFileDrop(ctx);
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
@@ -495,17 +502,21 @@ export function mountTable(root, cid) {
     if (characterOf(ctx.c, chId)) ctx.panels.openSheetFor({ characterId: chId });
   };
   sheetFromHash();
+  // Дом кампании (#203): действия из дома, Ctrl K, перенос заметок игроков в книгу клиентом мастера.
+  const homeHooks = mountHomeHooks(ctx);
+  homeHooks.fromHash();
   setPresence({ userId: ctx.userId, campaignId: ctx.cid, sceneId: ctx.sceneId });
   const onResize = () => ctx.invalidate('chrome');
   addEventListener('resize', onResize);
   viewport.focus({ preventScroll: true });
 
   return {
-    update: sheetFromHash,
+    update: () => { sheetFromHash(); homeHooks.fromHash(); },
     unmount() {
       gone = true;
+      homeHooks.unmount();
       if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
-      unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); detachCreatureFileDrop(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },

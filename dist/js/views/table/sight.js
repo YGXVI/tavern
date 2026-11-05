@@ -15,7 +15,7 @@ const okGrant = (g) => !!g && typeof g.to === 'string' && !!g.to && Number.isFin
 export const grantsOf = (t) => (Array.isArray(t?.sight) ? t.sight.filter(okGrant) : []);
 
 /** Чьи глаза можно дать: существа, не предметы и не герои (у героев — «Общий обзор»). */
-export const canGiveSight = (t) => !!t && t.kind !== 'item' && t.kind !== 'hero' && !t.characterId;
+export const canGiveSight = (t) => !!t && !t.pending && t.kind !== 'item' && t.kind !== 'hero' && !t.characterId;
 
 /** Дальность в футах: кратно 5, от 5 до SIGHT_MAX. */
 export const clampFt = (ft) => Math.max(5, Math.min(SIGHT_MAX, Math.round((Number(ft) || 0) / 5) * 5));

@@ -241,7 +241,7 @@ export function renderAuras(L, ctx) {
   const s = gridSize(scene.grid);
   const out = [], labels = [];
   for (const t of scene.tokens) {
-    if (!t.aura || !ctx.tokenShown(t)) continue;
+    if (t.pending || !t.aura || !ctx.tokenShown(t)) continue;
     const p = ctx.posOf(t);
     const n = sizeById(t.size).cells;
     const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;
@@ -261,6 +261,19 @@ export function renderAuras(L, ctx) {
 }
 
 // ——— Токены ———
+const localPortraitLoads = new WeakMap();
+function loadLocalPortrait(ctx, ref) {
+  if (!ref?.startsWith('idb:') || srcOf(ref)) return;
+  let requested = localPortraitLoads.get(ctx);
+  if (!requested) localPortraitLoads.set(ctx, (requested = new Set()));
+  // Один запрос на файл в этом столе, включая отсутствующие файлы: не читать IndexedDB на каждом кадре.
+  if (requested.has(ref)) return;
+  requested.add(ref);
+  resolveSrc(ref).then((src) => {
+    if (src && ctx.root.isConnected) ctx.invalidate('tokens');
+  }).catch(() => {});
+}
+
 function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const conds = (st.conditions || []).slice(0, 3).map((id) => { const c = conditionById(id); return c ? `<span class="tok-cond" title="${esc(c.name)}">${icon(c.icon, 12)}</span>` : ''; }).join('');
   const more = (st.conditions || []).length > 3 ? `<span class="tok-cond more">+${st.conditions.length - 3}</span>` : '';
@@ -290,6 +303,7 @@ export function renderTokens(L, ctx) {
   const marks = ctx.packMarks(); // пачки в инициативе (#198): цветная метка с номером
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
+    loadLocalPortrait(ctx, t.img);
     seen.add(t.id);
     const st = tokenStats(c, t);
     const size = sizeById(t.size);
@@ -298,7 +312,9 @@ export function renderTokens(L, ctx) {
     const d = n * s * 0.9 * (size.scale || 1) * look.scale;
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
     const name = ctx.nameOf(t, st);
-    const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
+    // После загрузки подписанного/локального URL сама ссылка t.img не меняется.
+    // Учитываем готовый адрес, чтобы инициалы сменились картинкой без правки токена.
+    const sig = `${t.img}|${srcOf(t.img)}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
     if (!node) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
@@ -310,8 +326,12 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--rot', `${look.rot}deg`);
     node.style.zIndex = ctx.dragging?.has(t.id) || ctx.remote.drags.has(t.id) ? top : layer.get(t.id);
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
-    node.style.setProperty('--fs', `${Math.max(7, s * 0.15)}px`);
-    node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
+    // Значки, кольцо и подпись — доли клетки, без нижних порогов в пикселях: при мелкой сетке они уменьшаются
+    // вместе с артом и не закрывают его (sol0139, 05.11). У маленьких и уменьшенных токенов — от их размера.
+    const base = Math.min(s, d / 0.9);
+    node.style.setProperty('--cell', base);
+    node.style.setProperty('--fs', `${base * 0.15}px`);
+    node.style.setProperty('--bw', `${base * 0.045}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
     node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''} ${t.pending ? 'pending' : ''}`;

@@ -95,6 +95,13 @@ select pg_temp.cnt('TASK-123: первый выбранный остаётся �
 select pg_temp.cnt('TASK-123: героя другого участника не взять', $q$select 1 where (public.claim_character('c-rls', 'ch-q') ->> 'error') = 'taken'$q$, 1);
 select pg_temp.err('роль мастера себе не дать', $q$update public.campaign_members set role = 'master' where campaign_id = 'c-rls' and user_id = '00000000-0000-0000-0000-00000000000b'$q$);
 select pg_temp.ok('игрок ставит своего героя', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values ('t-p', 'c-rls', 's-1', 'ch-p', false, 4, '{"kind":"hero","name":"Лира","x":10,"y":10}')$q$);
+select pg_temp.cnt('approval: новый герой тоже ожидает', $q$select 1 from public.tokens where id='t-p' and data->'pending'='true'$q$,1);
+
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('мастер разрешает заявки для дальнейших проверок', $q$update public.tokens set data = data - 'pending' where campaign_id = 'c-rls' and data -> 'pending' = 'true'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.err('чужого героя на сцену не поставить', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values ('t-q', 'c-rls', 's-1', 'ch-q', false, 5, '{"kind":"hero"}')$q$);
 select pg_temp.err('существо игрок не создаёт', $q$insert into public.tokens (id, campaign_id, scene_id, hidden, ord, data) values ('t-x', 'c-rls', 's-1', false, 6, '{"kind":"foe"}')$q$);
 select pg_temp.cnt('игрок видит только нескрытые токены', $q$select 1 from public.tokens where campaign_id = 'c-rls'$q$, 4);
@@ -345,6 +352,12 @@ select pg_temp.err('свой токен закреплённым — отказ'
 select pg_temp.err('предмет игрок не ставит', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x5', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 12, '{"kind":"item"}')$q$);
 select pg_temp.err('токен без вида игрок не ставит', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x6', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 12, '{"name":"?"}')$q$);
 select pg_temp.err('слишком большой токен — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x7', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 12, jsonb_build_object('kind', 'custom', 'img', repeat('x', 70000)))$q$);
+select pg_temp.cnt('approval: второй герой ожидает', $q$select 1 from public.tokens where id='t-s' and data->'pending'='true'$q$,1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('мастер разрешает героя перед призывами', $q$update public.tokens set data=data-'pending' where id='t-s'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.ok('призыв коня к своему герою', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-horse', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 13, '{"kind":"foe","monsterId":"warhorse","name":"Боевой конь","summonedBy":"t-p","disposition":"friendly","x":300,"y":200,"hp":19,"hpMax":19,"ac":11}')$q$);
 select pg_temp.ok('призыв волка ко второму герою', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-wolf', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 14, '{"kind":"foe","monsterId":"wolf","name":"Волк","summonedBy":"t-s","x":520,"y":500,"hp":11,"hpMax":11}')$q$);
 select pg_temp.err('призыв к чужому герою — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x8', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"foe","summonedBy":"t-q2"}')$q$);
@@ -352,6 +365,13 @@ select pg_temp.err('существо без призывателя — отка�
 select pg_temp.err('верхом сразу при постановке — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x10', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"custom","riding":"t-horse"}')$q$);
 select pg_temp.err('TASK-123 (review): свой токен на сцену чужой кампании — отказ', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-x11', 'c-rls', 's-2', '00000000-0000-0000-0000-00000000000b', 15, '{"kind":"custom"}')$q$);
 select pg_temp.err('TASK-123 (review): второй токен своего героя — отказ (И1)', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, ord, data) values ('t-s2', 'c-rls', 's-1', 'ch-s', 15, '{"kind":"hero","name":"Сид","x":10,"y":10}')$q$);
+select pg_temp.cnt('approval: картинка и оба призыва ожидают', $q$select 1 from public.tokens where id in ('t-owl','t-horse','t-wolf') and data->'pending'='true'$q$,3);
+
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('мастер разрешает заявки для дальнейших проверок', $q$update public.tokens set data = data - 'pending' where campaign_id = 'c-rls' and data -> 'pending' = 'true'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.rows('статы своему токену', $q$update public.tokens set data = data || '{"hp":1,"hpMax":1,"ac":11,"speed":30,"initBonus":2}' where id = 't-owl'$q$, 1);
 select pg_temp.rows('имя, картинка, союзность, слой своему токену', $q$update public.tokens set data = data || '{"name":"Сова Аси","img":"sb:c-rls/b/owl2.webp","disposition":"friendly","layer":1}' where id = 't-owl'$q$, 1);
 select pg_temp.rows('ездовое и размер — своему призыву', $q$update public.tokens set data = data || '{"mount":true,"size":"large"}' where id = 't-horse'$q$, 1);
@@ -374,6 +394,12 @@ select pg_temp.err('прибавкой — только хиты', $q$select pub
 select pg_temp.err('хиты героя — в листе', $q$select public.adjust_token('t-p', '{"hp":-1}')$q$);
 select pg_temp.err('хиты гоблина игрок не меняет и прибавкой', $q$select public.adjust_token('t-gob', '{"hp":-1}')$q$);
 select pg_temp.ok('TASK-123 (review): свой токен с hpMax 0', $q$insert into public.tokens (id, campaign_id, scene_id, owner_id, ord, data) values ('t-zero', 'c-rls', 's-1', '00000000-0000-0000-0000-00000000000b', 16, '{"kind":"custom","name":"Ноль","x":10,"y":10,"hp":0,"hpMax":0}')$q$);
+
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('мастер разрешает заявки для дальнейших проверок', $q$update public.tokens set data = data - 'pending' where campaign_id = 'c-rls' and data -> 'pending' = 'true'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.cnt('TASK-123 (review): при hpMax 0 хиты не выше нуля', $q$select 1 where (public.adjust_token('t-zero', '{"hp":5}') ->> 'hp')::int = 0$q$, 1);
 select pg_temp.rows('TASK-123 (review): токен с нулём удалён владельцем', $q$delete from public.tokens where id = 't-zero'$q$, 1);
 -- Частичная правка
@@ -687,6 +713,25 @@ select pg_temp.ok('архив связей: NPC восстанавливаетс
 select pg_temp.cnt('архив связей: восстановление не воскрешает токен или связи', $q$select 1 from public.characters where id='ch-mount' and archived_at is null and not exists(select 1 from public.tokens where character_id='ch-mount')$q$,1);
 select pg_temp.code('архив связей: завершённая операция не разрешает удалять другого героя', $q$delete from public.tokens where id='t-q2'$q$,'42501');
 reset role;
+
+-- #203: вставка старым/изменённым клиентом всё равно создаёт заявку.
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.ok('approval: прямой INSERT pending false становится заявкой', $q$insert into public.tokens(id,campaign_id,scene_id,owner_id,data) values('t-request','c-rls','s-1',auth.uid(),'{"kind":"custom","name":"Заявка","pending":false,"x":10,"y":10}')$q$);
+select pg_temp.cnt('approval: сервер проставил pending true', $q$select 1 from public.tokens where id='t-request' and data->'pending'='true'$q$,1);
+select pg_temp.code('approval: заявка не служит призывателем', $q$insert into public.tokens(id,campaign_id,scene_id,owner_id,data) values('t-child','c-rls','s-1',auth.uid(),'{"kind":"foe","summonedBy":"t-request"}')$q$,'42501');
+select pg_temp.code('approval: игрок не разрешает себе токен', $q$select public.patch_token('t-request','{}',array['pending'])$q$,'42501');
+select pg_temp.code('approval: ожидающий токен нельзя двигать', $q$select public.patch_token('t-request','{"x":20}')$q$,'42501');
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('approval: мастер разрешает', $q$select public.patch_token('t-request','{}',array['pending'])$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.ok('approval: разрешённый токен двигается', $q$select public.patch_token('t-request','{"x":20}')$q$);
+select pg_temp.ok('approval: отдельная заявка на отмену', $q$insert into public.tokens(id,campaign_id,scene_id,owner_id,data) values('t-cancel','c-rls','s-1',auth.uid(),'{"kind":"custom"}')$q$);
+select pg_temp.rows('approval: владелец отменяет заявку', $q$delete from public.tokens where id='t-cancel'$q$,1);
+reset role;
+
 
 -- ——— Исключение ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');

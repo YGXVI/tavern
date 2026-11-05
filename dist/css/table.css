@@ -10,6 +10,8 @@
     radial-gradient(120% 90% at 50% 40%, #252a40 0%, #161a28 70%, #10121c 100%);
 }
 .viewport.grab { cursor: grab; }
+.table.image-drop-active .viewport::after { content: 'Отпустите картинку, чтобы создать существо'; position: absolute; inset: 24px; z-index: 1; display: grid; place-items: center; padding: 20px; border: 2px dashed var(--brand-500); border-radius: 20px; background: rgb(0 0 0 / .45); color: var(--text-primary); font: 600 18px/24px var(--font-text); text-align: center; pointer-events: none; }
+.cc-popover.image-drop-active, .token-image-modal.image-drop-active { outline: 2px dashed var(--brand-500); outline-offset: -4px; }
 .viewport.panning, .viewport.panning * { cursor: grabbing !important; }
 .viewport[data-tool="measure"], .viewport[data-tool="draw"], .viewport[data-tool="walls"], .viewport[data-tool="gm"],
 .viewport[data-tool="terrain"], .viewport[data-tool="lights"] { cursor: crosshair; }
@@ -252,6 +254,10 @@
   font: 600 var(--fs)/1.2 var(--font-text); white-space: nowrap; pointer-events: none;
   box-shadow: inset 0 0 0 calc(var(--bw) * .3) var(--stroke-subtle);
 }
+/* Издалека числа гаснут, а не наползают на арт: экранная клетка 30 → 40 px (--cell — клетка токена, --z — масштаб камеры). */
+.tok { --lod: clamp(0, calc((var(--cell, 70) * var(--z, 1) - 30) / 10), 1); }
+.tok:is(.selected, .turn, :hover) { --lod: 1; }
+.tok-badge.hp-b, .tok-badge.ac-b, .tok-badge.elev, .tok-conds { opacity: var(--lod); transition: opacity .15s; }
 .tok.item .tok-name { opacity: 0; transition: opacity .15s; }
 .tok.item:hover .tok-name, .tok.item.selected .tok-name { opacity: 1; }
 
@@ -922,6 +928,9 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 
 /* Статблок SRD (TASK-083): английские описания под действиями. У атак — две строки, тап раскрывает. */
 .attack-row.has-desc { align-items: flex-start; }
+.attack-row > .grow { min-width: 0; }
+.monster-rolls { display: flex; flex-direction: column; align-items: stretch; gap: 4px; max-width: 50%; flex: none; }
+.monster-rolls .btn, .monster-rolls .chip { white-space: normal; height: auto; min-height: 32px; overflow-wrap: anywhere; }
 .attack-row.has-desc > .btn, .attack-row.has-desc > .chip { margin-top: 2px; }
 .atk-desc { margin: 6px 0 0; font: 400 12px/17px var(--font-text); color: var(--text-secondary); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .atk-desc[data-desc] { cursor: pointer; }
@@ -999,8 +1008,8 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .skin-opt .rail-svg { width: 40px; height: 40px; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .5)); }
 .skin-opt:hover { background: var(--bg-hover); color: var(--text-primary); }
 .skin-opt.on { background: var(--brand-900); border-color: var(--stroke-accent); color: var(--text-primary); }
-/* Кубы на столе: слой поверх карты, под панелями; подпись «кто · что · сколько» над кубами. */
-.dice-floor { position: absolute; inset: 0; z-index: calc(var(--z-chrome) - 1); pointer-events: none; }
+/* Кубы и результаты поверх интерфейса; прозрачный слой пропускает клики к столу и панелям. */
+.dice-floor { position: fixed; inset: 0; z-index: calc(var(--z-tooltip) + 1); pointer-events: none; }
 .df-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .df-label { position: absolute; transform: translate(-50%, -100%); max-width: 360px; display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: var(--r-full); background: rgb(0 0 0 / .62); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 4px 8px rgb(0 0 0 / .6); font: 600 12px/14px var(--font-text); color: var(--text-primary); white-space: nowrap; animation: rise .2s ease-out; transition: opacity .6s; }
 .df-label > b { font: 500 20px/24px var(--font-display); color: var(--brand-500); }
@@ -1014,9 +1023,11 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .df-tag.out { opacity: 0; }
 @media (max-width: 720px) {
   .ch-widget:has(.dice-widget) { right: auto; }
-  .dice-widget .dice-rail { flex-direction: row; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  .dice-widget .dice-rail { flex-direction: row; flex-wrap: wrap; width: min(520px, calc(100vw - 16px)); max-width: calc(100vw - 16px); overflow: visible; gap: 4px; }
+  .dice-widget .dice-rail .rail-btn { width: 36px; height: 36px; flex: 0 0 36px; }
+  .dice-widget .dice-rail .divider.rail-options-break { flex-basis: 100%; height: 0; margin: 0; border: 0; }
   .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
-  .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
+  .dice-tray { top: 184px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
 
 /* Лист героя (TASK-004) */
@@ -1079,8 +1090,8 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .b-create { align-self: flex-start; }
 .tok.pending { opacity: .55; }
 .tok.pending .tok-ring { outline: calc(var(--bw) * .8) dashed var(--brand-500); outline-offset: calc(var(--bw) * 1.2); }
-.tok-pending { position: absolute; left: 50%; top: -22%; transform: translateX(-50%); white-space: nowrap; padding: 1px 6px; border-radius: var(--r-full);
-  background: rgb(12 14 22 / .9); color: var(--brand-400, #f0c06a); font: 600 calc(var(--fs) * .9)/1.4 var(--font-text); box-shadow: inset 0 0 0 1px var(--brand-500); pointer-events: none; }
+.tok-pending { position: absolute; left: 50%; top: -22%; transform: translateX(-50%); white-space: nowrap; padding: calc(var(--fs) * .1) calc(var(--fs) * .6); border-radius: var(--r-full);
+  background: rgb(12 14 22 / .9); color: var(--brand-400, #f0c06a); font: 600 calc(var(--fs) * .9)/1.4 var(--font-text); box-shadow: inset 0 0 0 calc(var(--bw) * .3) var(--brand-500); pointer-events: none; }
 .cc-pop .input { min-width: 0; }
 .cc-pop .input input { width: 100%; min-width: 0; }
 .cc-id > .col, .cc-id > .cc-grid { min-width: 0; flex: 1; }
@@ -1089,3 +1100,26 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 /* Журнал бросков (меню кампании) */
 .log-modal .log-list { padding: 0 8px 12px; }
 .log-row .log-total { font: 600 16px/1 var(--font-display); min-width: 28px; text-align: right; }
+
+.sv-reason { display: block; margin-top: 4px; }
+.save-card .damage-relation { margin: 4px 0 10px; }
+/* Кадр картинки токена: размер предпросмотра не зависит от ширины окна. */
+.token-image-modal { width: min(480px, calc(100vw - 24px)); }
+.token-image-editor { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.token-image-editor canvas { width: min(256px, 100%); aspect-ratio: 1; height: auto; flex: none; align-self: center; border-radius: 50%; background: var(--neutral-300); box-shadow: 0 0 0 3px var(--side-foe); cursor: grab; touch-action: none; }
+.token-image-editor canvas:active { cursor: grabbing; }
+.token-image-editor .row { flex-wrap: wrap; }
+.token-image-editor p { margin: 0; }
+
+/* Очередь запросов: фиксированная шапка, прокрутка только списка. */
+.popover.token-requests { width: min(360px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(520px, calc(100dvh - 24px)); display: flex; flex-direction: column; overflow: hidden; }
+.token-requests .panel-header { flex: none; }
+.token-request-list { padding: 0 8px 8px; overscroll-behavior: contain; }
+.token-request-row { flex: none; min-height: 60px; }
+.token-request-row .avatar, .token-request-row > .ic { flex-shrink: 0; }
+.token-request-row .primary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.token-request-row .secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.token-request-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 20px 24px; text-align: center; }
+.token-request-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 4px; border-radius: 50%; background: var(--bg-control); color: var(--icon-secondary); }
+.token-request-empty strong { font: 500 14px/20px var(--font-text); }
+.token-request-empty p { margin: 0; font: 400 12px/18px var(--font-text); color: var(--text-secondary); }

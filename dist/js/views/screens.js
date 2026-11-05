@@ -25,7 +25,7 @@ export const go = (path) => {
 
 const d20 = raw(`<svg class="d20" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3e8d2"/><stop offset=".55" stop-color="#d9c49c"/><stop offset="1" stop-color="#9a7f55"/></linearGradient></defs><path d="M50 4 90 27v46L50 96 10 73V27z" fill="url(#dg)"/><path d="M50 4 72 46H28zM28 46 50 96 72 46M10 27l18 19M90 27 72 46M10 73l18-27M90 73 72 46" fill="none" stroke="#9a7f55" stroke-width="1.5" opacity=".8"/><path d="M28 46h44L50 82z" fill="#f3e8d2" opacity=".55"/><text x="50" y="64" text-anchor="middle" font-family="Unbounded, sans-serif" font-weight="600" font-size="20" fill="#2b1e15">20</text></svg>`);
 
-function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
+export function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
 
 function partyStrip(ids = ['elian', 'mira', 'lira', 'torin', 'garr'], names = ['Элиан', 'Мира', 'Лира', 'Торин', 'Гарр'], me = 'lira') {
   return raw(ids.map((id, i) => `<div class="ptoken ${id === me ? 'me' : ''}"><div class="ring"><img src="${srcOf(id)}" alt=""></div><span class="np">${esc(names[i])}</span></div>`).join(''));
@@ -135,16 +135,31 @@ export function openOAuth(onDone, { hint } = {}) {
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
 }
 
-// ——— Шапка ———
-function appHeader(user) {
+// ——— Шапка ——— (экраны героя тоже берут её: views/hero/index.js)
+/** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | workshop | ref (#203); false — без навигации. */
+export function appHeader(user, active = null) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
     <span class="spacer"></span>
+    ${active === false ? '' : appNav(user, active)}
     <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? (user.provider === 'guest' ? 'гость · тестовая партия' : 'через Discord') : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
   </header>`;
 }
 
-function bindHeader(root, user) {
+/** Навигация (#203): один ряд, одно место — один путь. Карты и свои существа живут в «Мастерской» — она видна тому, кто ведёт кампанию. */
+export function appNav(user, active) {
+  const leads = campaignsFor(user.id).some((c) => roleIn(c, user.id) === 'master');
+  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/characters'], leads || active === 'workshop' ? ['workshop', 'Мастерская', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
+  return html`<nav class="app-nav" aria-label="Разделы">${tabs.map(([id, label, href]) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
+}
+
+/** Заголовок «Мастерской»: крупные слова-вкладки «Карты · Существа» вместо второго ряда кнопок. */
+export function workshopSwitch(active) {
+  const a = (id, href, label) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`;
+  return html`<nav class="page-switch" aria-label="Мастерская">${a('maps', '#/maps', 'Карты')}${a('creatures', '#/creatures', 'Существа')}</nav>`;
+}
+
+export function bindHeader(root, user) {
   root.querySelector('[data-user]')?.addEventListener('click', (e) => {
     if (isServerMode()) {
       menu([
@@ -174,11 +189,8 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адреса #/characters и #/creatures (TASK-175) обрабатывает этот же экран. */
+/** Адреса #/characters и #/creatures (TASK-096, TASK-175) обрабатывает этот же экран: «Герои» и «Мастерская · Существа» в навигации. */
 const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
-function homeTabs(active) {
-  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a><a class="tab" href="#/creatures" aria-selected="${active === 'creatures'}">Существа</a></nav>`;
-}
 
 /** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
 function charactersPage(user) {
@@ -209,15 +221,16 @@ export function mountCampaigns(root) {
     const user = currentUser();
     if (homeTab() === 'creatures') {
       const { tools, body } = creaturesPage(user);
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-        <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'workshop')}
+        <main class="page page-wide lib-page"><div class="title-row page-head">${workshopSwitch('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
       bindHeader(root, user);
       bindCreatures(root, user, render);
       return;
     }
     if (homeTab() === 'characters') {
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-        <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'heroes')}
+        <main class="page page-wide"><div class="title-row page-head"><h1>Герои</h1><span class="spacer"></span>
+          <a class="btn btn-secondary" href="#/heroes">${raw(icon('sparkles', 18))}Новые экраны героя · превью</a></div>${charactersPage(user)}</main></div>`);
       bindHeader(root, user);
       return;
     }
@@ -225,11 +238,11 @@ export function mountCampaigns(root) {
     const mine = list.filter((c) => roleIn(c, user.id) === 'master').length;
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
     const shown = list.filter((c) => filter === 'all' || (filter === 'master' ? roleIn(c, user.id) === 'master' : membership(c, user.id)?.role === 'player'));
-    root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-      <main class="page">
+    root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
+      <main class="page page-wide">
         ${list.length ? html`
-          <div class="title-row">
-            ${homeTabs('campaigns')}
+          <div class="title-row page-head">
+            <h1>Кампании</h1>
             <button class="chip chip-md" data-f="all" aria-pressed="${filter === 'all'}">Все · ${list.length}</button>
             <button class="chip chip-md" data-f="master" aria-pressed="${filter === 'master'}">Веду · ${mine}</button>
             <button class="chip chip-md" data-f="player" aria-pressed="${filter === 'player'}">Играю · ${play}</button>
@@ -238,7 +251,7 @@ export function mountCampaigns(root) {
             <button class="btn btn-primary" data-new>${raw(icon('plus-sign', 18))}Новая кампания</button>
           </div>
           <div class="cards">${shown.map((c) => campaignCard(c, user))}${filter !== 'player' ? html`<button class="new-card" data-new>${raw(icon('plus-sign', 24))}<span>Новая кампания</span></button>` : ''}</div>`
-        : html`<div class="title-row">${homeTabs('campaigns')}</div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
+        : html`<div class="title-row page-head"><h1>Кампании</h1></div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
             <div class="row"><button class="btn btn-primary btn-lg" data-new>${raw(icon('plus-sign', 18))}Создать кампанию</button><button class="btn btn-secondary btn-lg" data-paste>${raw(icon('link-01', 18))}У меня есть ссылка</button></div></div>`}
       </main></div>`);
     bindHeader(root, user);
@@ -263,14 +276,14 @@ function campaignCard(c, user) {
     ? `${c.characters.length} ${plural(c.characters.length, 'герой', 'героя', 'героев')} · ${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')}${c.status === 'draft' ? ' · черновик' : ''}`
     : m?.status === 'pending' ? `Ведёт ${master?.name || '—'} · ждёт одобрения` : `Ведёт ${master?.name || '—'}${myChar ? ` · вы играете ${myChar.name}` : ''}`;
   // Ссылка, а не кнопка: карточку можно открыть в новой вкладке (TASK-094).
-  return html`<a class="camp-card ${live ? 'live' : ''}" href="#/c/${c.id}">
+  return html`<a class="camp-card ${live ? 'live' : ''}" href="${m?.status === 'active' && (isMaster || m.characterId) ? `#/camp/${c.id}` : `#/c/${c.id}`}">
     <div class="cover" style="background-image:url(${srcOf(c.cover)})"><div class="chips"><span class="chip">${isMaster ? 'Мастер' : 'Игрок'}</span>${live ? html`<span class="chip live"><i class="dot"></i>Сессия идёт</span>` : ''}</div></div>
     <div class="body"><div class="name">${c.name}</div><div class="meta">${meta}</div></div>
     <div class="footer"><span class="avatar-stack">${heroes.map((h) => portrait(h.portrait, 'sm hero', h.name))}</span><span class="btn btn-sm ${live && !isMaster ? 'btn-primary' : 'btn-secondary'}">${isMaster ? 'Открыть' : 'Войти'}</span></div>
   </a>`;
 }
 
-function pasteInvite() {
+export function pasteInvite() {
   const m = modal(html`${panelHeader('Вставить приглашение', 'Ссылка или код от мастера')}
     <div class="panel-section"><div class="input">${raw(icon('link-01', 18))}<input data-v placeholder="rasputye.vercel.app/#/join/RSP-7Q2K или RSP-7Q2K" autofocus></div>${isServerMode() ? '' : html`<p class="t-sm tertiary">Для проверки: код демо-кампании — RSP-7Q2K</p>`}</div>
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);

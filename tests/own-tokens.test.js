@@ -57,3 +57,12 @@ test('подпись статблока без типа и КО — «Сущес
   const st = tokenStats(c, { kind: 'foe', monsterId: 'lib:cc-1', name: 'Дух-волк 1', hp: 11, hpMax: 11 });
   assert.ok(!/null|undefined/.test(st.subtitle), st.subtitle);
 });
+
+ test('заявка не двигается и не участвует в бою до разрешения', () => {
+  const t = { ...horse, pending: true };
+  assert.equal(canControlToken(camp(true), 'timur', t), false);
+  assert.equal(canControlToken(camp(true), 'asya', t), false);
+  assert.equal(canControlToken(camp(true), 'gm', t), true);
+  assert.equal(canFight(t), false);
+  assert.equal(canFight({ ...t, pending: false }), true);
+});

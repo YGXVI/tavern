@@ -2,12 +2,14 @@
 import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, storeImage } from '../../core/assets.js';
-import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById } from '../../core/campaign.js';
+import { tokenStats, patchTokenStats, characterOf, addLog, nextTokenName, userById, monsterOf } from '../../core/campaign.js';
 import { CONDITIONS, conditionById, SIZES, sizeById, LIGHTS, woundLabel, AURA_COLORS, AURA_OPACITY, auraHex, auraAlpha } from '../../data/rules.js';
 import { popover, menu, closePopover, confirmDialog } from '../../ui/kit.js';
 import { currentEntry, keepTurnWith } from './combat.js';
 import { ridingItems, editFields } from './riding.js';
-import { pickImageFile } from '../creature-img.js';
+import { tokenImageEditor } from './token-image.js';
+import { loadSrdBestiary } from '../../data/bestiary.js';
+import { campaignImage } from '../creature-img.js';
 import { sightMenuItems } from './sight-ui.js';
 import { mobAttack } from './mob-attack.js';
 import { pendingItems, creatureCard } from './own-creature.js';
@@ -16,7 +18,7 @@ import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { gridSize, snapCenter } from '../../rules/geometry.js';
 import { parseHpInput } from '../../rules/hp.js';
 import { canDeleteDrawing } from './drawings.js';
-import { heroDamage, isDead, isStable } from '../../rules/attack.js';
+import { heroDamage, isDead, isStable, heroHpConditions, adjustDamage } from '../../rules/attack.js';
 
 const ib = (act, name, tip, extra = '') => `<button class="icon-btn" data-act="${act}" data-tip="${esc(tip)}" aria-label="${esc(tip)}" ${extra}>${icon(name, 22)}</button>`;
 const div = '<span class="divider"></span>';
@@ -58,7 +60,7 @@ export function setHp(ctx, id, value) {
       before = pick(x);
       const conds = new Set(x.conditions || []);
       if (delta < 0 && conds.has('concentration')) note = `${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`;
-      if (hp === 0 && t.kind === 'hero') { conds.add('unconscious'); conds.delete('concentration'); }
+      if (t.kind === 'hero') { const next = heroHpConditions([...conds], x.hp, hp); conds.clear(); next.forEach((q) => conds.add(q)); }
       if (hp > 0 && x.hp === 0) { conds.delete('unconscious'); if (x.deathSaves) x.deathSaves = { s: 0, f: 0 }; }
       const out = { hp, conditions: [...conds] };
       after = { ...pick(x), ...out };
@@ -79,6 +81,7 @@ export function tokenBarHTML(ctx) {
   const toks = selectedTokens(ctx);
   if (!toks.length) return '';
   const c = ctx.c;
+  if (toks.length === 1 && toks[0].pending) return `<div class="toolbar token-bar"><span class="tb-titles"><b>${esc(toks[0].name)}</b><small>Ждёт разрешения мастера</small></span>${ib('token-menu', ctx.isMasterView ? 'hourglass' : 'cancel-01', ctx.isMasterView ? 'Рассмотреть запрос' : 'Отменить запрос')}${ib('deselect', 'cancel-01', 'Снять выделение')}</div>`;
   if (toks.length > 1) {
     if (!ctx.isMasterView) return '';
     const allHidden = toks.every((t) => t.hidden);
@@ -141,6 +144,10 @@ export function tokenBarHTML(ctx) {
 }
 
 // ——— Хиты ———
+/** Ручная отметка отношения цели к этому урону: в бестиарии сопротивлений пока нет. */
+export function damageRelationHTML(value = '', attrs = '') {
+  return `<div class="mob-seg damage-relation" role="group" aria-label="Отношение к урону">${[['', 'Обычно'], ['resist', 'Сопр.'], ['vuln', 'Уязв.'], ['immune', 'Иммун.']].map(([v, label]) => `<button type="button" class="${v === value ? 'on' : ''}" data-rel="${v}" aria-pressed="${v === value}" ${attrs}>${label}</button>`).join('')}</div>`;
+}
 export function hpEditor(ctx, ids, anchor, mode = null) {
   const toks = ids.map((id) => ctx.scene.tokens.find((t) => t.id === id)).filter(Boolean);
   if (!toks.length) return;
@@ -155,18 +162,22 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
       <label class="label" for="hpv">${one ? 'Урон или лечение' : 'Сколько хитов'}</label>
       <div class="input"><input id="hpv" type="number" min="0" inputmode="numeric" data-v></div>
       <div class="row">${['1', '5', '10'].map((n) => `<button class="chip chip-md" data-q="${n}">${n}</button>`).join('')}${one ? `<button class="chip chip-md" data-q="half">½</button><button class="chip chip-md" data-q="all">всё</button>` : ''}</div>
+      ${damageRelationHTML()}${one ? '' : '<p class="t-xs muted">Отношение к урону — одно для всех целей.</p>'}
       <div class="row hp-actions"><button class="btn btn-danger grow" data-dmg>${icon('minus-sign', 16)}Урон</button><button class="btn btn-success grow" data-heal>${icon('plus-sign', 16)}Лечение</button></div>
     </div>
     ${one ? `<hr class="panel-divider"><div class="panel-section"><div class="setting-row">${icon('shield-01', 18)}<span class="titles"><span class="label-main">Временные хиты</span></span><div class="input" style="width:72px;height:32px"><input type="number" min="0" data-temp value="${st.tempHp || ''}" placeholder="0"></div></div>
       ${ctx.isMasterView ? `<div class="setting-row">${icon('favourite', 18)}<span class="titles"><span class="label-main">Максимум хитов</span></span><div class="input" style="width:72px;height:32px"><input type="number" min="1" data-max value="${esc(st.hpMax)}"></div></div>` : ''}</div>` : ''}
   </div>`, anchor, { placement: 'top', className: 'hp-pop' });
   const box = pop.node;
+  let relation = '';
   const v = box.querySelector('[data-v]');
   const setInput = box.querySelector('[data-set]');
   setTimeout(() => { const f = mode || !setInput ? v : setInput; f.focus(); f.select?.(); }, 20);
   const applySet = () => { const n = Math.floor(Number(setInput.value)); if (!Number.isFinite(n) || setInput.value === '') { setInput.closest('.input').classList.add('error'); return; } setHp(ctx, one.id, n); closePopover(); };
   setInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') applySet(); });
   box.addEventListener('click', (e) => {
+    const rel = e.target.closest('[data-rel]');
+    if (rel) { relation = rel.dataset.rel; for (const b of box.querySelectorAll('[data-rel]')) { b.classList.toggle('on', b === rel); b.setAttribute('aria-pressed', String(b === rel)); } }
     const q = e.target.closest('[data-q]');
     if (q) { v.value = q.dataset.q === 'half' ? Math.floor(st.hp / 2) : q.dataset.q === 'all' ? st.hp : q.dataset.q; v.focus(); }
     if (e.target.closest('[data-set-ok]')) applySet();
@@ -183,7 +194,7 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
   function apply(sign) {
     const amount = Math.max(0, Math.floor(Number(v.value) || 0));
     if (!amount) { v.closest('.input').classList.add('error'); return; }
-    applyHp(ctx, toks.map((t) => t.id), sign * amount);
+    applyHp(ctx, toks.map((t) => t.id), sign * amount, { relation });
     closePopover();
   }
 }
@@ -193,7 +204,8 @@ export function hpEditor(ctx, ids, anchor, mode = null) {
  * правилам 5e 2014 (#197 M1): при 0 хитов провал спасброска от смерти (крит — два), мгновенная смерть от урона
  * не меньше максимума. opts.crit — урон критического попадания.
  */
-export function applyHp(ctx, ids, delta, { crit = false } = {}) {
+export function applyHp(ctx, ids, delta, { crit = false, relation = null } = {}) {
+  if (delta < 0) { delta = -adjustDamage(-delta, relation); if (!delta) return; }
   const notes = [];
   const deathNotes = [];
   const before = {}, after = {};
@@ -213,7 +225,7 @@ export function applyHp(ctx, ids, delta, { crit = false } = {}) {
           hp = r.hp; temp = r.tempHp; ds = r.deathSaves;
           const nm = x.name || t.name;
           if (hp > 0 && conds.has('concentration')) notes.push(`${nm}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`);
-          if (r.dropped) { conds.add('unconscious'); conds.delete('concentration'); }
+          // Состояния перехода через 0 вычисляются ниже общей функцией.
           if (r.dead && !isDead(x.deathSaves)) deathNotes.push(was > 0 ? `${nm}: урон не меньше максимума хитов — мгновенная смерть` : `${nm}: три провала спасброска от смерти — погибает`);
           else if (was === 0 && !r.dead && r.deathSaves.f > (x.deathSaves?.f || 0)) deathNotes.push(`${nm}: урон по лежащему — ${crit ? 'два провала' : 'провал'} спасброска от смерти (${r.deathSaves.f} из 3)`);
         } else if (delta < 0) {
@@ -222,10 +234,11 @@ export function applyHp(ctx, ids, delta, { crit = false } = {}) {
           hp = Math.max(0, hp - dmg);
           if (conds.has('concentration')) notes.push(`${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`);
         } else {
-          if (hp === 0 && delta > 0) { conds.delete('unconscious'); if (x.deathSaves) x.deathSaves = { s: 0, f: 0 }; }
+          if (hp === 0 && delta > 0) { conds.delete('unconscious'); if (x.deathSaves) ds = { s: 0, f: 0 }; }
           hp = Math.min(x.hpMax, hp + delta);
         }
-        const out = { hp, tempHp: temp, conditions: [...conds], ...(ds && ds !== x.deathSaves ? { deathSaves: ds } : {}) };
+        const conditions = t.kind === 'hero' ? heroHpConditions([...conds], x.hp, hp) : [...conds];
+        const out = { hp, tempHp: temp, conditions, ...(ds && ds !== x.deathSaves ? { deathSaves: ds } : {}) };
         after[id] = { ...pick(x), ...out };
         return out;
       });
@@ -420,7 +433,7 @@ export function hpLogVis(c, toks) {
 export async function deleteTokens(ctx, ids, drawIds = []) {
   // Игрок удаляет только свои токены и призывы (TASK-183); очередь боя меняет мастер — токен из боя убирает он.
   if (!ctx.isMasterView) {
-    ids = ids.filter((id) => ctx.owns(ctx.scene.tokens.find((t) => t.id === id)));
+    ids = ids.filter((id) => { const t = ctx.scene.tokens.find((t) => t.id === id); return ctx.owns(t) || (t?.pending && ctx.isMine(t)); });
     if (ids.some((id) => ctx.c.combat.entries.some((e) => e.tokenId === id))) {
       ctx.toast({ title: 'Этот токен в бою', body: 'Убрать его из очереди и со сцены может мастер', icon: 'alert-circle' });
       return;
@@ -561,7 +574,7 @@ export function auraPopover(ctx, id, anchor) {
 // ——— Параметры в меню токена (TASK-039): хиты/максимум, временные, КД — правятся на месте ———
 /** Кто может править параметры токена из меню: мастер — любой с хитами, игрок — своего героя. */
 function canEditStats(ctx, t) {
-  if (!t || t.kind === 'item') return false;
+  if (!t || t.kind === 'item' || (t.pending && !ctx.isMasterView)) return false;
   if (!ctx.isMasterView && statless(t)) return false; // сначала «Статы…»
   return ctx.isMasterView || ctx.isMine(t) || ctx.owns(t);
 }
@@ -651,7 +664,7 @@ function ownTokenItems(ctx, t, anchor) {
     statless(t) ? { icon: 'first-aid-kit', label: 'Статы…', onClick: () => statsPrompt(ctx, t.id) } : null,
     { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) },
     { icon: 'flag-02', label: 'Союзность…', onClick: () => menu(DISPOSITIONS.map(([v, l]) => ({ icon: (t.disposition || 'friendly') === v ? 'tick-02' : 'circle', label: l, onClick: () => upd('Союзность', (x) => { x.disposition = v; }) })), anchor, { placement: 'right' }) },
-    { icon: 'image-01', label: 'Картинка…', onClick: () => pickTokenImage(ctx, (ref) => upd('Картинка', (x) => { x.img = ref; })) },
+    { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) },
     { icon: 'edit-02', label: 'Имя…', onClick: () => renameOwn(ctx, t.id) },
     { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, [t.id]) },
     'divider',
@@ -693,15 +706,29 @@ function renameToken(ctx, t, done) {
 }
 
 /** Выбрать картинку своего токена; в песочнице — в браузер, на сервере — в бакет tokens. done(ref, file). */
-export function pickTokenImage(ctx, done) {
-  pickImageFile(ctx.toast, async (f) => {
-    try { done(await storeTokenImage(ctx, f), f); } catch (err) { ctx.toast({ title: 'Картинка не загрузилась', body: err.message, icon: 'alert-circle' }); }
-  });
+export function pickTokenImage(ctx, done, { ref = '', defaultRef = '' } = {}) {
+  tokenImageEditor({ ref, defaultRef, toast: ctx.toast, store: (file) => storeTokenImage(ctx, file), done });
 }
 
 /** Мастер: своя картинка для существа на карте (#190 E) — у одного токена, с отменой. */
-export function setTokenImage(ctx, id) {
-  pickTokenImage(ctx, (ref) => editFields(ctx, [id], 'Картинка', (x) => { x.img = ref; }));
+export async function setTokenImage(ctx, id) {
+  const t = ctx.scene?.tokens.find((x) => x.id === id);
+  if (!t || (!ctx.isMasterView && !ctx.owns(t))) return;
+  if (t.monsterId?.startsWith('srd:')) {
+    try { await loadSrdBestiary(); }
+    catch (err) { ctx.toast({ title: 'Бестиарий не загрузился', body: err.message, icon: 'alert-circle' }); return; }
+  }
+  if (!ctx.scene?.tokens.includes(t)) return;
+  let defaultRef = monsterOf(ctx.c, t.monsterId)?.img || `ini:${t.name}`;
+  try { defaultRef = await campaignImage(ctx.cid, defaultRef, (file) => storeTokenImage(ctx, file)); }
+  catch (err) { ctx.toast({ title: 'Стандартная картинка недоступна', body: err.message, icon: 'alert-circle' }); return; }
+  if (!ctx.scene?.tokens.includes(t)) return;
+  tokenImageEditor({ ref: t.img, defaultRef, toast: ctx.toast, store: (file) => storeTokenImage(ctx, file),
+    done: (ref) => {
+      const current = ctx.scene?.tokens.find((x) => x.id === id);
+      if (current && (ctx.isMasterView || ctx.owns(current))) editFields(ctx, [id], 'Картинка', (x) => { x.img = ref; });
+    },
+  });
 }
 export async function storeTokenImage(ctx, file) {
   if (isServerMode()) return (await import('../../server/sync.js')).uploadTokenImage(ctx.cid, file);
@@ -732,6 +759,7 @@ export function contextMenu(ctx, target, w, screen) {
   if (target.kind === 'token') {
     const t = ctx.scene.tokens.find((x) => x.id === target.id);
     if (!t) return;
+    if (t.pending && !ctx.isMasterView) { menu(pendingItems(ctx, t), anchor, { placement: 'right' }); return; }
     if (!ctx.ui.selection.has(t.id)) ctx.select([t.id]);
     const ids = [...ctx.ui.selection];
     if (ctx.isMasterView) {

@@ -6,6 +6,52 @@
 // Поэтому на карту личная картинка попадает копией в кампанию, а в библиотеку — копией из выбранного файла.
 import { srcOf, resolveSrc } from '../core/assets.js';
 import { isServerMode } from '../core/store.js';
+import { validateLibraryImage } from '../server/library.js';
+
+export const imageFileName = (file) => (file.name.replace(/\.[^.]+$/, '').trim() || 'Новое существо').slice(0, 200);
+const hasFile = (event) => Array.from(event.dataTransfer?.types || []).some((t) => t === 'Files' || t === 'DownloadURL');
+let guardsInstalled = false;
+
+/** Файлы из проводника и панели загрузок. Защита от навигации устанавливается один раз на приложение. */
+export function attachImageDrop(root, { toast, onFile, accepts = () => true }) {
+  if (!guardsInstalled) {
+    guardsInstalled = true;
+    for (const type of ['dragover', 'drop']) document.addEventListener(type, (e) => { if (hasFile(e)) e.preventDefault(); }, true);
+  }
+  const over = (e) => {
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    const accepted = accepts(e);
+    root.classList.toggle('image-drop-active', accepted);
+    if (accepted) e.dataTransfer.dropEffect = 'copy';
+  };
+  const leave = (e) => { if (!root.contains(e.relatedTarget)) root.classList.remove('image-drop-active'); };
+  const drop = async (e) => {
+    root.classList.remove('image-drop-active');
+    if (!hasFile(e)) return;
+    e.preventDefault();
+    if (!accepts(e)) return;
+    e.stopPropagation();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length !== 1) { toast({ title: files.length ? 'Перетащите одну картинку' : 'Перетащите сам скачанный файл картинки', icon: 'alert-circle' }); return; }
+    let file = files[0];
+    if (!file.type || file.type === 'application/octet-stream') {
+      const type = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' }[file.name.split('.').pop().toLowerCase()];
+      if (type) file = new File([file], file.name, { type, lastModified: file.lastModified });
+    }
+    try { await validateLibraryImage(file); await onFile(file, e); }
+    catch (error) { toast({ title: 'Картинка не добавлена', body: error.message || String(error), icon: 'alert-circle' }); }
+  };
+  root.addEventListener('dragover', over);
+  root.addEventListener('dragleave', leave);
+  root.addEventListener('drop', drop);
+  return () => {
+    root.classList.remove('image-drop-active');
+    root.removeEventListener('dragover', over);
+    root.removeEventListener('dragleave', leave);
+    root.removeEventListener('drop', drop);
+  };
+}
 
 /** Выбрать файл картинки: PNG, JPEG или WebP до 5 МБ. done(file) — только если файл подходит. */
 export function pickImageFile(toast, done) {

@@ -53,3 +53,26 @@ export function heroDamage(s, dmg, { crit = false } = {}) {
   }
   return { hp, tempHp: temp, deathSaves: ds, dropped, dead: isDead(ds), dealt: dmg };
 }
+
+/** Состояния героя при переходе через 0 хитов; вставать после лечения игрок решает сам. */
+export function heroHpConditions(conditions, before, after) {
+  const out = new Set(conditions || []);
+  if (before > 0 && after === 0) {
+    out.add('unconscious'); out.add('prone'); out.delete('concentration');
+  } else if (before === 0 && after > 0) out.delete('unconscious');
+  return [...out];
+}
+
+/** Сначала половина при спасброске, затем отношение к урону; каждое деление округляется вниз. */
+export function adjustDamage(damage, relation, half = false) {
+  const dmg = half ? Math.floor(damage / 2) : damage;
+  return relation === 'resist' ? Math.floor(dmg / 2) : relation === 'vuln' ? dmg * 2 : relation === 'immune' ? 0 : dmg;
+}
+
+/** По возможности подходит только рукопашная атака с известным бонусом (в том числе +0). */
+export function opportunityAttack(actions, reacted = false) {
+  if (reacted) return { action: null, why: 'Реакция уже потрачена' };
+  const action = (actions || []).find((a) => Number.isFinite(a.attack?.bonus ?? a.bonus)
+    && (Number.isFinite(a.attack?.reach) || /melee|рукопашн/i.test(`${a.desc || ''} ${a.ru || ''} ${a.text || ''}`)));
+  return { action: action || null, why: action ? '' : 'Нет рукопашной атаки в статблоке' };
+}

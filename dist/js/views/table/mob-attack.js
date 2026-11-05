@@ -13,7 +13,7 @@ import { bus, emitLocal } from '../../core/store.js';
 import { footprintAt, footprintGap } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { initiativeOrder, slotMembers } from './combat.js';
-import { attackOutcome, critDamageFormula, heroDamage } from '../../rules/attack.js';
+import { attackOutcome, critDamageFormula, heroDamage, heroHpConditions, adjustDamage } from '../../rules/attack.js';
 import { showRollToast, poolVis } from './dice.js';
 import { hpLogVis } from './p-token.js';
 
@@ -83,7 +83,7 @@ export function rollDamage(f, random = Math.random) {
 export const outcome = attackOutcome;
 
 /** Урон с учётом отношения цели: сопротивление — половина вниз, уязвимость — вдвое, иммунитет — 0. */
-export const adjust = (dmg, rel) => (rel === 'resist' ? Math.floor(dmg / 2) : rel === 'vuln' ? dmg * 2 : rel === 'immune' ? 0 : dmg);
+export const adjust = adjustDamage;
 
 /**
  * Применить попадания по очереди к снимку цели {hp, hpMax, tempHp, conditions[], deathSaves?}. Возвращает новый
@@ -103,7 +103,7 @@ export function applyHits(s0, hits, rel, isHero) {
       s.hp = r.hp; s.tempHp = r.tempHp; s.deathSaves = r.deathSaves;
       dealt += dmg;
       if (was > 0 && s.hp > 0 && s.conditions.includes('concentration')) notes.push(`Проверка концентрации: спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(dmg / 2))}`);
-      if (r.dropped && !s.conditions.includes('unconscious')) { s.conditions = s.conditions.filter((x) => x !== 'concentration'); s.conditions.push('unconscious'); }
+      s.conditions = heroHpConditions(s.conditions, was, s.hp);
       if (r.dead) { notes.push(was > 0 ? 'Урон не меньше максимума хитов — мгновенная смерть' : 'Три провала спасброска от смерти — герой погибает'); break; }
       continue;
     }

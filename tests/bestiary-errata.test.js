@@ -50,3 +50,16 @@ test('стол видит поправки: сгенерированный бе�
   assert.match(byId.get('srd:blink-dog').senses, /пассивное Восприятие 13/);
   assert.match(byId.get('srd:spider').senses, /пассивное Восприятие 10/);
 });
+
+test('инвариант (#116): средние хиты = формула, бонус хитов = кубы × мод. Телосложения у всех существ SRD', () => {
+  const bad = [];
+  for (const m of srdBlocks) {
+    const s = m.stat_block, f = String(s.hit_points?.formula || '').replace(/\s/g, '');
+    const x = /^(\d+)d(\d+)([+-]\d+)?$/.exec(f);
+    if (!x) { bad.push(`${m.identity.srd_index}: формула ${f}`); continue; }
+    const n = +x[1], d = +x[2], b = x[3] ? +x[3] : 0;
+    if (Math.floor(n * (d + 1) / 2) + b !== s.hit_points.average) bad.push(`${m.identity.srd_index}: среднее`);
+    if (b !== n * s.abilities.constitution.modifier) bad.push(`${m.identity.srd_index}: бонус Телосложения`);
+  }
+  assert.deepEqual(bad, []);
+});

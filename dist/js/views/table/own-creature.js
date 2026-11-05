@@ -10,11 +10,12 @@ import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { nextTokenName, userById, tokenStats } from '../../core/campaign.js';
 import { saveCreature } from '../../core/library.js';
-import { popover, closePopover } from '../../ui/kit.js';
+import { popover, closePopover, panelHeader } from '../../ui/kit.js';
 import { sizeById } from '../../data/rules.js';
-import { spotNear, viewCenter, hydrateImages } from './p-side.js';
-import { pickTokenImage, deleteTokens } from './p-token.js';
-import { libraryImageFrom } from '../creature-img.js';
+import { spotNear, viewCenter, hydrateImages, commitCreatures } from './p-side.js';
+import { pickTokenImage, storeTokenImage, deleteTokens } from './p-token.js';
+import { isServerMode } from '../../core/store.js';
+import { libraryImageFrom, attachImageDrop, creatureImgTag } from '../creature-img.js';
 
 export const CARD_SIZES = [
   ['tiny', 'Крош.', 'Крошечный — четверть клетки, может делить её с другими'],
@@ -35,11 +36,11 @@ const bad = (v) => Number.isNaN(v);
  * Открыть карточку своего существа. at — точка на карте (клетка, по которой кликнули), name — из поиска.
  * Мастер ставит существо сразу (скрытым и выбранным); игрок — «ждёт мастера».
  */
-export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) {
+export function creatureCard(ctx, { at = null, name = '', anchor = null, img = '', file = null } = {}) {
   if (!ctx.scene) return;
   const master = ctx.isMasterView;
   // file — выбранный файл картинки: с ним копия уходит и в «Мои существа» (личный бакет), а не только на карту.
-  const st = { name: name.trim(), img: '', file: null, size: master ? 'medium' : 'tiny', side: 'hostile', ac: '', hp: '', speed: '', fly: '', init: '', save: !master, hidden: true, combat: false };
+  const st = { name: name.trim(), img, file, size: master ? 'medium' : 'tiny', side: 'hostile', ac: '', hp: '', speed: '', fly: '', init: '', save: !master, hidden: true, combat: false };
   const face = () => { const ref = st.img || `ini:${st.name || '?'}`; return `<span class="cc-face ${master ? `disp-${st.side}` : 'disp-friendly'}"><img alt="" data-ref="${esc(ref)}" src="${esc(srcOf(ref))}"></span><span class="cc-face-name">${esc(st.name || 'Без имени')}</span>`; };
   const field = (k, label, ph, extra = '') => `<label class="field"><span class="label">${label}</span><span class="input"><input data-n="${k}" value="${esc(st[k])}" placeholder="${ph}" inputmode="${k === 'hp' ? 'text' : 'numeric'}" autocomplete="off" aria-label="${label}"></span>${extra}</label>`;
   const html = () => `<div class="cc-pop">
@@ -65,11 +66,20 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
     <div class="panel-footer cc-foot">
       <label class="check t-sm"><input type="checkbox" data-opt="save" ${st.save ? 'checked' : ''}>Сохранить в «Мои существа»</label>
       ${master ? `<label class="check t-sm"><input type="checkbox" data-opt="hidden" ${st.hidden ? 'checked' : ''}>Скрыть от игроков</label><label class="check t-sm"><input type="checkbox" data-opt="combat" ${st.combat ? 'checked' : ''}>Сразу в бой</label>` : ''}
-      <button class="btn btn-primary btn-block" data-ok>${icon(master ? 'plus-sign' : 'chess-pawn', 16)}${master ? 'Поставить на карту' : 'Поставить и показать мастеру'}</button>
+      <button class="btn btn-primary btn-block" data-ok>${icon(master ? 'plus-sign' : 'chess-pawn', 16)}${master ? 'Поставить на карту' : 'Отправить мастеру'}</button>
     </div></div>`;
-  const pop = popover(html(), anchor || { x: innerWidth / 2, y: innerHeight / 2 }, { placement: anchor ? 'right' : 'auto', className: 'cc-popover' });
+  let detachDrop = () => {};
+  const pop = popover(html(), anchor || { x: innerWidth / 2, y: innerHeight / 2 }, { placement: anchor ? 'right' : 'auto', className: 'cc-popover', onClose: () => detachDrop() });
   const n = pop.node;
   const rerender = (focusSel = null) => { n.innerHTML = html(); hydrateImages(n); pop.reposition?.(); if (focusSel) n.querySelector(focusSel)?.focus(); };
+  detachDrop = attachImageDrop(n, { toast: ctx.toast, onFile: async (file) => {
+    if (st.busy) return;
+    st.busy = true; n.querySelector('[data-ok]').disabled = true;
+    try {
+      const ref = await storeTokenImage(ctx, file);
+      if (n.isConnected) { st.img = ref; st.file = file; rerender(); }
+    } finally { st.busy = false; if (n.isConnected) n.querySelector('[data-ok]').disabled = false; }
+  } });
   hydrateImages(n);
   n.querySelector('[data-name]').focus();
   n.addEventListener('input', (e) => {
@@ -81,12 +91,13 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
   n.addEventListener('click', (e) => {
     const sd = e.target.closest('[data-side]'); if (sd) { st.side = sd.dataset.side; rerender(); return; }
     const sz = e.target.closest('[data-size]'); if (sz) { st.size = sz.dataset.size; rerender(); return; }
-    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref, file) => { st.img = ref; st.file = file || null; if (n.isConnected) rerender(); }); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref, file) => { if (ref !== st.img) st.file = file || null; st.img = ref; if (n.isConnected) rerender(); }, { ref: st.img, defaultRef: `ini:${st.name || '?'}` }); return; }
     if (e.target.closest('[data-noimg]')) { st.img = ''; st.file = null; rerender(); return; }
     if (e.target.closest('[data-ok]')) place();
   });
 
-  function place() {
+  async function place() {
+    if (st.busy) return;
     const err = n.querySelector('[data-err]');
     if (!st.name.trim()) { n.querySelector('[data-name]').closest('.input').classList.add('error'); n.querySelector('[data-name]').focus(); return; }
     const wrong = ['ac', 'speed', 'fly', 'init'].filter((k) => bad(intOrNull(st[k])));
@@ -96,10 +107,19 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
       err.hidden = false; err.textContent = wrong.includes('hp') ? 'Хиты — число или формула вроде 2к8+2' : 'Здесь нужно целое число';
       return;
     }
-    const t = placeCreature(ctx, st, at);
-    closePopover();
-    if (!t) return;
-    if (st.save) saveToLibrary(ctx, st);
+    st.busy = true;
+    n.querySelectorAll('input, button').forEach((x) => { x.disabled = true; });
+    try {
+      const t = await placeCreature(ctx, st, at);
+      if (!t) return;
+      closePopover();
+      if (st.save) saveToLibrary(ctx, st);
+    } catch (error) {
+      err.hidden = false; err.textContent = `Существо не сохранено: ${error.message || error}`;
+    } finally {
+      st.busy = false;
+      n.querySelectorAll('input, button').forEach((x) => { x.disabled = false; });
+    }
   }
 }
 
@@ -116,18 +136,24 @@ export function placeCreature(ctx, st, at = null, random = undefined) {
     ...tokenFields(st, random),
     ...(master ? {} : { ownerId: ctx.userId, pending: true }),
   };
-  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: master ? 'Новое существо' : 'Своё существо', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
-  ctx.select([t.id]);
-  if (master) {
-    ctx.toast({
-      title: `«${t.name}» на карте`, body: t.hidden ? 'Скрыто от игроков' : 'Игроки его видят', icon: 'monster',
-      ...(t.hidden ? { action: { label: 'Показать', onClick: () => ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; }, { label: 'Показать', undo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = true; }, redo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; } }) } } : {}),
-    });
-    if (st.combat) ctx.panels.combatToggle([t.id]);
-  } else {
-    ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Пока мастер не решит, существо видите только вы. Передумали — ПКМ → «Отменить»', icon: 'hourglass' });
+  const history = { label: master ? 'Новое существо' : 'Своё существо', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } };
+  if (isServerMode()) return commitCreatures(ctx, ctx.sceneId, [t], null, history).then(placed);
+  ctx.mutateScene((s) => { s.tokens.push(t); }, history);
+  return placed();
+  function placed() {
+    if (ctx.sceneId !== sc.id) return t;
+    ctx.select([t.id]);
+    if (master) {
+      ctx.toast({
+        title: `«${t.name}» на карте`, body: t.hidden ? 'Скрыто от игроков' : 'Игроки его видят', icon: 'monster',
+        ...(t.hidden ? { action: { label: 'Показать', onClick: () => ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; }, { label: 'Показать', undo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = true; }, redo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; } }) } } : {}),
+      });
+      if (st.combat) ctx.panels.combatToggle([t.id]);
+    } else {
+      ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Пока мастер не решит, существо видите только вы. Передумали — ПКМ → «Отменить»', icon: 'hourglass' });
+    }
+    return t;
   }
-  return t;
 }
 
 async function saveToLibrary(ctx, st) {
@@ -137,7 +163,7 @@ async function saveToLibrary(ctx, st) {
   let img = '';
   if (st.img && !st.img.startsWith('ini:')) {
     try { img = await libraryImageFrom(st.file, st.img); }
-    catch (err) { ctx.toast({ title: 'Картинка в «Мои существа» не попала', body: `${err.message || err}. Существо сохраним с инициалами — картинку можно добавить на главной`, icon: 'alert-circle' }); }
+    catch (err) { ctx.toast({ title: 'Картинка в «Мои существа» не попала', body: `${err.message || err}. Существо сохраним с инициалами — картинку можно добавить в Мастерской`, icon: 'alert-circle' }); }
   }
   try {
     await saveCreature({
@@ -156,7 +182,7 @@ const pendingOf = (ctx) => (ctx.scene?.tokens || []).filter((t) => t.pending);
 
 /** Решение мастера: patch — поправленные числа (или null); approve=false — убрать. */
 export function decidePending(ctx, id, { approve = true, patch = null } = {}) {
-  const t0 = ctx.scene?.tokens.find((t) => t.id === id); if (!t0) return;
+  const t0 = ctx.scene?.tokens.find((t) => t.id === id); if (!ctx.isMasterView || !t0?.pending) return;
   if (!approve) { deleteTokens(ctx, [id]); return; }
   const before = structuredClone(t0);
   const apply = (s) => {
@@ -172,7 +198,7 @@ export function decidePending(ctx, id, { approve = true, patch = null } = {}) {
 
 /** Окно мастера: посмотреть, поправить числа, разрешить или убрать. */
 export function reviewPending(ctx, id, anchor = null) {
-  const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t?.pending) return;
+  const t = ctx.scene?.tokens.find((x) => x.id === id); if (!ctx.isMasterView || !t?.pending) return;
   const owner = userById(t.ownerId);
   const st = { ac: t.ac ?? '', hp: t.hpMax ?? '', speed: t.speed ?? '', init: t.initBonus ?? '' };
   const pos = anchor || (() => { const s = ctx.camera.toScreen(t.x, t.y); return { x: s.x + 24, y: s.y }; })();
@@ -210,13 +236,13 @@ export function pendingItems(ctx, t) {
     { icon: 'delete-02', label: 'Убрать', danger: true, onClick: () => decidePending(ctx, t.id, { approve: false }) },
     'divider',
   ];
-  if (ctx.owns(t)) return [{ icon: 'cancel-01', label: 'Отменить — мастер ещё не ответил', onClick: () => { ctx.ui.pendingCancel ||= new Set(); ctx.ui.pendingCancel.add(t.id); deleteTokens(ctx, [t.id]); } }, 'divider'];
+  if (ctx.owns(t) || ctx.isMine(t)) return [{ icon: 'cancel-01', label: 'Отменить — мастер ещё не ответил', onClick: () => { ctx.ui.pendingCancel ||= new Set(); ctx.ui.pendingCancel.add(t.id); deleteTokens(ctx, [t.id]); } }, 'divider'];
   return [];
 }
 
 /**
  * Следить за «ждёт мастера»: мастеру — тост о новом существе с «Посмотреть»; владельцу — итог решения.
- * Первый проход на сцене только запоминает.
+ * После входа на стол существующие заявки также доступны мастеру.
  */
 export function trackPending(ctx) {
   const sc = ctx.scene; if (!sc) return;
@@ -224,15 +250,15 @@ export function trackPending(ctx) {
   if (ctx.isMaster) {
     const now = new Set(pendingOf(ctx).map((t) => t.id));
     ctx.ui.pendingSeen = { sceneId: ctx.sceneId, ids: now };
-    if (!prev || prev.sceneId !== ctx.sceneId) return;
+    if (prev && prev.sceneId !== ctx.sceneId) return;
     for (const id of now) {
-      if (prev.ids?.has(id)) continue;
+      if (prev?.ids?.has(id)) continue;
       const t = sc.tokens.find((x) => x.id === id);
       ctx.toast({ title: `${userById(t.ownerId)?.name || 'Игрок'} ставит своё существо`, body: `«${t.name}» ждёт вашего решения`, icon: 'hourglass', action: { label: 'Посмотреть', onClick: () => reviewPending(ctx, id) } });
     }
     return;
   }
-  const mine = new Map(sc.tokens.filter((t) => t.ownerId === ctx.userId && (t.pending || prev?.mine?.has(t.id))).map((t) => [t.id, { name: t.name, pending: !!t.pending, nums: { ac: t.ac, hpMax: t.hpMax, speed: t.speed, initBonus: t.initBonus } }]));
+  const mine = new Map(sc.tokens.filter((t) => (t.ownerId === ctx.userId || ctx.isMine(t)) && (t.pending || prev?.mine?.has(t.id))).map((t) => [t.id, { name: t.name, pending: !!t.pending, nums: { ac: t.ac, hpMax: t.hpMax, speed: t.speed, initBonus: t.initBonus } }]));
   ctx.ui.pendingSeen = { sceneId: ctx.sceneId, mine: new Map([...mine].filter(([, v]) => v.pending)) };
   if (!prev?.mine || prev.sceneId !== ctx.sceneId) return;
   for (const [id, was] of prev.mine) {
@@ -250,6 +276,26 @@ export function trackPending(ctx) {
 }
 
 /** Видит ли зритель токен «ждёт мастера»: мастер и владелец — да, остальные — нет. */
-export const pendingHidden = (ctx, t) => !!t.pending && !ctx.isMasterView && !ctx.owns(t);
+export const pendingHidden = (ctx, t) => !!t.pending && !ctx.isMasterView && !ctx.owns(t) && !ctx.isMine(t);
 
 export { tokenStats };
+
+/** Постоянная очередь, включая заявки на других сценах и после перезагрузки. */
+export function pendingQueue(ctx, anchor) {
+  if (!ctx.isMasterView) return;
+  const entries = ctx.c.scenes.flatMap((s) => s.tokens.filter((t) => t.pending).map((t) => ({ s, t })));
+  const rows = entries.map(({ s, t }, i) => `<button class="list-row token-request-row" data-request="${i}" title="${esc(t.name)}">
+    <span class="avatar sm foe">${creatureImgTag(t.img, t.name)}</span>
+    <span class="grow col-tight"><span class="primary">${esc(t.name)}</span><span class="secondary">${esc(s.name)} · ${esc(userById(t.ownerId)?.name || 'Игрок')}</span></span>
+    ${icon('arrow-right-01', 16)}</button>`).join('');
+  const p = popover(`${panelHeader('Запросы токенов', entries.length ? `Ожидают решения: ${entries.length}` : '')}
+    ${entries.length ? `<div class="w-list token-request-list">${rows}</div>` : `<div class="token-request-empty">
+      <span class="token-request-empty-icon">${icon('hourglass', 24)}</span>
+      <strong>Пока нет запросов</strong><p>Когда игрок захочет добавить токен,<br>его запрос появится здесь.</p></div>`}`, anchor, { placement: 'left', className: 'token-requests' });
+  hydrateImages(p.node);
+  p.node.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-request]'); if (!b) return;
+    const {s,t} = entries[Number(b.dataset.request)];
+    closePopover(); ctx.switchScene(s.id); reviewPending(ctx,t.id,anchor);
+  });
+}
