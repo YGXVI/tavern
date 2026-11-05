@@ -433,6 +433,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
   const auth = { anonymous: true, n: 0 }; // auth.anonymous = false — анонимный вход выключен в Supabase
   async function handle(page, msg) {
     log.push(msg.op === 'query' ? `${msg.q.action} ${msg.q.table}` : msg.op);
+    if (net.signGate && msg.op === 'sign' && msg.bucket === 'tokens') await net.signGate;
     if (net.writeGate && (msg.op === 'rpc' && msg.name === 'place_creature'
       || msg.op === 'query' && msg.q.action === 'insert' && ['tokens', 'campaign_creatures'].includes(msg.q.table))) await net.writeGate;
     // Обрыв сети: supabase-js не бросает, а возвращает ошибку без кода.
