@@ -3,6 +3,7 @@
 //   #/campaigns        — мои кампании
 //   #/join/RSP-XXXX    — приглашение по ссылке
 //   #/c/<id>           — стол кампании (или ожидание одобрения / выбор героя)
+//   #/heroes, #/hero/… — экраны героя на витринных данных (views/hero, #203)
 import { initStore, subscribe, bus, onlineUsers, useServerBackend, setDB, deliver, emitLocal, commit, getDB, isServerMode } from './core/store.js';
 import { seedDB } from './data/demo.js';
 import { currentUser, restoreFromLast } from './core/auth.js';
@@ -45,6 +46,15 @@ function route() {
   if (!user) { show('login', () => mountLogin(root, { onSignedIn: () => go('#/campaigns'), message: loginMessage })); loginMessage = null; return; }
   if (page === 'login' || !page) { go('#/campaigns'); return; }
 
+  if (page === 'heroes' || page === 'hero') {
+    // Модуль грузится по требованию: остальным экранам он не нужен.
+    show(`hero:${location.hash}`, () => {
+      let api = null, gone = false;
+      import('./views/hero/index.js').then((m) => { if (!gone) api = m.mountHero(root, location.hash); });
+      return { unmount: () => { gone = true; api?.unmount?.(); }, update: () => api?.update?.() };
+    });
+    return;
+  }
   if (page === 'c' && arg) {
     const c = getCampaign(arg);
     if (!c) {
