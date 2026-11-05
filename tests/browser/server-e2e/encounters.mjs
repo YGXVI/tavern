@@ -82,9 +82,9 @@ try { for(const width of [1440,390]) {
  await p.waitForFunction(ids=>ids.every(id=>__ctx.scene.tokens.some(t=>t.id===id)),ids);
  await waitFor(()=>ids.every(id=>fake.T.tokens.some(t=>t.id===id)));
  // Отказ первого RPC не показывает ложный успех и не записывает токены.
- const unchanged=await p.evaluate(()=>__ctx.scene.tokens.length);rejectPlacement=true;
+ const unchanged=fake.T.tokens.length;rejectPlacement=true;
  const failed=await p.evaluate(async id=>(await import('/js/views/table/encounters.js')).placeEncounter(__ctx,id),id);rejectPlacement=false;
- assert.equal(failed.length,0);assert.equal(await p.evaluate(()=>__ctx.scene.tokens.length),unchanged);
+ assert.equal(failed.length,0);assert.equal(fake.T.tokens.length,unchanged);await p.waitForFunction(n=>__ctx.scene.tokens.length===n,unchanged);
  // Старый сервер без RPC также ставит несколько снимков.
  if(width===390){fallback=true;const retry=await p.evaluate(async id=>(await import('/js/views/table/encounters.js')).placeEncounter(__ctx,id),id);fallback=false;assert.equal(retry.length,4);}
  const fallbackResult=await p.evaluate(async()=>{
@@ -94,6 +94,12 @@ try { for(const width of [1440,390]) {
   const ids=await m.placeEncounter(__ctx,enc.id);const invalid=e.newEncounter(__ctx.cid,__ctx.userId,{monsters:[{id:'libsrc:missing',count:1}]});const before=__ctx.scene.tokens.length;const bad=await m.placeEncounter(__ctx,invalid.id);
   return {ids,bad,unchanged:before===__ctx.scene.tokens.length};
  });assert.equal(fallbackResult.ids.length,1);assert.equal(fallbackResult.bad.length,0);assert.equal(fallbackResult.unchanged,true);
+ // Кнопка из дома кампании использует тот же новый путь постановки.
+ const homeBefore=fake.T.tokens.length;
+ await p.goto(`http://localhost:4173/?server=1#/camp/c-own/encounters/${id}`);
+ await p.locator('.cp-enc-actions a.btn-primary').click();
+ await p.waitForFunction(n=>window.__ctx?.scene?.tokens.length===n+4,homeBefore);
+ await waitFor(()=>fake.T.tokens.length===homeBefore+4);
  console.log('OK',width,'поиск SRD/личное, краткая карточка+арт, отмена, состав/сложность/reload, встреча на карте целиком, несколько снимков+атаки+изображения/reload, повторная постановка');
  await context.close();
  }

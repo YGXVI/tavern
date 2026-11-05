@@ -94,8 +94,14 @@ for (const uid of [A, B]) {
   for (const label of labels) { const b = page.getByRole('button', { name: label, exact: true }); await b.click(); }
   await page.evaluate(async () => (await import('/js/server/sync.js')).whenSynced(__ctx.cid));
   assert.ok(fake.T.log_entries.some((l) => l.author === uid && /колющий/.test(l.data.label || ''))); assert.ok(fake.T.log_entries.some((l) => l.author === uid && /огонь/.test(l.data.label || '')));
-  await page.waitForFunction(() => getComputedStyle(document.querySelector('.sheet-portrait')).backgroundImage.includes('data:image/'));
-  assert.equal(await page.locator('.sheet-portrait').evaluate(async (e) => { const url = getComputedStyle(e).backgroundImage.slice(5, -2); const image = new Image(); image.src = url; await image.decode(); return image.naturalWidth; }), 512);
+  const loadedPortrait = await page.waitForFunction(async () => {
+    const node = document.querySelector('.sheet-portrait'); if (!node) return false;
+    const url = getComputedStyle(node).backgroundImage.match(/url\("([^"]+)"\)/)?.[1];
+    if (!url) return false;
+    const image = new Image(); image.src = url;
+    try { await image.decode(); return image.naturalWidth === 512 ? image.naturalWidth : false; } catch { return false; }
+  });
+  assert.equal(await loadedPortrait.jsonValue(), 512); await loadedPortrait.dispose();
   await page.getByRole('button', { name: 'Атака: Адское копьё', exact: true }).waitFor();
   const rects = await page.locator('.monster-rolls button').evaluateAll((buttons) => buttons.map((b) => b.getBoundingClientRect().toJSON()));
   assert.equal(rects.length, 3); for (const r of rects) assert.ok(r.x >= 0 && r.x + r.width <= (uid === A ? 1440 : 390));
