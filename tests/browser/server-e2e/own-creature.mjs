@@ -68,8 +68,20 @@ for (const uid of [A, B]) {
   assert.equal(fake.T.tokens.length, before + 1);
   const token = fake.T.tokens.at(-1); assert.match(token.data.img, /^sb:@tokens\//);
   const copy = fake.T.campaign_creatures.find((c) => c.id === token.data.monsterId.slice(4)); assert.equal(copy.data.img, token.data.img); assert.equal(copy.data.actions[0].damage.length, 2);
+  // Подписанный URL приходит после первой отрисовки: проверяем сам токен, не только портрет статблока.
+  let releaseImage; fake.net.signGate = new Promise((r) => { releaseImage = r; });
   await page.reload(); await page.waitForFunction(() => !!window.__ctx?.scene);
   assert.ok(await page.evaluate((id) => __ctx.scene.tokens.some((t) => t.id === id), token.id));
+  const tokenFace = page.locator(`[data-token="${token.id}"] .tok-ring`);
+  await tokenFace.locator('.tok-initials').waitFor();
+  releaseImage(); fake.net.signGate = null;
+  await page.waitForFunction(async (id) => {
+    const { srcOf } = await import('/js/core/assets.js');
+    return !!srcOf(__ctx.scene.tokens.find((t) => t.id === id)?.img);
+  }, token.id);
+  await tokenFace.locator('img').waitFor({ timeout: 5000 });
+  assert.equal(await tokenFace.locator('img').evaluate(async (image) => { await image.decode(); return image.naturalWidth; }), 512);
+  assert.equal(await tokenFace.locator('.tok-initials').count(), 0);
   await page.evaluate(async (id) => (await import('/js/views/table/sheet.js')).openStatblock(__ctx, id), token.id);
   await page.getByRole('button', { name: 'Атака: Адское копьё', exact: true }).waitFor();
   const labels = ['Урон: Адское копьё (колющий)', 'Урон: Адское копьё (огонь)'];

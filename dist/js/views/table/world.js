@@ -298,7 +298,9 @@ export function renderTokens(L, ctx) {
     const d = n * s * 0.9 * (size.scale || 1) * look.scale;
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
     const name = ctx.nameOf(t, st);
-    const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
+    // После загрузки подписанного/локального URL сама ссылка t.img не меняется.
+    // Учитываем готовый адрес, чтобы инициалы сменились картинкой без правки токена.
+    const sig = `${t.img}|${srcOf(t.img)}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
     if (!node) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
