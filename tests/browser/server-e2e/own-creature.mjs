@@ -54,14 +54,14 @@ for (const uid of [A, B]) {
   await modal.locator('[data-ok]').click(); await modal.waitFor({ state: 'detached' }); 
   const template = fake.T.creatures.find((c) => c.owner_id === uid); assert.ok(template); assert.match(template.data.img, /^library:/);
   await page.goto('http://localhost:4173/?server=1#/c/c-own'); await page.waitForFunction(() => !!window.__ctx?.scene);
-  const place = () => page.evaluate(async ({ id, uid, A }) => { const { listCreatures } = await import('/js/core/library.js'); const list = await listCreatures(); __ctx.ui.myLib = { list }; const p = await import('/js/views/table/p-side.js'); if (uid === A) await p.placeCreatures(__ctx, `libsrc:${id}`); else await p.placeSummon(__ctx, `libsrc:${id}`); }, { id: template.id, uid, A });
+  const place = () => page.evaluate(async ({ id, uid, A }) => { const { listCreatures } = await import('/js/core/library.js'); if (!__ctx.ui.myLib) __ctx.ui.myLib = { list: await listCreatures() }; const p = await import('/js/views/table/p-side.js'); if (uid === A) await p.placeCreatures(__ctx, `libsrc:${id}`); else await p.placeSummon(__ctx, `libsrc:${id}`); }, { id: template.id, uid, A });
   // Задержка сервера: до ACK токен и ложное уведомление об успехе отсутствуют.
   let release; fake.net.writeGate = new Promise((r) => { release = r; });
   const beforeVisible = await page.evaluate(() => __ctx.scene.tokens.filter((t) => t.name.startsWith('Нарзугон')).length);
   const writeStart = fake.log.length;
   const before = fake.T.tokens.length, pending = place(); pending.catch(() => {});
   await waitFor(() => fake.log.slice(writeStart).includes('rpc'));
-  await page.getByText('Сохраняю существо…', { exact: true }).waitFor(); 
+  await page.waitForFunction(() => __ctx.ui.creaturePlacing === true);
   await waitFor(() => fake.files.size >= 2);
   assert.equal(await page.evaluate(() => __ctx.scene.tokens.filter((t) => t.name.startsWith('Нарзугон')).length), beforeVisible);
   release(); fake.net.writeGate = null; await pending;
@@ -76,12 +76,13 @@ for (const uid of [A, B]) {
   for (const label of labels) { const b = page.getByRole('button', { name: label, exact: true }); await b.click(); }
   await page.evaluate(async () => (await import('/js/server/sync.js')).whenSynced(__ctx.cid));
   assert.ok(fake.T.log_entries.some((l) => l.author === uid && /колющий/.test(l.data.label || ''))); assert.ok(fake.T.log_entries.some((l) => l.author === uid && /огонь/.test(l.data.label || '')));
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('.sheet-portrait')).backgroundImage.includes('data:image/'));
   assert.equal(await page.locator('.sheet-portrait').evaluate(async (e) => { const url = getComputedStyle(e).backgroundImage.slice(5, -2); const image = new Image(); image.src = url; await image.decode(); return image.naturalWidth; }), 512);
   await page.getByRole('button', { name: 'Атака: Адское копьё', exact: true }).waitFor();
   const rects = await page.locator('.monster-rolls button').evaluateAll((buttons) => buttons.map((b) => b.getBoundingClientRect().toJSON()));
   assert.equal(rects.length, 3); for (const r of rects) assert.ok(r.x >= 0 && r.x + r.width <= (uid === A ? 1440 : 390));
   // Изменения библиотеки влияют на новые постановки, прежняя копия остаётся прежней.
-  await page.evaluate(async (id) => { const lib = await import('/js/core/library.js'); const c = (await lib.listCreatures()).find((x) => x.id === id); c.actions[0].attack.bonus = 12; await lib.saveCreature(c); }, template.id);
+  await page.evaluate(async (id) => { const lib = await import('/js/core/library.js'); const c = (await lib.listCreatures()).find((x) => x.id === id); __ctx.ui.myLib = { list: [structuredClone(c)] }; c.actions[0].attack.bonus = 12; await lib.saveCreature(c); }, template.id);
   if (uid === A) {
     rejectPlacement = true; const count = fake.T.tokens.length; await place(); assert.equal(fake.T.tokens.length, count);
     await page.getByText('Существо не поставлено', { exact: true }).waitFor(); rejectPlacement = false;

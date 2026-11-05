@@ -422,6 +422,16 @@ async function preparedCopy(ctx, tpl, ownerId = null) {
   return copy;
 }
 
+async function placementTemplate(ctx, pick) {
+  if (!String(pick).startsWith('libsrc:')) return null;
+  if (libOffline(ctx)) throw new Error('На сервере недоступны снимки своих существ');
+  const list = await listCreatures();
+  libState(ctx).list = list;
+  const template = list.find((x) => x.id === pick.slice(7));
+  if (!template) throw new Error('Существо удалено из библиотеки — выберите другой шаблон');
+  return template;
+}
+
 async function placing(ctx, work) {
   if (ctx.ui.creaturePlacing) return false;
   ctx.ui.creaturePlacing = true;
@@ -446,14 +456,15 @@ export async function commitCreatures(ctx, sceneId, tokens, copy, history) {
 
 export function placeCreatures(ctx, monsterId) { return placing(ctx, () => placeCreaturesInner(ctx, monsterId)); }
 async function placeCreaturesInner(ctx, monsterId) {
+  if (!ctx.scene) return false;
   const sceneId = ctx.sceneId;
-  const tpl = libTemplate(ctx, monsterId);
-  const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
-  if (!m || !ctx.scene) return;
-  if (tpl && libOffline(ctx)) return;
   const st = { ...bState(ctx) };
   const at = ctx.ui.placeAt || viewCenter(ctx);
   ctx.ui.placeAt = null;
+  const tpl = await placementTemplate(ctx, monsterId);
+  if (ctx.sceneId !== sceneId) return false;
+  const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
+  if (!m) return false;
   // Новый снимок на постановку: правки шаблона видны новым токенам и не меняют уже поставленных.
   let copyId = null, newCopy = null, pic = null;
   if (tpl) {
@@ -664,7 +675,8 @@ async function placeSummonInner(ctx, pick, at) {
   const sceneId = ctx.sceneId;
   const hero = myHeroToken(ctx);
   if (!hero || !ctx.scene) { ctx.toast({ title: 'Нужен ваш герой на сцене', body: 'Призыв встаёт рядом с ним — попросите мастера поставить героя', icon: 'alert-circle' }); return false; }
-  const tpl = libTemplate(ctx, pick);
+  const tpl = await placementTemplate(ctx, pick);
+  if (ctx.sceneId !== sceneId) return false;
   const m = tpl ? safeMonster(tpl) : monsterById(pick);
   if (!m || (tpl && libOffline(ctx))) return false;
   let copyId = null, newCopy = null, pic = null;
