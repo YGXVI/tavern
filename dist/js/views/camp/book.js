@@ -48,14 +48,25 @@ export function mountTab(ctx, body, tools) {
   }
 
   // ——— Выделение текста: на полях, в свою версию, разночтение, сноска ———
+  // Неточное выделение мышью дотягиваем до целых слов: «ос сказал» → «Голос сказал».
+  const LETTER = /[\p{L}\p{N}'’-]/u;
+  const wholeWords = (src) => {
+    const r = src.cloneRange();
+    if (r.startContainer.nodeType === 3) { const d = r.startContainer.data; let i = r.startOffset; while (i > 0 && LETTER.test(d[i - 1])) i--; r.setStart(r.startContainer, i); }
+    if (r.endContainer.nodeType === 3) { const d = r.endContainer.data; let i = r.endOffset; while (i < d.length && LETTER.test(d[i])) i++; r.setEnd(r.endContainer, i); }
+    return r;
+  };
   let selBar = null;
   const hideBar = () => { selBar?.remove(); selBar = null; };
   L('mouseup', '[data-text]', (e, t) => setTimeout(() => {
     hideBar();
-    const s = getSelection(); const quote = String(s || '').trim();
-    if (!quote || !t.contains(s.anchorNode)) return;
+    const s = getSelection();
+    if (!String(s || '').trim() || !t.contains(s.anchorNode)) return;
+    const range = wholeWords(s.getRangeAt(0));
+    s.removeAllRanges(); s.addRange(range);
+    const quote = range.toString().trim();
     const sec = t.closest('[data-entry]');
-    const r = s.getRangeAt(0).getBoundingClientRect();
+    const r = range.getBoundingClientRect();
     selBar = document.createElement('div');
     selBar.className = 'bk-selbar';
     selBar.innerHTML = String(html`<button data-sel="margin">${ic('pencil-edit-02', 14)}На полях</button><button data-sel="mine">${ic('note-edit', 14)}В свою версию</button><button data-sel="variant">${ic('arrow-left-right', 14)}Разночтение</button>${ctx.master ? html`<button data-sel="fn">† Сноска</button>` : ''}`);
