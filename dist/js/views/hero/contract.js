@@ -11,7 +11,7 @@ import { applyHeroAction } from './actions.js';
 import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter } from './creation.js';
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
-import { GEAR_RU, EQ_RU } from '../ref/world-text.js';
+import { gearIndex } from './gear.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
 
@@ -20,12 +20,12 @@ let spells = spellIndex();
 const json = (p) => fetch(new URL(p, import.meta.url)).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))));
 // Справочники конструктора для мастера создания (character-options, снаряжение, умения). Без них — витрина.
 let creationIx = null;
-// Снаряжение SRD по русскому названию: вес и вид для сумки старых листов (#203, ревью листа).
-let gear = new Map();
+// Снаряжение SRD по ID и русскому названию: имена, вес, КД и атаки в листе (gear.js, #203).
+let gear = null;
 await Promise.all(['spells-2014', 'spells-ref-2014', 'character-options-2014', 'equipment-2014', 'features-2014', 'spells-srd-2014'].map((n) => json(`../../data/${n}.json`)))
   .then(([list, ref, options, equipment, features, srd]) => {
     spells = spellIndex({ spells: list, ref, srd });
-    gear = new Map(equipment.entries.map((e) => [(EQ_RU[e.name.en] || GEAR_RU[e.name.en] || e.name.ru || e.name.en || '').toLowerCase(), { kind: e.kind, weight: e.weight?.lb, en: e.name.en }]));
+    gear = gearIndex(equipment);
     creationIx = indexCreation({ options, spells: list, equipment, features }, ref);
   })
   .catch(() => { /* без справочника — подписи с листа и витрина мастера */ });
@@ -158,6 +158,8 @@ export function canLevelUp(key) {
   const real = findHero(key), userId = currentUserId();
   return !!real && (real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
 }
+/** Снаряжение SRD для «Добавить предмет»: [{ ref, name, kind, weight }] (пусто — справочник не загрузился). */
+export const gearCatalog = () => (gear ? [...gear.byId.values()].map((g) => ({ ref: g.id, name: g.ru, kind: g.kind, weight: g.weight })) : []);
 /** Разбор файла Long Story Short. */
 export const lssImportView = () => LSS_IMPORT;
 
@@ -299,7 +301,10 @@ export const heroActions = {
   prepare: live('prepare'),                    // { heroId, spellId, prepared }
   cast: live('cast'),                          // { heroId, spellId, slot }
   editField: live('editField'),                // { heroId, field, value }
-  addItem: stub('Предмет'),                    // { heroId }
+  addItem: live('addItem'),                    // { heroId, name, quantity, ref?, weight? }
+  removeItem: live('removeItem'),              // { heroId, itemId }
+  equip: live('equip'),                        // { heroId, itemId, auto: [ids] }
+  coins: live('coins'),                        // { heroId, pp, ep, gp, sp, cp }
   levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
   importLss: stub('Импорт из LSS'),            // { decisions: { [issue]: choice } }
 };

@@ -747,3 +747,16 @@
 /* Героя нет (#203) */
 .h-missing { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 16px; text-align: center; }
 .h-missing > .ic { color: var(--icon-tertiary, var(--text-tertiary)); }
+/* Сумка: добавить предмет, монеты, надеть/снять (#203) */
+.s-item .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.s-add-modal { width: min(460px, 100vw - 32px); }
+.s-add-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow: auto; }
+.s-add-row { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 8px 12px; border-radius: 12px; text-align: left; color: var(--text-primary); }
+.s-add-row:hover { background: var(--bg-hover); }
+.s-add-row b { font: 600 13px/16px var(--font-text); }
+.s-add-row small { grid-row: 2; color: var(--text-tertiary); font-size: 11px; }
+.s-add-row > .ic { grid-column: 2; grid-row: 1 / 3; color: var(--icon-accent); }
+.s-add-row.own b { color: var(--text-accent); }
+.s-coins { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.s-coins label { display: flex; flex-direction: column; gap: 4px; font: 600 11px/14px var(--font-text); color: var(--text-tertiary); text-transform: uppercase; }
+.s-coins input { width: 100%; height: 40px; padding: 0 10px; border-radius: 10px; background: var(--bg-control); color: var(--text-primary); border: 0; font: 600 15px/20px var(--font-text); }

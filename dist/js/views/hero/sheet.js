@@ -3,7 +3,7 @@
 // Корнеры и варианты — после «?»: down, concentration, noSlots, multiclass, unfinished, roll, stub, ask, levelup.
 import { html, raw } from '../../core/dom.js';
 import { modal, popover, closePopover, toast } from '../../ui/kit.js';
-import { heroView, heroActions } from './contract.js';
+import { heroView, heroActions, gearCatalog } from './contract.js';
 import { ic, chip, caps, rowIcon, segmented, check, pips } from './parts.js';
 import { previewNote } from './index.js';
 
@@ -100,7 +100,9 @@ function concPanel(v) {
 
 // ——— строки действий ———
 function actionRow(v, a) {
-  if (a.empty) return html`<div class="s-act s-act-empty">${ic('sparkles', 18)}<span>${a.name}</span><span class="spacer"></span><a class="btn btn-sm btn-secondary" href="#/hero/new/spells">${a.action}</a></div>`;
+  if (a.empty) return html`<div class="s-act s-act-empty">${ic('sparkles', 18)}<span>${a.name}</span><span class="spacer"></span>${a.action ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/magic">${a.action}</a>` : ''}</div>`;
+  // Умение с зарядами (Ярость, Второе дыхание…): сколько осталось и «потратить» вместо броска.
+  if (a.res) return html`<div class="s-act feature ${a.left ? '' : 'noslot'}" data-act-row="${a.id}"><span class="s-act-ic">${ic(rowIcon('feature'), 18)}</span><span class="s-act-t"><b>${a.name}</b><small>${a.sub}</small></span><span class="s-badge">${a.left} ${a.left === 1 ? 'заряд' : a.left > 1 && a.left < 5 ? 'заряда' : 'зарядов'}</span><button class="s-dice" data-res="${a.res}" aria-label="Использовать" title="Использовать">${ic('tick-02', 16)}</button></div>`;
   const noSlot = v.noSlot && a.slotLevel === v.noSlot.level;
   const off = v.down;
   return html`<div class="s-act ${a.icon} ${noSlot ? 'noslot' : ''} ${off ? 'off' : ''}" data-act-row="${a.id}">
@@ -159,10 +161,12 @@ function skillsTab(v, { narrow = false, ask = false } = {}) {
 
 function bagTab(v) {
   const inv = v.inventory;
-  const item = (it) => html`<div class="s-item"><span class="s-act-ic">${ic(rowIcon(it.icon), 18)}</span><span class="t"><b>${it.name}</b><small>${it.sub}</small></span>${it.tag ? html`<span class="h-mini-chip ${it.tag === 'Новое' ? 'accent' : 'gold'}">${it.tag}</span>` : ''}<small class="qty">×${it.qty}</small></div>`;
-  return html`<div class="s-bag-top"><span class="s-pill"><small>груз</small><b>${inv.load.now} / ${inv.load.max} фнт</b></span><span class="s-pill"><small>зм</small><b>${inv.coins.gp}</b></span><span class="s-pill"><small>см</small><b>${inv.coins.sp}</b></span><span class="s-pill"><small>мм</small><b>${inv.coins.cp}</b></span><span class="spacer"></span><button class="btn btn-secondary btn-sm" data-add-item>${ic('plus-sign', 14)}Добавить</button></div>
-    <div class="s-group">${caps('Надето и в руках')}<small>влияет на атаки и КД</small></div><div class="s-items on">${inv.equipped.map(item)}</div>
-    <div class="s-group">${caps('В рюкзаке')}<small>перетащите на портрет, чтобы передать</small></div><div class="s-items">${inv.pack.map(item)}</div>`;
+  // Доспех, щит и оружие можно надеть и снять (#203): от этого зависят КД и атаки на «Бое».
+  const item = (it) => html`<div class="s-item"><span class="s-act-ic">${ic(rowIcon(it.icon), 18)}</span><span class="t"><b>${it.name}</b><small>${it.sub}</small></span>${it.tag ? html`<span class="h-mini-chip ${it.tag === 'Новое' ? 'accent' : 'gold'}">${it.tag}</span>` : ''}<small class="qty">×${it.qty}</small>
+    ${v.live && it.wearable && it.id ? html`<button class="btn btn-ghost btn-sm" data-equip="${it.id}">${it.equipped ? 'Снять' : 'Надеть'}</button>` : ''}${v.live && it.id && !it.id.startsWith('legacy-') ? html`<button class="icon-btn icon-btn-sm" data-unpack="${it.id}" aria-label="Убрать один">${ic('minus-sign', 14)}</button>` : ''}</div>`;
+  return html`<div class="s-bag-top"><span class="s-pill"><small>груз</small><b>${inv.load.now} / ${inv.load.max} фнт</b></span><span class="s-pill"><small>зм</small><b>${inv.coins.gp}</b></span><span class="s-pill"><small>см</small><b>${inv.coins.sp}</b></span><span class="s-pill"><small>мм</small><b>${inv.coins.cp}</b></span>${v.live ? html`<button class="btn btn-ghost btn-sm" data-coins>${ic('edit-02', 14)}Монеты</button>` : ''}<span class="spacer"></span><button class="btn btn-secondary btn-sm" data-add-item>${ic('plus-sign', 14)}Добавить</button></div>
+    <div class="s-group">${caps('Надето и в руках')}<small>влияет на атаки и КД</small></div><div class="s-items on">${inv.equipped.length ? inv.equipped.map(item) : html`<p class="s-none">Ничего не надето — КД без доспехов.</p>`}</div>
+    <div class="s-group">${caps('В рюкзаке')}<small>${inv.pack.length} ${inv.pack.length === 1 ? 'предмет' : 'предметов'}</small></div><div class="s-items">${inv.pack.length ? inv.pack.map(item) : html`<p class="s-none">Рюкзак пуст.</p>`}</div>`;
 }
 
 const PERSON_HINT = { traits: 'Как герой держится с людьми — пара фраз', ideals: 'Во что верит и ради чего рискнёт', bonds: 'Кто или что ему дорого', flaws: 'Слабость, на которой мастер может сыграть', appearance: 'Каким его увидят за столом' };
@@ -307,7 +311,7 @@ function bindSheet(root, L, v, redraw) {
     heroActions.roll({ heroId: v.id, what, formula });
   });
   L('click', '[data-explain]', (e, b) => { e.stopPropagation(); const t = v.explain?.[b.dataset.explain]; if (t) popover(html`<div class="s-explain">${t}</div>`, b, { placement: 'top', className: 'explain-pop' }); });
-  L('click', '[data-res]', (e, b) => heroActions.useResource({ heroId: v.id, id: b.dataset.res }));
+  L('click', '[data-res]', (e, b) => { const r = v.resources.find((x) => x.id === b.dataset.res); heroActions.useResource({ heroId: v.id, id: b.dataset.res, name: r?.name, total: r?.total, recovery: r?.recovery }); });
   L('click', '[data-drop-conc]', () => heroActions.dropConcentration({ heroId: v.id }));
   L('click', '[data-add-cond]', () => heroActions.toggleCondition({ heroId: v.id }));
   L('click', '[data-death]', () => heroActions.deathSave({ heroId: v.id }));
@@ -319,7 +323,10 @@ function bindSheet(root, L, v, redraw) {
   });
   L('click', '[data-cast]', (e, b) => heroActions.cast({ heroId: v.id, spellId: b.dataset.cast }));
   L('click', '[data-slot-pick]', (e, b) => heroActions.cast({ heroId: v.id, spellId: b.dataset.slotPick, pickSlot: true }));
-  L('click', '[data-add-item],[data-coins]', () => heroActions.addItem({ heroId: v.id }));
+  L('click', '[data-add-item]', () => addItemModal(v));
+  L('click', '[data-coins]', () => coinsModal(v));
+  L('click', '[data-equip]', (e, b) => { const all = [...v.inventory.equipped, ...v.inventory.pack]; const it = all.find((x) => x.id === b.dataset.equip); heroActions.equip({ heroId: v.id, itemId: b.dataset.equip, name: it?.name, auto: v.inventory.equipped.filter((x) => x.auto).map((x) => x.id) }); });
+  L('click', '[data-unpack]', (e, b) => heroActions.removeItem({ heroId: v.id, itemId: b.dataset.unpack }));
   L('click', '[data-more],[data-later]', () => heroActions.editField({ heroId: v.id, field: 'menu' }));
   L('change', '[data-edit]', (e, t) => heroActions.editField({ heroId: v.id, field: t.dataset.edit, value: t.value }));
   L('click', '[data-search]', () => { const s = root.querySelector('.s-search'); s?.classList.toggle('hidden'); s?.querySelector('input')?.focus(); });
@@ -351,6 +358,38 @@ function shortRest(v) {
     if (b.dataset.hd) { dice = Math.max(0, Math.min(hd.left, dice + +b.dataset.hd)); m.set(body()); }
     if (b.dataset.lv) { const lv = +b.dataset.lv; if (pick.has(lv)) pick.delete(lv); else if ([...pick].reduce((a, x) => a + x, 0) + lv <= Math.ceil(v.level / 2)) pick.add(lv); else toast({ title: `Не больше ${Math.ceil(v.level / 2)} уровней ячеек`, icon: 'information-circle', timeout: 1800 }); m.set(body()); }
     if (b.hasAttribute('data-ok')) { heroActions.rest({ heroId: v.id, kind: 'short', hitDice: dice, recover: [...pick] }); m.close(); }
+  });
+}
+
+// ——— Сумка: добавить предмет и монеты (#203) ———
+function addItemModal(v) {
+  const all = gearCatalog();
+  let q = '';
+  const KIND = { weapon: 'оружие', armor: 'доспех', shield: 'щит', gear: 'снаряжение', tool: 'инструмент', pack: 'набор', ammunition: 'боеприпасы', mount: 'транспорт' };
+  const list = () => { const n = q.trim().toLowerCase(); return (n ? all.filter((g) => g.name.toLowerCase().includes(n)) : all).slice(0, 40); };
+  const body = () => html`<div class="s-rest-modal s-add-modal"><div class="s-rest-head">${ic('backpack-01', 18)}<b>Добавить в сумку</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
+    <span class="input">${ic('search-01', 16)}<input data-q placeholder="Кинжал, верёвка, зелье лечения…" value="${q}" autofocus></span>
+    <div class="s-add-list">${list().map((g) => html`<button class="s-add-row" data-ref="${g.ref}"><b>${g.name}</b><small>${KIND[g.kind] || g.kind}${g.weight ? ` · ${g.weight} фнт` : ''}</small>${ic('plus-sign', 16)}</button>`)}
+      ${q.trim() ? html`<button class="s-add-row own" data-own><b>«${q.trim()}»</b><small>свой предмет</small>${ic('plus-sign', 16)}</button>` : ''}</div></div>`;
+  const m = modal(body(), { className: 'rest' });
+  const redraw = () => { m.set(body()); const i = m.box.querySelector('[data-q]'); i.focus(); i.setSelectionRange(q.length, q.length); };
+  m.box.addEventListener('input', (e) => { if (e.target.matches('[data-q]')) { q = e.target.value; redraw(); } });
+  m.box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ref],[data-own]'); if (!b) return;
+    const g = all.find((x) => x.ref === b.dataset.ref);
+    heroActions.addItem({ heroId: v.id, ...(g ? { name: g.name, ref: g.ref, weight: g.weight } : { name: q.trim() }), quantity: 1 });
+    m.close();
+  });
+}
+function coinsModal(v) {
+  const c = v.inventory.coins;
+  const m = modal(html`<div class="s-rest-modal"><div class="s-rest-head">${ic('backpack-01', 18)}<b>Монеты</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
+    <div class="s-coins">${[['pp', 'пм'], ['gp', 'зм'], ['ep', 'эм'], ['sp', 'см'], ['cp', 'мм']].map(([k, t]) => html`<label><small>${t}</small><input type="number" min="0" step="1" data-coin="${k}" value="${c[k] || 0}"></label>`)}</div>
+    <div class="s-rest-foot"><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${ic('tick-02', 16)}Сохранить</button></div></div>`, { className: 'rest' });
+  m.box.querySelector('[data-ok]').addEventListener('click', () => {
+    const p = { heroId: v.id };
+    m.box.querySelectorAll('[data-coin]').forEach((i) => { p[i.dataset.coin] = Number(i.value) || 0; });
+    heroActions.coins(p); m.close();
   });
 }
 

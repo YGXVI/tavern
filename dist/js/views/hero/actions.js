@@ -65,7 +65,12 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
       const legacy = /^legacy-slot-(\d)$/.exec(p.id || '');
       if (legacy) return spendLegacySlot(ch, Number(legacy[1]));
       if (p.id === 'legacy-hit-dice') return { title: 'Кости хитов старого листа', body: 'Потраченные кости отмечаются за столом, в листе героя.' };
-      const pool = [...(ch.slotPools || []), ...(ch.resources || []), ...(ch.hitDicePools || [])].find((x) => x.id === p.id);
+      let pool = [...(ch.slotPools || []), ...(ch.resources || []), ...(ch.hitDicePools || [])].find((x) => x.id === p.id);
+      // Заряд умения класса, посчитанный листом (gear.js), записывается в resources при первой трате (#203).
+      if (!pool && /^cls-/.test(p.id || '') && Number.isFinite(p.total) && p.total > 0) {
+        pool = { id: p.id, name: String(p.name || 'Умение'), max: p.total, spent: 0, recovery: p.recovery === 'short' ? 'short' : 'long' };
+        ch.resources = [...(ch.resources || []), pool];
+      }
       if (!pool) return { title: 'Не нашёл ресурс' };
       const max = n(pool.max ?? pool.total);
       if (n(pool.spent) >= max) return { title: 'Не осталось', body: `${pool.name || 'Ресурс'}: 0 из ${max}` };
@@ -116,6 +121,44 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
       for (const r of ch.resources || []) if (r.recovery === 'short') r.spent = 0;
       for (const s of ch.slotPools || []) if (s.kind === 'pact') s.spent = 0;
       return { title: 'Короткий отдых', body: healed ? `Восстановлено ${healed} хитов.` : 'Умения короткого отдыха восстановлены.', icon: 'coffee-02' };
+    }
+    case 'equip': {
+      // Надеть или снять предмет (#203). Пока игрок ничего не надевал, лист показывает стартовый комплект надетым —
+      // при первой правке он записывается как есть (p.auto), а потом меняется выбранный предмет.
+      if (!Array.isArray(ch.inventoryItems)) return { title: 'В старом листе надетое не хранится', body: 'КД и атаки у этого героя записаны вручную — правьте их в листе за столом.' };
+      const auto = new Set(p.auto || []);
+      if (!ch.inventoryItems.some((x) => x.equipped)) for (const x of ch.inventoryItems) if (auto.has(x.id)) x.equipped = true;
+      const it = ch.inventoryItems.find((x) => x.id === p.itemId);
+      if (!it) return { title: 'Предмет не найден' };
+      it.equipped = !it.equipped;
+      return { title: `${p.name || it.name}: ${it.equipped ? 'надето' : 'в рюкзаке'}`, icon: 'tick-02' };
+    }
+    case 'addItem': {
+      // Предмет из снаряжения SRD или свой (#203): в структурированную сумку, у старого листа — строкой в конец.
+      const name = String(p.name || '').trim();
+      if (!name) return null;
+      const qty = Math.max(1, Math.round(n(p.quantity, 1)));
+      if (Array.isArray(ch.inventoryItems) || !ch.inventory || typeof ch.inventory !== 'string') {
+        const list = Array.isArray(ch.inventoryItems) ? ch.inventoryItems : [];
+        const same = p.ref && list.find((x) => x.ref === p.ref && !x.equipped);
+        if (same) same.quantity = n(same.quantity, 1) + qty;
+        else list.push({ id: p.id || crypto.randomUUID(), name, quantity: qty, weight: Number.isFinite(p.weight) ? p.weight : null, equipped: false, attuned: false, description: String(p.description || ''), ...(p.ref ? { ref: p.ref } : {}) });
+        ch.inventoryItems = list;
+      } else ch.inventory = `${ch.inventory.replace(/[\s,.]+$/, '')}, ${qty > 1 ? `${qty} × ` : ''}${name}`;
+      return { title: `${name}${qty > 1 ? ` ×${qty}` : ''} — в сумке`, icon: 'tick-02' };
+    }
+    case 'removeItem': {
+      if (!Array.isArray(ch.inventoryItems)) return { title: 'В старом листе сумка — строкой', body: 'Уберите предмет в листе за столом.' };
+      const it = ch.inventoryItems.find((x) => x.id === p.itemId);
+      if (!it) return null;
+      if (n(it.quantity, 1) > 1) it.quantity = n(it.quantity, 1) - 1; else ch.inventoryItems = ch.inventoryItems.filter((x) => x !== it);
+      return { title: `${p.name || it.name}: убрано`, icon: 'tick-02' };
+    }
+    case 'coins': {
+      const c = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(ch.coins || {}) };
+      for (const k of Object.keys(c)) if (Number.isFinite(p[k])) c[k] = Math.max(0, Math.round(p[k]));
+      ch.coins = c;
+      return { title: 'Монеты обновлены', icon: 'tick-02' };
     }
     case 'prepare': {
       const s = (ch.knownSpells || []).find((x) => x.id === p.spellId);
