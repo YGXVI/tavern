@@ -142,7 +142,9 @@ export function foldInbox(cid, userId) {
   folding = true;
   try {
     const ops = bookOps(c);
-    const hidden = ops.filter((o) => o.hidden && o.op.op === 'entry');
+    const inBook = bookOf(c);
+    // Уже открытая или запечатанная запись снова во входящие не попадает.
+    const hidden = ops.filter((o) => o.hidden && o.op.op === 'entry' && !findEntry(inBook, o.op.entry.n, o.op.entry.id));
     if (hidden.length) {
       const sec = local('secret', cid, userId);
       const fresh = hidden.filter((o) => !sec.inbox?.[o.op.entry.id] || (sec.inbox[o.op.entry.id].rev || 0) < (o.op.entry.rev || 0));

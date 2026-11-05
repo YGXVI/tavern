@@ -33,7 +33,8 @@ export function mountTab(ctx, body, tools) {
     const c = ctx.c, book = ctx.book();
     const [page, a, b, d] = rest;
     if (page === 'write') { body.innerHTML = ''; sub = mountWrite(ctx, body, a || null); return; }
-    if (!book.chapters.length) { body.innerHTML = String(empty(ctx)); return; }
+    // До первой главы открыты только пустая книга и выбор летописца.
+    if (!book.chapters.length && page !== 'pen') { body.innerHTML = String(empty(ctx)); return; }
     let out;
     if (page === 'ch' && a) out = b === 'v' && d ? variantPage(ctx, Number(a), d) : chapterPage(ctx, Number(a));
     else if (page === 'index') out = indexPage(ctx, a || null);
@@ -334,12 +335,17 @@ function bindModal(ctx) {
   if (!ch) { ctx.toast({ title: 'Все главы уже переплетены', body: 'Новая глава появится, когда начнёте игру', icon: 'book-open-01' }); return; }
   const prev = chapterOf(book, ch.n - 1);
   const lines = ch.entries.filter((e) => e.text && !e.diary && !e.onlyMaster && e.kind !== 'sealed').map((e) => ({ userId: e.userId, text: (String(e.text).replace(/^>.*$/gm, '').replace(/@\[([^\]]+)\]/g, '$1').replace(/@(\S+)/g, '$1').trim().split(/(?<=[.!?…])\s+/)[0] || '').slice(0, 140) })).filter((x) => x.text).slice(0, 5);
+  const cnt = (k, one, few, many) => (k ? `${k} ${plural(k, one, few, many)}` : '');
+  const voicesN = new Set(ch.entries.filter((e) => !e.diary && !e.onlyMaster).map((e) => e.userId)).size;
+  const brokenN = ch.entries.filter((e) => e.sealed?.brokenAt).length, sealedN = ch.entries.filter((e) => e.kind === 'sealed').length;
+  const openThreads = book.threads.filter((t) => !t.closed).length;
   const stat = [
-    `${new Set(ch.entries.map((e) => e.userId)).size} ${plural(new Set(ch.entries.map((e) => e.userId)).size, 'голос', 'голоса', 'голосов')}`,
-    ch.entries.filter((e) => e.variantOf).length ? `${ch.entries.filter((e) => e.variantOf).length} разночтение` : '',
-    ch.entries.filter((e) => e.sealed?.brokenAt).length ? `${ch.entries.filter((e) => e.sealed?.brokenAt).length} печать сломана` : '',
-    ch.entries.reduce((n, e) => n + (e.footnotes || []).length, 0) ? `${ch.entries.reduce((n, e) => n + (e.footnotes || []).length, 0)} сноска` : '',
-    book.threads.filter((t) => !t.closed).length ? `${book.threads.filter((t) => !t.closed).length} нити тянутся дальше` : '',
+    cnt(voicesN, 'голос', 'голоса', 'голосов'),
+    cnt(ch.entries.filter((e) => e.variantOf).length, 'разночтение', 'разночтения', 'разночтений'),
+    brokenN ? `${brokenN} ${plural(brokenN, 'печать сломана', 'печати сломаны', 'печатей сломано')}` : '',
+    cnt(sealedN, 'печать', 'печати', 'печатей'),
+    cnt(ch.entries.reduce((n, e) => n + (e.footnotes || []).length, 0), 'сноска', 'сноски', 'сносок'),
+    openThreads ? `${openThreads} ${plural(openThreads, 'нить тянется', 'нити тянутся', 'нитей тянутся')} дальше` : '',
   ].filter(Boolean);
   const m = modal(html`<div class="bk-bind"><div class="bk-bind-spine">${prev ? html`<div class="bk-vol"><span class="bk-num">${ROMAN(prev.n)}</span><b>${prev.title || chapterName(prev)}</b><small>${fmtDate(prev.startedAt)}</small></div>` : ''}<div class="bk-vol glow"><span class="bk-num">${ROMAN(ch.n)}</span><b data-prev-title>${ch.title || chapterName(ch)}</b><small>${fmtDate(ch.startedAt)}</small></div><small class="bk-muted">Так глава встанет на корешок</small></div>
     <div class="bk-bind-form"><p class="bk-meta gold">переплетая главу, ты даёшь ей имя</p><h1 class="bk-serif-light">Переплести главу ${ROMAN(ch.n)}</h1>

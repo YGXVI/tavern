@@ -416,7 +416,8 @@ button.cp-map { cursor: pointer; }
 /* Разворот */
 .bk-spread-wrap { position: relative; }
 .bk-spread { position: relative; border-radius: 6px; padding: 44px 0 28px; color: var(--bk-ink); background: linear-gradient(90deg, var(--bk-paper) 0%, var(--bk-paper) 46%, #dccdaa 50%, var(--bk-paper) 54%, var(--bk-paper) 100%); box-shadow: 0 34px 60px -20px rgb(0 0 0 / .7), 0 4px 0 -1px #d7c69f, 0 8px 0 -3px #c9b78f; }
-.bk-cols { columns: 2; column-gap: 128px; padding: 0 64px 0 120px; column-fill: balance; }
+/* Колонка: слева — поле времени и места (96px), справа — поле пометок (110px); между колонками помещаются оба. */
+.bk-cols { columns: 2; column-gap: 236px; padding: 0 136px 0 116px; column-fill: balance; }
 .bk-chapter-head { break-inside: avoid; margin-bottom: 12px; }
 .bk-meta { font: 700 10px/12px var(--font-text); letter-spacing: .08em; text-transform: uppercase; color: var(--bk-red); margin-bottom: 10px; }
 .bk-meta span { color: var(--bk-gold); }
@@ -437,7 +438,7 @@ button.cp-map { cursor: pointer; }
 .bk-text::selection, .bk-text *::selection { background: rgb(91 63 160 / .22); }
 .bk-mention { color: inherit; text-decoration: underline; text-decoration-color: rgb(184 128 31 / .6); text-underline-offset: 3px; }
 .bk-quote { position: relative; margin: 10px 0; padding: 10px 14px 10px 36px; border-radius: 6px; background: rgb(184 128 31 / .14); display: flex; flex-direction: column; gap: 4px; font-style: italic; }
-.bk-quote small { font: 700 9px/12px var(--font-text); letter-spacing: .07em; text-transform: uppercase; color: var(--bk-gold); font-style: normal; }
+.bk-quote small { user-select: none; font: 700 9px/12px var(--font-text); letter-spacing: .07em; text-transform: uppercase; color: var(--bk-gold); font-style: normal; }
 .bk-ribbon-ic { position: absolute; left: 12px; top: 10px; width: 10px; height: 16px; background: var(--bk-red); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 75%, 0 100%); }
 .bk-footnotes { margin-top: 8px; padding-left: 14px; font: italic 400 12px/1.45 var(--bk-serif); color: var(--bk-gold); }
 .bk-footnotes span { color: var(--bk-ink2); }
@@ -713,7 +714,8 @@ button.cp-map { cursor: pointer; }
   .bk-insert { grid-column: 2; transform: none; }
   .bk-write { grid-template-columns: 200px minmax(0, 1fr); grid-template-areas: "crumbs crumbs" "left paper" "right right"; }
   .bk-w-right { position: static; display: grid; grid-template-columns: 1fr 1fr; }
-  .bk-cols { padding: 0 56px 0 112px; column-gap: 120px; }
+  .bk-cols { padding: 0 124px 0 104px; column-gap: 220px; }
+  .bk-margin { width: 96px; right: -108px; }
   .app-nav { position: static; transform: none; }
 }
 @media (max-width: 1020px) {
