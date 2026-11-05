@@ -63,16 +63,12 @@ await page.evaluate(async()=>{
  const{openStatblock}=await import('/js/views/table/sheet.js');openStatblock(__ctx,'test-srd');
 });
 await page.locator('.sheet-drawer .atk-desc[lang="ru"]').first().waitFor();
-const ru=await page.locator('.sheet-drawer .atk-desc').first().innerText();
-await page.locator('[data-stat-lang="en"]').click();
-assert.notEqual(await page.locator('.sheet-drawer .atk-desc').first().innerText(),ru);
-assert.equal(await page.locator('.sheet-drawer .atk-desc').first().getAttribute('lang'),'en');
+// Переключателя языка нет: каталоговый статблок по-русски, атрибуция называет перевод.
+assert.match(await page.locator('.sheet-drawer .atk-desc').first().innerText(),/[а-яё]/i);
+assert.equal(await page.locator('.sheet-drawer [data-stat-lang]').count(),0);
+assert.match(await page.locator('.sheet-drawer').innerText(),/CC BY 4\.0.*перевод/s);
 await page.locator('[data-close-sheet]').click();
-await page.evaluate(async()=>{const{openStatblock}=await import('/js/views/table/sheet.js');openStatblock(__ctx,'test-srd');});
-assert.equal(await page.locator('[data-stat-lang="en"]').getAttribute('aria-pressed'),'true');
-assert.match(await page.locator('.sheet-drawer').innerText(),/CC BY 4.0/);
-await page.locator('[data-close-sheet]').click();
-console.log('RU/EN statblock, session choice, lang, attribution OK');
+console.log('Russian statblock without language switch, lang, attribution OK');
 await page.evaluate(async heroId=>{
  const{opportunityForMaster}=await import('/js/views/table/p-map.js');
  window.savedToast=__ctx.toast;window.opportunityActions=[];window.opportunityMessages=[];
