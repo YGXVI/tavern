@@ -10,12 +10,12 @@ import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { nextTokenName, userById, tokenStats } from '../../core/campaign.js';
 import { saveCreature } from '../../core/library.js';
-import { popover, closePopover } from '../../ui/kit.js';
+import { popover, closePopover, panelHeader } from '../../ui/kit.js';
 import { sizeById } from '../../data/rules.js';
 import { spotNear, viewCenter, hydrateImages, commitCreatures } from './p-side.js';
 import { pickTokenImage, storeTokenImage, deleteTokens } from './p-token.js';
 import { isServerMode } from '../../core/store.js';
-import { libraryImageFrom, attachImageDrop } from '../creature-img.js';
+import { libraryImageFrom, attachImageDrop, creatureImgTag } from '../creature-img.js';
 
 export const CARD_SIZES = [
   ['tiny', 'Крош.', 'Крошечный — четверть клетки, может делить её с другими'],
@@ -284,7 +284,15 @@ export { tokenStats };
 export function pendingQueue(ctx, anchor) {
   if (!ctx.isMasterView) return;
   const entries = ctx.c.scenes.flatMap((s) => s.tokens.filter((t) => t.pending).map((t) => ({ s, t })));
-  const p = popover(`<div class="pick-pop"><div class="panel-header"><div class="title">Запросы токенов</div><button class="icon-btn" data-close>${icon('cancel-01', 18)}</button></div><div class="w-list scroll">${entries.length ? entries.map(({s,t},i) => `<button class="list-row" data-request="${i}"><span class="grow col-tight"><b>${esc(t.name)}</b><small>${esc(s.name)} · ${esc(userById(t.ownerId)?.name || 'Игрок')}</small></span>${icon('arrow-right-01',16)}</button>`).join('') : '<p class="panel-section muted">Запросов нет</p>'}</div></div>`, anchor, { placement: 'left' });
+  const rows = entries.map(({ s, t }, i) => `<button class="list-row token-request-row" data-request="${i}" title="${esc(t.name)}">
+    <span class="avatar sm foe">${creatureImgTag(t.img, t.name)}</span>
+    <span class="grow col-tight"><span class="primary">${esc(t.name)}</span><span class="secondary">${esc(s.name)} · ${esc(userById(t.ownerId)?.name || 'Игрок')}</span></span>
+    ${icon('arrow-right-01', 16)}</button>`).join('');
+  const p = popover(`${panelHeader('Запросы токенов', entries.length ? `Ожидают решения: ${entries.length}` : '')}
+    ${entries.length ? `<div class="w-list token-request-list">${rows}</div>` : `<div class="token-request-empty">
+      <span class="token-request-empty-icon">${icon('hourglass', 24)}</span>
+      <strong>Пока нет запросов</strong><p>Когда игрок захочет добавить токен,<br>его запрос появится здесь.</p></div>`}`, anchor, { placement: 'left', className: 'token-requests' });
+  hydrateImages(p.node);
   p.node.addEventListener('click', (e) => {
     const b = e.target.closest('[data-request]'); if (!b) return;
     const {s,t} = entries[Number(b.dataset.request)];

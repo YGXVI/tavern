@@ -1110,3 +1110,16 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .token-image-editor canvas:active { cursor: grabbing; }
 .token-image-editor .row { flex-wrap: wrap; }
 .token-image-editor p { margin: 0; }
+
+/* Очередь запросов: фиксированная шапка, прокрутка только списка. */
+.popover.token-requests { width: min(360px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(520px, calc(100dvh - 24px)); display: flex; flex-direction: column; overflow: hidden; }
+.token-requests .panel-header { flex: none; }
+.token-request-list { padding: 0 8px 8px; overscroll-behavior: contain; }
+.token-request-row { flex: none; min-height: 60px; }
+.token-request-row .avatar, .token-request-row > .ic { flex-shrink: 0; }
+.token-request-row .primary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.token-request-row .secondary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.token-request-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 20px 24px; text-align: center; }
+.token-request-empty-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 4px; border-radius: 50%; background: var(--bg-control); color: var(--icon-secondary); }
+.token-request-empty strong { font: 500 14px/20px var(--font-text); }
+.token-request-empty p { margin: 0; font: 400 12px/18px var(--font-text); color: var(--text-secondary); }
