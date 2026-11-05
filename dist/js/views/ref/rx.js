@@ -15,7 +15,7 @@ export const sec = (id, title, hint, body) => html`<section class="cls-sec" id="
 /** Чипы подбора в адресе: one — одно значение (повторный клик снимает), multi — несколько. */
 export function pickRow(key, label, iconName, options, q, { multi = false } = {}) {
   const vals = multi ? q.getAll(key) : [q.get(key)];
-  return html`<div class="cls-pick-q"><small>${ic(iconName, 14)}${label}</small><div class="ref-chips">${options.map(([v, l, color]) => html`<button class="chip chip-md ${color ? 'rx-dot' : ''}" ${color ? raw(`style="--dot:${color}"`) : ''} ${raw(multi ? 'data-qmulti' : 'data-qtoggle')}="${key}" data-v="${v}" aria-pressed="${vals.includes(String(v))}">${l}</button>`)}</div></div>`;
+  return html`<div class="cls-pick-q"><small>${ic(iconName, 14)}${label}</small><div class="ref-chips">${options.map(([v, l, color]) => html`<button class="chip chip-md ${color ? 'rx-color-chip' : ''}" ${color ? raw(`style="--dot:${color}"`) : ''} ${raw(multi ? 'data-qmulti' : 'data-qtoggle')}="${key}" data-v="${v}" aria-pressed="${vals.includes(String(v))}">${l}</button>`)}</div></div>`;
 }
 export function switchRow(key, label, iconName, text, q) {
   return html`<label class="cls-pick-q cls-pick-easy"><small>${ic(iconName, 14)}${label}</small><span class="row"><input type="checkbox" class="switch" data-qswitch="${key}" ${q.get(key) ? 'checked' : ''}><span class="t-sm">${text}</span></span></label>`;

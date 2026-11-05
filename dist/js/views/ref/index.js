@@ -243,6 +243,9 @@ export function mountRef(root, hash) {
     root.innerHTML = String(html`<div class="screen ref-screen">${header()}${body}</div>`);
     const u = user(); if (u) bindHeader(root, u);
     root.querySelector('.ref-row-item.current')?.scrollIntoView({ block: 'nearest' });
+    // Длинный активный пункт в ленте классов/рас должен целиком оставаться виден.
+    const current = root.querySelector('.cls-switch .on'), strip = current?.parentElement;
+    if (current && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = current.offsetLeft - strip.offsetLeft - (strip.clientWidth - current.offsetWidth) / 2;
     // Телефон: лента разделов прокручена к текущему.
     const tab = root.querySelector('.ref-tabs [aria-selected="true"]'), bar = tab?.parentElement;
     if (tab && bar.scrollWidth > bar.clientWidth) { const t = tab.getBoundingClientRect(), b = bar.getBoundingClientRect(); bar.scrollLeft += t.left - b.left - (b.width - t.width) / 2; }
