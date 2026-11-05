@@ -25,7 +25,48 @@ export function emptyRows(withCreatures = false) {
     combat: null,
     // Снимки личных существ в кампании (TASK-179): Map — таблица campaign_creatures есть; null — её ещё нет на сервере.
     creatures: withCreatures ? new Map() : null,
+    // Тайное мастера в токенах (20261105170000): секреты по token_id и список тайных полей каждого токена (_s).
+    tokenSecrets: new Map(), tokenHeld: new Map(), master: false,
   };
+}
+
+// ——— Тайное мастера в токенах (аудит 04.11, #204) ———
+// Публичная строка tokens несёт _s (какие поля лежат в token_secrets) и wound (степень ранения вместо хитов).
+// Мастер видит токен целиком: тайные поля подставляются из секрета. Игроку подставляются только видимые ему
+// значения: хиты по степени ранения (их показывает только «цел / ранен / …») и «союзник» у скрытого врага;
+// _s и wound у игрока остаются в данных токена, чтобы строка, собранная из кампании, совпала с кэшем.
+const WOUND_HP = { full: 100, hurt: 75, bloodied: 40, critical: 10, down: 0 };
+export function viewToken(row, { master = false, secret = null, prev = null } = {}) {
+  const d = row?.data;
+  if (!d || typeof d !== 'object') return row;
+  const held = Array.isArray(d._s) ? d._s : [];
+  if (!held.length && !('wound' in d)) return row;
+  const data = { ...d };
+  if (master) {
+    delete data._s; delete data.wound;
+    const src = secret?.data || prev?.data || {};
+    for (const k of held) if (!(k in data) && k in src) data[k] = src[k];
+  } else {
+    if (held.includes('hp') && data.wound in WOUND_HP) { data.hpMax = 100; data.hp = WOUND_HP[data.wound]; }
+    if (held.includes('disposition')) data.disposition = 'friendly';
+  }
+  return { ...row, data };
+}
+function putToken(rows, row, prev) {
+  const held = Array.isArray(row?.data?._s) ? row.data._s : [];
+  if (held.length) rows.tokenHeld.set(row.id, held); else rows.tokenHeld.delete(row.id);
+  rows.tokens.set(row.id, viewToken(row, { master: rows.master, secret: rows.tokenSecrets.get(row.id), prev }));
+}
+/** Секрет токена пришёл или изменился: мастер подставляет тайные поля в уже лежащий токен. */
+function putTokenSecret(rows, type, row) {
+  const k = row?.token_id; if (k == null) return;
+  if (type === 'DELETE') { rows.tokenSecrets.delete(k); return; }
+  rows.tokenSecrets.set(k, row);
+  const t = rows.tokens.get(k), held = rows.tokenHeld.get(k);
+  if (!rows.master || !t || !held) return;
+  const data = { ...t.data };
+  for (const h of held) { if (h in (row.data || {})) data[h] = row.data[h]; else delete data[h]; }
+  rows.tokens.set(k, { ...t, data });
 }
 
 /** ACK RPC листа → кэш строк. Служебные колонки не попадают в characters.data. */
@@ -327,8 +368,14 @@ export function applyChange(rows, table, type, row) {
   if (table === 'campaigns') { if (type === 'DELETE') rows.campaign = null; else rows.campaign = row; return rows; }
   if (table === 'campaign_invites') { rows.invite = type === 'DELETE' ? null : row; return rows; }
   if (table === 'combats') { rows.combat = type === 'DELETE' ? null : row; return rows; }
+  if (table === 'token_secrets') { putTokenSecret(rows, type, row); return rows; }
   const m = rows[map[table]]; if (!m) return rows;
   const k = (keyOf[table] || ((r) => r.id))(row);
+  if (table === 'tokens') {
+    if (type === 'DELETE') { m.delete(k); rows.tokenHeld?.delete(k); rows.tokenSecrets?.delete(k); }
+    else putToken(rows, row, m.get(k));
+    return rows;
+  }
   if (type === 'DELETE') m.delete(k); else m.set(k, row);
   return rows;
 }
@@ -359,7 +406,9 @@ export function rowsFrom(server) {
   put(rows.scenes, server.scenes);
   put(rows.secrets, server.secrets, (r) => r.scene_id);
   put(rows.explored, server.explored, (r) => r.scene_id);
-  put(rows.tokens, server.tokens);
+  rows.master = !!server.master;
+  put(rows.tokenSecrets, server.tokenSecrets, (r) => r.token_id);
+  for (const t of server.tokens || []) putToken(rows, t, null);
   put(rows.drawings, server.drawings);
   put(rows.log, server.log);
   put(rows.logSecrets, server.logSecrets);

@@ -252,7 +252,7 @@ select pg_temp.err('097: отказ токена откатывает снимо
 select pg_temp.cnt('097: после отказа снимка нет', $q$select 1 from public.campaign_creatures where id='cr-097y'$q$, 0);
 select pg_temp.cnt('097: урон прибавкой', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'false'$q$, 1);
 select pg_temp.cnt('097: повтор той же операции не бьёт второй раз', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'true'
-  and (select data->>'hp' from public.tokens where id='t-097a') = '7'$q$, 1);
+  and (select public.token_full(t)->>'hp' from public.tokens t where id='t-097a') = '7'$q$, 1);
 select pg_temp.err('097: тот же ID операции с другой дельтой', $q$select public.adjust_token_once('t-097a','{"hp":-1}','97000000-0000-0000-0000-000000000001')$q$);
 select pg_temp.err('097: хиты героя прибавкой токена — нельзя', $q$select public.adjust_token_once((select id from public.tokens where character_id is not null limit 1),'{"hp":-1}','97000000-0000-0000-0000-000000000002')$q$);
 select pg_temp.ok('097: мастер удаляет токен', $q$delete from public.tokens where id='t-097b'$q$);
@@ -260,6 +260,35 @@ select pg_temp.err('097: правка удалённого токена — «Т
 select pg_temp.cnt('097: существа кампании в Realtime', $q$select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='campaign_creatures'$q$, 1);
 select pg_temp.ok('097: убрать за собой токен', $q$delete from public.tokens where id='t-097a'$q$);
 select pg_temp.ok('097: убрать за собой снимок', $q$delete from public.campaign_creatures where campaign_id='c-rls' and id='cr-097'$q$);
+-- Тайное мастера в токенах (аудит 04.11, 20261105170000): хиты врага, имя за nameHidden, «скрытый враг», заметка.
+select pg_temp.ok('секреты: мастер ставит предателя', $q$insert into public.tokens(id,campaign_id,scene_id,ord,data) values('t-sec','c-rls','s-1',90,
+  '{"kind":"foe","name":"Предатель","nameHidden":true,"monsterId":"srd:bandit","disposition":"secret","note":"тайна","hp":10,"hpMax":20,"x":1,"y":1}')$q$);
+select pg_temp.cnt('секреты: публичная строка без тайного', $q$select 1 from public.tokens where id='t-sec' and not (data ?| array['hp','hpMax','name','monsterId','disposition','note'])
+  and data->>'wound'='bloodied' and data->'_s' @> '["hp","hpMax","name","monsterId","disposition","note"]'$q$, 1);
+select pg_temp.cnt('секреты: тайное — в token_secrets', $q$select 1 from public.token_secrets where token_id='t-sec' and data->>'hp'='10' and data->>'name'='Предатель' and data->>'note'='тайна'$q$, 1);
+select pg_temp.cnt('секреты: мастер собирает полный токен', $q$select 1 from public.tokens t where id='t-sec' and public.token_full(t)->>'hp'='10' and not public.token_full(t) ? '_s'$q$, 1);
+select pg_temp.ok('секреты: мастер двигает — тайное на месте', $q$select public.patch_token('t-sec','{"x":5}')$q$);
+select pg_temp.ok('секреты: мастер снимает заметку', $q$select public.patch_token('t-sec','{}',array['note'])$q$);
+select pg_temp.cnt('секреты: после правок хиты и имя в секрете, заметки нет', $q$select 1 from public.token_secrets where token_id='t-sec' and data->>'hp'='10' and data ? 'name' and not data ? 'note'$q$, 1);
+select pg_temp.ok('секреты: урон прибавкой', $q$select public.adjust_token_once('t-sec','{"hp":-5}','97000000-0000-0000-0000-000000000099')$q$);
+select pg_temp.cnt('секреты: урон считан от настоящих хитов', $q$select 1 from public.tokens t join public.token_secrets s on s.token_id=t.id where t.id='t-sec' and s.data->>'hp'='5' and t.data->>'wound'='critical'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('секреты: игрок видит токен без хитов и имени', $q$select 1 from public.tokens where id='t-sec' and not (data ?| array['hp','name','disposition'])$q$, 1);
+select pg_temp.cnt('секреты: игрок не читает token_secrets', $q$select 1 from public.token_secrets$q$, 0);
+select pg_temp.cnt('секреты: token_full игроку не открывает тайное', $q$select 1 from public.tokens t where id='t-sec' and public.token_full(t) ? 'hp'$q$, 0);
+select pg_temp.err('секреты: игрок не стирает список тайного', $q$select public.patch_token('t-sec','{}',array['_s'])$q$);
+select pg_temp.err('секреты: игрок не пишет в token_secrets', $q$update public.token_secrets set data='{}'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('секреты: мастер открывает точные хиты', $q$update public.campaigns set data=jsonb_set(data,'{settings,playersSeeHp}','"exact"') where id='c-rls'$q$);
+select pg_temp.cnt('секреты: с точными хитами хиты в публичной строке, имя — нет', $q$select 1 from public.tokens where id='t-sec' and data->>'hp'='5' and not data ? 'wound' and not data ? 'name'$q$, 1);
+select pg_temp.ok('секреты: мастер снова прячет хиты', $q$update public.campaigns set data=jsonb_set(data,'{settings,playersSeeHp}','"status"') where id='c-rls'$q$);
+select pg_temp.cnt('секреты: хиты снова в секрете', $q$select 1 from public.tokens t join public.token_secrets s on s.token_id=t.id where t.id='t-sec' and not t.data ? 'hp' and s.data->>'hp'='5'$q$, 1);
+select pg_temp.ok('секреты: мастер открывает имя', $q$select public.patch_token('t-sec','{"nameHidden":false}')$q$);
+select pg_temp.cnt('секреты: открытое имя — в публичной строке', $q$select 1 from public.tokens where id='t-sec' and data->>'name'='Предатель' and data->>'monsterId'='srd:bandit'$q$, 1);
+select pg_temp.ok('секреты: мастер убирает токен', $q$delete from public.tokens where id='t-sec'$q$);
+select pg_temp.cnt('секреты: секрет удалён вместе с токеном', $q$select 1 from public.token_secrets where token_id='t-sec'$q$, 0);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000c');
 select pg_temp.err('097: посторонний не ставит существо', $q$select public.place_creature(

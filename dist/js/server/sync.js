@@ -174,6 +174,7 @@ async function loadAll() {
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 
 const loading = new Map(); // cid → {events, n}: изменения, пришедшие, пока кампания грузится
+let hasTokenSecrets = false; // таблица token_secrets есть на сервере (миграция 20261105170000)
 let hasCreatures = false; // таблица campaign_creatures есть на сервере (видно по первой загрузке)
 
 /**
@@ -188,13 +189,13 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   let rows;
   try {
     const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures] = await Promise.all([
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures, tokenSecrets] = await Promise.all([
       sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
       q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
       q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
       sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
       q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
-      q('campaign_creatures'),
+      q('campaign_creatures'), q('token_secrets'),
     ]);
     const logRows = must(log);
     const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
@@ -205,6 +206,9 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
       saves: must(saves), portals: must(portals), combat: must(combat),
       // Снимки существ (TASK-179): таблицы ещё нет на живой базе (миграция #150 не применена) — кампания грузится без них.
       creatures: noTable(creatures.error) ? null : (hasCreatures = true, must(creatures)),
+      // Тайное мастера в токенах: игроку RLS отдаёт пустой список; до миграции таблицы нет — токены как раньше.
+      tokenSecrets: noTable(tokenSecrets.error) ? [] : (hasTokenSecrets = true, must(tokenSecrets)),
+      master: must(members).some((m) => m.user_id === me && m.status === 'active' && m.role === 'master'),
     });
   } finally {
     ld.n -= 1;
@@ -458,7 +462,12 @@ async function createCampaign(c) {
     const probe = await sb.from('campaign_creatures').select('id').limit(1);
     if (!noTable(probe.error)) { must(probe); hasCreatures = true; }
   }
+  if (!hasTokenSecrets) {
+    const probe = await sb.from('token_secrets').select('token_id').limit(1);
+    if (!noTable(probe.error)) { must(probe); hasTokenSecrets = true; }
+  }
   const rows0 = emptyRows(hasCreatures);
+  rows0.master = true;
   const exploded = explode(c, rows0);
   // Кэш — до вставки: событие «вы мастер новой кампании» из личного канала не должно перезагружать её посреди отправки.
   rows0.campaign = structuredClone(exploded.campaign);
@@ -719,6 +728,11 @@ function subscribe(cid) {
   if (hasCreatures) {
     ch.on('postgres_changes', { event: '*', schema: 'public', table: 'campaign_creatures', filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, 'campaign_creatures', p));
     ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'campaign_creatures' }, (p) => { if (p.old?.campaign_id === cid) onChange(cid, 'campaign_creatures', p); });
+  }
+  // Секреты токенов (только мастеру по RLS). Удаление приходит без фильтра — своё узнаём по ключу в кэше.
+  if (hasTokenSecrets) {
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'token_secrets', filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, 'token_secrets', p));
+    ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'token_secrets' }, (p) => { if (cache.get(cid)?.tokenSecrets?.has(p.old?.token_id)) onChange(cid, 'token_secrets', p); });
   }
   ch.on('broadcast', { event: 'bus' }, ({ payload }) => onBus(cid, payload));
   ch.on('presence', { event: 'sync' }, () => {

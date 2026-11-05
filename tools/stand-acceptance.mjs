@@ -78,8 +78,17 @@ try {
   const op = crypto.randomUUID();
   r = await M.sb.rpc('adjust_token_once', { p_id: `t-gob-${tag}`, p_deltas: { hp: -3 }, p_operation: op });
   const again = await M.sb.rpc('adjust_token_once', { p_id: `t-gob-${tag}`, p_deltas: { hp: -3 }, p_operation: op });
-  const hp = (await M.sb.from('tokens').select('data').eq('id', `t-gob-${tag}`).single()).data?.data?.hp;
+  // Хиты врага — тайное мастера (20261105170000): в token_secrets, у игроков в строке только степень ранения.
+  const hp = (await M.sb.from('token_secrets').select('data').eq('token_id', `t-gob-${tag}`).single()).data?.data?.hp;
   check('урон прибавкой применён один раз при повторе', !r.error && again.data?.replayed === true && hp === 4, `hp=${hp} ${r.error?.message || ''}`);
+  const seen2 = (await P.sb.from('tokens').select('data').eq('id', `t-gob-${tag}`).single()).data?.data || {};
+  check('игрок видит степень ранения, а не хиты врага', !('hp' in seen2) && !('hpMax' in seen2) && seen2.wound === 'hurt', JSON.stringify({ hp: seen2.hp, wound: seen2.wound }));
+  const ps = await P.sb.from('token_secrets').select('token_id').eq('campaign_id', cid);
+  check('игрок не читает тайное токенов', !ps.error && ps.data.length === 0, ps.error?.message || `видно: ${ps.data?.length}`);
+  r = await M.sb.from('campaigns').update({ data: { seats: 4, settings: { playersSeeHp: 'exact' } } }).eq('id', cid);
+  const ex = (await P.sb.from('tokens').select('data').eq('id', `t-gob-${tag}`).single()).data?.data || {};
+  check('«Точные числа» открывают игроку хиты врага', !r.error && ex.hp === 4, r.error?.message || `hp=${ex.hp}`);
+  await M.sb.from('campaigns').update({ data: { seats: 4 } }).eq('id', cid);
 
   // Бой: игрок пишет только своё точечной функцией, прямая правка строки — у мастера (аудит 04.11).
   r = await M.sb.from('combats').insert({ campaign_id: cid, data: { active: true, round: 1, turn: 0, current: `t-own-${tag}`, entries: [{ tokenId: `t-gob-${tag}`, init: 15 }, { tokenId: `t-own-${tag}`, init: null }], moved: {} } });
