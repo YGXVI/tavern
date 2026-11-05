@@ -43,10 +43,16 @@ for (const uid of [A, B]) {
     await modal.locator(`[data-p="actions.0.damage.${i}.dice"]`).fill(dice);
     await modal.locator(`[data-p="actions.0.damage.${i}.type"]`).fill(type);
   }
-  await modal.locator('[data-act="pic"]').click();
   const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 100; c.height = 400; const g = c.getContext('2d'); g.fillStyle = 'red'; g.fillRect(0, 0, 100, 100); g.fillStyle = 'blue'; g.fillRect(0, 100, 100, 200); g.fillStyle = 'lime'; g.fillRect(0, 300, 100, 100); return c.toDataURL('image/png').split(',')[1]; });
-  const chooser = page.waitForEvent('filechooser'); await page.locator('[data-upload]').click();
-  await (await chooser).setFiles({ name: 'narzugon.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await modal.evaluate((node, png) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(png), (c) => c.charCodeAt(0))], 'narzugon.png', { type: 'image/png' }));
+    node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, png);
+  await modal.getByRole('button', { name: 'Настроить картинку', exact: true }).waitFor();
+  assert.equal(await modal.locator('[data-p="name"]').inputValue(), 'Нарзугон');
+  assert.equal(await modal.locator('[data-p="actions.0.damage.1.dice"]').inputValue(), '3к10');
+  await modal.locator('[data-act="pic"]').click();
   await page.locator('.token-image-modal button[data-save]:enabled').waitFor(); await page.locator('[data-fit]').click(); await page.locator('.token-image-modal button[data-save]').click();
   await page.locator('.token-image-modal').waitFor({ state: 'detached' });
   await modal.getByRole('button', { name: 'Настроить картинку', exact: true }).waitFor();

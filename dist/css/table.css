@@ -10,6 +10,8 @@
     radial-gradient(120% 90% at 50% 40%, #252a40 0%, #161a28 70%, #10121c 100%);
 }
 .viewport.grab { cursor: grab; }
+.table.image-drop-active .viewport::after { content: 'Отпустите картинку, чтобы создать существо'; position: absolute; inset: 24px; z-index: 1; display: grid; place-items: center; padding: 20px; border: 2px dashed var(--brand-500); border-radius: 20px; background: rgb(0 0 0 / .45); color: var(--text-primary); font: 600 18px/24px var(--font-text); text-align: center; pointer-events: none; }
+.cc-popover.image-drop-active, .token-image-modal.image-drop-active { outline: 2px dashed var(--brand-500); outline-offset: -4px; }
 .viewport.panning, .viewport.panning * { cursor: grabbing !important; }
 .viewport[data-tool="measure"], .viewport[data-tool="draw"], .viewport[data-tool="walls"], .viewport[data-tool="gm"],
 .viewport[data-tool="terrain"], .viewport[data-tool="lights"] { cursor: crosshair; }
