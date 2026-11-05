@@ -43,6 +43,21 @@ try {
   else await page.locator('[data-pal-close]').click();
   assert.equal(await page.locator('.ref-pal').count(),0,'Search closes by touch');
  }
+ // A rule tooltip near the viewport bottom must open above its anchor.
+ for(const [width,height] of [[1440,1000],[320,640],[844,390]]) {
+  await page.setViewportSize({width,height});await page.goto(base+'#/ref/creatures');
+  await page.locator('.cr-token').first().click();
+  const term=page.locator('[data-term]').first();
+  await term.evaluate(n=>n.scrollIntoView({block:'end'}));await term.hover();
+  assert.equal(await page.locator('.ref-tip').count(),1,'Only one tooltip is open');
+  const bounds=await page.locator('.ref-tip').evaluate(n=>{
+   const r=n.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom};
+  });
+  assert.ok(bounds.x>=7 && bounds.y>=7 && bounds.right<=width-7 && bounds.bottom<=height-7,JSON.stringify(bounds));
+  await audit(`${width}-tooltip`);
+  await page.goto(base+'#/ref');
+  assert.equal(await page.locator('.ref-tip').count(),0,'Navigation clears tooltips');
+ }
  // All class timelines at level 20, and their progression tables.
  for(const width of [1440,320]) {
   await page.setViewportSize({width,height:1000});
