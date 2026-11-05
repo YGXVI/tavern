@@ -808,6 +808,8 @@ button.cp-map { cursor: pointer; }
   .cls-gal-head h1 { font-size: 30px; }
   .cls-pick { padding: 14px; gap: 14px; }
   .cls-pick .ref-chips { flex-wrap: wrap; }
+  .cls-pick-easy .row { max-width: 100%; height: auto; min-height: 24px; }
+  .cls-pick-easy .row > span { min-width: 0; }
   .cls-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .cls-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); }
   .cls-card::before { inset: 0 auto 0 0; width: 3px; height: auto; }
@@ -822,7 +824,7 @@ button.cp-map { cursor: pointer; }
 }
 
 /* ——— Справочник: общий каркас разделов (rx-*) и существа (cr-*) ——— */
-.chip.rx-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); margin-right: 2px; }
+.chip.rx-color-chip::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); margin-right: 2px; }
 .rx-crumbs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rx-crumbs a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-full); background: rgb(255 255 255 / .04); box-shadow: inset 0 0 0 1px var(--stroke-subtle); font: 600 12px/1 var(--font-text); color: var(--text-secondary); }
 .rx-crumbs a:hover { color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--c, var(--stroke-divider)); }
@@ -1015,7 +1017,7 @@ span.sp-class { padding-left: 16px; }
 .rl-death span { display: flex; gap: 6px; }
 .rl-death i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgb(255 255 255 / .2); }
 .rl-death .ok i.on { background: #6ad3a1; box-shadow: none; } .rl-death .fail i.on { background: #e5584f; box-shadow: none; }
-.rl-death-btns { gap: 8px; }
+.rl-death-btns { gap: 8px; flex-wrap: wrap; }
 .rl-log { display: flex; flex-wrap: wrap; gap: 4px; }
 .rl-log b { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 4px; border-radius: 8px; font: 700 12px/1 var(--font-display); color: #0e1018; }
 .rl-log .ok { background: #6ad3a1; } .rl-log .bad { background: #e58a5f; } .rl-log .crit { background: #efc777; } .rl-log .fumble { background: #e5584f; }
@@ -1263,4 +1265,36 @@ a.bg-card:hover { box-shadow: inset 0 0 0 1px var(--c), 0 20px 40px -20px var(--
   .rx-flist, .rx-fgrid { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: none; }
   .rx-fgrid .rx-opt { flex: none; width: 38px; }
   .rx-opt { flex: none; white-space: nowrap; background: rgb(255 255 255 / .04); }
+}
+
+/* Справочник: длинные названия и вложенные карточки должны помещаться в свой контейнер. */
+.cls-hero-text { min-width: 0; overflow-wrap: anywhere; }
+.cls-hero h1 span { display: block; margin: 8px 0 0; line-height: 1.3; }
+.cls-passport > div, .cls-pick > *, .cls-now, .rx-controls { min-width: 0; }
+.cls-passport dt, .cls-passport dd { overflow-wrap: anywhere; }
+.cls-pick .ref-chips { flex-wrap: wrap; }
+.rx-name > * { min-width: 0; max-width: 100%; }
+.rl-prob { grid-template-columns: minmax(0, 112px) minmax(12px, 1fr) 44px; }
+.ref-card-body { min-height: 0; }
+.ref-card-foot { flex: none; }
+.ref-card-modal { max-height: calc(100dvh - 32px); }
+.ref-card-modal .cls-hero { grid-template-columns: minmax(0, 1fr) !important; }
+.ref-card-modal .sp-seal { display: none; }
+.ref-pal { max-height: min(80vh, calc(100dvh - 32px)); }
+.ref-pal-close { flex: none; }
+@container cls (max-width: 960px) {
+  /* Предметы используют общий герой правил: скрываем и их декоративный арт,
+     иначе именованная область art создаёт незапланированную вторую колонку. */
+  .cls-page .it-bigem { display: none; }
+}
+@media (max-width: 720px) {
+  .rx-name b { overflow-wrap: anywhere; }
+  .ref-pal-root { height: 100dvh; }
+  .ref-pal { max-height: 100%; }
+  .ref-pal-top { padding: 16px; gap: 10px; }
+  .ref-pal-top input { font-size: 18px; }
+}
+
+@container cls (max-width: 560px) {
+  .cls-page .cls-hero h1 { font-size: clamp(20px, 7cqi, 30px); }
 }

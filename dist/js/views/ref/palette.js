@@ -13,7 +13,7 @@ export function openPalette(q0 = '', { onPick } = {}) {
   const root = document.createElement('div');
   root.className = 'ref-pal-root';
   root.innerHTML = String(html`<div class="ref-pal panel" role="dialog" aria-modal="true" aria-label="Поиск по справочнику">
-    <div class="ref-pal-top">${ic('search-01', 20)}<input data-q value="${q0}" placeholder="Заклинание, существо, правило…" aria-label="Что найти" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <div class="ref-pal-top">${ic('search-01', 20)}<input data-q value="${q0}" placeholder="Заклинание, существо, правило…" aria-label="Что найти" autocomplete="off" spellcheck="false"><button class="icon-btn ref-pal-close" data-pal-close aria-label="Закрыть поиск">${ic('cancel-01', 20)}</button></div>
     <div class="ref-pal-hint" hidden></div>
     <div class="ref-pal-body"><div class="ref-pal-list" role="listbox"></div><div class="ref-pal-preview"></div></div>
     <div class="ref-pal-foot"><span><kbd>↑ ↓</kbd> выбрать</span><span><kbd>Enter</kbd> открыть</span><span><kbd>Tab</kbd> следующий раздел</span><span><kbd>/</kbd> поиск в любом месте</span></div>
@@ -51,6 +51,7 @@ export function openPalette(q0 = '', { onPick } = {}) {
   const close = () => { root.remove(); removeEventListener('keydown', onKey, true); open = null; };
   const onKey = (e) => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+    if (e.target.closest('[data-pal-close]')) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); cur = Math.min(flat.length - 1, cur + 1); draw(); }
     if (e.key === 'ArrowUp') { e.preventDefault(); cur = Math.max(0, cur - 1); draw(); }
     if (e.key === 'Tab' && flat.length) {
@@ -61,6 +62,7 @@ export function openPalette(q0 = '', { onPick } = {}) {
     if (e.key === 'Enter' && flat[cur]) { e.preventDefault(); pick(flat[cur]); }
   };
   addEventListener('keydown', onKey, true);
+  root.querySelector('[data-pal-close]').addEventListener('click', close);
   input.addEventListener('input', () => { cur = 0; run(); });
   root.addEventListener('mousedown', (e) => { if (e.target === root) close(); });
   list.addEventListener('mousemove', (e) => { const b = e.target.closest('[data-i]'); if (b && Number(b.dataset.i) !== cur) { cur = Number(b.dataset.i); draw(); } });
