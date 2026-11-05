@@ -6,7 +6,7 @@ import { CONDITIONS } from '../../data/rules.js';
 import { RULES } from './rules-text.js';
 import { norm } from './data.js';
 import { rich } from './cards.js';
-import { ic, sec, galleryHead, toolBox, slider, TOOLS, crumbs } from './rx.js';
+import { ic, sec, toolBox, slider, TOOLS, crumbs } from './rx.js';
 
 const href = (it) => `#/ref/rules/${encodeURIComponent(it.id)}`;
 const GROUPS = ['Основы', 'Бой', 'Действия', 'Магия', 'Отдых', 'Мир'];
@@ -30,30 +30,37 @@ function ruleCard(it) {
 }
 function turnBoard(items) {
   const r = (id) => items.find((x) => x.id === id);
-  const link = (id, label) => (r(id) ? html`<a class="chip chip-md" href="${href(r(id))}">${label || r(id).name}</a>` : html`<span class="chip chip-md">${label}</span>`);
-  const col = (cls, title, iconName, text, chips) => html`<div class="rl-turn-col ${cls}"><span class="rl-turn-ic">${ic(iconName, 20)}</span><b>${title}</b><p>${text}</p><div class="ref-chips">${chips}</div></div>`;
-  return html`<div class="rl-turn">
-    ${col('move', 'Движение', 'running-shoes', 'До своей скорости, можно делить: шаг — атака — ещё шаг.', [link('dash', 'Рывок — вдвое дальше'), link('falling'), html`<span class="chip chip-md">Встать — половина скорости</span>`])}
-    ${col('act', 'Действие', 'sword-03', 'Одно за ход — главное, что вы делаете.', [link('attack'), link('dash'), link('disengage'), link('dodge'), link('help'), link('hide'), link('ready'), link('search'), html`<span class="chip chip-md">Заклинание</span>`, html`<span class="chip chip-md">Предмет</span>`])}
-    ${col('bonus', 'Бонусное', 'flash', 'Только если умение или заклинание его даёт.', [html`<span class="chip chip-md">Хитрое действие плута</span>`, html`<span class="chip chip-md">Второе дыхание</span>`, html`<span class="chip chip-md">Заклинания «1 бонусное»</span>`])}
-    ${col('react', 'Реакция', 'reload', 'Одна за раунд, даже в чужой ход.', [link('opportunity'), link('ready', 'Подготовленное'), html`<span class="chip chip-md">«Щит», «Контрзаклинание»</span>`])}
-    ${col('free', 'Мимоходом', 'hand-grip', 'Сказать пару слов, открыть дверь, достать меч — без траты действия.', [])}
+  const link = (id, label) => (r(id) ? html`<a href="${href(r(id))}">${label || r(id).name}</a>` : html`<span>${label}</span>`);
+  const col = (color, title, text, lines) => html`<div class="rl-step" style="--k:${color}"><b><i></i>${title}</b><p>${text}</p>${lines.length ? html`<div class="rl-step-links">${lines}</div>` : ''}</div>`;
+  return html`<div class="rl-turn2">
+    ${col('#6fa8e8', 'Движение', 'До своей скорости; можно делить: шаг — атака — шаг.', [link('dash', 'Рывок — вдвое дальше'), link('falling'), html`<span>Встать — половина скорости</span>`])}
+    ${col('#ef7a52', 'Действие', 'Одно за ход — главное, что вы делаете.', [link('attack'), link('dash'), link('disengage'), link('dodge'), link('help'), link('hide'), link('ready'), link('search'), html`<span>Заклинание, предмет</span>`])}
+    ${col('#e9b052', 'Бонусное', 'Только если его даёт умение или заклинание.', [html`<span>Хитрое действие плута</span>`, html`<span>Второе дыхание воина</span>`, html`<span>Заклинания «1 бонусное»</span>`])}
+    ${col('#a597f2', 'Реакция', 'Одна за раунд, можно в чужой ход.', [link('opportunity'), link('ready', 'Подготовленное действие'), html`<span>«Щит», «Контрзаклинание»</span>`])}
+    ${col('#6ad3a1', 'Мимоходом', 'Пара слов, открыть дверь, достать меч — бесплатно.', [])}
   </div>`;
 }
+const term = (it) => html`<div class="rl-gl" id="rl-${it.id}"><a class="rl-gl-name" href="${href(it)}">${isCond(it) ? html`<span class="rl-gl-ic" style="color:${color(it)}">${ic(iconOf(it), 16)}</span>` : ''}<b>${it.name}</b><small>${it.en}</small></a><p>${it.text}</p></div>`;
+const TOOL_ORDER = ['advantage', 'cover', 'exhaustion', 'death', 'falling', 'proficiency'];
 export function grid(items, q, text = '') {
   const t = norm(text);
   const hit = (it) => !t || it.hay.includes(t);
   const conds = items.filter((it) => isCond(it) && hit(it));
-  return html`${!t ? sec('turn', 'Ход в бою', 'Что можно за один ход — нажмите, чтобы открыть правило', turnBoard(items)) : ''}
-    ${conds.length ? sec('cond', 'Состояния', `${conds.length} — что они делают с героем`, html`<div class="rl-conds">${conds.map(condCard)}</div>`) : ''}
-    ${GROUPS.map((g) => { const list = items.filter((it) => it.group === g && hit(it)); return list.length ? sec(`g-${GROUPS.indexOf(g)}`, g, '', html`<div class="rl-grid">${list.map(ruleCard)}</div>`) : ''; })}
+  const tools = TOOL_ORDER.map((id) => items.find((x) => x.id === id)).filter(Boolean);
+  return html`${!t ? html`${sec('turn', 'Ход в бою', 'Что можно сделать за один ход', turnBoard(items))}
+      ${sec('tools', 'Живые схемы', 'Двигайте ползунки и бросайте кубы', html`<div class="rl-tools">${tools.map((it) => tool(it))}</div>`)}` : ''}
+    ${conds.length ? sec('cond', 'Состояния', '', html`<div class="rl-glossary">${conds.map(term)}</div>`) : ''}
+    ${GROUPS.map((g) => { const list = items.filter((it) => it.group === g && hit(it)); return list.length ? sec(`g-${GROUPS.indexOf(g)}`, g, '', html`<div class="rl-glossary">${list.map(term)}</div>`) : ''; })}
     ${t && !items.some(hit) ? html`<p class="ref-empty">Ничего не нашлось — попробуйте короче.</p>` : ''}`;
 }
 export function gallery(items, q, text, top) {
-  return html`<main class="page cls-gallery rl-book">${top}
-    ${galleryHead('Правила и состояния', 'Вся книга правил на одной странице: ход в бою, состояния, проверки, магия, отдых. Схемы живые — двигайте ползунки и бросайте кубы.', q, { compare: false })}
-    <nav class="rl-nav">${[['turn', 'Ход в бою', 'sword-03'], ['cond', 'Состояния', 'sad-dizzy'], ...GROUPS.map((g, i) => [`g-${i}`, g, GROUP_ICON[g]])].map(([id, l, i]) => html`<button class="chip chip-md" data-rx-goto="rx-${id}">${ic(i, 14)}${l}</button>`)}</nav>
-    <div data-rx-grid>${grid(items, q, text)}</div>
+  const toc = [['turn', 'Ход в бою'], ['tools', 'Живые схемы'], ['cond', 'Состояния'], ...GROUPS.map((g, i) => [`g-${i}`, g])];
+  return html`<main class="page cls-gallery rx-clean rl-book">${top}
+    <header class="rx-title"><h1>Правила и состояния</h1><p>Вся книга правил на одной странице — своими словами по SRD 5.1.</p></header>
+    <div class="rx-split">
+      <aside class="rx-side" aria-label="Оглавление"><div class="rx-fgroup"><small>Оглавление</small><div class="rx-flist">${toc.map(([id, l]) => html`<button class="rx-opt" data-rx-goto="rx-${id}"><span>${l}</span></button>`)}</div></div></aside>
+      <div class="rx-main" data-rx-grid>${grid(items, q, text)}</div>
+    </div>
     <p class="ref-foot">Пересказ правил D&amp;D 5e 2014 своими словами по SRD 5.1 (CC BY 4.0).</p>
   </main>`;
 }
@@ -70,7 +77,7 @@ export function page(it, items, q, o = {}) {
             ${o.modal ? '' : html`<div class="cls-hero-actions"><button class="icon-btn icon-btn-sm" data-fav="${o.key}" aria-pressed="${!!o.fav}" aria-label="Избранное">${ic(o.fav ? 'star' : 'favourite', 18)}</button><button class="icon-btn icon-btn-sm" data-share="${o.key}" aria-label="Скопировать ссылку">${ic('link-01', 18)}</button></div>`}</div>
           <div class="rl-hero-ic">${ic(iconOf(it), 72)}</div>
         </header>
-        ${near.length ? sec('near', `Ещё в разделе «${it.group}»`, '', html`<div class="${isCond(it) ? 'rl-conds' : 'rl-grid'}">${near.map((x) => (isCond(x) ? condCard(x) : ruleCard(x)))}</div>`) : ''}
+        ${near.length ? sec('near', `Ещё в разделе «${it.group}»`, '', html`<div class="rl-glossary">${near.map(term)}</div>`) : ''}
       </div>
       <aside class="cls-side">${tool(it) || html`<div class="cls-now"><p class="cls-now-hint">Где встречается</p><p class="t-sm muted">Термин подсвечивается в текстах справочника — наведите на него в карточке существа или класса, чтобы увидеть правило.</p></div>`}</aside>
     </div>

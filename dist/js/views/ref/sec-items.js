@@ -3,7 +3,7 @@
 import { html, plural } from '../../core/dom.js';
 import { norm } from './data.js';
 import { reflow } from './class-text.js';
-import { ic, sec, pickRow, switchRow, galleryHead, resultLine, srdText, crumbs } from './rx.js';
+import { ic, sec, srdText, crumbs, sideFilters, countLine } from './rx.js';
 
 export const RARITY = [['Обычный', '#b4bccb'], ['Необычный', '#6ad3a1'], ['Редкий', '#6fa8e8'], ['Очень редкий', '#b08cf5'], ['Легендарный', '#efb456'], ['Артефакт', '#ef7a52'], ['Редкость варьируется', '#e88fcf'], ['Не имеет редкости', '#7a8094']];
 const TYPE_IC = { 'Чудесный предмет': 'sparkles', 'Оружие': 'sword-01', 'Доспех': 'shield-01', 'Кольцо': 'circle', 'Зелье': 'potion', 'Посох': 'magic-wand-01', 'Волшебная палочка': 'magic-wand-01', 'Жезл': 'magic-wand-01', 'Свиток': 'scroll' };
@@ -20,31 +20,30 @@ const matches = (it, q, text) => {
   if (text && !it.hay.includes(norm(text))) return false;
   return true;
 };
-function card(it) {
-  return html`<a class="it-card" href="${href(it)}" style="--c:${rc(it)}"><span class="it-gem">${ic(icOf(it), 18)}</span><span class="it-t"><b>${it.name}</b><small>${it.en}</small></span>
-    <span class="it-tags">${it.attune ? html`<i title="Нужна настройка">${ic('link-04', 11)}</i>` : ''}${it.text ? html`<i class="srd" title="Текст SRD">${ic('book-open-01', 11)}</i>` : ''}</span><em>${it.type}</em></a>`;
-}
+const row = (it) => html`<a class="rx-row it-row" href="${href(it)}"><i class="rx-dot gem" style="background:${rc(it)}"></i>
+  <span class="rx-name"><b>${it.name}</b><small>${it.en}</small></span><span class="rx-col">${it.type}</span><span class="rx-col">${it.attune ? 'настройка' : ''}</span>
+  <span class="rx-marks">${it.text ? html`<abbr title="Полный текст SRD">T</abbr>` : ''}</span></a>`;
+const card = row;
 export function grid(items, q, text = '') {
   const on = items.filter((it) => matches(it, q, text));
-  const keys = ['rar', 'type', 'att', 'txt'];
-  if (q.get('view') === 'table') {
-    return html`${resultLine(on, items.length, q, keys, text, href)}<div class="cls-compare-wrap"><table class="cls-compare"><thead><tr><th>Предмет</th><th>Тип</th><th>Редкость</th><th>Настройка</th><th>Текст</th></tr></thead>
-      <tbody>${on.map((it) => html`<tr style="--c:${rc(it)}"><td><a class="cls-compare-name" href="${href(it)}"><span><b>${it.name}</b><small>${it.en}</small></span></a></td><td>${it.type}</td><td><span class="it-rar">${it.rarity}</span></td><td>${it.attune ? 'да' : '—'}</td><td>${it.text ? 'SRD' : '—'}</td></tr>`)}</tbody></table></div>`;
-  }
-  return html`${resultLine(on, items.length, q, keys, text, href)}${RARITY.map(([r, c]) => { const list = on.filter((it) => it.rarity === r); return list.length ? html`<section class="sp-level it-level" style="--c:${c}"><h3><span class="it-dot"></span>${r}<small>${list.length}</small></h3><div class="sp-grid">${list.map(card)}</div></section>` : ''; })}`;
+  return html`${countLine(on.length, items.length, 'предметов')}
+    ${on.length ? html`<div class="rx-head it-row"><span></span><span>Название</span><span>Вид</span><span>Настройка</span><span></span></div>` : html`<p class="ref-empty">Таких нет — снимите один из фильтров.</p>`}
+    ${RARITY.map(([r, c]) => { const list = on.filter((it) => it.rarity === r); return list.length ? html`<section class="rx-group"><h3><i class="rx-dot gem" style="background:${c}"></i>${r}<small>${list.length}</small></h3>${list.map(row)}</section>` : ''; })}`;
 }
 export function gallery(items, q, text, top) {
+  const count = (fn) => items.filter(fn).length;
   const types = [...new Set(items.map((it) => it.type).filter(Boolean))];
-  return html`<main class="page cls-gallery">${top}
-    ${galleryHead('Магические предметы', `${items.length} предметов, у ${items.filter((it) => it.text).length} — полный текст SRD. Цвет — редкость: от серого «обычного» до огненного артефакта.`, q)}
-    <section class="cls-pick" aria-label="Подбор предметов">
-      ${pickRow('rar', 'Редкость', 'gem', RARITY.map(([r, c]) => [r, short(r), c]), q, { multi: true })}
-      ${pickRow('type', 'Вид', 'sparkles', types.map((t) => [t, t]), q, { multi: true })}
-      ${switchRow('att', 'Настройка', 'link-04', 'только с настройкой', q)}
-      ${switchRow('txt', 'Текст', 'book-open-01', 'с полным текстом SRD', q)}
-    </section>
-    <div data-rx-grid>${grid(items, q, text)}</div>
-    <p class="ref-foot">Названия, тип и редкость — открытый индекс dnd.su; полный текст — SRD 5.1 (CC BY 4.0) на английском.</p>
+  return html`<main class="page cls-gallery rx-clean">${top}
+    <header class="rx-title"><h1>Магические предметы</h1><p>Цвет — редкость. Полный текст SRD — у ${count((it) => it.text)} из ${items.length}.</p></header>
+    <div class="rx-split">
+      ${sideFilters([
+        { key: 'rar', label: 'Редкость', multi: true, options: RARITY.map(([r, c]) => [r, short(r), c, count((it) => it.rarity === r)]) },
+        { key: 'type', label: 'Вид', multi: true, options: types.map((t) => [t, t, null, count((it) => it.type === t)]) },
+        { key: 'att', label: 'Свойства', options: [['1', 'Нужна настройка', null, count((it) => it.attune), 'att'], ['1', 'Есть полный текст', null, count((it) => it.text), 'txt']] },
+      ], q)}
+      <div class="rx-main" data-rx-grid>${grid(items, q, text)}</div>
+    </div>
+    <p class="ref-foot">Названия, вид и редкость — открытый индекс dnd.su; полный текст — SRD 5.1 (CC BY 4.0) на английском. Т — есть текст.</p>
   </main>`;
 }
 export function page(it, items, q, o = {}) {
@@ -64,7 +63,7 @@ export function page(it, items, q, o = {}) {
           <div class="it-bigem">${ic(icOf(it), 64)}</div>
         </header>
         ${sec('text', 'Описание', it.text ? 'SRD 5.1 на английском — целиком' : '', it.text ? srdText(paras, `SRD · ${it.en}`) : html`<div class="cls-box sp-nosrd"><h3>${ic('book-open-01', 18)}Текста в открытых правилах нет</h3><p class="t-sm muted">Предмет не входит в SRD 5.1 — открыт только паспорт: тип, редкость, настройка.</p>${it.link ? html`<a class="btn btn-secondary btn-sm" href="${it.link}" target="_blank" rel="noopener noreferrer">${ic('arrow-right-02')}Карточка на dnd.su</a>` : ''}</div>`)}
-        ${near.length ? sec('near', 'Того же вида и редкости', `${near.length}`, html`<div class="sp-grid">${near.map(card)}</div>`) : ''}
+        ${near.length ? sec('near', 'Того же вида и редкости', `${near.length}`, html`<div class="rx-group">${near.map(card)}</div>`) : ''}
       </div>
       <aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Лестница редкости</p>
         <ol class="it-ladder">${RARITY.slice(0, 6).map(([r, col], i) => html`<li class="${i === ri ? 'on' : ''}" style="--k:${col}"><i></i><b>${r}</b><span>${items.filter((x) => x.rarity === r).length}</span></li>`)}</ol>

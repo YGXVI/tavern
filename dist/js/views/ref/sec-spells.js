@@ -3,7 +3,7 @@
 import { html, raw, plural } from '../../core/dom.js';
 import { CLASSES } from '../../data/rules.js';
 import { norm, SPELL_CLASSES } from './data.js';
-import { ic, sec, pickRow, switchRow, galleryHead, resultLine, srdText, toolBox, slider, TOOLS, crumbs } from './rx.js';
+import { ic, sec, srdText, toolBox, slider, TOOLS, crumbs, sideFilters, countLine } from './rx.js';
 
 export const SCHOOL = {
   evocation: { name: 'Воплощение', color: '#ef7a52', icon: 'fire', about: 'Энергия, которая бьёт и согревает: огонь, холод, молния, свет.' },
@@ -22,7 +22,7 @@ const lvlName = (l) => (l ? `${l} круг` : 'Заговор');
 const classId = (name) => CLASSES.find((c) => c.name === name)?.id;
 const shortTime = (t) => String(t).replace(/^1 действие$/, '1 действие').replace(/^1 бонусное действие$/, 'бонусное').replace(/^1 реакция.*/, 'реакция');
 
-// ——— Галерея ———
+// ——— Галерея: фильтры слева, ровный список по кругам ———
 const matches = (it, q, text) => {
   const l = q.get('lvl'); if (l && String(it.level) !== l) return false;
   const cls = q.getAll('cls'); if (cls.length && !cls.some((c) => it.classes.includes(c))) return false;
@@ -30,48 +30,33 @@ const matches = (it, q, text) => {
   if (q.get('conc') && !it.conc) return false;
   if (q.get('rit') && !it.ritual) return false;
   if (q.get('srd') && !it.srdText) return false;
-  const dmg = q.get('dmg'); if (dmg === 'any' && !it.damage.length) return false;
+  if (q.get('dmg') && !it.damage.length) return false;
   if (text && !it.hay.includes(norm(text))) return false;
   return true;
 };
-function row(it) {
-  const s = sch(it);
-  return html`<a class="sp-card" href="${href(it)}" style="--c:${s.color}">
-    <span class="sp-ic">${ic(s.icon, 16)}</span>
-    <span class="sp-t"><b>${it.name}</b><small>${it.en}</small></span>
-    <span class="sp-tags">${it.conc ? html`<i title="Концентрация">К</i>` : ''}${it.ritual ? html`<i title="Ритуал">Р</i>` : ''}${it.srdText ? html`<i class="srd" title="Полный текст SRD">${ic('book-open-01', 11)}</i>` : ''}</span>
-    <span class="sp-time">${shortTime(it.time)}</span></a>`;
-}
+const row = (it) => html`<a class="rx-row sp-row" href="${href(it)}"><i class="rx-dot" style="background:${sch(it).color}"></i>
+  <span class="rx-name"><b>${it.name}</b><small>${it.en}</small></span><span class="rx-col">${sch(it).name}</span><span class="rx-col">${shortTime(it.time)}</span><span class="rx-col">${it.range}</span>
+  <span class="rx-marks">${it.conc ? html`<abbr title="Концентрация">К</abbr>` : ''}${it.ritual ? html`<abbr title="Ритуал">Р</abbr>` : ''}${it.srdText ? html`<abbr title="Полный текст SRD">T</abbr>` : ''}</span></a>`;
 export function grid(items, q, text = '') {
   const on = items.filter((it) => matches(it, q, text));
-  const keys = ['lvl', 'cls', 'sch', 'conc', 'rit', 'srd', 'dmg'];
-  if (q.get('view') === 'table') {
-    return html`${resultLine(on, items.length, q, keys, text, href)}<div class="cls-compare-wrap"><table class="cls-compare sp-table"><thead><tr><th>Заклинание</th><th>Круг</th><th>Школа</th><th>Время</th><th>Дистанция</th><th>Длительность</th><th>Компоненты</th><th>Классы</th></tr></thead>
-      <tbody>${on.slice().sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, 'ru')).map((it) => html`<tr style="--c:${sch(it).color}"><td><a class="cls-compare-name" href="${href(it)}"><span><b>${it.name}</b><small>${it.en}</small></span></a></td>
-        <td class="num">${it.level || '—'}</td><td>${sch(it).name}</td><td class="t-sm">${shortTime(it.time)}</td><td class="t-sm">${it.range}</td><td class="t-sm">${it.conc ? 'К · ' : ''}${it.duration}</td><td class="t-sm">${it.comp.replace(/\s*\(.*$/, '')}</td><td class="t-sm">${it.classes.join(', ')}</td></tr>`)}</tbody></table></div>`;
-  }
-  return html`${resultLine(on, items.length, q, keys, text, href)}
-    ${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => {
-      const list = on.filter((it) => it.level === l);
-      if (!list.length) return '';
-      return html`<section class="sp-level"><h3><span class="sp-roman">${ROMAN[l]}</span>${l ? `${l} круг` : 'Заговоры'}<small>${list.length}</small></h3><div class="sp-grid">${list.map(row)}</div></section>`;
-    })}`;
+  return html`${countLine(on.length, items.length, 'заклинаний')}
+    ${on.length ? html`<div class="rx-head sp-row"><span></span><span>Название</span><span>Школа</span><span>Время</span><span>Дистанция</span><span></span></div>` : html`<p class="ref-empty">Таких нет — снимите один из фильтров.</p>`}
+    ${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => { const list = on.filter((it) => it.level === l); return list.length ? html`<section class="rx-group"><h3>${l ? `${l} круг` : 'Заговоры'}<small>${list.length}</small></h3>${list.map(row)}</section>` : ''; })}`;
 }
 export function gallery(items, q, text, top) {
-  const withText = items.filter((it) => it.srdText).length;
-  return html`<main class="page cls-gallery">${top}
-    ${galleryHead('Заклинания', `${items.length} заклинаний D&D 5e 2014, у ${withText} — полный текст SRD. На странице заклинания — печать школы, все параметры и урон на любой ячейке.`, q)}
-    <section class="cls-pick" aria-label="Подбор заклинаний">
-      ${pickRow('lvl', 'Круг', 'layers-01', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), l ? ROMAN[l] : 'Заговоры']), q)}
-      ${pickRow('cls', 'Класс', 'user-group', SPELL_CLASSES.map((c) => [c, c]), q, { multi: true })}
-      ${pickRow('sch', 'Школа', 'magic-wand-01', Object.entries(SCHOOL).map(([k, s]) => [k, s.name, s.color]), q, { multi: true })}
-      ${switchRow('conc', 'Концентрация', 'brain-02', 'только с концентрацией', q)}
-      ${switchRow('rit', 'Ритуал', 'hourglass', 'можно ритуалом', q)}
-      ${switchRow('srd', 'Текст', 'book-open-01', 'с полным текстом SRD', q)}
-      ${pickRow('dmg', 'Урон', 'flash', [['any', 'наносит урон']], q)}
-    </section>
-    <div data-rx-grid>${grid(items, q, text)}</div>
-    <p class="ref-foot">Параметры — по открытому индексу dnd.su; полный текст — SRD 5.1 (CC BY 4.0) на английском. Остальные тексты не публикуются: на странице есть ссылка на источник.</p>
+  const count = (fn) => items.filter(fn).length;
+  return html`<main class="page cls-gallery rx-clean">${top}
+    <header class="rx-title"><h1>Заклинания</h1><p>Полный текст SRD — у ${count((it) => it.srdText)} из ${items.length}. Внутри — урон на любой ячейке.</p></header>
+    <div class="rx-split">
+      ${sideFilters([
+        { key: 'lvl', label: 'Круг', grid: true, options: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((l) => [String(l), l ? ROMAN[l] : '0']) },
+        { key: 'cls', label: 'Класс', multi: true, options: SPELL_CLASSES.map((c) => [c, c, null, count((it) => it.classes.includes(c))]) },
+        { key: 'sch', label: 'Школа', multi: true, options: Object.entries(SCHOOL).map(([k, x]) => [k, x.name, x.color, count((it) => it.school === k)]) },
+        { key: 'conc', label: 'Свойства', options: [['1', 'Концентрация', null, count((it) => it.conc), 'conc'], ['1', 'Ритуал', null, count((it) => it.ritual), 'rit'], ['1', 'Наносит урон', null, count((it) => it.damage.length), 'dmg'], ['1', 'Есть полный текст', null, count((it) => it.srdText), 'srd']] },
+      ], q)}
+      <div class="rx-main" data-rx-grid>${grid(items, q, text)}</div>
+    </div>
+    <p class="ref-foot">Параметры — по открытому индексу dnd.su; полный текст — SRD 5.1 (CC BY 4.0) на английском. К — концентрация, Р — ритуал, Т — есть текст.</p>
   </main>`;
 }
 

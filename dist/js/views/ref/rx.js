@@ -86,3 +86,21 @@ export function crumbs(section, title, it, list, href) {
   return html`<nav class="rx-crumbs"><a href="#/ref/${section}">${ic('arrow-left-02', 14)}${title}</a><span class="spacer"></span>
     ${prev ? html`<a href="${href(prev)}" class="rx-nb">${ic('arrow-left-01', 14)}${prev.name}</a>` : ''}${next ? html`<a href="${href(next)}" class="rx-nb">${next.name}${ic('arrow-right-01', 14)}</a>` : ''}</nav>`;
 }
+
+/**
+ * Чистая раскладка раздела: фильтры колонкой слева, содержимое справа.
+ * groups: [{ key, label, options: [[значение, подпись, цвет?, число?]], multi?, grid? }] — строки-галочки, без чипов.
+ */
+export function sideFilters(groups, q) {
+  const keys = [...new Set(groups.flatMap((g) => g.options.map((o) => o[4] || g.key)))];
+  const any = keys.some((k) => q.getAll(k).length);
+  return html`<aside class="rx-side" aria-label="Фильтры">
+    ${groups.map((g) => {
+      const attr = g.multi ? 'data-qmulti' : 'data-qtoggle';
+      return html`<div class="rx-fgroup"><small>${g.label}</small><div class="${g.grid ? 'rx-fgrid' : 'rx-flist'}">${g.options.map(([v, l, color, n, key]) => html`<button class="rx-opt" ${raw(attr)}="${key || g.key}" data-v="${v}" aria-pressed="${q.getAll(key || g.key).includes(String(v))}">${color ? html`<i style="background:${color}"></i>` : ''}<span>${l}</span>${n != null ? html`<em>${n}</em>` : ''}</button>`)}</div></div>`;
+    })}
+    ${any ? html`<button class="link-btn rx-reset" data-qclear="${keys.join(',')}">Сбросить фильтры</button>` : ''}
+  </aside>`;
+}
+/** Строка-счётчик над списком. */
+export const countLine = (n, total, what) => html`<p class="rx-count">${n === total ? html`${total} ${what}` : html`<b>${n}</b> из ${total} ${what}`}</p>`;
