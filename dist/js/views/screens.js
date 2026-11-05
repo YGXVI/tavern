@@ -136,7 +136,7 @@ export function openOAuth(onDone, { hint } = {}) {
 }
 
 // ——— Шапка ——— (экраны героя тоже берут её: views/hero/index.js)
-/** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | maps | ref (#203); false — без навигации. */
+/** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | workshop | ref (#203); false — без навигации. */
 export function appHeader(user, active = null) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
@@ -146,10 +146,17 @@ export function appHeader(user, active = null) {
   </header>`;
 }
 
+/** Навигация (#203): один ряд, одно место — один путь. Карты и свои существа живут в «Мастерской» — она видна тому, кто ведёт кампанию. */
 export function appNav(user, active) {
   const leads = campaignsFor(user.id).some((c) => roleIn(c, user.id) === 'master');
-  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/characters'], leads ? ['maps', 'Карты', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
+  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/characters'], leads || active === 'workshop' ? ['workshop', 'Мастерская', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
   return html`<nav class="app-nav" aria-label="Разделы">${tabs.map(([id, label, href]) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
+}
+
+/** Заголовок «Мастерской»: крупные слова-вкладки «Карты · Существа» вместо второго ряда кнопок. */
+export function workshopSwitch(active) {
+  const a = (id, href, label) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`;
+  return html`<nav class="page-switch" aria-label="Мастерская">${a('maps', '#/maps', 'Карты')}${a('creatures', '#/creatures', 'Существа')}</nav>`;
 }
 
 export function bindHeader(root, user) {
@@ -182,11 +189,8 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адреса #/characters и #/creatures (TASK-175) обрабатывает этот же экран. */
+/** Адреса #/characters и #/creatures (TASK-096, TASK-175) обрабатывает этот же экран: «Герои» и «Мастерская · Существа» в навигации. */
 const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
-function homeTabs(active) {
-  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a><a class="tab" href="#/creatures" aria-selected="${active === 'creatures'}">Существа</a></nav>`;
-}
 
 /** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
 function charactersPage(user) {
@@ -205,12 +209,10 @@ function charactersPage(user) {
       <span class="cc-text"><b>${ch.name}</b><small>${sub}</small><small class="cc-camp">${c.name}${owner ? ` · играет ${owner}` : ''}</small></span></a>`;
   };
   const section = (title, items) => (items.length ? html`<section class="char-section"><h3>${title}</h3><div class="char-cards">${items.map(card)}</div></section>` : '');
-  // Новые экраны героя (#203) пока на образце данных — ссылка, чтобы их можно было посмотреть.
-  const preview = html`<a class="hero-preview-link" href="#/heroes">${raw(icon('sparkles', 16))}Новые экраны героя — создание, лист, повышение уровня (превью на образце) →</a>`;
   if (!mine.length && !led.length) {
-    return html`${preview}<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
+    return html`<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
   }
-  return html`${preview}${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
+  return html`${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
 }
 
 export function mountCampaigns(root) {
@@ -219,15 +221,16 @@ export function mountCampaigns(root) {
     const user = currentUser();
     if (homeTab() === 'creatures') {
       const { tools, body } = creaturesPage(user);
-      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
-        <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'workshop')}
+        <main class="page page-wide lib-page"><div class="title-row page-head">${workshopSwitch('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
       bindHeader(root, user);
       bindCreatures(root, user, render);
       return;
     }
     if (homeTab() === 'characters') {
       root.innerHTML = String(html`<div class="screen">${appHeader(user, 'heroes')}
-        <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
+        <main class="page page-wide"><div class="title-row page-head"><h1>Герои</h1><span class="spacer"></span>
+          <a class="btn btn-secondary" href="#/heroes">${raw(icon('sparkles', 18))}Новые экраны героя · превью</a></div>${charactersPage(user)}</main></div>`);
       bindHeader(root, user);
       return;
     }
@@ -236,10 +239,10 @@ export function mountCampaigns(root) {
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
     const shown = list.filter((c) => filter === 'all' || (filter === 'master' ? roleIn(c, user.id) === 'master' : membership(c, user.id)?.role === 'player'));
     root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
-      <main class="page">
+      <main class="page page-wide">
         ${list.length ? html`
-          <div class="title-row">
-            ${homeTabs('campaigns')}
+          <div class="title-row page-head">
+            <h1>Кампании</h1>
             <button class="chip chip-md" data-f="all" aria-pressed="${filter === 'all'}">Все · ${list.length}</button>
             <button class="chip chip-md" data-f="master" aria-pressed="${filter === 'master'}">Веду · ${mine}</button>
             <button class="chip chip-md" data-f="player" aria-pressed="${filter === 'player'}">Играю · ${play}</button>
@@ -248,7 +251,7 @@ export function mountCampaigns(root) {
             <button class="btn btn-primary" data-new>${raw(icon('plus-sign', 18))}Новая кампания</button>
           </div>
           <div class="cards">${shown.map((c) => campaignCard(c, user))}${filter !== 'player' ? html`<button class="new-card" data-new>${raw(icon('plus-sign', 24))}<span>Новая кампания</span></button>` : ''}</div>`
-        : html`<div class="title-row">${homeTabs('campaigns')}</div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
+        : html`<div class="title-row page-head"><h1>Кампании</h1></div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
             <div class="row"><button class="btn btn-primary btn-lg" data-new>${raw(icon('plus-sign', 18))}Создать кампанию</button><button class="btn btn-secondary btn-lg" data-paste>${raw(icon('link-01', 18))}У меня есть ссылка</button></div></div>`}
       </main></div>`);
     bindHeader(root, user);

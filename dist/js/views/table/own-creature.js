@@ -163,7 +163,7 @@ async function saveToLibrary(ctx, st) {
   let img = '';
   if (st.img && !st.img.startsWith('ini:')) {
     try { img = await libraryImageFrom(st.file, st.img); }
-    catch (err) { ctx.toast({ title: 'Картинка в «Мои существа» не попала', body: `${err.message || err}. Существо сохраним с инициалами — картинку можно добавить на главной`, icon: 'alert-circle' }); }
+    catch (err) { ctx.toast({ title: 'Картинка в «Мои существа» не попала', body: `${err.message || err}. Существо сохраним с инициалами — картинку можно добавить в Мастерской`, icon: 'alert-circle' }); }
   }
   try {
     await saveCreature({
