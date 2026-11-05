@@ -317,14 +317,16 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     }
     if (q.action === 'delete') {
       const hit = T[t].filter((r) => canSee(uid, t, r) && match(r, q.filters));
+      const removed = [];
       for (const old of hit) {
         const w = writeCheck(uid, t, 'delete', old, old); if (w === 'skip') continue; if (w) return err(w, '42501');
+        removed.push(clone(old));
         T[t].splice(T[t].indexOf(old), 1); emit(t, 'DELETE', null, old);
         if (t === 'tokens') unlinkToken(old);
         if (t === 'campaigns') for (const k of Object.keys(T)) if (k !== 'campaigns' && k !== 'profiles') for (const x of T[k].filter((y) => y.campaign_id === old.id)) { T[k].splice(T[k].indexOf(x), 1); emit(k, 'DELETE', null, x); }
         if (t === 'scenes') for (const k of ['tokens', 'drawings', 'scene_secrets', 'scene_explored']) for (const x of T[k].filter((y) => y.scene_id === old.id)) { T[k].splice(T[k].indexOf(x), 1); emit(k, 'DELETE', null, x); }
       }
-      return { data: null, error: null };
+      return { data: q.wantSelect ? removed : null, error: null };
     }
     return err('unknown action');
   }

@@ -394,17 +394,19 @@ export function whenSynced(cid) { return queues.get(cid) || Promise.resolve(); }
 /** Новое существо показываем после подтверждения сервера, вместе со снимком и готовой картинкой. */
 export async function persistCreatureTokens(cid, sceneId, tokens, creature = null) {
   const actor = me;
+  const copies = Array.isArray(creature) ? creature : creature ? [creature] : [];
+  const copyIds = new Set(copies.map((x) => x.id));
   const job = (queues.get(cid) || Promise.resolve()).then(async () => {
     if (!actor || actor !== me || !isActiveMember(cid)) throw new Error('Войдите в кампанию заново');
     const rows = cache.get(cid);
-    if (!rows || (creature && !rows.creatures)) throw new Error('Кампания ещё не загружена');
+    if (!rows || (copies.length && !rows.creatures)) throw new Error('Кампания ещё не загружена');
     const c = assemble(rows), scene = c.scenes.find((s) => s.id === sceneId);
     if (!scene) throw new Error('Сцена удалена');
-    if (creature) (c.creatures ||= {})[creature.id] = structuredClone(creature);
+    for (const copy of copies) (c.creatures ||= {})[copy.id] = structuredClone(copy);
     scene.tokens.push(...structuredClone(tokens));
     const ids = new Set(tokens.map((t) => t.id));
     const ops = diffRows(rows, explode(c, rows), { isMaster: isMasterOf(cid) }).filter((o) => o.op === 'insert'
-      && ((o.table === 'tokens' && ids.has(o.key)) || (o.table === 'campaign_creatures' && o.key === creature?.id)));
+      && ((o.table === 'tokens' && ids.has(o.key)) || (o.table === 'campaign_creatures' && copyIds.has(o.key))));
     await send(cid, groupPlacements(ops));
     if (actor !== me) return;
     applyOps(rows, ops);
