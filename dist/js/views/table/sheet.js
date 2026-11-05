@@ -52,9 +52,10 @@ function traitHTML(x, lib = false) {
 function actionHTML(m, list, a, i) {
   const meta = String(m.id).startsWith('lib:') ? libMeta(a) : [a.type, a.note].filter(Boolean).join(' · ');
   const bonus = catalogueAttackBonus(a);
+  const damage = String(m.id).startsWith('lib:') ? a.damageComponents || [] : a.damage ? [{ dice: a.damage, type: a.type }] : [];
   const rolls = (bonus !== null ? `<button class="btn btn-sm btn-secondary" data-roll="mattack" data-list="${list}" data-i="${i}" aria-label="Атака: ${esc(a.name)}">${knownBonus(bonus)}</button>` : '')
-    + (a.damage ? parseFormula(a.damage) ? `<button class="btn btn-sm btn-secondary" data-roll="mdamage" data-list="${list}" data-i="${i}" aria-label="Урон: ${esc(a.name)}">${esc(a.damage)}</button>`
-      : `<span class="chip" title="Урон без броска">${esc(a.damage)} урон</span>` : '');
+    + damage.map((d, part) => d.dice ? parseFormula(d.dice) ? `<button class="btn btn-sm btn-secondary" data-roll="mdamage" data-list="${list}" data-i="${i}" data-part="${part}" aria-label="Урон: ${esc(a.name)}${d.type ? ` (${esc(d.type)})` : ''}">${esc(d.dice)}${d.type ? ` · ${esc(d.type)}` : ''}</button>`
+      : `<span class="chip" title="Урон без броска">${esc(d.dice)}${d.type ? ` ${esc(d.type)}` : ''} урон</span>` : '').join('');
   const k = `${m.id}:${list}:${i}`;
   // Описание без бросков — единственное, что есть у действия: показываем целиком; у атак — две строки, тап раскрывает.
   const lib = String(m.id).startsWith('lib:');
@@ -62,7 +63,7 @@ function actionHTML(m, list, a, i) {
   const text = ru ? a.ru : a.desc;
   const lang = ru ? 'ru' : 'en';
   const desc = text ? `<p class="atk-desc ${!rolls || openDesc.has(k) ? 'open' : ''}" lang="${lang}" ${rolls ? `data-desc="${esc(k)}" title="Показать целиком"` : ''}>${esc(text)}</p>` : '';
-  return `<div class="attack-row ${desc ? 'has-desc' : ''}"><div class="grow"><b>${esc(a.name)}</b>${meta ? `<small class="muted">${esc(meta)}</small>` : ''}${desc}</div>${rolls}</div>`;
+  return `<div class="attack-row ${desc ? 'has-desc' : ''}"><div class="grow"><b>${esc(a.name)}</b>${meta ? `<small class="muted">${esc(meta)}</small>` : ''}${desc}</div>${rolls ? `<div class="monster-rolls">${rolls}</div>` : ''}</div>`;
 }
 
 function monsterHTML(ctx, t) {
@@ -92,7 +93,7 @@ function monsterHTML(ctx, t) {
       ${m.senses ? `<p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>` : ''}
       ${(m.traits||[]).map((x) => traitHTML(x, lib)).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
-      ${list === 'reactions' ? m.reactions.map((x) => traitHTML(x, lib)).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
+      <div class="attacks">${m[list].map((a, i) => typeof a === 'string' ? traitHTML(a, lib) : actionHTML(m, list, a, i)).join('')}</div>`).join('')}
       <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и описания — SRD 5.1 (CC BY 4.0); русские названия и перевод описаний — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
@@ -105,6 +106,6 @@ function monsterRoll(ctx,b){
  if(kind==='mcheck'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(ab){const bonus=abilityModifier(m.stats?.[ab.id]);if(bonus===null){ctx.toast('Характеристика неизвестна: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: проверка ${AB_NAMES[ab.id]||ab.name}`,dice:{20:1},mod:bonus,vis});}}
  const a=(m[b.dataset.list]||m.actions)?.[Number(b.dataset.i)];
  if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1},mod:bonus,kind:'attack',vis});}
- if(kind==='mdamage'&&a){const f=parseFormula(a.damage);if(f)doRoll(ctx,{label:`${who}: ${a.name} — урон${a.type?` (${a.type})`:''}`,...f,vis});}
+ if(kind==='mdamage'&&a){const part=String(m.id).startsWith('lib:')?a.damageComponents?.[Number(b.dataset.part)]:{dice:a.damage,type:a.type};const f=part&&parseFormula(part.dice);if(f)doRoll(ctx,{label:`${who}: ${a.name} — урон${part.type?` (${part.type})`:''}`,...f,vis});}
 }
 export {conditionById};

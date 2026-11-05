@@ -74,6 +74,7 @@ export function createClient(url, key, opts) {
     realtime: { setAuth: async () => {} },
     auth: {
       getSession: async () => ({ data: { session: session() }, error: null }),
+      getUser: async () => ({ data: { user: session()?.user || null }, error: null }),
       signInWithOAuth: async (o) => { await call({ op: 'oauth', o }); return { data: {}, error: null }; },
       // Вход гостем (#194): анонимный пользователь, ник — в метаданных, профиль создаёт «триггер» стенда.
       signInAnonymously: async (o) => {
@@ -87,7 +88,8 @@ export function createClient(url, key, opts) {
     },
     storage: {
       from: (bucket) => ({
-        upload: (path, blob, o) => call({ op: 'upload', uid: uid(), bucket, path, size: blob.size, type: o?.contentType }),
+        upload: async (path, blob, o) => call({ op: 'upload', uid: uid(), bucket, path, size: blob.size, type: o?.contentType,
+          dataUrl: await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(blob); }) }),
         createSignedUrl: (path) => call({ op: 'sign', uid: uid(), bucket, path }),
       }),
     },

@@ -8,10 +8,10 @@ export function imagePlacement(width, height, zoom = 1, x = 0, y = 0) {
 }
 
 /** done(ref, file): file нужен также при сохранении существа в личную библиотеку. */
-export function tokenImageEditor({ ref = '', defaultRef = '', toast, store, done }) {
+export function tokenImageEditor({ ref = '', defaultRef = '', title = 'Картинка токена', toast, store, done }) {
   let img = null, sourceRef = ref, localUrl = '', zoom = 1, x = 0, y = 0;
   let revision = 0, dirty = false, saving = false, drag = null;
-  const m = modal(`${panelHeader('Картинка токена', 'Перетащите картинку и выберите масштаб')}
+  const m = modal(`${panelHeader(title, 'Перетащите картинку и выберите масштаб')}
     <div class="panel-section token-image-editor">
       <canvas width="512" height="512" data-preview role="img" aria-label="Предпросмотр круглого токена"></canvas>
       <p class="t-sm muted" data-status aria-live="polite">Загрузка картинки…</p>
