@@ -15,9 +15,10 @@ import { galleryPage, refreshGallery, classPage, wireClass } from './classes.js'
 import { wireRx } from './rx.js';
 import * as CREATURES from './sec-creatures.js';
 import * as SPELLS from './sec-spells.js';
+import * as RULES_PAGE from './sec-rules.js';
 
 /** Разделы со своей галереей и страницей записи (как у классов). */
-const PAGES = { creatures: CREATURES, spells: SPELLS };
+const PAGES = { creatures: CREATURES, spells: SPELLS, rules: RULES_PAGE };
 
 const ic = (n, s = 16) => raw(icon(n, s));
 const STORE = 'rasputye-ref-v1';

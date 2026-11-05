@@ -57,7 +57,8 @@ export function wireRx(host) {
   const itOf = (el) => (sectionNow(el.dataset.sec) || []).find((x) => x.id === el.dataset.id);
   const apply = (el, key, value) => {
     const t = TOOLS[el.dataset.rx]; const it = itOf(el); if (!t || !it) return;
-    const st = { ...JSON.parse(el.dataset.state || '{}'), [key]: value };
+    const prev = JSON.parse(el.dataset.state || '{}');
+    const st = t.reduce ? t.reduce(prev, key, value) : { ...prev, [key]: value };
     el.dataset.state = JSON.stringify(st);
     el.querySelectorAll(`[data-rx-val="${key}"]`).forEach((n) => { n.textContent = t.fmt?.[key] ? t.fmt[key](value, st) : value; });
     el.querySelectorAll(`[data-rx-in="${key}"]`).forEach((n) => { if (Number(n.value) !== Number(value)) n.value = value; });
@@ -65,7 +66,14 @@ export function wireRx(host) {
     el.querySelector('[data-rx-out]').innerHTML = String(t.out(it, st));
   };
   const onInput = (e) => { const i = e.target.closest('[data-rx-in]'); if (!i) return; const el = rootOf(i); if (el) apply(el, i.dataset.rxIn, Number(i.value)); };
-  const onClick = (e) => { const b = e.target.closest('[data-rx-set]'); if (!b) return; const el = rootOf(b); if (!el) return; const [k, v] = b.dataset.rxSet.split(':'); apply(el, k, Number.isNaN(Number(v)) ? v : Number(v)); };
+  const onClick = (e) => {
+    const g = e.target.closest('[data-rx-goto]');
+    if (g) { document.getElementById(g.dataset.rxGoto)?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); return; }
+    const r = e.target.closest('[data-rx-roll]');
+    if (r) { const el = rootOf(r); if (el) apply(el, r.dataset.rxRoll, 1 + Math.floor(Math.random() * 20)); return; }
+    onSet(e);
+  };
+  const onSet = (e) => { const b = e.target.closest('[data-rx-set]'); if (!b) return; const el = rootOf(b); if (!el) return; const [k, v] = b.dataset.rxSet.split(':'); apply(el, k, Number.isNaN(Number(v)) ? v : Number(v)); };
   host.addEventListener('input', onInput);
   host.addEventListener('click', onClick);
   return () => { host.removeEventListener('input', onInput); host.removeEventListener('click', onClick); };
