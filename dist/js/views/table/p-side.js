@@ -156,7 +156,7 @@ function libList(ctx) {
   const L = libState(ctx);
   if (!L.list && !L.error) { if (!L.loading) loadLib(ctx); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
   if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
-  if (!L.list.length) return '<p class="t-sm muted b-empty">В библиотеке пусто. Соберите существо на главной во вкладке «Существа».</p>';
+  if (!L.list.length) return '<p class="t-sm muted b-empty">В библиотеке пусто. Соберите существо в Мастерской, раздел «Существа».</p>';
   const st = bState(ctx), q = st.q.trim().toLowerCase();
   const copies = Object.values(ctx.c.creatures || {});
   const list = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
@@ -660,7 +660,7 @@ function summonPicker(ctx, anchor) {
       if (!L.list && !L.error) { if (!L.loading) loadLib(ctx).then(() => { if (n.isConnected) list(); }); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
       if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
       const mine = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
-      if (!mine.length) return `<p class="t-sm muted b-empty">${L.list.length ? 'Никого не нашлось.' : 'В библиотеке пусто — соберите существо на главной, во вкладке «Существа».'}</p>`;
+      if (!mine.length) return `<p class="t-sm muted b-empty">${L.list.length ? 'Никого не нашлось.' : 'В библиотеке пусто — соберите существо в Мастерской, раздел «Существа».'}</p>`;
       return mine.slice(0, 40).map((x) => row(`libsrc:${x.id}`, x.name, [x.type, x.cr != null ? `КО ${x.cr}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · '), x.img || `ini:${x.name}`)).join('');
     }
     const found = BESTIARY.filter((m) => bMatch(m, q)).slice(0, 40);

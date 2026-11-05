@@ -126,8 +126,6 @@ kbd { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; b
 .cp-scene-new small, .cp-map-new small { max-width: 260px; font-size: 11px; color: var(--text-tertiary); }
 .cp-plus { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-accent-subtle); color: var(--text-accent); }
 .cp-maps-page { width: min(1440px, 100% - 64px); }
-.cp-maps-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 40px; }
-.cp-maps-title h1 { font: 600 32px/1 var(--font-display); margin-right: 8px; }
 .cp-mapgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
 .cp-mapgrid.small { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 0 20px 20px; }
 .cp-map { display: flex; flex-direction: column; gap: 6px; border-radius: 18px; overflow: hidden; background: var(--neutral-250); box-shadow: inset 0 0 0 1px var(--stroke-subtle); padding-bottom: 14px; text-align: left; color: inherit; border: 0; }
@@ -466,6 +464,7 @@ button.cp-map { cursor: pointer; }
 @media (max-width: 720px) {
   .app-header { flex-wrap: wrap; }
   .app-nav { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .app-nav a { flex: 1 1 auto; justify-content: center; padding: 0 8px; }
   .cp-page, .cp-maps-page, .ref-page { width: calc(100% - 32px); }
   .cv-big { min-height: 0; padding: 64px 20px 20px; flex-direction: column; align-items: stretch; }
   .cv-text h1 { font-size: 28px; }
@@ -475,7 +474,6 @@ button.cp-map { cursor: pointer; }
   .cp-grid-master, .cp-grid-player, .cp-grid-master > .cp-col:last-child, .cp-grid-player > .cp-col { grid-template-columns: minmax(0, 1fr); display: flex; flex-direction: column; }
   .cp-heroes { grid-template-columns: minmax(0, 1fr); }
   .cp-hero-card { flex-direction: column; }
-  .cp-maps-title h1 { font-size: 24px; width: 100%; }
   .cp-scenes, .cp-mapgrid { grid-template-columns: minmax(0, 1fr); }
   .cp-diff-th { grid-template-columns: 1fr 1fr; }
   .cp-title-input { max-width: 100%; font-size: 20px; flex: 1 1 100%; }
@@ -491,7 +489,12 @@ button.cp-map { cursor: pointer; }
   .ref-sec-n { position: static; }
   .ref-bottom { grid-template-columns: minmax(0, 1fr); }
   .ref-cta { flex-direction: column; align-items: flex-start; }
-  .ref-top { display: none; }
+  /* Телефон: разделы справочника — лентой, как на компьютере; «назад» только у записи (#203) */
+  .ref-top { flex-direction: column; align-items: stretch; gap: 10px; }
+  .ref-tabs { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .ref-tabs a { flex: none; }
+  .ref-search { width: 100%; }
+  .ref-search kbd { display: none; }
   .ref-phone-bar { display: flex; align-items: center; gap: 10px; }
   .ref-phone-bar h2 { flex: 1; font: 600 20px/1 var(--font-display); }
   .ref-phone-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -885,7 +888,7 @@ button.cp-map { cursor: pointer; }
 @media (max-width: 720px) {
   .cr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cr-abils { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .rx-crumbs .rx-nb { display: none; }
+  .rx-crumbs { display: none; } /* назад — в верхней полосе телефона */
 }
 @container cls (max-width: 960px) {
   .cls-page .cr-hero { grid-template-columns: minmax(0, 1fr) !important; }

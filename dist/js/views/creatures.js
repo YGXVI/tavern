@@ -1,4 +1,4 @@
-// Вкладка «Существа» на главной (TASK-175, план TASK-097 п. 4.1): личная библиотека — список, конструктор,
+// «Мастерская · Существа» (TASK-175, раньше вкладка главной; план TASK-097 п. 4.1): личная библиотека — список, конструктор,
 // копия из бестиария SRD, удаление. Данные — готовый API core/library.js (#150): песочница или таблица на сервере.
 // Библиотеку видит и правит только её хозяин; за столом свои существа появятся следующей порцией (4.3).
 import { esc } from '../core/dom.js';
@@ -45,7 +45,7 @@ function card(c) {
     <span class="cc-text"><b>${esc(c.name)}</b><small>${esc(sub || 'Без описания')}</small>${vit ? `<small class="cc-camp">${esc(vit)}</small>` : ''}</span></button>`;
 }
 
-/** Разметка вкладки «Существа» (под вкладками главной). */
+/** Разметка «Мастерская · Существа» (#/creatures). */
 export function creaturesPage(user) {
   const tools = `<span class="spacer"></span>
     <label class="input lib-search">${icn('search-01')}<input type="search" data-lib-q placeholder="Найти своё существо" value="${esc(lib.q)}" aria-label="Поиск по библиотеке"></label>

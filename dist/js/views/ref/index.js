@@ -189,7 +189,7 @@ export function mountRef(root, hash) {
       </div>`;
   }
   function rxPage(s, items) {
-    const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? `#/ref/${s.id}` : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/${s.id}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return PAGES[s.id].gallery(items, st.q, text, top);
     // Снаряжение показывает, какие классы начинают с предмета, — подгружаем классы и перерисовываем.
@@ -201,7 +201,7 @@ export function mountRef(root, hash) {
   function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)) }; }
   function classesPage(items) {
     const s = sectionById('classes');
-    const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? '#/ref/classes' : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/classes" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return galleryPage(items, st.q, text, top);
     const key = `classes/${it.id}`;
@@ -243,6 +243,9 @@ export function mountRef(root, hash) {
     root.innerHTML = String(html`<div class="screen ref-screen">${header()}${body}</div>`);
     const u = user(); if (u) bindHeader(root, u);
     root.querySelector('.ref-row-item.current')?.scrollIntoView({ block: 'nearest' });
+    // Телефон: лента разделов прокручена к текущему.
+    const tab = root.querySelector('.ref-tabs [aria-selected="true"]'), bar = tab?.parentElement;
+    if (tab && bar.scrollWidth > bar.clientWidth) { const t = tab.getBoundingClientRect(), b = bar.getBoundingClientRect(); bar.scrollLeft += t.left - b.left - (b.width - t.width) / 2; }
   }
   function track() {
     if (!st.id || !st.section) return;

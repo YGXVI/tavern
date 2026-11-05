@@ -1,4 +1,4 @@
-// Сцены кампании (#203, макет 61) и «Мои карты» — карты из всех кампаний мастера (макет 63).
+// Сцены кампании (#203, макет 61) и «Мастерская · Карты» — карты из всех кампаний мастера (макет 63).
 // Сцена правится на столе: отсюда — открыть, перенести отряд, переименовать, удалить, взять карту из другой кампании.
 import { html, raw, on, esc, plural, uid } from '../../core/dom.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
@@ -6,7 +6,7 @@ import { currentUser } from '../../core/auth.js';
 import { campaignsFor, roleIn, updateCampaign, addLog } from '../../core/campaign.js';
 import { modal, panelHeader, menu, confirmDialog, toast } from '../../ui/kit.js';
 import { gridDims } from '../../rules/geometry.js';
-import { appHeader, bindHeader } from '../screens.js';
+import { appHeader, bindHeader, workshopSwitch } from '../screens.js';
 import { ic } from './parts.js';
 
 /** Подгрузить картинки idb:/sb: в <img data-ref> и фон [data-bgref]. */
@@ -31,14 +31,14 @@ export function mountTab(ctx, body) {
   const render = () => {
     const c = ctx.c;
     body.innerHTML = String(html`<div class="cp-toolbar"><span class="chip chip-accent">Все · ${c.scenes.length}</span><span class="spacer"></span>
-        <button class="btn btn-secondary btn-sm" data-from-maps>${ic('maps')}Из «Моих карт»</button><a class="btn btn-primary btn-sm" href="#/c/${c.id}/do/new-scene">${ic('plus-sign')}Новая сцена</a></div>
+        <button class="btn btn-secondary btn-sm" data-from-maps>${ic('maps')}Из Мастерской</button><a class="btn btn-primary btn-sm" href="#/c/${c.id}/do/new-scene">${ic('plus-sign')}Новая сцена</a></div>
       <div class="cp-scenes">${c.scenes.map((s) => {
         const active = s.id === c.activeSceneId;
         return html`<article class="cp-scene ${active ? 'active' : ''}"><div class="cp-scene-img">${img(s.map?.src)}${active ? html`<span class="chip chip-accent cp-scene-flag">Сейчас на столе</span>` : ''}</div>
           <div class="cp-scene-body"><b>${s.name}</b><small>${sceneMeta(s) || 'пустая сцена'}</small>
             <div class="cp-scene-foot">${active ? html`<a class="btn btn-primary btn-sm" href="#/c/${c.id}">${ic('play')}Открыть стол</a>` : html`<a class="btn btn-secondary btn-sm" href="#/c/${c.id}/do/show/${encodeURIComponent(s.id)}">${ic('arrow-right-02')}Перенести отряд</a>`}
               <span class="spacer"></span><a class="icon-btn icon-btn-sm" href="#/c/${c.id}/do/edit/${encodeURIComponent(s.id)}" data-tip="Настроить на столе" aria-label="Настроить на столе">${ic('settings-01', 18)}</a><button class="icon-btn icon-btn-sm" data-more="${s.id}" aria-label="Ещё">${ic('more-horizontal', 18)}</button></div></div></article>`;
-      })}<a class="cp-scene cp-scene-new" href="#/c/${c.id}/do/new-scene"><span class="cp-plus">${ic('plus-sign', 22)}</span><b>Новая сцена</b><small>Загрузите карту или возьмите из «Моих карт» — сетку подгоним</small></a></div>`);
+      })}<a class="cp-scene cp-scene-new" href="#/c/${c.id}/do/new-scene"><span class="cp-plus">${ic('plus-sign', 22)}</span><b>Новая сцена</b><small>Загрузите карту или возьмите готовую из Мастерской — сетку подгоним</small></a></div>`);
     hydrate(body);
   };
   L('click', '[data-more]', (e, b) => {
@@ -97,7 +97,7 @@ const mapMeta = (e) => { const s = e.scene; let d = ''; try { const g = gridDims
 
 function pickMap(ctx) {
   const list = myMaps(ctx.user.id);
-  const m = modal(html`${panelHeader('Из «Моих карт»', 'Карта встанет новой сценой с сеткой, стенами и светом — без токенов')}
+  const m = modal(html`${panelHeader('Карты из Мастерской', 'Карта встанет новой сценой с сеткой, стенами и светом — без токенов')}
     <div class="modal-body scroll"><div class="cp-mapgrid small">${list.map((e, i) => html`<button class="cp-map" data-i="${i}"><span class="cp-map-img">${img(e.src)}</span><b>${e.name}</b><small>${mapMeta(e)}</small></button>`)}
     ${!list.length ? html`<p class="t-sm muted">Карт пока нет.</p>` : ''}</div></div>`, { wide: true });
   hydrate(m.box);
@@ -110,7 +110,7 @@ function pickMap(ctx) {
   });
 }
 
-// ——— «Мои карты» (#/maps) ———
+// ——— «Мастерская · Карты» (#/maps) ———
 export function mountMaps(root) {
   const user = currentUser();
   let only = null;
@@ -120,8 +120,8 @@ export function mountMaps(root) {
     const camps = [...new Map(all.flatMap((e) => e.used).map((u) => [u.id, u])).values()];
     const list = only ? all.filter((e) => e.used.some((u) => u.id === only)) : all;
     const masterCamps = campaignsFor(user.id).filter((c) => roleIn(c, user.id) === 'master');
-    root.innerHTML = String(html`<div class="screen">${appHeader(user, 'maps')}<main class="page cp-maps-page">
-      <div class="cp-maps-title"><h1>Мои карты</h1><button class="chip chip-md" data-only="" aria-pressed="${!only}">Все · ${all.length}</button>${camps.map((u) => html`<button class="chip chip-md" data-only="${u.id}" aria-pressed="${only === u.id}">${u.name} · ${all.filter((e) => e.used.some((x) => x.id === u.id)).length}</button>`)}<span class="spacer"></span>
+    root.innerHTML = String(html`<div class="screen">${appHeader(user, 'workshop')}<main class="page cp-maps-page">
+      <div class="title-row page-head">${workshopSwitch('maps')}<button class="chip chip-md" data-only="" aria-pressed="${!only}">Все · ${all.length}</button>${camps.map((u) => html`<button class="chip chip-md" data-only="${u.id}" aria-pressed="${only === u.id}">${u.name} · ${all.filter((e) => e.used.some((x) => x.id === u.id)).length}</button>`)}<span class="spacer"></span>
         <button class="btn btn-primary" data-upload ${masterCamps.length ? '' : raw('disabled')}>${ic('upload-01')}Загрузить карту</button></div>
       <div class="cp-mapgrid">${list.map((e) => html`<article class="cp-map"><span class="cp-map-img">${img(e.src)}</span><div class="cp-map-row"><b>${e.name}</b><button class="icon-btn icon-btn-sm" data-mapmenu="${all.indexOf(e)}" aria-label="Ещё">${ic('more-horizontal', 18)}</button></div><small>${mapMeta(e)}</small>
         <div class="cp-map-used"><span>В кампаниях:</span>${e.used.map((u) => html`<a class="chip chip-accent" href="#/camp/${u.id}/scenes">${u.name}</a>`)}</div></article>`)}
