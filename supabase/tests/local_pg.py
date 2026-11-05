@@ -237,6 +237,33 @@ def level_up_checks(psql, run):
     refused('22023', player, payload=two, version=v0)  # тот же operationId, другой запрос
     print('level_up OK: level 2, server HP gain, history, exact replay', flush=True)
 
+    # Простое повышение старого героя (без creation): только уровень, классы и кости; хиты считает сервер.
+    old = '90000000-0000-4000-8000-000000000020'
+    legacy = {'name': 'Торин', 'classId': 'fighter', 'className': 'Воин', 'level': 5, 'stats': {'str': 16, 'dex': 12, 'con': 16, 'int': 10, 'wis': 12, 'cha': 8}, 'hp': 30, 'hpMax': 44}
+    code, _, err = as_user(player, f"insert into public.characters(id,campaign_id,owner_id,data) values('{old}','c-create','{player}','{body(legacy)}'::jsonb);")
+    assert code == 0, err[-400:]
+    simple = {'patch': {'level': 6, 'classes': [{'ref': 'srd51:class:fighter', 'levels': 6}], 'hitDicePools': [{'id': 'p1', 'name': 'd10', 'die': 10, 'total': 6, 'spent': 0}]}}
+    old_state = lambda: q(f"select sheet_version || ':' || (data->>'level') || ':' || (data->>'hpMax') from public.characters where id='{old}'")
+    def refused_old(expect, payload, operation):
+        before = old_state()
+        code, reply, err = level_up(player, payload=payload, operation=operation, character=old)
+        assert code != 0 and expect in err, (expect, code, reply, err[-400:])
+        assert old_state() == before, 'nothing written on refusal'
+    refused_old('22023', {'patch': dict(simple['patch'], stats={'con': 20})}, '90000000-0000-4000-8000-000000000021')
+    refused_old('22023', {'patch': dict(simple['patch'], level=7, classes=[{'ref': 'srd51:class:fighter', 'levels': 7}])}, '90000000-0000-4000-8000-000000000022')
+    refused_old('22023', {'patch': dict(simple['patch'], classes=[{'ref': 'srd51:class:wizard', 'levels': 6}])}, '90000000-0000-4000-8000-000000000023')
+    refused_old('22023', {'creation': fixture['payload']['creation'], 'patch': simple['patch']}, '90000000-0000-4000-8000-000000000024')
+    code, reply, err = level_up(player, payload=simple, operation='90000000-0000-4000-8000-000000000025', character=old)
+    assert code == 0 and reply['hpGain'] == 9, err[-400:]
+    data = reply['sheet']['data']
+    assert data['level'] == 6 and data['hpMax'] == 53 and data['hp'] == 39 and 'creation' not in data, data
+    assert q(f"select sheet_managed from public.characters where id='{old}'") == 't', 'after a command the sheet is managed'
+    multi = {'patch': {'level': 7, 'classes': [{'ref': 'srd51:class:fighter', 'levels': 6}, {'ref': 'srd51:class:wizard', 'levels': 1}],
+                       'hitDicePools': [{'id': 'p1', 'name': 'd10', 'die': 10, 'total': 6, 'spent': 0}, {'id': 'p2', 'name': 'd6', 'die': 6, 'total': 1, 'spent': 0}]}}
+    code, reply, err = level_up(player, payload=multi, operation='90000000-0000-4000-8000-000000000026', character=old)
+    assert code == 0 and reply['hpGain'] == 7 and reply['sheet']['data']['hpMax'] == 60, err[-400:]  # d6: 4 + 3
+    print('level_up OK: simple level-up for legacy heroes (class, multiclass, server HP) and refusals', flush=True)
+
 
 def main():
     programs = {name: shutil.which(name) for name in ('initdb', 'pg_ctl', 'psql')}

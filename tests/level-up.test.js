@@ -159,3 +159,35 @@ test('фикстура SQL-проверок повышения совпадае�
   assert.deepEqual(file, JSON.parse(JSON.stringify(levelUpFixture())));
   assert.equal(file.hpGain, 8); // d10: 6 + Телосложение 14 (+2)
 });
+
+// ——— Простое повышение героя без конструктора (#202) ———
+const legacy = (o = {}) => ({ name: 'Торин', classId: 'fighter', className: 'Воин', level: 5, stats: { str: 16, dex: 12, con: 16, int: 10, wis: 12, cha: 8 }, hp: 30, hpMax: 44, ...o });
+
+test('простой план: старый воин 5 → 6, d10 и +9 хитов, выборов нет — заметка про ручные правки', () => {
+  const plan = levelUpPlan(legacy(), 'srd51:class:fighter', cats);
+  assert.equal(plan.supported, true);
+  assert.equal(plan.mode, 'simple');
+  assert.deepEqual([plan.fromLevel, plan.toLevel, plan.classLevel, plan.hitDie, plan.hp.gain, plan.hp.maxAfter], [5, 6, 6, 10, 9, 53]);
+  assert.deepEqual(plan.choices, []);
+  assert.match(plan.note, /вручную/);
+  const body = levelUpPayload(legacy(), plan, cats, { makeId });
+  assert.deepEqual(Object.keys(body), ['patch']);
+  assert.equal(body.patch.level, 6);
+  assert.deepEqual(body.patch.classes.map(c => [c.ref, c.levels]), [['srd51:class:fighter', 6]]);
+  assert.deepEqual(body.patch.hitDicePools.map(p => [p.die, p.total, p.spent]), [[10, 6, 0]]);
+});
+
+test('простой план: мультикласс — по политике, свои пулы костей; без Телосложения — ошибка', () => {
+  assert.equal(levelUpPlan(legacy(), 'srd51:class:wizard', cats).errors[0].code, 'multiclass_disabled');
+  const plan = levelUpPlan(legacy(), 'srd51:class:wizard', cats, { policy: context({ optionalRules: { multiclass: true } }) });
+  const body = levelUpPayload(legacy(), plan, cats, { makeId });
+  assert.deepEqual(body.patch.classes.map(c => [c.ref, c.levels]), [['srd51:class:fighter', 5], ['srd51:class:wizard', 1]]);
+  assert.deepEqual(body.patch.hitDicePools.map(p => [p.die, p.total]), [[10, 5], [6, 1]]);
+  const noCon = levelUpPlan(legacy({ stats: { str: 10 } }), 'srd51:class:fighter', cats);
+  assert.equal(noCon.errors[0].code, 'constitution');
+  assert.throws(() => levelUpPayload(legacy({ stats: { str: 10 } }), noCon, cats, { makeId }), /Телосложение/);
+  // Существующий пул сохраняет ID и потраченное.
+  const pooled = legacy({ hitDicePools: [{ id: 'p1', name: 'd10', die: 10, total: 5, spent: 2 }] });
+  const b2 = levelUpPayload(pooled, levelUpPlan(pooled, 'srd51:class:fighter', cats), cats, { makeId });
+  assert.deepEqual(b2.patch.hitDicePools, [{ id: 'p1', name: 'd10', die: 10, total: 6, spent: 2 }]);
+});
