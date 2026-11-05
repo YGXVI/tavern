@@ -450,6 +450,7 @@ select pg_temp.cnt('скрытую свою сову владелец не ви�
 select pg_temp.err('и не правит', $q$select public.patch_token('t-owl', '{"x":1}')$q$);
 select pg_temp.err('TASK-123 (review): id своих токенов снаружи не запросить — в том числе скрытой совы (И7)', $q$select public.owned_token_ids('c-rls')$q$);
 select pg_temp.err('TASK-123 (review): и id героев тоже', $q$select public.hero_token_ids('c-rls')$q$);
+select pg_temp.err('аудит #57: видимые токены напрямую не перечислить', $q$select public.visible_token_ids('c-rls')$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.rows('мастер показывает сову', $q$update public.tokens set hidden = false where id = 't-owl'$q$, 1);

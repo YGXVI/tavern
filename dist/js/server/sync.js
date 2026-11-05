@@ -667,8 +667,12 @@ function subscribe(cid) {
     presence.set(cid, map);
     store.deliver('presence-change', {});
   });
+  // Аудит #57 (B2): кампанию читают до подписки — изменения между чтением и SUBSCRIBED иначе потерялись бы.
+  // После первой подписки перечитываем: события, пришедшие во время чтения, копятся и накладываются (loading).
+  let fresh = true;
   ch.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
+      if (fresh) { fresh = false; loadCampaign(cid, { silent: true }).catch(() => {}); }
       if (myPresence?.campaignId === cid) ch.track(myPresence);
       if (ch.__wasDown) { ch.__wasDown = false; netState(cid, true); loadCampaign(cid).catch(() => {}); }
     }
@@ -743,6 +747,12 @@ function masterDuties(cid, c) {
 function removed(cid, { quiet = false } = {}) {
   const ch = channels.get(cid); if (ch) { sb.removeChannel(ch); channels.delete(cid); }
   cache.delete(cid);
+  // Аудит #57: после исключения в вкладке не остаётся ничего из кампании — очереди, подтверждённые листы, черновики.
+  inflight.delete(cid); loading.delete(cid); confirmedSheets.delete(cid); pendingSheets.delete(cid);
+  try {
+    const prefix = `rasputye:sheet-draft:server:${me}:${cid}:`;
+    for (const k of Object.keys(sessionStorage)) if (k.startsWith(prefix)) sessionStorage.removeItem(k);
+  } catch { /* хранилище недоступно — чистить нечего */ }
   const db = store.getDB();
   const name = db.campaigns[cid]?.name;
   if (!db.campaigns[cid]) return;
