@@ -234,10 +234,9 @@ button.cp-map { cursor: pointer; }
 .ref-page { width: min(1440px, 100% - 64px); padding-top: 16px; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); grid-template-areas: "top top" "list card"; gap: 20px 24px; align-items: start; }
 .ref-page.has-filters { grid-template-columns: 220px minmax(280px, 360px) minmax(0, 1fr); grid-template-areas: "top top top" "filters list card"; }
 .ref-top { grid-area: top; display: flex; align-items: center; gap: 16px; }
-.ref-tabs { flex: 1 1 auto; min-width: 0; }
+.ref-tabs { flex: 0 1 auto; width: max-content; min-width: 0; }
 .ref-tabs a { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--r-full); font: 600 12px/1 var(--font-text); color: var(--text-secondary); white-space: nowrap; }
 .ref-tabs a[aria-selected="true"] { background: var(--bg-accent-subtle); color: var(--text-accent); }
-.ref-count { font-size: 10px; opacity: .8; }
 .ref-search { width: 300px; flex: none; height: 40px; border-radius: var(--r-full); }
 .ref-search input { flex: 1; }
 .ref-filters { grid-area: filters; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 96px; }

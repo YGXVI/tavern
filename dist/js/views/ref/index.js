@@ -182,14 +182,14 @@ export function mountRef(root, hash) {
       <div class="ref-card-body">${card(it, { lang, key, fav: prefs().fav.includes(key) })}</div>
       <footer class="ref-card-foot">${footActions(it)}<span class="spacer"></span>${similar(it, items)}<span class="t-xs tertiary">${it.section === 'creatures' && !it.m.srd ? '' : 'SRD 5.1 · CC BY 4.0'}</span></footer></article>`;
   }
-  function topBar(s, items) {
+  function topBar(s) {
     return html`<div class="ref-top">
-        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}${x.id === s.id ? html` <span class="ref-count">${items.length}</span>` : ''}</a>`)}</nav>
+        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}</a>`)}</nav>
         <label class="input ref-search">${ic('search-01', 18)}<input data-text value="${text}" placeholder="Искать в разделе «${s.name.toLowerCase()}»…" aria-label="Поиск в разделе" autocomplete="off"><kbd>/</kbd></label>
       </div>`;
   }
   function rxPage(s, items) {
-    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/${s.id}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/${s.id}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return PAGES[s.id].gallery(items, st.q, text, top);
     // Снаряжение показывает, какие классы начинают с предмета, — подгружаем классы и перерисовываем.
@@ -201,7 +201,7 @@ export function mountRef(root, hash) {
   function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)) }; }
   function classesPage(items) {
     const s = sectionById('classes');
-    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/classes" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/classes" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return galleryPage(items, st.q, text, top);
     const key = `classes/${it.id}`;
@@ -215,7 +215,7 @@ export function mountRef(root, hash) {
     const sort = st.q.get('sort') || sorts?.[0][0];
     const nFilters = (FILTERS[st.section] || []).reduce((n, [k]) => n + st.q.getAll(k).length, 0);
     return html`<main class="page ref-page ${FILTERS[st.section] ? 'has-filters' : ''} ${st.id ? 'has-card' : ''}">
-      ${topBar(s, items)}
+      ${topBar(s)}
       ${phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>
         <div class="ref-phone-chips">${FILTERS[st.section] ? html`<button class="chip chip-md" data-ftoggle>${ic('settings-01', 14)}Фильтр${nFilters ? ` · ${nFilters}` : ''}</button>` : ''}${activeChips(st.section, items)}</div>` : ''}
       ${filtersHTML(st.section, items)}
