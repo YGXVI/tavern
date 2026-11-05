@@ -66,9 +66,19 @@ export function applyLevelUpChoice(ix, st, hero, p = {}) {
     const c = ev.choices.find((x) => x.id === choiceId);
     if (!c) return null;
     if (c.kind === 'asi_or_feat') {
-      const ab = opt.replace(/^asi2:/, '');
-      const same = c.selected?.type === 'asi' && c.selected.increases?.[ab] === 2;
-      change(ix, st, plan, { type: 'setSelection', choiceId, value: same ? undefined : { type: 'asi', increases: { [ab]: 2 } } });
+      // +2 к одной, +1 к двум (по одной кнопке на характеристику) или черта (#203: раньше было только +2).
+      const sel = c.selected;
+      let value;
+      if (opt.startsWith('feat:')) { const featId = opt.slice(5); value = sel?.type === 'feat' && sel.featId === featId ? undefined : { type: 'feat', featId }; }
+      else if (opt.startsWith('asi1:')) {
+        const ab = opt.slice(5), inc = sel?.type === 'asi' && Object.values(sel.increases || {}).every((x) => x === 1) ? { ...sel.increases } : {};
+        if (inc[ab]) delete inc[ab]; else { if (Object.keys(inc).length >= 2) delete inc[Object.keys(inc)[0]]; inc[ab] = 1; }
+        value = Object.keys(inc).length ? { type: 'asi', increases: inc } : undefined;
+      } else {
+        const ab = opt.replace(/^asi2:/, '');
+        value = sel?.type === 'asi' && sel.increases?.[ab] === 2 ? undefined : { type: 'asi', increases: { [ab]: 2 } };
+      }
+      change(ix, st, plan, { type: 'setSelection', choiceId, value });
       return null;
     }
     if (c.count === 1 && (c.kind === 'subclass' || c.kind === 'feature_option')) { change(ix, st, plan, { type: 'setSelection', choiceId, value: c.selected === opt ? undefined : opt }); return null; }
@@ -110,9 +120,14 @@ export function levelUpModel(ix, st, hero, v) {
   const feats = plan.features.map((f) => ({ name: nameOf(ix, f.ref), text: ix.features.get(f.ref)?.description?.ru || ix.features.get(f.ref)?.text?.ru || '' }));
   const extra = simple ? [] : extraChoices(ev, plan).map((c) => {
     if (c.kind === 'asi_or_feat') {
-      const sel = c.selected?.type === 'asi' ? Object.keys(c.selected.increases || {})[0] : null;
-      return { title: 'Улучшение характеристик: +2 к одной', note: asiValue(c.selected) ? `выбрано: ${asiValue(c.selected)}` : 'выбрано 0 из 1', choiceId: c.id,
-        list: ABILITIES.map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === sel || undefined })) };
+      const s = c.selected, inc = s?.type === 'asi' ? s.increases || {} : {};
+      const two = Object.keys(inc).find((k) => inc[k] === 2), ones = Object.keys(inc).filter((k) => inc[k] === 1);
+      const feats = [...ix.defs.values()].filter((d) => d.kind === 'feat');
+      const note = s?.type === 'feat' ? `черта: ${nameOf(ix, s.featId)}` : two ? `выбрано: ${asiValue(s)}` : ones.length === 2 ? `выбрано: ${asiValue(s)}` : ones.length === 1 ? 'выберите ещё одну +1' : 'выбрано 0 из 1';
+      return { title: 'Улучшение характеристик: +2 к одной, +1 к двум или черта', note, choiceId: c.id,
+        list: [...ABILITIES.map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === two || undefined })),
+          ...ABILITIES.map((a) => ({ name: `${a.short} +1`, value: `asi1:${a.id}`, on: ones.includes(a.id) || undefined })),
+          ...feats.map((f) => ({ name: `Черта: ${nameOf(ix, f.id)}`, value: `feat:${f.id}`, on: (s?.type === 'feat' && s.featId === f.id) || undefined }))] };
     }
     const bad = new Set((c.unavailable || []).map((u) => u.option));
     const isSel = (o) => (Array.isArray(c.selected) ? c.selected.includes(o) : c.selected === o);
