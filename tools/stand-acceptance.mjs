@@ -77,6 +77,16 @@ try {
   const hp = (await M.sb.from('tokens').select('data').eq('id', `t-gob-${tag}`).single()).data?.data?.hp;
   check('урон прибавкой применён один раз при повторе', !r.error && again.data?.replayed === true && hp === 4, `hp=${hp} ${r.error?.message || ''}`);
 
+  // Бой: игрок пишет только своё точечной функцией, прямая правка строки — у мастера (аудит 04.11).
+  r = await M.sb.from('combats').insert({ campaign_id: cid, data: { active: true, round: 1, turn: 0, current: `t-own-${tag}`, entries: [{ tokenId: `t-gob-${tag}`, init: 15 }, { tokenId: `t-own-${tag}`, init: null }], moved: {} } });
+  check('мастер начинает бой', !r.error, r.error?.message);
+  r = await P.sb.from('combats').update({ data: { active: false } }).eq('campaign_id', cid).select('campaign_id');
+  check('игрок не правит строку боя напрямую', !r.error && r.data.length === 0, r.error?.message || `строк: ${r.data?.length}`);
+  r = await P.sb.rpc('combat_player', { p_campaign: cid, p_init: { [`t-own-${tag}`]: 12 }, p_moved: { [`t-own-${tag}`]: 15 }, p_ended: `t-own-${tag}` });
+  check('игрок бросает инициативу, идёт и заканчивает ход (combat_player)', !r.error && r.data?.entries?.[1]?.init === 12 && r.data?.ended === `t-own-${tag}`, r.error?.message);
+  r = await P.sb.rpc('combat_player', { p_campaign: cid, p_init: { [`t-gob-${tag}`]: 1 } });
+  check('инициативу врага функция не трогает', !r.error && r.data?.entries?.[0]?.init === 15, r.error?.message);
+
   // Существо одной транзакцией.
   r = await M.sb.rpc('place_creature', {
     p_creature: { campaign_id: cid, id: `cr-${tag}`, owner_id: M.id, data: { name: 'Страж', source: 'manual' } },

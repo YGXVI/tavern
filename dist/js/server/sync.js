@@ -6,7 +6,7 @@
 // Отказ сервера → сообщение и перезагрузка кампании с сервера. События других участников приходят
 // изменениями таблиц → кэш → сборка кампании → setDB.
 import { supabase } from './client.js';
-import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot, tokenPatch, groupTokenMoves, groupPlacements, UNFILTERED_DELETES, ownsDeleted } from './model.js';
+import { assemble, explode, diffRows, applyOps, applyChange, rowsFrom, emptyRows, EMPTY_COMBAT, applyCharacterSnapshot, tokenPatch, groupTokenMoves, groupPlacements, playerCombatDelta, playerSaveResults, UNFILTERED_DELETES, ownsDeleted } from './model.js';
 import { createCharacterSheetClient, SheetCommandError } from './character-sheet.js';
 import { commandFromCharacterChange, sameSheetValue, rebaseCharacterDraft } from './character-sheet-ops.js';
 import { advanceTurn, turnTokenId, initiativeOrder, turnIndexOf } from '../views/table/combat.js';
@@ -388,6 +388,36 @@ async function rebasePlayerRow(cid, o, err) {
   applyChange(rows, 'save_requests', 'UPDATE', row); scheduleAssemble(cid);
 }
 
+/**
+ * Бой и спасбросок игрока — точечными функциями сервера (combat_player, save_result; аудит 04.11): уходит только
+ * своё, сервер вносит его в текущую строку под блокировкой, ответ — строка после записи. Без функций на сервере
+ * (миграция не применена) — false, и игрок пишет строку целиком, как раньше.
+ */
+let pointRpc = true;
+async function sendPlayerPoint(cid, o) {
+  if (!pointRpc) return false;
+  const rows = cache.get(cid);
+  if (!rows) return false;
+  let res;
+  if (o.table === 'combats') {
+    const d = playerCombatDelta(o.want, o.base, rows);
+    if (!d) return true;
+    res = await sb.rpc('combat_player', { p_campaign: cid, p_init: d.init, p_moved: d.moved, p_ended: d.ended });
+  } else {
+    const results = playerSaveResults(o);
+    if (!Object.keys(results).length) return true;
+    res = await sb.rpc('save_result', { p_request: o.key, p_results: results });
+  }
+  if (res.error) {
+    if (missingFn(res.error)) { pointRpc = false; return false; }
+    throw res.error;
+  }
+  const table = o.table === 'combats' ? 'combats' : 'save_requests';
+  const prev = table === 'combats' ? rows.combat : rows.saves.get(o.key);
+  if (prev) { applyChange(rows, table, 'UPDATE', { ...prev, data: res.data }); scheduleAssemble(cid); }
+  return true;
+}
+
 /** Дождаться, пока уйдут все изменения кампании (например, перед загрузкой обложки). */
 export function whenSynced(cid) { return queues.get(cid) || Promise.resolve(); }
 
@@ -620,6 +650,7 @@ async function sendOne(cid, o, attempt) {
   }
   else if (['campaign_invites', 'combats', 'scene_secrets'].includes(o.table) && isMasterOf(cid)) res = await t.upsert(o.row);
   else if ((o.table === 'combats' && o.want) || (o.table === 'save_requests' && o.op === 'update' && !isMasterOf(cid))) {
+    if (await sendPlayerPoint(cid, o)) return;
     try { return await updateRow(cid, o); } catch (err) { return rebasePlayerRow(cid, o, err); }
   }
   else return updateRow(cid, o);

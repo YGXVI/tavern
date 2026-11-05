@@ -376,3 +376,26 @@ export function cloneRows(r) {
   for (const k of Object.keys(r)) if (r[k] instanceof Map) out[k] = new Map(r[k]);
   return out;
 }
+
+/** Что игрок поменял в бою относительно своего «до» (base): брошенные инициативы, пройденное, конец хода. */
+export function playerCombatDelta(want, base, rows) {
+  const tokens = [...rows.tokens.values()];
+  const visible = new Set(tokens.filter((t) => !t.hidden).map((t) => t.id));
+  const init = {}, moved = {};
+  for (const w of want?.entries || []) {
+    const b = (base?.entries || []).find((x) => x.tokenId === w.tokenId);
+    const v = Number(w.init);
+    if (w.init != null && b?.init == null && Number.isFinite(v)) init[w.tokenId] = Math.round(v);
+  }
+  for (const [id, v] of Object.entries(want?.moved || {})) {
+    if (visible.has(id) && v !== base?.moved?.[id] && Number.isFinite(Number(v))) moved[id] = Number(v);
+  }
+  const ended = want?.ended && want.ended !== base?.ended ? want.ended : null;
+  return Object.keys(init).length || Object.keys(moved).length || ended ? { init, moved, ended } : null;
+}
+
+/** Новые результаты спасброска игрока: то, чего не было в его «до». */
+export function playerSaveResults(o) {
+  const was = o.prev?.data?.results || {};
+  return Object.fromEntries(Object.entries(o.row?.data?.results || {}).filter(([k]) => !(k in was)));
+}
