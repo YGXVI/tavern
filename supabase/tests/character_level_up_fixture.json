@@ -1,0 +1,200 @@
+{
+ "from": "fighter1",
+ "operationId": "20000000-0000-4000-8000-0000000000ff",
+ "hpGain": 8,
+ "payload": {
+  "creation": {
+   "schemaVersion": 1,
+   "edition": "5e-2014",
+   "verified": "client",
+   "rulesRevision": "b3713bae5b979b5b5f57576db97e603fe3389fa9a8991cf8e5ce5e4da228b7a0",
+   "policyRevision": "default-v1",
+   "ancestry": {
+    "raceId": "srd51:race:human",
+    "subraceId": null
+   },
+   "background": {
+    "backgroundId": "srd51:background:acolyte"
+   },
+   "levelHistory": [
+    {
+     "classId": "srd51:class:fighter"
+    },
+    {
+     "classId": "srd51:class:fighter"
+    }
+   ],
+   "selections": {
+    "srd51:class:fighter:L1:fighting-style": [
+     "srd51:feature:fighter:archery"
+    ],
+    "srd51:race:human:language": [
+     "dwarvish"
+    ],
+    "srd51:background:acolyte:languages": [
+     "elvish",
+     "giant"
+    ],
+    "srd51:class:fighter:skills": [
+     "acrobatics",
+     "animal"
+    ],
+    "srd51:class:fighter:starting:equipment:1": {
+     "alternative": "a",
+     "picks": [
+      null
+     ]
+    },
+    "srd51:class:fighter:starting:equipment:2": {
+     "alternative": "a",
+     "picks": [
+      [
+       "srd51:equipment:battleaxe"
+      ],
+      null
+     ]
+    },
+    "srd51:class:fighter:starting:equipment:3": {
+     "alternative": "a",
+     "picks": [
+      null,
+      null
+     ]
+    },
+    "srd51:class:fighter:starting:equipment:4": {
+     "alternative": "a",
+     "picks": [
+      null
+     ]
+    },
+    "srd51:background:acolyte:starting:item:1:pick": {
+     "alternative": "a",
+     "picks": [
+      [
+       "srd51:equipment:holy-symbol-amulet"
+      ]
+     ]
+    },
+    "srd51:background:acolyte:starting:equipment:1": {
+     "alternative": "a",
+     "picks": [
+      null
+     ]
+    }
+   },
+   "abilityInput": {
+    "method": "standard_array",
+    "scores": {
+     "str": 15,
+     "dex": 14,
+     "con": 13,
+     "int": 12,
+     "wis": 10,
+     "cha": 8
+    }
+   },
+   "rollReceipts": [],
+   "manualOverrides": []
+  },
+  "patch": {
+   "level": 2,
+   "classes": [
+    {
+     "id": "20000000-0000-4000-8000-000000000001",
+     "name": "Воин",
+     "subclass": "",
+     "levels": 2,
+     "ref": "srd51:class:fighter"
+    }
+   ],
+   "hitDicePools": [
+    {
+     "id": "00000002-0000-4000-8000-000000000002",
+     "name": "d10 · Воин",
+     "die": 10,
+     "total": 2,
+     "spent": 0
+    }
+   ],
+   "featureEntries": [
+    {
+     "id": "00000003-0000-4000-8000-000000000003",
+     "name": "Увеличение характеристик",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:ability-score-increase"
+    },
+    {
+     "id": "00000004-0000-4000-8000-000000000004",
+     "name": "Возраст",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:age"
+    },
+    {
+     "id": "00000005-0000-4000-8000-000000000005",
+     "name": "Мировоззрение",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:alignment"
+    },
+    {
+     "id": "00000006-0000-4000-8000-000000000006",
+     "name": "Языки",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:languages"
+    },
+    {
+     "id": "00000007-0000-4000-8000-000000000007",
+     "name": "Размер",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:size"
+    },
+    {
+     "id": "00000008-0000-4000-8000-000000000008",
+     "name": "Скорость",
+     "source": "Человек",
+     "description": null,
+     "ref": "srd51:feature:human:speed"
+    },
+    {
+     "id": "00000009-0000-4000-8000-000000000009",
+     "name": "Убежище верующих",
+     "source": "Прислужник",
+     "description": null,
+     "ref": "srd51:feature:background:acolyte:shelter-of-the-faithful"
+    },
+    {
+     "id": "00000010-0000-4000-8000-000000000010",
+     "name": "Боевой стиль",
+     "source": "Воин, 1-й уровень",
+     "description": null,
+     "ref": "srd51:feature:fighter:fighting-style"
+    },
+    {
+     "id": "00000011-0000-4000-8000-000000000011",
+     "name": "Второе дыхание",
+     "source": "Воин, 1-й уровень",
+     "description": null,
+     "ref": "srd51:feature:fighter:second-wind"
+    },
+    {
+     "id": "00000012-0000-4000-8000-000000000012",
+     "name": "Стрельба",
+     "source": "Воин, 1-й уровень",
+     "description": null,
+     "ref": "srd51:feature:fighter:archery"
+    },
+    {
+     "id": "20000000-0000-4000-8000-000000000013",
+     "name": "Всплеск действий",
+     "source": "Воин, 2-й уровень",
+     "description": null,
+     "ref": "srd51:feature:fighter:action-surge"
+    }
+   ]
+  }
+ }
+}

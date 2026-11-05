@@ -9,7 +9,7 @@ const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
 // Поля записи журнала, которые для скрытого броска уходят в log_secrets.
 const SECRET_LOG_KEYS = ['label', 'text', 'total', 'detail', 'nat', 'dice', 'results'];
 // Поля кампании, которые живут отдельными таблицами или не сохраняются на сервере.
-const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'scenes', 'combat', 'log', 'saveRequests', 'portalRequests', 'doorAttempt', 'creatures']);
+const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'archivedCharacters', 'scenes', 'combat', 'log', 'saveRequests', 'portalRequests', 'doorAttempt', 'creatures']);
 
 const ms = (t) => (t ? Date.parse(t) || null : null);
 const iso = (n) => (n ? new Date(n).toISOString() : null);
@@ -26,6 +26,20 @@ export function emptyRows(withCreatures = false) {
     // Снимки личных существ в кампании (TASK-179): Map — таблица campaign_creatures есть; null — её ещё нет на сервере.
     creatures: withCreatures ? new Map() : null,
   };
+}
+
+/** ACK RPC листа → кэш строк. Служебные колонки не попадают в characters.data. */
+export function applyCharacterSnapshot(rows, sheet) {
+  if (!rows.campaign || sheet?.campaignId !== rows.campaign.id || typeof sheet.id !== 'string'
+    || typeof sheet.data !== 'object' || sheet.data === null || Array.isArray(sheet.data)
+    || typeof sheet.version !== 'string' || !/^\d+$/.test(sheet.version)) throw new TypeError('Некорректный снимок листа');
+  const previous = rows.characters.get(sheet.id);
+  if (previous?.sheet_version !== undefined && BigInt(previous.sheet_version) > BigInt(sheet.version)) return rows;
+  rows.characters.set(sheet.id, {
+    id: sheet.id, campaign_id: sheet.campaignId, owner_id: sheet.ownerId ?? null, data: structuredClone(sheet.data),
+    sheet_version: sheet.version, sheet_managed: !!sheet.managed, archived_at: sheet.archivedAt ?? null,
+  });
+  return rows;
 }
 
 /**
@@ -52,8 +66,11 @@ export function assemble(rows0) {
   }).sort((a, b) => (a.role === b.role ? a.joinedAt - b.joinedAt : a.role === 'master' ? -1 : 1));
   const inv = rows.invite;
   c.invite = inv ? { code: inv.code, createdAt: ms(inv.created_at), expiresAt: ms(inv.expires_at), manual: !!inv.manual, ...(inv.revoked ? { revoked: true } : {}) } : { code: null, manual: true, expiresAt: null };
-  c.characters = [...rows.characters.values()].map((ch) => ({ ...ch.data, id: ch.id, ownerId: ch.owner_id || null }))
+  const characterRows = [...rows.characters.values()];
+  c.characters = characterRows.filter((ch) => !ch.archived_at).map((ch) => ({ ...ch.data, id: ch.id, ownerId: ch.owner_id || null }))
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id)));
+  const archive = characterRows.filter((ch) => ch.archived_at).map((ch) => ({ ...ch.data, id: ch.id, ownerId: ch.owner_id || null }));
+  if (archive.length) c.archivedCharacters = archive;
   if (rows.creatures) c.creatures = Object.fromEntries([...rows.creatures.values()].map((x) => [x.id, { ...x.data, id: x.id, ownerId: x.owner_id || null, sourceId: x.source_id || null }]));
 
   const byScene = (map) => {
@@ -104,9 +121,11 @@ export function explode(c, prev = emptyRows(true), now = Date.now()) {
     rows.members.set(m.userId, withDefault({ campaign_id: c.id, user_id: m.userId, role: m.role, status: m.status, character_id: m.characterId || null, scene_id: m.sceneId || null, joined_at: keepTime(prev.members.get(m.userId)?.joined_at, m.joinedAt) }, 'joined_at'));
   }
   if (c.invite?.code) rows.invite = withDefault({ campaign_id: c.id, code: c.invite.code, expires_at: iso(c.invite.expiresAt), manual: !!c.invite.manual, revoked: !!c.invite.revoked, created_at: keepTime(prev.invite?.created_at, c.invite.createdAt) }, 'created_at');
-  for (const ch of c.characters || []) {
+  for (const ch of [...(c.characters || []), ...(c.archivedCharacters || [])]) {
     const { id, ownerId, ...rest } = ch;
-    rows.characters.set(id, { id, campaign_id: c.id, owner_id: ownerId || null, data: rest });
+    const old = prev.characters.get(id);
+    rows.characters.set(id, { id, campaign_id: c.id, owner_id: ownerId || null, data: rest,
+      ...(old?.sheet_version !== undefined ? { sheet_version: old.sheet_version, sheet_managed: old.sheet_managed, archived_at: old.archived_at } : {}) });
   }
   // Снимки существ — только если таблица есть на сервере (prev.creatures — Map); нет таблицы — null, без операций.
   if (prev.creatures) {
@@ -259,6 +278,25 @@ export function groupTokenMoves(ops) {
   }
   // Один токен — обычная частичная правка, без лишнего вызова.
   return out.map((o) => (o.op === 'move' && o.parts.length === 1 ? o.parts[0] : o));
+}
+
+/**
+ * Своё существо на карту (TASK-097 1.2b): вставку снимка campaign_creatures и вставку ссылающегося на него токена
+ * той же кампании — одной операцией place (функция place_creature, одна транзакция). Остальное — как было.
+ */
+export function groupPlacements(ops) {
+  const out = [...ops];
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (c.table !== 'campaign_creatures' || c.op !== 'insert') continue;
+    const j = out.findIndex((o, k) => k > i && o.table === 'tokens' && o.op === 'insert' && o.row?.campaign_id === c.row.campaign_id
+      && o.row?.data?.monsterId === `lib:${c.row.id}`);
+    if (j < 0) continue;
+    const t = out[j];
+    out.splice(j, 1);
+    out[i] = { table: 'tokens', op: 'place', key: t.key, creature: c.row, token: t.row, parts: [c, t] };
+  }
+  return out;
 }
 
 /** Применить операции к кэшу строк (оптимистично — до ответа сервера). */

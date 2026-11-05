@@ -47,6 +47,7 @@ test('mark-test-stand: с тестовой базой стенд включае�
   const prodKey = prod.match(/SUPABASE_KEY = '([^']+)'/)[1];
   const config = markStand({ TEST_SUPABASE_URL: `${TEST_URL}/`, TEST_SUPABASE_KEY: TEST_KEY });
   assert.match(config, /export const SERVER_ENABLED = true;/);
+  assert.match(config, /return true; \/\/ тестовый стенд: гость без \?guest=1/);
   assert.match(config, new RegExp(`SUPABASE_URL = '${TEST_URL}';`));
   assert.match(config, new RegExp(`SUPABASE_KEY = '${TEST_KEY}';`));
   assert.equal(config.includes('ilsuespohsuligyiqjsx'), false);

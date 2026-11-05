@@ -178,7 +178,7 @@ export function diceWidget(ctx) {
       const n = (pool.dice[s] || 0) + (s === 20 && pool.adv && pool.dice[20] === 1 ? 1 : 0); // при преимуществе к20 два
       return `<button class="rail-btn rail-die ${n ? 'selected' : ''}" data-act="die-add" data-sides="${s}" data-tip="к${s}${n ? ' · правый клик — убрать' : ''}" aria-label="Положить к${s}${n ? `, в лотке ${n}` : ''}">${railDie(s, skin.id)}${n ? `<span class="count">${n}</span>` : ''}</button>`;
     }).join('')}
-    <span class="divider"></span>
+    <span class="divider rail-options-break"></span>
     ${tool('dice-vis-menu', mode.icon, `Кому виден бросок: ${mode.name}`, { active: (pool.vis || 'all') !== 'all' })}
     ${tool('dice-mod-menu', 'plus-minus', pool.mod ? `Модификатор ${fmtMod(pool.mod)}` : 'Модификатор', { active: !!pool.mod, badge: pool.mod ? fmtMod(pool.mod) : '' })}
     ${tool('dice-adv', 'justice-scale-01', ADV_TIP[adv], { cls: pool.adv ? `adv-${pool.adv}` : '', badge: pool.adv === 'adv' ? '↑' : pool.adv === 'dis' ? '↓' : '', menu: false })}

@@ -175,7 +175,7 @@ function createTray(ctx) {
 
 // ——— Кубы на столе ———
 const floors = new WeakMap();
-/** Слой кубов поверх карты (один на стол). null — без WebGL. */
+/** Слой кубов поверх интерфейса (один на стол). null — без WebGL. */
 export function diceFloor(ctx) {
   if (floors.has(ctx)) return floors.get(ctx);
   const f = webgl() ? createFloor(ctx) : null;
@@ -194,7 +194,7 @@ function floorInsets(node, root) {
   let right = W;
   for (const p of root.querySelectorAll('.sheet-drawer, .side-panel:not(.hidden):not([data-panel="bestiary"])')) {
     const r = p.getBoundingClientRect();
-    // Панель во весь экран (телефон) не сужает площадку — кубы всё равно под ней.
+    // Панель во весь экран (телефон) не сужает площадку — кубы видны поверх неё.
     if (r.width && r.left - box.left > W / 2) right = Math.min(right, r.left - box.left - 12);
   }
   const aw = Math.min(ARENA.w, right), cx = right / 2;
@@ -204,8 +204,9 @@ function floorInsets(node, root) {
 
 function createFloor(ctx) {
   const node = el('<div class="dice-floor" aria-hidden="true"><canvas class="df-canvas"></canvas></div>');
-  const chrome = ctx.root.querySelector('.chrome');
-  if (chrome) chrome.before(node); else ctx.root.append(node);
+  // Вне stacking context стола: панели, поповеры и модальные окна не закрывают бросок.
+  // Жизненным циклом по-прежнему управляет стол через destroy().
+  document.body.append(node);
   const canvas = node.querySelector('.df-canvas');
   let stage = null;
   const ensure = () => { if (!stage) stage = createDiceStage(canvas, { insetTop: 100, insetBottom: 110, maxDpr: 1.5, sound: 0.6 }); return stage; };

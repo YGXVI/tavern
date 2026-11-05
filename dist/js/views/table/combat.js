@@ -27,8 +27,38 @@ export function initiativeOrder(c, scene) {
   const byName = (a, b) => a.name.localeCompare(b.name, 'ru') || (a.tokenId < b.tokenId ? -1 : a.tokenId > b.tokenId ? 1 : 0);
   const rank = (r) => (fallenFoe(r) ? 2 : r.token.hidden ? 1 : 0);
   const list = [...slots.values()].map((ms) => ({ ref: [...ms].sort(byName)[0], ms: ms.sort((a, b) => rank(a) - rank(b) || byName(a, b)) }));
-  list.sort(({ ref: a }, { ref: b }) => (b.init ?? -99) - (a.init ?? -99) || b.bonus - a.bonus || byName(a, b));
+  // Ничья по инициативе (#197 S1): по RAW порядок решают мастер и игроки — ручной tie мастера идёт раньше бонуса.
+  list.sort(({ ref: a }, { ref: b }) => (b.init ?? -99) - (a.init ?? -99) || (a.tie ?? 0) - (b.tie ?? 0) || b.bonus - a.bonus || byName(a, b));
   return list.flatMap(({ ms }) => ms.map((r, i) => ({ ...r, slotSize: ms.length, lead: i === 0 })));
+}
+
+/** Слоты очереди по порядку: [{ slot, init, ids }]. */
+function slotList(order) {
+  const out = [];
+  for (const r of order) { const last = out.at(-1); if (last?.slot === r.slot) last.ids.push(r.tokenId); else out.push({ slot: r.slot, init: r.init, ids: [r.tokenId] }); }
+  return out;
+}
+
+/** Можно ли поднять/опустить слот среди равных по инициативе (#197 S1). */
+export function tiedMoves(order, slot) {
+  const list = slotList(order), i = list.findIndex((x) => x.slot === slot);
+  if (i < 0 || list[i].init == null) return { up: false, down: false };
+  return { up: list[i - 1]?.init === list[i].init, down: list[i + 1]?.init === list[i].init };
+}
+
+/**
+ * Поменять слот токена с соседом той же инициативы (dir: -1 — выше, +1 — ниже). Пишет tie всем записям
+ * равных слотов, чтобы порядок не зависел от бонуса и имени. Возвращает false, если двигать некуда.
+ */
+export function moveTied(c, scene, tokenId, dir) {
+  const list = slotList(initiativeOrder(c, scene));
+  const i = list.findIndex((x) => x.ids.includes(tokenId)), j = i + dir;
+  if (i < 0 || !list[j] || list[i].init == null || list[j].init !== list[i].init) return false;
+  [list[i], list[j]] = [list[j], list[i]];
+  const tied = list.filter((x) => x.init === list[i].init);
+  const tieOf = new Map(tied.flatMap((x, n) => x.ids.map((id) => [id, n])));
+  for (const e of c.combat.entries) if (tieOf.has(e.tokenId)) e.tie = tieOf.get(e.tokenId);
+  return true;
 }
 
 /** Начало слота, в котором стоит строка i (−1, если строки нет). */
@@ -64,12 +94,12 @@ export function startCombat(c, scene, tokenIds, rolls = {}, groups = {}) {
     if (groups[id]) e.group = groups[id];
     return e;
   });
-  c.combat = { active: true, sceneId: scene.id, round: 1, turn: 0, entries, moved: {}, startedAt: Date.now() };
+  c.combat = { active: true, sceneId: scene.id, round: 1, turn: 0, entries, moved: {}, reacted: {}, startedAt: Date.now() };
   addLog(c, { kind: 'combat', text: `Бой начался: ${entries.length} участников` });
 }
 
 export function endCombat(c) {
-  c.combat = { active: false, round: 1, turn: 0, entries: [], moved: {} };
+  c.combat = { active: false, round: 1, turn: 0, entries: [], moved: {}, reacted: {} };
   addLog(c, { kind: 'combat', text: 'Бой окончен' });
 }
 
@@ -91,7 +121,10 @@ export function advanceTurn(c, scene, dir = 1) {
   c.combat.turn = turn;
   const cur = order[turn];
   // В начале хода движение обнуляется у всех членов пачки.
-  for (const m of order) if (m.slot === cur?.slot) c.combat.moved[m.tokenId] = 0;
+  for (const m of order) if (m.slot === cur?.slot) {
+    c.combat.moved[m.tokenId] = 0;
+    if (c.combat.reacted) delete c.combat.reacted[m.tokenId];
+  }
   if ('current' in c.combat) c.combat.current = cur?.tokenId || null;
 }
 
@@ -171,7 +204,10 @@ export function keepTurnWith(c, sc, fn) {
       i = next.i;
       if (next.wrap) c.combat.round = (c.combat.round || 1) + 1;
       c.combat.moved = c.combat.moved || {};
-      for (const m of order) if (m.slot === order[i].slot) c.combat.moved[m.tokenId] = 0;
+      for (const m of order) if (m.slot === order[i].slot) {
+        c.combat.moved[m.tokenId] = 0;
+        if (c.combat.reacted) delete c.combat.reacted[m.tokenId];
+      }
     }
   }
   c.combat.turn = i >= 0 ? i : Math.max(0, Math.min(c.combat.turn || 0, order.length - 1));

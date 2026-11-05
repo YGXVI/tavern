@@ -999,8 +999,8 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .skin-opt .rail-svg { width: 40px; height: 40px; filter: drop-shadow(0 3px 4px rgb(0 0 0 / .5)); }
 .skin-opt:hover { background: var(--bg-hover); color: var(--text-primary); }
 .skin-opt.on { background: var(--brand-900); border-color: var(--stroke-accent); color: var(--text-primary); }
-/* Кубы на столе: слой поверх карты, под панелями; подпись «кто · что · сколько» над кубами. */
-.dice-floor { position: absolute; inset: 0; z-index: calc(var(--z-chrome) - 1); pointer-events: none; }
+/* Кубы и результаты поверх интерфейса; прозрачный слой пропускает клики к столу и панелям. */
+.dice-floor { position: fixed; inset: 0; z-index: calc(var(--z-tooltip) + 1); pointer-events: none; }
 .df-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .df-label { position: absolute; transform: translate(-50%, -100%); max-width: 360px; display: flex; align-items: center; gap: 8px; padding: 4px 14px 4px 4px; border-radius: var(--r-full); background: rgb(0 0 0 / .62); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); box-shadow: 0 4px 8px rgb(0 0 0 / .6); font: 600 12px/14px var(--font-text); color: var(--text-primary); white-space: nowrap; animation: rise .2s ease-out; transition: opacity .6s; }
 .df-label > b { font: 500 20px/24px var(--font-display); color: var(--brand-500); }
@@ -1014,10 +1014,42 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .df-tag.out { opacity: 0; }
 @media (max-width: 720px) {
   .ch-widget:has(.dice-widget) { right: auto; }
-  .dice-widget .dice-rail { flex-direction: row; max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
+  .dice-widget .dice-rail { flex-direction: row; flex-wrap: wrap; width: min(520px, calc(100vw - 16px)); max-width: calc(100vw - 16px); overflow: visible; gap: 4px; }
+  .dice-widget .dice-rail .rail-btn { width: 36px; height: 36px; flex: 0 0 36px; }
+  .dice-widget .dice-rail .divider.rail-options-break { flex-basis: 100%; height: 0; margin: 0; border: 0; }
   .dice-widget .dice-rail .divider { width: 1px; height: 24px; }
-  .dice-tray { top: 140px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
+  .dice-tray { top: 184px; left: 8px; right: 8px; width: auto; height: min(56vh, 480px); }
 }
+
+/* Лист героя (TASK-004) */
+.sheet-editor { display:flex; flex-direction:column; }
+.sheet-editor .sheet-body { flex:1; min-height:0; }
+.sheet-editor .sheet-tabs { flex-shrink:0; overflow-x:auto; }
+.sheet-editor .sheet-head { flex-shrink:0; }
+.sheet-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.sheet-field { display:flex; flex-direction:column; gap:4px; min-width:0; font-size:12px; margin:8px 0; }
+.sheet-field>span { color:var(--text-secondary); }
+.sheet-field input,.sheet-field select,.sheet-field textarea { width:100%; min-width:0; box-sizing:border-box; padding:8px; border:1px solid var(--stroke-subtle); border-radius:6px; background:var(--bg-control); color:inherit; }
+.sheet-field input[type=checkbox] { width:auto; align-self:start; }
+.sheet-field input:disabled,.sheet-field textarea:disabled { opacity:.8; }
+.sheet-field [aria-invalid=true] { outline:2px solid #db6b63; }
+.sheet-wide { grid-column:1/-1; }
+.sheet-entry { min-width:0; padding:10px; border:1px solid var(--stroke-subtle); border-radius:8px; margin:12px 0; }
+.sheet-entry legend { max-width:100%; overflow-wrap:anywhere; font-weight:600; }
+.sheet-check { padding:8px 0; border-bottom:1px solid var(--stroke-subtle); }
+.sheet-check summary { cursor:pointer; }
+.sheet-editor h3 { font-size:14px; margin:14px 0 6px; }
+.sheet-editor-footer { display:flex; flex-wrap:wrap; gap:8px; padding:12px; border-top:1px solid var(--stroke-subtle); flex-shrink:0; }
+.sheet-editor-footer>span { flex-basis:100%; }
+.sheet-error { color:#d55b53; overflow-wrap:anywhere; }
+.sheet-conflicts { padding:10px; border:1px solid #d29248; border-radius:8px; }
+.sheet-conflicts p { overflow-wrap:anywhere; }
+@media(max-width:480px) { .sheet-editor { width:auto; max-width:none; } .sheet-form-grid { grid-template-columns:1fr; } .sheet-editor .sheet-head { padding:12px; } }
+.sheet-editor { background:rgb(12 14 22); }
+.sheet-actor-switch { padding:0 16px 10px; }
+.sheet-actor-switch select { width:100%; padding:6px; color:var(--text-primary); background:var(--bg-control); border:1px solid var(--stroke-subtle); border-radius:6px; }
+.sheet-actor-tools { padding:0 16px 8px; flex-shrink:0; }
+.sheet-source-image { display:block; max-width:100%; height:auto; margin:12px 0; }
 
 /* Существа: вкладки «Бестиарий» / «Мои» (TASK-179) */
 .b-search .b-src { align-self: stretch; }
@@ -1059,3 +1091,13 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 /* Журнал бросков (меню кампании) */
 .log-modal .log-list { padding: 0 8px 12px; }
 .log-row .log-total { font: 600 16px/1 var(--font-display); min-width: 28px; text-align: right; }
+
+.sv-reason { display: block; margin-top: 4px; }
+.save-card .damage-relation { margin: 4px 0 10px; }
+/* Кадр картинки токена: размер предпросмотра не зависит от ширины окна. */
+.token-image-modal { width: min(480px, calc(100vw - 24px)); }
+.token-image-editor { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+.token-image-editor canvas { width: min(256px, 100%); aspect-ratio: 1; height: auto; flex: none; align-self: center; border-radius: 50%; background: var(--neutral-300); box-shadow: 0 0 0 3px var(--side-foe); cursor: grab; touch-action: none; }
+.token-image-editor canvas:active { cursor: grabbing; }
+.token-image-editor .row { flex-wrap: wrap; }
+.token-image-editor p { margin: 0; }
