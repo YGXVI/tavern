@@ -252,6 +252,10 @@
   font: 600 var(--fs)/1.2 var(--font-text); white-space: nowrap; pointer-events: none;
   box-shadow: inset 0 0 0 calc(var(--bw) * .3) var(--stroke-subtle);
 }
+/* Издалека числа гаснут, а не наползают на арт: экранная клетка 30 → 40 px (--cell — клетка токена, --z — масштаб камеры). */
+.tok { --lod: clamp(0, calc((var(--cell, 70) * var(--z, 1) - 30) / 10), 1); }
+.tok:is(.selected, .turn, :hover) { --lod: 1; }
+.tok-badge.hp-b, .tok-badge.ac-b, .tok-badge.elev, .tok-conds { opacity: var(--lod); transition: opacity .15s; }
 .tok.item .tok-name { opacity: 0; transition: opacity .15s; }
 .tok.item:hover .tok-name, .tok.item.selected .tok-name { opacity: 1; }
 
@@ -1084,8 +1088,8 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 .b-create { align-self: flex-start; }
 .tok.pending { opacity: .55; }
 .tok.pending .tok-ring { outline: calc(var(--bw) * .8) dashed var(--brand-500); outline-offset: calc(var(--bw) * 1.2); }
-.tok-pending { position: absolute; left: 50%; top: -22%; transform: translateX(-50%); white-space: nowrap; padding: 1px 6px; border-radius: var(--r-full);
-  background: rgb(12 14 22 / .9); color: var(--brand-400, #f0c06a); font: 600 calc(var(--fs) * .9)/1.4 var(--font-text); box-shadow: inset 0 0 0 1px var(--brand-500); pointer-events: none; }
+.tok-pending { position: absolute; left: 50%; top: -22%; transform: translateX(-50%); white-space: nowrap; padding: calc(var(--fs) * .1) calc(var(--fs) * .6); border-radius: var(--r-full);
+  background: rgb(12 14 22 / .9); color: var(--brand-400, #f0c06a); font: 600 calc(var(--fs) * .9)/1.4 var(--font-text); box-shadow: inset 0 0 0 calc(var(--bw) * .3) var(--brand-500); pointer-events: none; }
 .cc-pop .input { min-width: 0; }
 .cc-pop .input input { width: 100%; min-width: 0; }
 .cc-id > .col, .cc-id > .cc-grid { min-width: 0; flex: 1; }
