@@ -1,11 +1,10 @@
-// Общие куски дома кампании и книги (#203): строки отряда, сводка главы, раздатка, мелочи.
+// Общие куски дома кампании (#203): строки отряда, раздатка, мелочи.
 import { html, raw, plural, timeAgo } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { onlineUsers } from '../../core/store.js';
-import { userById, characterOf } from '../../core/campaign.js';
+import { userById } from '../../core/campaign.js';
 import { portrait, modal, panelHeader } from '../../ui/kit.js';
-import { ROMAN, fmtDate } from './book-store.js';
 
 export const ic = (n, s = 16) => raw(icon(n, s));
 export const caps = (t) => html`<span class="cp-caps">${t}</span>`;
@@ -34,33 +33,6 @@ export function slotsText(ch) {
   const s = Object.entries(ch?.slots || {}).filter(([k]) => /^[1-9]$/.test(k)).sort((a, b) => a[0] - b[0]);
   return s.length ? s.map(([, v]) => Math.max(0, (v?.max || 0) - (v?.used || 0))).join(' · ') : '—';
 }
-
-/** Последняя глава с записями (или null). */
-export function lastChapter(book) {
-  return [...book.chapters].reverse().find((ch) => ch.entries.some((e) => e.text || e.kind === 'sealed')) || null;
-}
-export const chapterName = (ch) => ch?.title || `Глава ${ROMAN(ch?.n || 1)}`;
-/** Короткий пересказ главы: начало записи летописца, иначе первой записи. */
-export function chapterSummary(ch, max = 280) {
-  if (!ch) return '';
-  const pick = ch.entries.find((e) => ch.pen && e.userId === ch.pen && e.text) || ch.entries.find((e) => e.text && !e.diary && !e.onlyMaster);
-  const t = String(pick?.text || '').replace(/^>.*$/gm, '').replace(/@\[([^\]]+)\]/g, '$1').replace(/@(\S+)/g, '$1').replace(/\s+/g, ' ').trim();
-  return t.length > max ? `${t.slice(0, max).replace(/\s+\S*$/, '')}…` : t;
-}
-export function authorsOf(c, ch) {
-  const ids = [...new Set(ch.entries.filter((e) => !e.diary && !e.onlyMaster && e.kind !== 'sealed').map((e) => e.userId))];
-  const masterId = c.members.find((m) => m.role === 'master')?.userId;
-  return ids.map((id) => {
-    if (id === masterId) return { id, name: 'мастер', master: true };
-    const m = c.members.find((x) => x.userId === id);
-    const hero = m?.characterId ? characterOf(c, m.characterId) : null;
-    return { id, name: hero?.name || userById(id)?.name || 'игрок' };
-  });
-}
-export const authorHue = (c, userId) => (userById(userId)?.hue ?? 210);
-export const chapterDate = (ch) => fmtDate(ch?.startedAt || ch?.endedAt);
-export const duration = (ch) => { if (!ch?.startedAt || !ch?.endedAt) return ''; const m = Math.round((ch.endedAt - ch.startedAt) / 60000); if (m < 1) return ''; return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60 ? `${m % 60} мин` : ''}`.trim(); };
-export const voices = (ch) => new Set(ch.entries.filter((e) => !e.diary && e.kind !== 'sealed').map((e) => e.userId)).size;
 
 /** Раздатка — модальное окно для чтения. */
 export function openHandout(h) {

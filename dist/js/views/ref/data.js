@@ -127,16 +127,8 @@ const LOADERS = {
     return list;
   },
   async classes() {
-    const [opt, feat] = await Promise.all([json('character-options-2014.json'), json('features-2014.json')]);
-    const fById = new Map(feat.entries.map((f) => [f.id, f]));
-    const list = opt.entries.filter((e) => e.kind === 'class').map((e) => {
-      const key = e.id.split(':').pop();
-      const base = CLASSES.find((c) => c.id === key) || {};
-      const levels = (e.progression || []).map((row) => ({ level: row.level, prof: row.proficiencyBonus, slots: row.spellSlots,
-        features: (row.grants || []).filter((g) => g.kind === 'feature').map((g) => fById.get(g.ref)).filter(Boolean) }));
-      const subs = opt.entries.filter((x) => x.kind === 'subclass' && x.classId === e.id).map((x) => x.name.ru || x.name.en);
-      return item({ section: 'classes', id: key, name: e.name.ru, en: e.name.en, hd: base.hd, saves: base.saves || [], spell: base.spell || null, levels, subs, sub: `Кость хитов к${base.hd || '?'}` });
-    });
+    const [opt, feat, eq] = await Promise.all([json('character-options-2014.json'), json('features-2014.json'), json('equipment-2014.json').catch(() => ({ entries: [] }))]);
+    const list = classItems(opt, feat, eq);
     ready.set('classes', list);
     return list;
   },
@@ -201,6 +193,48 @@ const LOADERS = {
 };
 
 // ——— Справочники ———
+/** Классы из каталогов проекта — одна модель на класс (чистая функция: её проверяют тесты). */
+export function classItems(opt, feat, eq = { entries: [] }) {
+  const fById = new Map(feat.entries.map((f) => [f.id, f]));
+  for (const g of eq.entries) GEAR_NAMES.set(g.id, { name: g.name.ru || EQ_RU[g.name.en] || g.name.en, kind: g.kind, section: g.id.split(':').pop() });
+  const short = (id) => String(id).replace(/^srd51:feature:/, '');
+  const featOf = (id) => { const f = fById.get(id); return f && { id: f.id, key: short(f.id), name: f.name.ru || f.name.en, en: f.name.en, text: f.text?.en || '', options: [] }; };
+  const options = new Map();
+  for (const f of feat.entries) if (f.kind === 'option' && f.scope?.parentId) {
+    if (!options.has(f.scope.parentId)) options.set(f.scope.parentId, []);
+    options.get(f.scope.parentId).push({ id: f.id, name: f.name.ru || f.name.en, en: f.name.en, text: f.text?.en || '', pre: f.prerequisiteText || '' });
+  }
+  const levelsOf = (prog) => {
+    const at = new Map();
+    for (const row of prog || []) for (const g of row.grants || []) if (g.kind === 'feature') { if (!at.has(g.ref)) at.set(g.ref, []); at.get(g.ref).push(row.level); }
+    return at;
+  };
+  const list = opt.entries.filter((e) => e.kind === 'class').map((e) => {
+    const key = e.id.split(':').pop();
+    const base = CLASSES.find((c) => c.id === key) || {};
+    const k = e.class || {};
+    // Умения класса: где впервые появились и на каких уровнях усиливаются.
+    const feats = [...levelsOf(e.progression)].map(([ref, lv]) => ({ ...featOf(ref), levels: lv, options: options.get(ref) || [] })).filter((f) => f.name);
+    const subs = opt.entries.filter((x) => x.kind === 'subclass' && x.classId === e.id).map((s) => {
+      const skey = s.id.replace(/^srd51:subclass:/, '');
+      const intro = featOf(s.optionRef);
+      const sf = [...levelsOf(s.progression)].filter(([ref]) => ref !== s.optionRef)
+        .map(([ref, lv]) => ({ ...featOf(ref), levels: lv, options: options.get(ref) || [], sub: skey })).filter((f) => f.name);
+      return { id: skey, name: s.name.ru || s.name.en, en: s.name.en, level: s.selectionLevel, intro, feats: sf };
+    });
+    const prof = { armor: [], weapon: [], tool: [], save: [] };
+    for (const g of e.grants || []) if (g.kind === 'proficiency') (prof[g.category === 'saving_throw' ? 'save' : g.category] ||= []).push(g.value);
+    const rows = (e.progression || []).map((row) => ({ level: row.level, prof: row.proficiencyBonus, slots: row.spellSlots || null, values: row.values || {} }));
+    return item({ section: 'classes', id: key, name: e.name.ru, en: e.name.en, hd: k.hitDie || base.hd, saves: k.savingThrows || base.saves || [], spell: k.spellcasting?.ability || base.spell || null,
+      casting: k.spellcasting || null, armorNote: k.armorNote || null, subLevel: k.subclassLevel, asi: k.asiLevels || [], columns: (k.columns || []).map((c) => c.id),
+      multiclass: k.multiclass || null, choices: e.choices || [], equipment: e.startingEquipment || null, prof, rows, feats, subs,
+      sub: `Кость хитов к${k.hitDie || base.hd || '?'}` });
+  });
+  return list;
+}
+
+/** Названия снаряжения по id каталога — заполняются при загрузке классов. */
+export const GEAR_NAMES = new Map();
 export let SPELL_CLASSES = ['Бард', 'Жрец', 'Друид', 'Паладин', 'Следопыт', 'Чародей', 'Колдун', 'Волшебник', 'Изобретатель'];
 export let SCHOOLS = { evocation: 'Воплощение', abjuration: 'Ограждение', illusion: 'Иллюзия', necromancy: 'Некромантия', enchantment: 'Очарование', transmutation: 'Преобразование', divination: 'Прорицание', conjuration: 'Вызов' };
 export function crNum(cr) { if (cr == null || cr === '') return 99; const s = String(cr); if (s.includes('/')) { const [a, b] = s.split('/'); return Number(a) / Number(b); } return Number(s) || 0; }

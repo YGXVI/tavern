@@ -1,16 +1,16 @@
 // Вкладка «Обзор» дома кампании (#203): мастер — следующая сессия, отряд, заявки, приглашение, книга (60);
-// игрок — свой герой, «в прошлый раз», отряд, раздатки (91).
-import { html, raw, on, esc } from '../../core/dom.js';
+// игрок — свой герой, последние заметки книги, отряд, раздатки (91).
+import { html, raw, on, esc, plural } from '../../core/dom.js';
 import { userById, updateCampaign, addLog, characterOf, sceneOf } from '../../core/campaign.js';
 import { joinUrl } from '../../server/config.js';
 import { isServerMode } from '../../core/store.js';
 import { modal, panelHeader, copyText, userAvatar, portrait } from '../../ui/kit.js';
-import { mutateBook, sessionLive, fmtDate, ROMAN, heroOfUser, tzCity } from './book-store.js';
+import { mutateBook, sessionLive, fmtDate, heroOfUser, tzCity, authorName, noteSummary } from './book-store.js';
 import { local, updateLocal } from './local.js';
 import { encounters } from './encounters.js';
 import { difficulty } from './encounter-math.js';
 import { monsterById } from '../../data/bestiary.js';
-import { ic, caps, cardHead, party, partyRow, levelsLine, slotsText, lastChapter, chapterName, chapterSummary, authorsOf, chapterDate, openHandout, handoutIcon } from './parts.js';
+import { ic, cardHead, party, partyRow, levelsLine, slotsText, openHandout, handoutIcon } from './parts.js';
 import { handoutsModal } from './handouts.js';
 
 export function mountTab(ctx, body) {
@@ -67,8 +67,6 @@ function master(ctx) {
   const done = items.filter((i) => i.done).length;
   const live = sessionLive(book);
   const pending = c.members.filter((m) => m.status === 'pending');
-  const last = [...book.chapters].reverse().find((ch) => ch.startedAt) || null;
-  const pen = book.pen?.userId ? (heroOfUser(c, book.pen.userId)?.name || userById(book.pen.userId)?.name) : null;
   const inv = c.invite || {};
   const code = String(inv.code || '').replace(/^RSP-/, '');
   const city = tzCity();
@@ -76,7 +74,7 @@ function master(ctx) {
   return html`<div class="cp-grid cp-grid-master">
     <section class="cp-card cp-next">
       ${cardHead(live ? 'Сессия идёт' : 'Следующая сессия', html`<span class="chip ${done === items.length ? 'chip-accent' : ''}">Готово ${done} из ${items.length}</span>`)}
-      <button class="cp-date" data-next>${live ? `Глава ${ROMAN(book.session.n)} · с ${new Date(book.session.startedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : book.next?.at ? fmtDate(book.next.at, { weekday: true, time: true }).replace(/^./, (x) => x.toUpperCase()).replace(/, (\d\d:\d\d)$/, ' · $1') : 'Назначить дату'}${ic('edit-02', 16)}</button>
+      <button class="cp-date" data-next>${live ? `Идёт с ${new Date(book.session.startedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : book.next?.at ? fmtDate(book.next.at, { weekday: true, time: true }).replace(/^./, (x) => x.toUpperCase()).replace(/, (\d\d:\d\d)$/, ' · $1') : 'Назначить дату'}${ic('edit-02', 16)}</button>
       ${book.next?.at && city ? html`<p class="t-xs tertiary cp-tz">по ${city}</p>` : ''}
       <div class="cp-checks">${items.map(item)}</div>
       <div class="row cp-next-actions">
@@ -93,9 +91,7 @@ function master(ctx) {
       <section class="cp-card">${cardHead('Приглашение')}
         <div class="cp-code"><b>${code.replace(/^(.{4})(.+)$/, '$1 $2')}</b><button class="icon-btn icon-btn-sm" data-copy-invite data-tip="Скопировать ссылку" aria-label="Скопировать ссылку">${ic('copy-01', 18)}</button></div>
         <p class="t-xs tertiary">Ссылка ведёт сразу к выбору героя.${inv.manual ? ' Новых игроков вы одобряете сами.' : ' Игроки входят без одобрения.'}</p></section>
-      <section class="cp-card">${cardHead('Книга кампании')}
-        <p class="cp-book-line">${last ? `${chapterName(last)}${last.title ? '' : ''} ${last.endedAt ? (last.boundAt ? 'переплетена' : 'закрыта на столе') : 'пишется'}` : 'Книга пока пуста'}</p>
-        <p class="t-xs tertiary">${pen ? `Летописец следующей сессии — ${pen}` : 'Летописец не выбран — передайте перо в книге'}</p>
+      <section class="cp-card">${cardHead('Книга кампании')}${lastNotes(ctx, 1)}
         <a class="link-accent" href="${ctx.href('book')}">Открыть книгу ${ic('arrow-right-02', 14)}</a></section>
     </div>
   </div>`;
@@ -105,13 +101,13 @@ function editNext(ctx) {
   const book = ctx.book();
   const d = book.next?.at ? new Date(book.next.at) : (() => { const x = new Date(); x.setDate(x.getDate() + ((6 - x.getDay() + 7) % 7 || 7)); x.setHours(19, 0, 0, 0); return x; })();
   const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-  const m = modal(html`${panelHeader('Следующая игра', 'Игроки увидят дату на обложке; до неё сохнут чернила главы')}
+  const m = modal(html`${panelHeader('Следующая игра', 'Игроки увидят дату на обложке')}
     <div class="panel-section"><div class="field"><label for="cp-when">Когда</label><div class="input"><input id="cp-when" type="datetime-local" value="${local}"></div></div><p class="t-xs tertiary">Время — по часам вашего устройства${tzCity() ? ` (${tzCity()})` : ''}. Игроки увидят его в своём часовом поясе.</p></div>
     <div class="panel-footer">${book.next?.at ? html`<button class="btn btn-ghost" data-clear>Снять дату</button>` : ''}<span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${ic('tick-02')}Сохранить</button></div>`);
   m.box.querySelector('[data-ok]').addEventListener('click', () => {
     const v = m.box.querySelector('#cp-when').value; if (!v) return;
     const at = new Date(v).getTime();
-    mutateBook(ctx.cid, (b) => { b.next = { at }; const s = b.session; if (s?.endedAt) { const ch = b.chapters.find((x) => x.n === s.n); if (ch && !ch.boundAt && (!ch.inkUntil || ch.inkUntil > Date.now())) ch.inkUntil = at; } });
+    mutateBook(ctx.cid, (b) => { b.next = { at }; });
     m.close();
   });
   m.box.querySelector('[data-clear]')?.addEventListener('click', () => { mutateBook(ctx.cid, (b) => { b.next = null; }); m.close(); });
@@ -129,28 +125,18 @@ function editIntro(ctx) {
 function player(ctx) {
   const c = ctx.c, book = ctx.book(), me = ctx.user.id;
   const hero = heroOfUser(c, me);
-  const last = lastChapter(book);
   const ps = party(c);
   const online = ps.filter((p) => p.online).length;
   const withPlayers = ps.filter((p) => p.member).length;
-  const threads = book.threads.slice(-4);
-  // «Позже — напомню перед игрой»: обещанная версия главы, пока не высохли чернила.
-  const later = local('mine', c.id, me).later;
-  const owed = later ? book.chapters.find((ch) => ch.n === later && (!ch.inkUntil || ch.inkUntil > Date.now()) && !ch.entries.some((e) => e.userId === me)) : null;
   return html`<div class="cp-grid cp-grid-player">
     <section class="cp-card cp-hero">${cardHead('Ваш герой')}
       ${hero ? html`<div class="cp-hero-head">${portrait(hero.portrait, 'lg hero', hero.name)}<span><b>${hero.name}</b><small>${[hero.raceName, `${hero.className || ''} ${hero.level || ''}`.trim()].filter(Boolean).join(' · ')}</small></span></div>
         <div class="cp-stats"><div><small>Хиты</small><b>${hero.hp ?? '—'}/${hero.hpMax ?? '—'}</b></div><div><small>КД</small><b>${hero.ac ?? '—'}</b></div><div><small>Ячейки</small><b>${slotsText(hero)}</b></div></div>
-        <div class="row"><a class="btn btn-secondary btn-sm" href="#/c/${c.id}/sheet/${encodeURIComponent(hero.id)}">Открыть лист</a><a class="btn btn-ghost btn-sm" href="${ctx.href('book', 'mine')}">${ic('book-open-01')}Книга героя</a></div>
+        <div class="row"><a class="btn btn-secondary btn-sm" href="#/c/${c.id}/sheet/${encodeURIComponent(hero.id)}">Открыть лист</a></div>
         <p class="t-xs tertiary">${(hero.conditions || []).length ? `Сейчас: ${hero.conditions.map((x) => x.name || x).join(', ')}` : hero.hp < hero.hpMax ? `Ранен: не хватает ${hero.hpMax - hero.hp} хитов` : 'Цел и готов — всё восстановлено'}</p>`
     : html`<p class="t-sm muted">Героя ещё нет.</p><a class="btn btn-primary btn-sm" href="#/c/${c.id}">Выбрать героя</a>`}
     </section>
-    <section class="cp-card cp-last">${cardHead('В прошлый раз', last ? html`<span class="t-xs tertiary">Глава ${ROMAN(last.n)}${chapterDate(last) ? ` · ${chapterDate(last)}` : ''}</span>` : '')}
-      ${last ? html`<h2 class="cp-last-title">${chapterName(last)}</h2><p class="cp-last-text">${chapterSummary(last) || 'Глава закрыта — запишите свою версию, пока не высохли чернила.'}</p>
-        ${authorsOf(c, last).length ? html`<div class="cp-authors"><span class="t-xs tertiary">Записали:</span>${authorsOf(c, last).map((a) => html`<span class="chip ${a.master ? 'chip-accent' : ''}">${a.name}</span>`)}</div>` : ''}`
-    : html`<h2 class="cp-last-title">Книга пока пуста</h2><p class="cp-last-text">Первая глава появится после первой игры. Во время игры закладывайте ленточки — из них вырастет ваша версия.</p>`}
-      ${threads.length ? html`${caps('Нити')}<div class="cp-threads">${threads.map((t) => html`<span class="cp-thread ${t.closed ? 'on' : ''}"><span class="cp-check ${t.closed ? 'on' : ''}">${t.closed ? ic('tick-02', 12) : ''}</span>${t.title}</span>`)}</div>` : ''}
-      ${owed ? html`<div class="cp-owed">${ic('pencil-edit-02', 16)}<span>Вы собирались вписать свою версию главы ${ROMAN(owed.n)}${owed.inkUntil ? ` — чернила сохнут до ${fmtDate(owed.inkUntil, { time: true })}` : ''}.</span><a class="btn btn-primary btn-sm" href="${ctx.href('book', 'write')}">Вписать</a></div>` : ''}
+    <section class="cp-card cp-last">${cardHead('Книга кампании', book.notes.length ? html`<span class="t-xs tertiary">${book.notes.length} ${plural(book.notes.length, 'заметка', 'заметки', 'заметок')}</span>` : '')}${lastNotes(ctx, 3)}
       <a class="link-accent" href="${ctx.href('book')}">Открыть книгу кампании ${ic('arrow-right-02', 14)}</a>
     </section>
     <div class="cp-col">
@@ -160,5 +146,12 @@ function player(ctx) {
       </section>
     </div>
   </div>`;
+}
+
+/** Последние заметки книги: кто и что вписал. */
+function lastNotes(ctx, k) {
+  const c = ctx.c, notes = ctx.book().notes.slice(-k).reverse();
+  if (!notes.length) return html`<p class="t-sm muted">Книга пока пуста. Это общий блокнот — вписать заметку может любой за столом.</p>`;
+  return html`<div class="cp-notes">${notes.map((n) => { const s = noteSummary(n, k > 1 ? 140 : 90); return html`<a class="cp-note" href="${ctx.href('book')}"><small>${authorName(c, n.userId)} · ${fmtDate(n.at, { time: true })}</small>${s.title ? html`<b>${s.title}</b>` : ''}${s.text ? html`<span>${s.text}</span>` : ''}</a>`; })}</div>`;
 }
 export { characterOf };

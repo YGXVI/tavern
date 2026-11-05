@@ -1,4 +1,4 @@
-// Дом кампании, книга и справочник (#203): чистые функции — правки книги, указатель, сложность встречи, поиск.
+// Дом кампании, книга и справочник (#203): чистые функции — заметки книги, сложность встречи, поиск.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -11,55 +11,65 @@ const { difficulty } = await import('../dist/js/views/camp/encounter-math.js');
 const ref = await import('../dist/js/views/ref/data.js');
 globalThis.setInterval = realInterval;
 
-const empty = () => ({ chapters: [], threads: [], handouts: [], next: null, session: null, pen: null });
-const entry = (o = {}) => ({ id: 'be-1', n: 1, userId: 'u-asya', title: 'Он произнёс имя', text: 'Голос назвал @Торин по имени у @[Алтарь Безликого].', at: 1000, rev: 1, ...o });
+const empty = () => book.bookOf({});
+const note = (o = {}) => ({ id: 'bn-1', at: 1000, rev: 1, blocks: [{ type: 'h', text: 'Склеп' }, { type: 'p', text: 'Голос назвал Торина по имени.' }, { type: 'q', text: 'Ты опоздал' }], ...o });
 
-test('книга: правка записи применяется один раз, новая ревизия заменяет текст, пометки остаются', () => {
+test('книга: заметка вписывается один раз, новая ревизия автора заменяет блоки, чужая — нет', () => {
   const b = empty();
-  book.applyOp(b, { op: 'entry', entry: entry() });
-  book.applyOp(b, { op: 'entry', entry: entry() });
-  assert.equal(b.chapters.length, 1);
-  assert.equal(b.chapters[0].entries.length, 1);
-  book.applyOp(b, { op: 'margin', n: 1, entryId: 'be-1', margin: { id: 'bm-1', userId: 'u-yara', text: 'а ключ?', quote: 'Голос' } });
-  book.applyOp(b, { op: 'margin', n: 1, entryId: 'be-1', margin: { id: 'bm-1', userId: 'u-yara', text: 'а ключ?', quote: 'Голос' } });
-  book.applyOp(b, { op: 'agree', n: 1, entryId: 'be-1', userId: 'u-yara' });
-  book.applyOp(b, { op: 'entry', entry: entry({ text: 'Новый текст', rev: 2 }) });
-  book.applyOp(b, { op: 'entry', entry: entry({ text: 'Старый текст', rev: 1 }) });
-  const e = b.chapters[0].entries[0];
-  assert.equal(e.text, 'Новый текст');
-  assert.equal(e.margins.length, 1);
-  assert.deepEqual(e.agree, ['u-yara']);
+  book.applyOp(b, { op: 'note', note: note() }, 'u-asya');
+  book.applyOp(b, { op: 'note', note: note() }, 'u-asya');
+  assert.equal(b.notes.length, 1);
+  assert.equal(b.notes[0].userId, 'u-asya');
+  assert.deepEqual(b.notes[0].blocks.map((x) => x.type), ['h', 'p', 'q']);
+  book.applyOp(b, { op: 'note', note: note({ rev: 2, blocks: [{ type: 'p', text: 'Чужая правка' }] }) }, 'u-yara');
+  assert.equal(b.notes[0].blocks[0].text, 'Склеп');
+  book.applyOp(b, { op: 'note', note: note({ rev: 2, blocks: [{ type: 'p', text: 'Новый текст' }] }) }, 'u-asya');
+  book.applyOp(b, { op: 'note', note: note({ rev: 1, blocks: [{ type: 'p', text: 'Старый текст' }] }) }, 'u-asya');
+  assert.equal(b.notes[0].blocks[0].text, 'Новый текст');
+  assert.ok(b.notes[0].edited);
 });
 
-test('книга: записи из журнала — открытые и «только мастеру»; автор берётся из записи журнала', () => {
-  const c = { log: [
-    { id: 'r-1', at: 2, userId: 'u-asya', kind: 'book', text: JSON.stringify({ op: 'entry', entry: { ...entry(), userId: 'u-hacker' } }) },
-    { id: 'r-2', at: 3, userId: 'u-yara', kind: 'book', vis: 'gm', hidden: true, text: JSON.stringify({ op: 'entry', entry: entry({ id: 'be-2' }) }) },
-    { id: 'r-3', at: 4, userId: 'u-yara', kind: 'book', vis: 'gm', hidden: true, redacted: true },
-    { id: 'r-4', at: 5, userId: 'u-asya', kind: 'roll', label: 'Атака', total: 12 },
-  ] };
-  const ops = book.bookOps(c);
-  assert.equal(ops.length, 2);
-  assert.equal(ops[0].op.entry.userId, 'u-asya');
-  assert.equal(ops[1].hidden, true);
-});
-
-test('книга: указатель собирается из упоминаний; печать без текста в указатель не попадает', () => {
+test('книга: пустые блоки не хранятся, неизвестный вид — текст; пустая заметка не вписывается', () => {
+  assert.deepEqual(book.cleanBlocks([{ type: 'h', text: '  ' }, { type: 'x', text: 'а' }, { type: 'q', text: 'б' }]), [{ type: 'p', text: 'а' }, { type: 'q', text: 'б' }]);
   const b = empty();
-  book.applyOp(b, { op: 'entry', entry: entry() });
-  b.chapters[0].entries.push({ id: 'be-s', n: 1, kind: 'sealed', text: '@Тайна', sealed: { breakOn: 'manual' } });
-  const c = { characters: [{ name: 'Торин' }], scenes: [{ name: 'Алтарь Безликого' }] };
-  const idx = book.bookIndex(b, c);
-  assert.deepEqual(idx.map((x) => [x.name, x.kind]), [['Алтарь Безликого', 'place'], ['Торин', 'hero']]);
-  assert.deepEqual(book.mentionsIn('у @[Нижний зал] и @Гарр.'), ['Нижний зал', 'Гарр']);
+  book.applyOp(b, { op: 'note', note: note({ blocks: [{ type: 'p', text: ' ' }] }) }, 'u-asya');
+  assert.equal(b.notes.length, 0);
 });
 
-test('книга: римские номера глав и чернила', () => {
-  assert.equal(book.ROMAN(4), 'IV');
-  assert.equal(book.ROMAN(19), 'XIX');
-  assert.equal(book.inkWet({ inkUntil: 10 }, 5), true);
-  assert.equal(book.inkWet({ inkUntil: 10 }, 11), false);
-  assert.equal(book.inkWet({ inkUntil: null }, 11), true);
+test('книга: удалить свою может автор, чужую — только мастер; удалённая не возвращается из журнала', () => {
+  const b = empty();
+  book.applyOp(b, { op: 'note', note: note() }, 'u-asya');
+  book.applyOp(b, { op: 'del', id: 'bn-1' }, 'u-yara');
+  assert.equal(b.notes.length, 1);
+  book.applyOp(b, { op: 'del', id: 'bn-1' }, 'u-gm', true);
+  assert.equal(b.notes.length, 0);
+  book.applyOp(b, { op: 'note', note: note() }, 'u-asya');
+  assert.equal(b.notes.length, 0);
+  assert.deepEqual(b.gone, ['bn-1']);
+});
+
+test('книга: заметки из журнала — автор берётся из записи журнала, мастер удаляет чужую', () => {
+  const c = {
+    members: [{ userId: 'u-gm', role: 'master', status: 'active' }, { userId: 'u-asya', role: 'player', status: 'active' }],
+    book: { notes: [], played: 2 },
+    log: [
+      { id: 'r-1', at: 2, userId: 'u-asya', kind: 'book', text: JSON.stringify({ op: 'note', note: { ...note(), userId: 'u-hacker' } }) },
+      { id: 'r-2', at: 3, userId: 'u-asya', kind: 'book', text: JSON.stringify({ op: 'note', note: note({ id: 'bn-2' }) }) },
+      { id: 'r-3', at: 4, userId: 'u-gm', kind: 'book', text: JSON.stringify({ op: 'del', id: 'bn-2' }) },
+      { id: 'r-4', at: 5, userId: 'u-asya', kind: 'roll', label: 'Атака', total: 12 },
+      { id: 'r-5', at: 6, userId: 'u-asya', kind: 'book', text: 'не json' },
+    ],
+  };
+  assert.equal(book.bookOps(c).length, 3);
+  const b = book.readBook(c);
+  assert.deepEqual(b.notes.map((x) => [x.id, x.userId]), [['bn-1', 'u-asya']]);
+  assert.equal(b.played, 2);
+});
+
+test('книга: сессии считаются отдельно от заметок; у старой книги — по главам', () => {
+  assert.equal(book.bookOf({ book: { chapters: [{ n: 1, startedAt: 1 }, { n: 2, startedAt: 2 }, { n: 3 }] } }).played, 2);
+  assert.deepEqual(book.bookOf({ book: { chapters: [{ n: 1 }] } }).notes, []);
+  assert.deepEqual(book.noteSummary(note()), { title: 'Склеп', text: 'Голос назвал Торина по имени. Ты опоздал' });
 });
 
 test('встреча: 4 героя 5 уровня, 4 культиста и 2 фанатика — средняя (1 000 опыта × 2)', () => {

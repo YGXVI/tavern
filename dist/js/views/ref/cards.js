@@ -6,6 +6,7 @@ import { srcOf } from '../../core/assets.js';
 import { RULES } from './rules-text.js';
 import { CONDITIONS } from '../../data/rules.js';
 import { ABIL, abilityMod, xpFor, DMG_RU, WEAPON_PROPS, EQ_KINDS, SKILL_RU } from './data.js';
+import { classPage, classPreview } from './classes.js';
 
 const ic = (n, s = 16) => raw(icon(n, s));
 const chip = (t, cls = '') => html`<span class="chip ${cls}">${t}</span>`;
@@ -89,13 +90,8 @@ function creature(it, o) {
 }
 const SIZE = { tiny: 'Крошечный', small: 'Маленький', medium: 'Средний', large: 'Большой', huge: 'Огромный', gargantuan: 'Громадный' };
 
-function klass(it, o) {
-  const ab = (id) => ABIL.find((a) => a.id === id)?.name || id;
-  return html`${head({ ...o, title: it.name, en: it.en, chips: [chip(`Кость хитов к${it.hd}`, 'chip-accent'), it.spell ? chip(`Заклинания: ${ab(it.spell)}`, 'chip-magic') : ''] })}
-    <div class="ref-stats three">${stat('Спасброски', it.saves.map(ab).join(', '))}${stat('Хиты на 1 уровне', `${it.hd} + ТЕЛ`)}${stat('Подклассы', it.subs.join(', ') || '—')}</div>
-    <div class="ref-levels">${it.levels.map((l) => html`<div class="ref-level"><b>${l.level}</b><span class="t-xs tertiary">+${l.prof}</span><span class="ref-level-f">${l.features.length ? l.features.map((f, i) => html`${i ? ', ' : ''}<button class="ref-feat" data-feat="${f.id}">${f.name.ru || f.name.en}</button>`) : html`<span class="tertiary">—</span>`}</span></div>`)}</div>
-    <p class="ref-note">Нажмите на умение — покажем описание (SRD, на английском).</p>`;
-}
+// Класс в модалке на столе — та же страница, что в справочнике, без ссылок наружу.
+function klass(it) { return classPage(it, {}, { modal: true }); }
 
 function race(it, o) {
   return html`${head({ ...o, title: it.name, en: it.en, chips: [chip(it.size || 'Средний', 'chip-accent')] })}
@@ -146,6 +142,7 @@ export function preview(it) {
   if (it.section === 'spells') return html`<div class="ref-chips">${chip(it.level ? `${it.level} уровень` : 'Заговор', 'chip-accent')}${chip(it.schoolName, 'chip-magic')}</div><h3>${it.name}</h3><p class="tertiary">${it.en}</p><div class="ref-stats two">${stat('Время', it.time)}${stat('Дистанция', it.range)}</div><p class="t-sm muted">${it.comp}${it.duration ? ` · ${it.duration}` : ''}</p>`;
   if (it.section === 'creatures') return html`<div class="ref-chips">${chip(`Опасность ${it.m.cr}`, 'chip-accent')}</div><h3>${it.name}</h3><p class="tertiary">${it.en} · ${it.m.type}</p><div class="ref-stats two">${stat('КД', it.m.ac)}${stat('Хиты', it.m.hp, it.m.hpDice)}</div>`;
   if (it.section === 'rules') return html`<div class="ref-chips">${chip(it.group, 'chip-accent')}</div><h3>${it.name}</h3><p class="t-sm muted">${it.text}</p>`;
+  if (it.section === 'classes') return classPreview(it);
   return html`<h3>${it.name}</h3>${it.en ? html`<p class="tertiary">${it.en}</p>` : ''}<p class="t-sm muted">${it.sub}</p>`;
 }
 export { SKILL_RU, EQ_KINDS };
