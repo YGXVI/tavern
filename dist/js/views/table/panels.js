@@ -1,5 +1,4 @@
 import { pendingQueue } from './own-creature.js';
-import { previouslyCard } from './book-hooks.js';
 // Панели стола: принимает действия от кнопок интерфейса и раздаёт их модулям,
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
 import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
@@ -270,7 +269,7 @@ export class Panels {
     const ch = myCharacter(c, ctx.userId);
     node.innerHTML = ctx.isMaster
       ? `<div class="no-scene-card panel"><span class="empty-ic">${icon('maps', 32)}</span><h2>Сцен пока нет</h2><p class="t-para muted">Возьмите готовую карту — склеп, лес, таверну или пещеру — или загрузите свою. Игроки увидят сцену, когда вы её покажете.</p><div class="row"><button class="btn btn-primary btn-lg" data-act="add:map">${icon('plus-sign', 18)}Создать сцену</button><button class="btn btn-secondary btn-lg" data-act="invite">${icon('user-add-01', 18)}Пригласить</button></div></div>`
-      : `<div class="no-scene-pair"><div class="no-scene-card panel"><span class="empty-ic hourglass">${icon('hourglass', 32)}</span><h2>Мастер готовит сцену</h2><p class="t-para muted">Как только он покажет карту, она появится здесь. А пока можно заглянуть в лист героя.</p>${ch ? `<button class="btn btn-secondary btn-lg" data-act="sheet" data-id="${esc(ch.id)}">${icon('book-open-01', 18)}Лист: ${esc(ch.name)}</button>` : ''}</div>${previouslyCard(c, ctx.userId)}</div>`;
+      : `<div class="no-scene-pair"><div class="no-scene-card panel"><span class="empty-ic hourglass">${icon('hourglass', 32)}</span><h2>Мастер готовит сцену</h2><p class="t-para muted">Как только он покажет карту, она появится здесь. А пока можно заглянуть в лист героя.</p>${ch ? `<button class="btn btn-secondary btn-lg" data-act="sheet" data-id="${esc(ch.id)}">${icon('book-open-01', 18)}Лист: ${esc(ch.name)}</button>` : ''}</div></div>`;
   }
 
   sceneTransition(scene) {

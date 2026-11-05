@@ -1,8 +1,7 @@
-// Хранилище «на этом устройстве» для кампании (#203): тайное мастера, ленточки и черновики игрока, встречи.
-// Только localStorage этого браузера — на сервер не уходит и между устройствами не переносится (docs/campaign-book.md).
+// Хранилище «на этом устройстве» для кампании (#203): вступление и черновики раздаток мастера, встречи.
+// Только localStorage этого браузера — на сервер не уходит и между устройствами не переносится (docs/data.md).
 const KEY = {
-  secret: (cid, uid) => `rasputye-book-secret:${cid}:${uid}`,   // мастер: печати, личные сноски, вступление, раздатки-черновики, входящие «только мастеру»
-  mine: (cid, uid) => `rasputye-book-mine:${cid}:${uid}`,       // любой: ленточки, черновики, дневник «только я», «напомнить позже»
+  secret: (cid, uid) => `rasputye-book-secret:${cid}:${uid}`,   // мастер: вступление, черновики раздаток
   enc: (cid, uid) => `rasputye-encounters:${cid}:${uid}`,       // мастер: встречи
 };
 
@@ -18,11 +17,10 @@ const notify = () => { for (const fn of [...listeners]) { try { fn(); } catch (e
 globalThis.addEventListener?.('storage', (e) => { if (/^rasputye-(book|encounters)/.test(e.key || '')) notify(); });
 
 const DEF = {
-  secret: () => ({ sealed: {}, inbox: {}, notes: {}, intro: '', handouts: [] }),
-  mine: () => ({ ribbons: [], drafts: {}, diary: [], later: null }),
+  secret: () => ({ intro: '', handouts: [] }),
   enc: () => ({ list: [] }),
 };
-/** Прочитать: kind — secret | mine | enc. */
+/** Прочитать: kind — secret | enc. */
 export function local(kind, cid, uid) { return { ...DEF[kind](), ...read(KEY[kind](cid, uid), {}) }; }
 /** Изменить: fn(value) правит объект на месте. */
 export function updateLocal(kind, cid, uid, fn) {
