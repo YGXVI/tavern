@@ -11,6 +11,7 @@ import { SECTIONS, sectionById, loadSection, sectionNow, search, SPELL_CLASSES, 
 import { card, ruleById, termOf } from './cards.js';
 import { openPalette, bindPaletteKeys } from './palette.js';
 import { encounters, newEncounter, addToEncounter } from '../camp/encounters.js';
+import { galleryPage, refreshGallery, classPage, wireClass } from './classes.js';
 
 const ic = (n, s = 16) => raw(icon(n, s));
 const STORE = 'rasputye-ref-v1';
@@ -171,6 +172,23 @@ export function mountRef(root, hash) {
       <div class="ref-card-body">${card(it, { lang, key, fav: prefs().fav.includes(key) })}</div>
       <footer class="ref-card-foot">${footActions(it)}<span class="spacer"></span>${similar(it, items)}<span class="t-xs tertiary">${it.section === 'creatures' && !it.m.srd ? '' : 'SRD 5.1 · CC BY 4.0'}</span></footer></article>`;
   }
+  function topBar(s, items) {
+    return html`<div class="ref-top">
+        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}${x.id === s.id ? html` <span class="ref-count">${items.length}</span>` : ''}</a>`)}</nav>
+        <label class="input ref-search">${ic('search-01', 18)}<input data-text value="${text}" placeholder="Искать в разделе «${s.name.toLowerCase()}»…" aria-label="Поиск в разделе" autocomplete="off"><kbd>/</kbd></label>
+      </div>`;
+  }
+  // ——— Классы: галерея и страница класса ———
+  function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)), view: ['table', 'start'].includes(q.get('view')) ? q.get('view') : 'road', sub: !q.get('nosub') }; }
+  function classesPage(items) {
+    const s = sectionById('classes');
+    const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? '#/ref/classes' : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const it = st.id && items.find((x) => x.id === st.id);
+    if (!it) return galleryPage(items, st.q, text, top);
+    const key = `classes/${it.id}`;
+    return html`<main class="page cls-wrap">${top}${classPage(it, classState(st.q), { key, fav: prefs().fav.includes(key) })}
+      <p class="ref-foot">Описания умений — наш пересказ по SRD 5.1 (CC BY 4.0); полный английский текст — под каждым умением.</p></main>`;
+  }
   function sectionPage(items) {
     const s = sectionById(st.section);
     const lst = listRows(st.section, items);
@@ -178,10 +196,7 @@ export function mountRef(root, hash) {
     const sort = st.q.get('sort') || sorts?.[0][0];
     const nFilters = (FILTERS[st.section] || []).reduce((n, [k]) => n + st.q.getAll(k).length, 0);
     return html`<main class="page ref-page ${FILTERS[st.section] ? 'has-filters' : ''} ${st.id ? 'has-card' : ''}">
-      <div class="ref-top">
-        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}${x.id === s.id ? html` <span class="ref-count">${items.length}</span>` : ''}</a>`)}</nav>
-        <label class="input ref-search">${ic('search-01', 18)}<input data-text value="${text}" placeholder="Искать в разделе «${s.name.toLowerCase()}»…" aria-label="Поиск в разделе" autocomplete="off"><kbd>/</kbd></label>
-      </div>
+      ${topBar(s, items)}
       ${phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>
         <div class="ref-phone-chips">${FILTERS[st.section] ? html`<button class="chip chip-md" data-ftoggle>${ic('settings-01', 14)}Фильтр${nFilters ? ` · ${nFilters}` : ''}</button>` : ''}${activeChips(st.section, items)}</div>` : ''}
       ${filtersHTML(st.section, items)}
@@ -201,7 +216,7 @@ export function mountRef(root, hash) {
     const s = st.section && sectionById(st.section);
     if (!s) { paint(home()); for (const x of SECTIONS) if (!sectionNow(x.id) && x.id !== 'items') loadSection(x.id).then(() => { if (my === token && !st.section) paint(home()); }, () => {}); return; }
     const items = sectionNow(s.id);
-    if (items) { paint(sectionPage(items)); track(); return; }
+    if (items) { paint(s.id === 'classes' ? classesPage(items) : sectionPage(items)); track(); return; }
     paint(html`<main class="page ref-page"><div class="ref-loading">${ic('hourglass', 24)}<p>Открываю раздел «${s.name}»…</p></div></main>`);
     loadSection(s.id).then(() => { if (my === token) render(); }, (err) => { if (my === token) paint(html`<main class="page ref-page"><div class="ref-loading">${ic('alert-circle', 24)}<p>Раздел не загрузился: ${err.message}</p><button class="btn btn-secondary" data-retry>Ещё раз</button></div></main>`); });
   }
@@ -228,8 +243,24 @@ export function mountRef(root, hash) {
   L('click', '[data-palette]', () => openPalette());
   L('click', '[data-retry]', () => render());
   L('click', '[data-paste]', () => pasteInvite());
-  L('input', '[data-text]', (e) => { text = e.target.value; refreshList(); });
-  L('keydown', '[data-text]', (e) => { if (e.key === 'Enter') { const first = root.querySelector('[data-rows] .ref-row-item'); if (first) location.hash = first.getAttribute('href'); } });
+  L('input', '[data-text]', (e) => { text = e.target.value; if (st.section === 'classes') { const items = sectionNow('classes'); if (items && !st.id) refreshGallery(root, items, st.q, text); return; } refreshList(); });
+  L('keydown', '[data-text]', (e) => {
+    if (e.key !== 'Enter') return;
+    if (st.section === 'classes') { const hit = search(sectionNow('classes') || [], text, 1).list[0]; if (hit) location.hash = hrefOf('classes', hit.id); return; }
+    const first = root.querySelector('[data-rows] .ref-row-item'); if (first) location.hash = first.getAttribute('href');
+  });
+  // Подбор класса: значения живут в адресе, как фильтры других разделов.
+  L('click', '[data-qtoggle]', (e, b) => setQ((q) => { const k = b.dataset.qtoggle, v = b.dataset.v; if (!v || q.get(k) === v) q.delete(k); else q.set(k, v); }));
+  L('change', '[data-qswitch]', (e, b) => setQ((q) => { if (b.checked) q.set(b.dataset.qswitch, '1'); else q.delete(b.dataset.qswitch); }));
+  L('click', '[data-qclear]', (e, b) => setQ((q) => { for (const k of b.dataset.qclear.split(',')) q.delete(k); }));
+  offs.push(wireClass(root, { onState: (cs, it) => {
+    const q = new URLSearchParams(st.q);
+    if (cs.lvl > 1) q.set('lvl', cs.lvl); else q.delete('lvl');
+    if (cs.view !== 'road') q.set('view', cs.view); else q.delete('view');
+    if (!cs.sub) q.set('nosub', '1'); else q.delete('nosub');
+    const h = hrefOf('classes', it.id, q);
+    if (h !== location.hash) { history.replaceState(null, '', h); lastHash = location.hash; st = parse(location.hash); }
+  } }));
   L('click', '[data-fchip]', (e, b) => setQ((q) => { const k = b.dataset.fchip, v = b.dataset.v; const all = q.getAll(k); q.delete(k); (all.includes(v) ? all.filter((x) => x !== v) : [...all, v]).forEach((x) => q.append(k, x)); }));
   L('change', '[data-flt]', (e, b) => setQ((q) => { const k = b.dataset.flt; if (b.type === 'checkbox' && b.value && b.value !== 'on') { const all = q.getAll(k); q.delete(k); (b.checked ? [...all, b.value] : all.filter((x) => x !== b.value)).forEach((x) => q.append(k, x)); } else if (b.checked) q.set(k, '1'); else q.delete(k); }));
   L('click', '[data-unflt]', (e, b) => setQ((q) => { const k = b.dataset.unflt; const all = q.getAll(k).filter((x) => x !== b.dataset.v); q.delete(k); all.forEach((x) => q.append(k, x)); }));
