@@ -56,6 +56,10 @@ try {
   check('мастер ставит гоблина', !r.error, r.error?.message);
   r = await P.sb.from('tokens').insert({ id: `t-own-${tag}`, campaign_id: cid, scene_id: sid, owner_id: P.id, ord: 2, data: { kind: 'custom', name: 'Волк игрока', x: 50, y: 50, hp: 11, hpMax: 11 } });
   check('игрок ставит свой токен', !r.error, r.error?.message);
+  const pend = (await P.sb.from('tokens').select('data').eq('id', `t-own-${tag}`).single()).data?.data?.pending;
+  check('новый токен игрока — заявка мастеру', pend === true, `pending=${pend}`);
+  r = await M.sb.rpc('patch_token', { p_id: `t-own-${tag}`, p_set: {}, p_unset: ['pending'] });
+  check('мастер разрешает токен игрока', !r.error, r.error?.message);
 
   // Реальное время: игрок видит правку мастера.
   const live = await listen(P.sb);
