@@ -705,8 +705,8 @@ function renameToken(ctx, t, done) {
 }
 
 /** Выбрать картинку своего токена; в песочнице — в браузер, на сервере — в бакет tokens. done(ref, file). */
-export function pickTokenImage(ctx, done) {
-  tokenImageEditor({ toast: ctx.toast, store: (file) => storeTokenImage(ctx, file), done });
+export function pickTokenImage(ctx, done, { ref = '', defaultRef = '' } = {}) {
+  tokenImageEditor({ ref, defaultRef, toast: ctx.toast, store: (file) => storeTokenImage(ctx, file), done });
 }
 
 /** Мастер: своя картинка для существа на карте (#190 E) — у одного токена, с отменой. */

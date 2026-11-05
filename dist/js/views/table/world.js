@@ -261,6 +261,19 @@ export function renderAuras(L, ctx) {
 }
 
 // ——— Токены ———
+const localPortraitLoads = new WeakMap();
+function loadLocalPortrait(ctx, ref) {
+  if (!ref?.startsWith('idb:') || srcOf(ref)) return;
+  let requested = localPortraitLoads.get(ctx);
+  if (!requested) localPortraitLoads.set(ctx, (requested = new Set()));
+  // Один запрос на файл в этом столе, включая отсутствующие файлы: не читать IndexedDB на каждом кадре.
+  if (requested.has(ref)) return;
+  requested.add(ref);
+  resolveSrc(ref).then((src) => {
+    if (src && ctx.root.isConnected) ctx.invalidate('tokens');
+  }).catch(() => {});
+}
+
 function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const conds = (st.conditions || []).slice(0, 3).map((id) => { const c = conditionById(id); return c ? `<span class="tok-cond" title="${esc(c.name)}">${icon(c.icon, 12)}</span>` : ''; }).join('');
   const more = (st.conditions || []).length > 3 ? `<span class="tok-cond more">+${st.conditions.length - 3}</span>` : '';
@@ -290,6 +303,7 @@ export function renderTokens(L, ctx) {
   const marks = ctx.packMarks(); // пачки в инициативе (#198): цветная метка с номером
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
+    loadLocalPortrait(ctx, t.img);
     seen.add(t.id);
     const st = tokenStats(c, t);
     const size = sizeById(t.size);
@@ -298,7 +312,9 @@ export function renderTokens(L, ctx) {
     const d = n * s * 0.9 * (size.scale || 1) * look.scale;
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
     const name = ctx.nameOf(t, st);
-    const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
+    // После загрузки подписанного/локального URL сама ссылка t.img не меняется.
+    // Учитываем готовый адрес, чтобы инициалы сменились картинкой без правки токена.
+    const sig = `${t.img}|${srcOf(t.img)}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
     if (!node) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
