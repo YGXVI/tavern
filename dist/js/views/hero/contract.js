@@ -12,7 +12,11 @@ export function heroView(id, corner = '') {
   return corner && CORNERS[corner] ? { ...base, ...CORNERS[corner], corner } : base;
 }
 /** «Мои герои»: карточки и сохранённое из справочника. */
-export const heroList = () => ({ heroes: HERO_LIST, saved: SAVED_FROM_REFERENCE });
+/** Отложенное из справочника (#/ref, «В книгу героя») — на этом устройстве; пусто — образец. */
+function savedFromRef() {
+  try { const p = JSON.parse(localStorage.getItem('rasputye-ref-v1') || '{}'); return (p.saved || []).map((k) => p.names?.[k]).filter(Boolean); } catch { return []; }
+}
+export const heroList = () => { const real = savedFromRef(); return { heroes: HERO_LIST, saved: real.length ? real : SAVED_FROM_REFERENCE }; };
 /** Мастер создания: шаги, варианты, правила кампании, быстрый герой. */
 export const creationView = () => CREATION;
 /** Живой лист справа на шаге stepId. */

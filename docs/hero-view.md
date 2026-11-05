@@ -36,7 +36,7 @@
 | Функция | Возвращает |
 | --- | --- |
 | `heroView(id, corner)` | Лист героя — объект `HeroView` (ниже). `corner` — образец корнера, только для превью |
-| `heroList()` | `{ heroes: HeroCard[], saved: string[] }` — карточки «Моих героев» и сохранённое из справочника |
+| `heroList()` | `{ heroes: HeroCard[], saved: string[] }` — карточки «Моих героев» и сохранённое из справочника (`saved` — уже настоящее: «В книгу героя» в `#/ref`, ключ `rasputye-ref-v1` на устройстве; пусто — образец) |
 | `creationView()` | Всё для мастера создания: `campaign`, `paths`, `steps`, `races`, `classes`, `abilities`, `backgrounds`, `backgroundSkills`, `backgroundLangs`, `equipment`, `spells`, `look`, `done`, `quick` |
 | `creationLive(stepId)` | Живой лист справа на шаге: `{ name, summary, portrait?, stats: [{short, mod, score}], facts: [[подпись, значение?, новое?]] }` |
 | `levelUpView()` | Повышение: `from`, `to`, `steps`, `hp`, `news`, `spells`, `live`, `done` |
