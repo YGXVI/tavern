@@ -80,6 +80,7 @@ function monsterHTML(ctx, t) {
       <div class="vital"><small>Иниц.</small><b>${knownBonus(m.init)}</b></div>
     </div>
     <div class="sheet-body scroll">
+      ${isM && m.statblockImage ? `<img class="sheet-source-image" src="${esc(srcOf(m.statblockImage))}" alt="Статблок: ${esc(m.name)}" loading="lazy">` : ''}
       ${isM ? `<div class="abilities">${ABILITIES.map((a) => {const score=m.stats?.[a.id],bonus=abilityModifier(score);return `<div class="ability"><span class="ab-name">${a.short}</span><button class="ab-mod" data-roll="mcheck" data-ab="${a.id}" ${bonus===null?'disabled':''}>${knownBonus(bonus)}</button><span class="ab-score">${knownNumber(score)}</span></div>`;}).join('')}</div>
       ${saves ? `<p class="t-sm muted" style="margin:12px 0 0">Спасброски: ${saves}</p>` : ''}
       ${m.senses ? `<p class="t-sm muted" style="margin:12px 0">${esc(m.senses)}</p>` : ''}
