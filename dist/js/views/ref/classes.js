@@ -89,10 +89,11 @@ const MAG = { none: 0, half: 2, pact: 3, full: 4 };
 function galleryCard(it, on) {
   const m = meta(it.id);
   return html`<a class="cls-card ${on ? '' : 'dim'}" href="#/ref/classes/${it.id}" style="--c:${m.color}" data-cls-card="${it.id}">
-    <span class="cls-card-art"><img src="${art(it.id)}" alt="" loading="lazy"><span class="cls-card-play">${m.play}</span></span>
+    <span class="cls-card-art"><img src="${art(it.id)}" alt="" loading="lazy"></span>
     <span class="cls-card-body">
       <span class="cls-card-name"><b>${it.name}</b><small>${it.en}</small></span>
       <span class="cls-card-tag">${m.tagline}</span>
+      <span class="cls-card-play">${m.play}</span>
       <span class="cls-card-meters">
         <span><small>Хиты</small>${meter(HD[it.hd] || 2, 4, `Кость хитов к${it.hd}`)}<em>к${it.hd}</em></span>
         <span><small>Магия</small>${meter(MAG[m.magic], 4, MAGIC[m.magic])}<em>${{ none: 'нет', half: 'половина', pact: 'договор', full: 'полная' }[m.magic]}</em></span>
@@ -121,7 +122,7 @@ export function galleryPage(items, q, text, top) {
   const want = q.get('want'), mag = q.get('mag'), easy = q.get('easy'), view = q.get('view');
   return html`<main class="page cls-gallery">${top}
     <header class="cls-gal-head">
-      <div><h1>Классы</h1><p>Класс — это то, чем герой занят, когда начинается бой. На карточке — как он играется, внутри — вся дорога с 1-го по 20-й уровень.</p></div>
+      <div><h1>Классы</h1><p>Класс — это то, чем герой занят, когда начинается бой. На карточке — как он играется, внутри — таблица и вся дорога с 1-го по 20-й уровень.</p></div>
       <div class="h-seg cls-gal-view"><button data-qtoggle="view" data-v="" aria-selected="${view !== 'table'}">${ic('grid-02', 16)}Карточки</button><button data-qtoggle="view" data-v="table" aria-selected="${view === 'table'}">${ic('menu-01', 16)}Сравнить</button></div>
     </header>
     <section class="cls-pick" aria-label="Подбор класса">
@@ -146,7 +147,7 @@ export function classPreview(it) {
 }
 
 // ——— Страница класса ———
-const stateOf = (el) => ({ lvl: Math.min(20, Math.max(1, Number(el.dataset.lvl) || 1)), view: el.dataset.view || 'road', sub: el.dataset.sub !== '0' });
+const stateOf = (el) => ({ lvl: Math.min(20, Math.max(1, Number(el.dataset.lvl) || 1)), sub: true });
 
 function scrub(it, st) {
   return html`<div class="cls-scrub" role="slider" tabindex="0" aria-label="Уровень героя" aria-valuemin="1" aria-valuemax="20" aria-valuenow="${st.lvl}" data-scrub>
@@ -207,8 +208,8 @@ function featCard(f, it) {
   return html`<article class="cls-feat ${f.sub ? 'is-sub' : ''}">
     <header><b>${f.name}</b>${f.subName ? html`<span class="cls-feat-sub">${fork(12)}${f.subName}</span>` : ''}${f.levels.length > 1 ? html`<span class="cls-feat-lv">растёт на ${f.levels.slice(1).join(', ')}</span>` : ''}</header>
     ${s ? html`<p>${rich(s)}</p>` : ''}
-    ${opts.length ? html`<details class="cls-opts"><summary>На выбор — ${opts.length} ${plural(opts.length, ...word)}</summary><ul>${opts.map((o) => html`<li><details><summary><b>${o.name}</b>${o.pre ? html`<span class="cls-pre">${prereqRu(o.pre)}</span>` : ''}</summary>${optSum(o) ? html`<p class="cls-opt-ru">${rich(optSum(o))}</p>` : ''}<div class="cls-opt-en" lang="en">${reflow(o.text).map((p) => (p.h ? html`<h5>${p.h}</h5>` : html`<p>${p.p}</p>`))}</div></details></li>`)}</ul></details>` : ''}
-    ${srd.length ? html`<details class="cls-srd"><summary>${ic('book-open-01', 14)}Текст SRD · ${f.en}</summary><div lang="en">${srd.map((p) => (p.h ? html`<h5>${p.h}</h5>` : html`<p>${p.p}</p>`))}</div></details>` : ''}
+    ${srd.length ? html`<div class="cls-srd"><small>${ic('book-open-01', 12)}SRD · ${f.en}</small><div lang="en">${srd.map((p) => (p.h ? html`<h5>${p.h}</h5>` : html`<p>${p.p}</p>`))}</div></div>` : ''}
+    ${opts.length ? html`<div class="cls-opts"><small>На выбор — ${opts.length} ${plural(opts.length, ...word)}</small><ul>${opts.map((o) => html`<li><b>${o.name}</b>${o.pre ? html`<span class="cls-pre">${prereqRu(o.pre)}</span>` : ''}${optSum(o) ? html`<p class="cls-opt-ru">${rich(optSum(o))}</p>` : ''}<div class="cls-opt-en" lang="en">${reflow(o.text).map((p) => (p.h ? html`<h5>${p.h}</h5>` : html`<p>${p.p}</p>`))}</div></li>`)}</ul></div>` : ''}
   </article>`;
 }
 
@@ -226,7 +227,7 @@ function road(it, st) {
           <span class="cls-fork-ic">${fork(22)}</span>
           <div><small>Распутье · выбор пути</small><b>${x.fork.name}</b><p>${SUM[x.fork.key] || ''} Путь даёт умения на ${md.subLevels.join(', ')} уровнях.</p>
             <div class="cls-branches">
-              ${sub ? html`<button class="cls-branch" data-cls-sub aria-pressed="${st.sub}"><b>${sub.name}</b><small>${SUB_INTRO[sub.id] || ''}</small><span>${st.sub ? html`${ic('view', 14)}умения пути на дороге` : html`${ic('view-off', 14)}показать умения пути`}</span></button>` : ''}
+              ${sub ? html`<div class="cls-branch"><b>${sub.name}</b><small>${SUB_INTRO[sub.id] || ''}</small><span>${fork(12)}умения пути — ниже на дороге, с пометкой</span></div>` : ''}
               <div class="cls-branch ghost"><b>Ещё ${meta(it.id).phb - 1} ${plural(meta(it.id).phb - 1, 'путь', 'пути', 'путей')}</b><small>в Книге игрока — не входят в открытые правила SRD</small></div>
             </div></div></div>` : ''}
         ${items.map((f) => featCard(f, it))}
@@ -250,7 +251,7 @@ function table(it, st) {
         ${cols.map((c) => html`<td class="num">${fmtCol(c, r.values[c])}</td>`)}
         ${Array.from({ length: circles }, (_, k) => { const n = r.slots?.[k] || 0; return html`<td class="slot ${n ? 'has' : ''}" style="--n:${n}">${n || '·'}</td>`; })}</tr>`;
     })}</tbody></table></div>
-    <p class="ref-note">Нажмите на строку — ползунок встанет на этот уровень.</p>`;
+`;
 }
 
 function start(it) {
@@ -301,11 +302,6 @@ function start(it) {
   </div>`;
 }
 
-function content(it, st, o) {
-  if (st.view === 'table') return table(it, st);
-  if (st.view === 'start') return start(it);
-  return road(it, st);
-}
 
 function hero(it, o) {
   const m = meta(it.id);
@@ -333,44 +329,38 @@ function hero(it, o) {
   </header>`;
 }
 
-const VIEWS = [['road', 'Дорога 1 → 20', 'path'], ['table', 'Таблица', 'grid'], ['start', 'Старт и владения', 'backpack-01']];
+const sec = (id, title, hint, body) => html`<section class="cls-sec" id="cls-${id}"><header class="cls-sec-head"><h2>${title}</h2>${hint ? html`<p>${hint}</p>` : ''}</header>${body}</section>`;
 /** Страница класса. o.modal — в модалке на столе: без переключателя классов, кнопок и ссылок наружу. */
 export function classPage(it, st0 = {}, o = {}) {
-  const st = { lvl: 1, view: 'road', sub: true, ...st0 };
+  const st = { lvl: 1, ...st0, sub: true };
   const m = meta(it.id);
   const all = sectionNow('classes') || [];
-  return html`<div class="cls-page ${o.modal ? 'is-modal' : ''}" style="--c:${m.color}" data-cls="${it.id}" data-lvl="${st.lvl}" data-view="${st.view}" data-sub="${st.sub ? 1 : 0}">
+  return html`<div class="cls-page ${o.modal ? 'is-modal' : ''}" style="--c:${m.color}" data-cls="${it.id}" data-lvl="${st.lvl}">
     ${o.modal ? '' : html`<nav class="cls-switch" aria-label="Другие классы">${all.map((c) => html`<a href="#/ref/classes/${c.id}" class="${c.id === it.id ? 'on' : ''}" style="--c:${meta(c.id).color}" data-tip="${c.name}" aria-label="${c.name}" ${c.id === it.id ? raw('aria-current="page"') : ''}><img src="${art(c.id)}" alt="" loading="lazy"><span>${c.name}</span></a>`)}</nav>`}
     <div class="cls-main">
       <div class="cls-left">
         ${hero(it, o)}
-        <div class="cls-views h-seg" role="tablist">${VIEWS.map(([v, l, i]) => html`<button role="tab" data-cls-view="${v}" aria-selected="${st.view === v}">${ic(i, 16)}${l}</button>`)}</div>
-        <section class="cls-content" data-cls-content>${content(it, st, o)}</section>
+        ${sec('start', 'Старт и владения', 'С чем герой выходит на первый уровень', start(it))}
+        ${sec('table', 'Таблица класса', 'Строка — уровень: нажмите, и ползунок встанет на него', table(it, st))}
+        ${sec('road', 'Дорога 1 → 20', 'Каждое умение — суть по-русски и полный текст SRD', road(it, st))}
       </div>
       <aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Двигайте — покажем героя на любом уровне</p>${scrub(it, st)}${legend()}<div data-cls-panel>${panel(it, st, o)}</div></div></aside>
     </div>
   </div>`;
 }
 
-/** Ожививает страницу класса внутри host: ползунок, клики по уровням, вкладки, развилка. onState — синхронизация адреса. */
+/** Оживляет страницу класса внутри host: ползунок, клики по уровням в таблице и на дороге. onState — синхронизация адреса. */
 export function wireClass(host, { onState = () => {}, modal = false } = {}) {
   const itOf = (el) => (sectionNow('classes') || []).find((c) => c.id === el.dataset.cls);
   const apply = (el, patch, { scroll = false } = {}) => {
     const it = itOf(el); if (!it) return;
-    const before = stateOf(el);
-    const st = { ...before, ...patch };
-    el.dataset.lvl = st.lvl; el.dataset.view = st.view; el.dataset.sub = st.sub ? 1 : 0;
-    const full = st.view !== before.view || st.sub !== before.sub;
-    if (full) {
-      el.querySelector('[data-cls-content]').innerHTML = String(content(it, st, { modal }));
-      el.querySelectorAll('[data-cls-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.clsView === st.view)));
-      const sc = el.querySelector('[data-scrub]'); if (sc) sc.outerHTML = String(scrub(it, st));
-    }
+    const st = { ...stateOf(el), ...patch };
+    el.dataset.lvl = st.lvl;
     el.querySelectorAll('.cls-tick').forEach((t) => { const l = Number(t.dataset.l); t.classList.toggle('on', l <= st.lvl); t.classList.toggle('here', l === st.lvl); });
     el.querySelector('[data-scrub]')?.setAttribute('aria-valuenow', st.lvl);
     el.querySelectorAll('[data-lv]').forEach((s) => { const l = Number(s.dataset.lv); s.classList.toggle('walked', l <= st.lvl); s.classList.toggle('here', l === st.lvl); });
     el.querySelector('[data-cls-panel]').innerHTML = String(panel(it, st, { modal }));
-    if (scroll) el.querySelector(`#cls-lv-${st.lvl}`)?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    if (scroll) el.querySelector(`.cls-road #cls-lv-${st.lvl}`)?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     onState(st, it);
   };
   const rootOf = (t) => t.closest('[data-cls]');
@@ -393,11 +383,10 @@ export function wireClass(host, { onState = () => {}, modal = false } = {}) {
   };
   const onClick = (e) => {
     const lv = e.target.closest('[data-set-lv]');
-    if (lv && !e.target.closest('a, details, summary, button.ref-dice')) { apply(rootOf(lv), { lvl: Number(lv.dataset.setLv) }); return; }
+    // Строка таблицы — уровень и прокрутка к нему на дороге; узел на дороге — только уровень.
+    if (lv && !e.target.closest('a, button.ref-dice')) { apply(rootOf(lv), { lvl: Number(lv.dataset.setLv) }, { scroll: lv.tagName === 'TR' }); return; }
     const go = e.target.closest('[data-goto]');
-    if (go) { e.preventDefault(); const el = rootOf(go); apply(el, { lvl: Number(go.dataset.goto), view: 'road' }, { scroll: true }); return; }
-    const v = e.target.closest('[data-cls-view]'); if (v) { apply(rootOf(v), { view: v.dataset.clsView }); return; }
-    const s = e.target.closest('[data-cls-sub]'); if (s) { const el = rootOf(s); apply(el, { sub: !stateOf(el).sub }); return; }
+    if (go) { e.preventDefault(); const el = rootOf(go); apply(el, { lvl: Number(go.dataset.goto) }, { scroll: true }); return; }
     const b = e.target.closest('[data-cls-build]');
     if (b) {
       import('../hero/index.js').then(({ draft, saveDraft }) => { draft.class = b.dataset.clsBuild; saveDraft(); location.hash = '#/hero/new/class'; }).catch(() => { location.hash = '#/hero/new'; });

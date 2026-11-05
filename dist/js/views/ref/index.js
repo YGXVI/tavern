@@ -179,7 +179,7 @@ export function mountRef(root, hash) {
       </div>`;
   }
   // ——— Классы: галерея и страница класса ———
-  function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)), view: ['table', 'start'].includes(q.get('view')) ? q.get('view') : 'road', sub: !q.get('nosub') }; }
+  function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)) }; }
   function classesPage(items) {
     const s = sectionById('classes');
     const top = phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="${st.id ? '#/ref/classes' : '#/ref'}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
@@ -256,8 +256,7 @@ export function mountRef(root, hash) {
   offs.push(wireClass(root, { onState: (cs, it) => {
     const q = new URLSearchParams(st.q);
     if (cs.lvl > 1) q.set('lvl', cs.lvl); else q.delete('lvl');
-    if (cs.view !== 'road') q.set('view', cs.view); else q.delete('view');
-    if (!cs.sub) q.set('nosub', '1'); else q.delete('nosub');
+    q.delete('view'); q.delete('nosub');
     const h = hrefOf('classes', it.id, q);
     if (h !== location.hash) { history.replaceState(null, '', h); lastHash = location.hash; st = parse(location.hash); }
   } }));
