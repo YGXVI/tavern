@@ -76,7 +76,7 @@ function monsterHTML(ctx, t) {
   return `<header class="sheet-head">
       <span class="sheet-portrait foe" style="background-image:url(&quot;${esc(srcOf(t.img))}&quot;)"></span>
       <div class="titles grow"><b class="t-lg">${esc(t.name)}</b><div class="t-sm muted">${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''}${m.type ? ` · ${esc(m.type)}` : ''}${m.cr != null ? ` · КО ${esc(m.cr)}` : ''}</div></div>
-      ${isM && !lib ? `<div class="mob-seg" role="group" aria-label="Язык описаний">${['ru', 'en'].map((lang) => `<button class="${statblockLang === lang ? 'on' : ''}" data-stat-lang="${lang}" aria-pressed="${statblockLang === lang}">${lang.toUpperCase()}</button>`).join('')}</div>` : ''}
+      ${isM && !lib ? `<div class="mob-seg stat-lang" role="group" aria-label="Язык описаний">${['ru', 'en'].map((lang) => `<button class="${statblockLang === lang ? 'on' : ''}" data-stat-lang="${lang}" aria-pressed="${statblockLang === lang}">${lang.toUpperCase()}</button>`).join('')}</div>` : ''}
       <button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${icon('cancel-01', 18)}</button>
     </header>
     <div class="sheet-vitals">
@@ -93,7 +93,7 @@ function monsterHTML(ctx, t) {
       ${(m.traits||[]).map((x) => traitHTML(x, lib)).join('')}
       ${Object.entries(MLISTS).filter(([list]) => m[list]?.length).map(([list, title]) => `<div class="section-label" style="margin:16px 0 8px">${title}</div>
       ${list === 'reactions' ? m.reactions.map((x) => traitHTML(x, lib)).join('') : `<div class="attacks">${m[list].map((a, i) => actionHTML(m, list, a, i)).join('')}</div>`}`).join('')}
-      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.' : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
+      <p class="t-xs tertiary" style="margin-top:16px">${lib ? `Своё существо — копия из ${copyOwner === ctx.userId ? 'вашей библиотеки' : copyOwner ? 'библиотеки игрока' : 'библиотеки мастера'} в этой кампании${m.provenance ? '; основа — SRD 5.1 (CC BY 4.0)' : ''}.` : m.srd ? (statblockLang === 'ru' ? 'Числа и описания — SRD 5.1 (CC BY 4.0); русские названия и перевод описаний — наши.' : 'Числа и английские описания — SRD 5.1 (CC BY 4.0), русские названия — наши.') : 'Числа — SRD 5.1 (CC BY 4.0).'}</p>` : '<p class="muted t-para">Подробности о существе знает только мастер.</p>'}
     </div>`;
 }
 
