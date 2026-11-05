@@ -391,6 +391,29 @@ async function rebasePlayerRow(cid, o, err) {
 /** Дождаться, пока уйдут все изменения кампании (например, перед загрузкой обложки). */
 export function whenSynced(cid) { return queues.get(cid) || Promise.resolve(); }
 
+/** Новое существо показываем после подтверждения сервера, вместе со снимком и готовой картинкой. */
+export async function persistCreatureTokens(cid, sceneId, tokens, creature = null) {
+  const actor = me;
+  const job = (queues.get(cid) || Promise.resolve()).then(async () => {
+    if (!actor || actor !== me || !isActiveMember(cid)) throw new Error('Войдите в кампанию заново');
+    const rows = cache.get(cid);
+    if (!rows || (creature && !rows.creatures)) throw new Error('Кампания ещё не загружена');
+    const c = assemble(rows), scene = c.scenes.find((s) => s.id === sceneId);
+    if (!scene) throw new Error('Сцена удалена');
+    if (creature) (c.creatures ||= {})[creature.id] = structuredClone(creature);
+    scene.tokens.push(...structuredClone(tokens));
+    const ids = new Set(tokens.map((t) => t.id));
+    const ops = diffRows(rows, explode(c, rows), { isMaster: isMasterOf(cid) }).filter((o) => o.op === 'insert'
+      && ((o.table === 'tokens' && ids.has(o.key)) || (o.table === 'campaign_creatures' && o.key === creature?.id)));
+    await send(cid, groupPlacements(ops));
+    if (actor !== me) return;
+    applyOps(rows, ops);
+  });
+  queues.set(cid, job.catch((err) => failed(cid, err)));
+  await job;
+  if (actor === me) await loadCampaign(cid);
+}
+
 function enqueue(cid, job) {
   const p = (queues.get(cid) || Promise.resolve()).then(job).catch((err) => failed(cid, err));
   queues.set(cid, p);
@@ -399,6 +422,10 @@ function enqueue(cid, job) {
 
 async function createCampaign(c) {
   // Таблица снимков существ есть на сервере — новая кампания сразу с ней, а не «после обновления базы» (review C8).
+  if (!hasCreatures) {
+    const probe = await sb.from('campaign_creatures').select('id').limit(1);
+    if (!noTable(probe.error)) { must(probe); hasCreatures = true; }
+  }
   const rows0 = emptyRows(hasCreatures);
   const exploded = explode(c, rows0);
   // Кэш — до вставки: событие «вы мастер новой кампании» из личного канала не должно перезагружать её посреди отправки.
@@ -898,8 +925,9 @@ const asked = new Map(); // ссылка → время последней по�
 function prefetchAssets(c) {
   if (!c) return;
   const toks = c.scenes.flatMap((s) => (s.tokens || []).map((t) => t.img));
+  const pictures = Object.values(c.creatures || {}).flatMap((x) => [x.img, x.statblockImage]);
   const now = Date.now();
-  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src), ...toks].filter((r) => r?.startsWith('sb:') && !signedUrl(r) && now - (asked.get(r) || 0) > 60000));
+  const refs = new Set([c.cover, ...c.scenes.map((s) => s.map?.src), ...toks, ...pictures].filter((r) => r?.startsWith('sb:') && !signedUrl(r) && now - (asked.get(r) || 0) > 60000));
   if (!refs.size) return;
   for (const r of refs) asked.set(r, now);
   Promise.all([...refs].map(resolveSigned)).then(() => store.setDB(store.getDB(), { remote: true, assets: true }));

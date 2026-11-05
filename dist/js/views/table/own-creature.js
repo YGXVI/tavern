@@ -12,8 +12,9 @@ import { nextTokenName, userById, tokenStats } from '../../core/campaign.js';
 import { saveCreature } from '../../core/library.js';
 import { popover, closePopover } from '../../ui/kit.js';
 import { sizeById } from '../../data/rules.js';
-import { spotNear, viewCenter, hydrateImages } from './p-side.js';
+import { spotNear, viewCenter, hydrateImages, commitCreatures } from './p-side.js';
 import { pickTokenImage, deleteTokens } from './p-token.js';
+import { isServerMode } from '../../core/store.js';
 import { libraryImageFrom } from '../creature-img.js';
 
 export const CARD_SIZES = [
@@ -81,12 +82,13 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
   n.addEventListener('click', (e) => {
     const sd = e.target.closest('[data-side]'); if (sd) { st.side = sd.dataset.side; rerender(); return; }
     const sz = e.target.closest('[data-size]'); if (sz) { st.size = sz.dataset.size; rerender(); return; }
-    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref, file) => { st.img = ref; st.file = file || null; if (n.isConnected) rerender(); }); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref, file) => { if (ref !== st.img) st.file = file || null; st.img = ref; if (n.isConnected) rerender(); }, { ref: st.img, defaultRef: `ini:${st.name || '?'}` }); return; }
     if (e.target.closest('[data-noimg]')) { st.img = ''; st.file = null; rerender(); return; }
     if (e.target.closest('[data-ok]')) place();
   });
 
-  function place() {
+  async function place() {
+    if (st.busy) return;
     const err = n.querySelector('[data-err]');
     if (!st.name.trim()) { n.querySelector('[data-name]').closest('.input').classList.add('error'); n.querySelector('[data-name]').focus(); return; }
     const wrong = ['ac', 'speed', 'fly', 'init'].filter((k) => bad(intOrNull(st[k])));
@@ -96,10 +98,19 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null } = {}) 
       err.hidden = false; err.textContent = wrong.includes('hp') ? 'Хиты — число или формула вроде 2к8+2' : 'Здесь нужно целое число';
       return;
     }
-    const t = placeCreature(ctx, st, at);
-    closePopover();
-    if (!t) return;
-    if (st.save) saveToLibrary(ctx, st);
+    st.busy = true;
+    n.querySelectorAll('input, button').forEach((x) => { x.disabled = true; });
+    try {
+      const t = await placeCreature(ctx, st, at);
+      if (!t) return;
+      closePopover();
+      if (st.save) saveToLibrary(ctx, st);
+    } catch (error) {
+      err.hidden = false; err.textContent = `Существо не сохранено: ${error.message || error}`;
+    } finally {
+      st.busy = false;
+      n.querySelectorAll('input, button').forEach((x) => { x.disabled = false; });
+    }
   }
 }
 
@@ -116,18 +127,24 @@ export function placeCreature(ctx, st, at = null, random = undefined) {
     ...tokenFields(st, random),
     ...(master ? {} : { ownerId: ctx.userId, pending: true }),
   };
-  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: master ? 'Новое существо' : 'Своё существо', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
-  ctx.select([t.id]);
-  if (master) {
-    ctx.toast({
-      title: `«${t.name}» на карте`, body: t.hidden ? 'Скрыто от игроков' : 'Игроки его видят', icon: 'monster',
-      ...(t.hidden ? { action: { label: 'Показать', onClick: () => ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; }, { label: 'Показать', undo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = true; }, redo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; } }) } } : {}),
-    });
-    if (st.combat) ctx.panels.combatToggle([t.id]);
-  } else {
-    ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Пока мастер не решит, существо видите только вы. Передумали — ПКМ → «Отменить»', icon: 'hourglass' });
+  const history = { label: master ? 'Новое существо' : 'Своё существо', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } };
+  if (isServerMode()) return commitCreatures(ctx, ctx.sceneId, [t], null, history).then(placed);
+  ctx.mutateScene((s) => { s.tokens.push(t); }, history);
+  return placed();
+  function placed() {
+    if (ctx.sceneId !== sc.id) return t;
+    ctx.select([t.id]);
+    if (master) {
+      ctx.toast({
+        title: `«${t.name}» на карте`, body: t.hidden ? 'Скрыто от игроков' : 'Игроки его видят', icon: 'monster',
+        ...(t.hidden ? { action: { label: 'Показать', onClick: () => ctx.mutateScene((s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; }, { label: 'Показать', undo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = true; }, redo: (s) => { const x = s.tokens.find((q) => q.id === t.id); if (x) x.hidden = false; } }) } } : {}),
+      });
+      if (st.combat) ctx.panels.combatToggle([t.id]);
+    } else {
+      ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Пока мастер не решит, существо видите только вы. Передумали — ПКМ → «Отменить»', icon: 'hourglass' });
+    }
+    return t;
   }
-  return t;
 }
 
 async function saveToLibrary(ctx, st) {

@@ -294,7 +294,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     }
     if (q.action === 'insert' || q.action === 'upsert') {
       for (const r of [].concat(q.payload)) { const e = insertRow(uid, t, r, { upsert: q.action === 'upsert' }); if (e) return err(e, e.startsWith('new row') ? '42501' : '23000'); }
-      return { data: q.wantSelect ? [].concat(q.payload) : null, error: null };
+      const written = [].concat(q.payload).map((row) => clone(find(t, row)));
+      return { data: q.wantSelect ? q.single ? written[0] : written : null, error: null };
     }
     if (q.action === 'update') {
       const bad = validate(t, q.payload, { partial: true }); if (bad) return err(bad);
@@ -329,6 +330,20 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     ensureProfile(uid);
     if (rpcOverride) { const custom = rpcOverride({ uid, name, args: a, tables: T, emit }); if (custom !== undefined) return custom; }
     const ok = (data) => ({ data, error: null });
+    if (name === 'place_creature') {
+      const c = a.p_creature, t = a.p_token;
+      if (!c || !t || c.campaign_id !== t.campaign_id || t.data?.monsterId !== `lib:${c.id}`) return err('Нужны снимок и токен одной кампании', '22023');
+      const had = find('campaign_creatures', c);
+      let failure = had ? null : insertRow(uid, 'campaign_creatures', c, { emitIt: false });
+      if (!failure) failure = insertRow(uid, 'tokens', t, { emitIt: false });
+      if (failure) {
+        if (!had) { const i = T.campaign_creatures.findIndex((x) => x.id === c.id && x.campaign_id === c.campaign_id); if (i >= 0) T.campaign_creatures.splice(i, 1); }
+        return err(failure, /duplicate key/.test(failure) ? '23505' : '42501');
+      }
+      if (!had) emit('campaign_creatures', 'INSERT', find('campaign_creatures', c));
+      emit('tokens', 'INSERT', find('tokens', t));
+      return ok(t.id);
+    }
     if (name === 'invite_preview') {
       const inv = T.campaign_invites.find((i) => i.code === String(a.p_code).trim().toUpperCase());
       if (!inv || inv.revoked || (inv.expires_at && Date.parse(inv.expires_at) < Date.now())) return ok({ ok: false });
@@ -418,6 +433,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
   const auth = { anonymous: true, n: 0 }; // auth.anonymous = false — анонимный вход выключен в Supabase
   async function handle(page, msg) {
     log.push(msg.op === 'query' ? `${msg.q.action} ${msg.q.table}` : msg.op);
+    if (net.writeGate && (msg.op === 'rpc' && msg.name === 'place_creature'
+      || msg.op === 'query' && msg.q.action === 'insert' && ['tokens', 'campaign_creatures'].includes(msg.q.table))) await net.writeGate;
     // Обрыв сети: supabase-js не бросает, а возвращает ошибку без кода.
     if (net.down && ['query', 'rpc'].includes(msg.op)) return { data: null, error: { message: 'TypeError: Failed to fetch', details: '', hint: '', code: '' } };
     switch (msg.op) {
