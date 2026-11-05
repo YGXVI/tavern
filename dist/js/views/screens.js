@@ -551,7 +551,8 @@ export function seatHero(cid, userId, chId) {
   go(`#/c/${cid}`);
 }
 
-function claim(cid, userId, chId) {
+/** Сесть за стол героем chId (выбор героя, перенос из LSS, «Привести в кампанию»): членство, токен, стол. */
+export function claim(cid, userId, chId) {
   if (isServerMode()) { claimServer(cid, userId, chId); return; }
   commit((db) => {
     const c = db.campaigns[cid];

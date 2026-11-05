@@ -2,7 +2,7 @@
 // Настоящие герои (#202, YGXVI / Claude): лист и «Мои герои» читают персонажей кампаний пользователя через adapter.js,
 // действия листа меняют персонажа теми же путями, что лист за столом (updateCampaign → команды листа на сервере).
 // Адреса образцов (lira, torin, корнеры) и шаги, ещё не подключённые к данным, работают на витрине fixture.js.
-import { LIRA, TORIN, CORNERS, LSS_IMPORT, LEVEL_UP, CREATION, CREATION_LIVE } from './fixture.js';
+import { LIRA, TORIN, CORNERS, LEVEL_UP, CREATION, CREATION_LIVE } from './fixture.js';
 import { toast } from '../../ui/kit.js';
 import { campaignsFor, membership, updateCampaign, userById } from '../../core/campaign.js';
 import { currentUserId } from '../../core/auth.js';
@@ -236,8 +236,63 @@ export async function uploadPortrait(file) {
 }
 /** Снаряжение SRD для «Добавить предмет»: [{ ref, name, kind, weight }] (пусто — справочник не загрузился). */
 export const gearCatalog = () => (gear ? [...gear.byId.values()].map((g) => ({ ref: g.id, name: g.ru, kind: g.kind, weight: g.weight })) : []);
-/** Разбор файла Long Story Short. */
-export const lssImportView = () => LSS_IMPORT;
+// ——— Перенос из Long Story Short (72, #203): разбор файла — lss.js, разобранный лист живёт в вкладке до переноса ———
+const LSS_KEY = 'rasputye-hero-lss-v1';
+/** Разобранный файл LSS или null — тогда экран просит файл. */
+export const lssImportView = () => readJSON(LSS_KEY);
+export async function loadLssFile(file) {
+  try {
+    const { parseLss } = await import('./lss.js');
+    const parsed = parseLss(await file.text(), { fileName: `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} КБ`, spellNames: spells.byName });
+    sessionStorage.setItem(LSS_KEY, JSON.stringify(parsed));
+  } catch (e) { say('Файл не подошёл', e.message, 'alert-circle'); return; }
+  window.dispatchEvent(new CustomEvent('hero:changed'));
+}
+export const dropLss = () => { try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ } window.dispatchEvent(new CustomEvent('hero:changed')); };
+
+/**
+ * Положить готового героя (данные листа) в кампанию: песочница — сразу, сервер — createCharacterSheet. Если у игрока
+ * в этой кампании ещё нет героя — он садится за стол этим героем, иначе открывается лист.
+ */
+async function placeHero(c, data, { title }) {
+  const userId = currentUserId();
+  const id = (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `ch-${Date.now().toString(36)}`);
+  const hero = structuredClone(data);
+  // Черт характера сервер пока не хранит (#202): переносим их в заметки, чтобы не потерять.
+  if (isServerMode() && hero.personality) {
+    const p = hero.personality, lines = [['Черты', p.traits], ['Идеалы', p.ideals], ['Привязанности', p.bonds], ['Слабости', p.flaws], ['Предыстория', p.backstory]].filter(([, x]) => x);
+    if (lines.length) hero.notes = [hero.notes, lines.map(([k, x]) => `${k}: ${x}`).join('\n')].filter(Boolean).join('\n\n');
+    delete hero.personality;
+  }
+  const m = membership(c, userId);
+  const seat = m?.role === 'player' && !m.characterId;
+  try {
+    if (isServerMode()) { const sync = await import('../../server/sync.js'); await sync.createCharacterSheet(c.id, { ...hero, id, ownerId: userId }); }
+    else updateCampaign(c.id, (camp) => { camp.characters.push({ ...hero, id, ownerId: userId }); });
+  } catch (e) { say(`${title} не удалось`, e?.message || 'Сервер не принял героя.', 'alert-circle'); return null; }
+  say(`${hero.name} — в «${c.name}»`, seat ? 'Садитесь за стол.' : 'Лист открыт.', 'tick-02');
+  if (seat) { const { claim } = await import('../screens.js'); claim(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
+  return id;
+}
+async function importLss(p = {}) {
+  const v = lssImportView();
+  if (!v) return;
+  const st = readJSON(BUILD_KEY);
+  const c = targetCampaign(currentUserId(), p.campaignId || st?.campaignId);
+  if (!c) { say('Нет кампании', 'Войдите в кампанию по приглашению мастера — герой появится в ней.'); return; }
+  const id = await placeHero(c, v.hero, { title: 'Перенос' });
+  if (id) try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ }
+}
+/** Привести героя в другую кампанию — копией листа (у каждой кампании свой экземпляр, как при выборе героя). */
+async function bringToCampaign(p = {}) {
+  const real = findHero(p.heroId);
+  const c = campaignsFor(currentUserId()).find((x) => x.id === p.campaignId);
+  if (!real || !c) { say('Не нашёл героя или кампанию'); return; }
+  const { id, ownerId, ...data } = structuredClone(real.ch);
+  await placeHero(c, data, { title: 'Перенос героя' });
+}
+/** Кампании, куда можно привести героя key: где пользователь играет или ведёт, кроме текущей. */
+export const bringTargets = (key) => { const real = findHero(key); return campaignsFor(currentUserId()).filter((c) => c.id !== real?.c.id && membership(c, currentUserId())?.status === 'active').map((c) => ({ id: c.id, name: c.name, free: membership(c, currentUserId())?.role === 'player' && !membership(c, currentUserId()).characterId })); };
 
 const say = (title, body, icon = 'information-circle') => toast({ title, body, icon, timeout: 2600 });
 const stub = (name) => (payload) => {
@@ -375,7 +430,7 @@ export const heroActions = {
   createFrom: (p = {}) => (p.path === 'steps' && creationIx ? undefined : stub('Новый герой')(p)), // { path: 'steps' | 'quick' | 'lss' }
   choose,                                      // { step, id, value }
   finish,                                      // { draftId }
-  bringToCampaign: stub('Привести в кампанию'),// { heroId, campaignId }
+  bringToCampaign,                             // { heroId, campaignId }
   setHp: live('setHp'),                        // { heroId, delta, temp }
   roll: live('roll'),                          // { heroId, what, formula }
   useResource: live('useResource'),            // { heroId, id }
@@ -391,5 +446,5 @@ export const heroActions = {
   equip: live('equip'),                        // { heroId, itemId, auto: [ids] }
   coins: live('coins'),                        // { heroId, pp, ep, gp, sp, cp }
   levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
-  importLss: stub('Импорт из LSS'),            // { decisions: { [issue]: choice } }
+  importLss,                                   // { campaignId? } — разобранный файл из loadLssFile
 };

@@ -80,3 +80,23 @@ test('повышение: +1 к двум характеристикам вмес
   assert.equal(req.payload.patch.stats.cha, h.stats.cha + 1);
   assert.equal(req.payload.patch.stats.con, h.stats.con + 1);
 });
+
+test('перенос из Long Story Short: имя, класс, характеристики, экспертиза, атаки, сумка текстом', async () => {
+  const { parseLss, lssText } = await import('../dist/js/views/hero/lss.js');
+  const inner = { name: { value: 'Брин' }, info: { charClass: { value: 'Плут' }, level: { value: 3 }, race: { value: 'Полурослик' } },
+    stats: { str: { score: 8 }, dex: { score: 17 }, con: { score: 12 }, int: { score: 13 }, wis: { score: 10 }, cha: { score: 14 } },
+    saves: { dex: { isProf: true } }, skills: { stealth: { isProf: 2 }, 'sleight of hand': { isProf: 1 } },
+    vitality: { 'hp-max': { value: 20 }, ac: { value: 14 }, speed: { value: 25 }, 'hit-die': { value: 'd8' } },
+    weaponsList: [{ name: { value: 'Короткий меч' }, mod: { value: '+5' }, dmg: { value: '1к6+3' } }],
+    text: { equipment: { value: { data: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Кожаный доспех, лук' }] }] } } } } };
+  const r = parseLss(JSON.stringify({ jsonType: 'character', data: JSON.stringify(inner) }));
+  assert.equal(r.hero.name, 'Брин'); assert.equal(r.hero.classId, 'rogue'); assert.equal(r.hero.stats.dex, 17);
+  assert.deepEqual(r.hero.saves, ['dex']); assert.equal(r.hero.proficiencies.skills.stealth, 2); assert.ok(r.hero.skills.includes('sleight'));
+  assert.deepEqual(r.hero.attacks[0], { name: 'Короткий меч', bonus: 5, damage: '1d6+3', type: '', note: '' });
+  assert.equal(r.hero.inventory, 'Кожаный доспех, лук');
+  assert.equal(lssText('строка'), 'строка');
+  assert.throws(() => parseLss('{"foo": 1}'), /Long Story Short/);
+  const v = view({ ...r.hero, id: 'brin', ownerId: 'u1' });
+  assert.equal(v.vitals.ac.value, 14);
+  assert.equal(v.skills.find((s) => s.name === 'Скрытность').prof, 'expert');
+});

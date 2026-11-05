@@ -762,3 +762,8 @@
 .s-coins input { width: 100%; height: 40px; padding: 0 10px; border-radius: 10px; background: var(--bg-control); color: var(--text-primary); border: 0; font: 600 15px/20px var(--font-text); }
 .h-quick-portraits.sm { flex-wrap: wrap; gap: 8px; }
 .h-quick-portraits.sm .h-portrait-pick { width: 48px; height: 48px; }
+/* Перенос из LSS: файл (#203) */
+.h-drop { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 48px 24px; border-radius: var(--r-24, 24px); border: 1.5px dashed var(--stroke-divider); color: var(--text-secondary); cursor: pointer; text-align: center; }
+.h-drop:hover, .h-drop.over { border-color: var(--stroke-accent); background: var(--bg-accent-subtle); color: var(--text-primary); }
+.h-drop b { font: 600 16px/20px var(--font-text); }
+.h-import-art { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; }
