@@ -8,7 +8,8 @@ import { modal, panelHeader, toast, portrait, confirmDialog } from '../ui/kit.js
 import { ABILITIES, SKILLS, SIZES, sizeById, mod } from '../data/rules.js';
 import { BESTIARY, loadSrdBestiary } from '../data/bestiary.js';
 import { listCreatures, saveCreature, deleteCreature, uploadLibraryImage } from '../core/library.js';
-import { creatureImgTag, hydrateCreatureImages, pickImageFile, dropLibraryImages } from './creature-img.js';
+import { creatureImgTag, hydrateCreatureImages, dropLibraryImages } from './creature-img.js';
+import { tokenImageEditor } from './table/token-image.js';
 import { normalizeCreature, fromSrd } from '../rules/creature.js';
 
 const CRS = ['0', '1/8', '1/4', '1/2', ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
@@ -206,7 +207,7 @@ function editorBody(d) {
   const prov = d.provenance ? `<p class="t-xs tertiary">Основа — SRD 5.1 (CC BY 4.0), копия ваша: правки не меняют бестиарий.</p>` : '';
   const own = d.img && !String(d.img).startsWith('ini:');
   const pic = `<div class="lib-pic"><span class="avatar lib-pic-face foe">${creatureImgTag(d.img, d.name)}</span><div class="col grow" style="gap:6px">
-      <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-act="pic" ${d.picBusy ? 'disabled' : ''}>${icn('upload-01', 16)}${d.picBusy ? 'Загружаю…' : own ? 'Заменить картинку' : 'Своя картинка'}</button>${own ? `<button class="btn btn-sm btn-ghost" data-act="nopic">Без картинки</button>` : ''}</div>
+      <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-act="pic" ${d.picBusy ? 'disabled' : ''}>${icn('upload-01', 16)}${d.picBusy ? 'Загружаю…' : own ? 'Настроить картинку' : 'Своя картинка'}</button>${own ? `<button class="btn btn-sm btn-ghost" data-act="nopic">Без картинки</button>` : ''}</div>
       <small class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ. Здесь её видите только вы; на карте — все, кто видит существо.</small></div></div>`;
   return `
     <section class="lib-sec"><h4>Основное</h4>${pic}
@@ -279,12 +280,16 @@ function openEditor(c0, reload) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const p = b.dataset.p, act = b.dataset.act;
     if (act === 'pic') {
-      pickImageFile(toast, async (file) => {
-        d.picBusy = true; render();
-        try { const ref = await uploadLibraryImage(file); uploaded.add(ref); d.img = ref; }
-        catch (err) { failed('Картинка не загрузилась', err); }
-        delete d.picBusy;
-        if (m.root.isConnected) render();
+      tokenImageEditor({ title: 'Картинка существа', ref: d.img || `ini:${d.name || '?'}`, defaultRef: `ini:${d.name || '?'}`, toast,
+        store: async (file) => {
+          d.picBusy = true; render();
+          try {
+            const ref = await uploadLibraryImage(file); uploaded.add(ref);
+            if (!m.root.isConnected) { dropLibraryImages([ref]); throw new Error('Окно существа закрыто'); }
+            return ref;
+          } finally { delete d.picBusy; if (m.root.isConnected) render(); }
+        },
+        done: (ref) => { if (m.root.isConnected) { d.img = ref.startsWith('ini:') ? '' : ref; render(); } },
       });
       return;
     }

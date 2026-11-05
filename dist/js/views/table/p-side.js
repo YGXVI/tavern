@@ -137,9 +137,7 @@ export function pickMonster(ctx, pick) {
   return tpl ? safeMonster(tpl) : null;
 }
 /**
- * Копия шаблона для кампании: без владельца и приватных картинок библиотеки. Картинку статблока (TASK-097 4.2) из
- * личного бакета копия получает позже — мастер переносит файл в бакет кампании (fillStatblockImage); до того копия
- * «ручная». Ссылка не из библиотеки (песочница) остаётся как есть.
+ * Основа снимка для кампании без приватных ссылок. preparedCopy переносит картинки до записи снимка и токена.
  */
 function snapshotOf(tpl, id) {
   const { ownerId, updatedAt, statblockImage, ...rest } = structuredClone(tpl);
@@ -147,14 +145,6 @@ function snapshotOf(tpl, id) {
   const keep = rest.source === 'image' && typeof statblockImage === 'string' && statblockImage && !isLibRef(statblockImage);
   if (keep) rest.statblockImage = statblockImage; else if (rest.source === 'image') rest.source = 'manual';
   return { ...rest, id, sourceId: tpl.id, ownerId: null };
-}
-/** Картинка статблока из личной библиотеки — в бакет кампании, затем в копию существа (правит снимок только мастер). */
-function fillStatblockImage(ctx, tpl, copyId) {
-  if (!isServerMode() || tpl.source !== 'image' || !isLibRef(tpl.statblockImage)) return;
-  campaignImage(ctx.cid, tpl.statblockImage, (b) => storeTokenImage(ctx, b)).then((ref) => {
-    if (!ref) return;
-    updateCampaign(ctx.cid, (c) => { const cp = c.creatures?.[copyId]; if (cp && !cp.statblockImage) { cp.statblockImage = ref; cp.source = 'image'; } });
-  }).catch((err) => ctx.toast({ title: 'Картинка статблока не перенеслась', body: `${err.message || err}. Статблок за столом пока без картинки.`, icon: 'alert-circle' }));
 }
 /** В серверном режиме снимки живут в таблице campaign_creatures — без неё (#153) ставить свои существа нельзя. */
 const libOffline = (ctx) => isServerMode() && ctx.c.creatures === undefined;
@@ -420,67 +410,80 @@ export function newSceneModal(ctx) {
 
 // ——— Существа ———
 /**
- * Своя картинка шаблона из «Моих существ» (#190 E). Песочница: ссылка общая — ставим как есть. Сервер: личный бакет
- * игрокам не виден, поэтому сразу — инициалы (или картинка, уже скопированная в кампанию), а копия — следом.
+ * Своя картинка шаблона из «Моих существ»: личный файл переносится в кампанию до постановки.
  */
-function libImageNow(tpl, have, name) {
-  if (have?.img && !have.img.startsWith('ini:') && !isLibRef(have.img)) return { now: have.img, later: null };
-  if (isLibRef(tpl.img)) return { now: `ini:${name}`, later: isServerMode() ? tpl.img : null };
-  return { now: tpl.img || `ini:${name}`, later: null };
-}
-/** Копия личной картинки в кампании: заменить инициалы у только что поставленных; мастеру — и у копии существа. */
-function fillLibImage(ctx, later, placeholder, ids, copyId, master) {
-  if (!later) return;
-  campaignImage(ctx.cid, later, (b) => storeTokenImage(ctx, b)).then((ref) => {
-    if (!ref) return;
-    updateCampaign(ctx.cid, (c) => {
-      for (const s of c.scenes) for (const t of s.tokens) if (ids.has(t.id) && t.img === placeholder) t.img = ref;
-      const cp = c.creatures?.[copyId];
-      if (master && cp && (!cp.img || cp.img.startsWith('ini:'))) cp.img = ref;
-    });
-  }).catch((err) => ctx.toast({ title: 'Своя картинка не перенеслась', body: `${err.message || err}. На карте пока инициалы — картинку можно поставить: ПКМ → «Картинка…»`, icon: 'alert-circle' }));
+async function preparedCopy(ctx, tpl, ownerId = null) {
+  const copy = { ...snapshotOf(tpl, uid('cc-')), ownerId };
+  copy.img = await campaignImage(ctx.cid, tpl.img || `ini:${tpl.name}`, (b) => storeTokenImage(ctx, b));
+  if (tpl.source === 'image' && tpl.statblockImage) {
+    copy.statblockImage = await campaignImage(ctx.cid, tpl.statblockImage, (b) => storeTokenImage(ctx, b));
+    copy.source = 'image';
+  }
+  return copy;
 }
 
-export function placeCreatures(ctx, monsterId) {
+async function placing(ctx, work) {
+  if (ctx.ui.creaturePlacing) return false;
+  ctx.ui.creaturePlacing = true;
+  const dismiss = isServerMode() ? ctx.toast({ title: 'Сохраняю существо…', body: 'Картинка и токен появятся после записи на сервер', icon: 'hourglass', timeout: 0 }) : null;
+  try { return await work(); }
+  catch (err) { ctx.toast({ title: 'Существо не поставлено', body: err.message || String(err), icon: 'alert-circle' }); return false; }
+  finally { ctx.ui.creaturePlacing = false; dismiss?.(); }
+}
+
+export async function commitCreatures(ctx, sceneId, tokens, copy, history) {
+  if (isServerMode()) {
+    const { persistCreatureTokens } = await import('../../server/sync.js');
+    await persistCreatureTokens(ctx.cid, sceneId, tokens, copy);
+    ctx.history.push({ sceneId, ...history });
+  } else {
+    ctx.mutateScene((sc, c) => {
+      if (copy) (c.creatures ||= {})[copy.id] = structuredClone(copy);
+      sc.tokens.push(...structuredClone(tokens));
+    }, history);
+  }
+}
+
+export function placeCreatures(ctx, monsterId) { return placing(ctx, () => placeCreaturesInner(ctx, monsterId)); }
+async function placeCreaturesInner(ctx, monsterId) {
+  const sceneId = ctx.sceneId;
   const tpl = libTemplate(ctx, monsterId);
   const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
   if (!m || !ctx.scene) return;
   if (tpl && libOffline(ctx)) return;
-  // Своё существо: копия шаблона в кампании (одна на шаблон — правки библиотеки её не меняют), токен ссылается на неё.
-  let copyId = null, newCopy = null, pic = null;
-  if (tpl) {
-    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && !x.ownerId);
-    copyId = have ? have.id : uid('cc-');
-    if (!have) newCopy = snapshotOf(tpl, copyId);
-    pic = libImageNow(tpl, have, m.name);
-  }
-  const tokenMonsterId = tpl ? `lib:${copyId}` : m.id;
-  const st = bState(ctx);
-  const n = sizeById(m.size).cells;
+  const st = { ...bState(ctx) };
   const at = ctx.ui.placeAt || viewCenter(ctx);
   ctx.ui.placeAt = null;
+  // Новый снимок на постановку: правки шаблона видны новым токенам и не меняют уже поставленных.
+  let copyId = null, newCopy = null, pic = null;
+  if (tpl) {
+    newCopy = await preparedCopy(ctx, tpl);
+    copyId = newCopy.id;
+    pic = { now: newCopy.img };
+    if (ctx.sceneId !== sceneId) return false;
+  }
+  const tokenMonsterId = tpl ? `lib:${copyId}` : m.id;
+  const n = sizeById(m.size).cells;
   const spots = freeSpots(ctx.scene, at, st.count, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const made = [];
-  ctx.mutateScene((sc, c) => {
-    if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy);
-    for (const p of spots) {
-      const name = nextTokenName(sc, m.name);
-      let hp = m.hp;
-      if (st.rollHp) { try { hp = Math.max(1, roll(m.hpDice.replace(/\s/g, '')).total); } catch { /* среднее */ } }
-      const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-      const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp, ...(pic ? { img: pic.now } : {}) }, m);
-      sc.tokens.push(t);
-      made.push(t);
-    }
-  }, {
+  const sc = structuredClone(ctx.scene);
+  for (const p of spots) {
+    const name = nextTokenName(sc, m.name);
+    let hp = m.hp;
+    if (st.rollHp) { try { hp = Math.max(1, roll(m.hpDice.replace(/\s/g, '')).total); } catch { /* среднее */ } }
+    const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
+    const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp, ...(pic ? { img: pic.now } : {}) }, m);
+    sc.tokens.push(t);
+    made.push(t);
+  }
+  await commitCreatures(ctx, sceneId, made, newCopy, {
     label: 'Существа',
     undo: (sc, c) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); if (newCopy && c.creatures) delete c.creatures[copyId]; },
     redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); for (const t of made) sc.tokens.push(structuredClone(t)); },
   });
+  if (ctx.sceneId !== sceneId) return true;
   ctx.select(made.map((t) => t.id));
-  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set(made.map((t) => t.id)), copyId, true);
-  if (newCopy) fillStatblockImage(ctx, tpl, copyId);
   if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({
@@ -583,15 +586,19 @@ function ownTokenPicker(ctx, anchor) {
   n.addEventListener('click', (e) => {
     const sz = e.target.closest('[data-size]');
     if (sz) { st.size = sz.dataset.size; for (const b of n.querySelectorAll('[data-size]')) b.classList.toggle('chip-accent', b === sz); return; }
-    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref) => { st.img = ref; redraw(); }); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref) => { st.img = ref; redraw(); }, { ref: st.img, defaultRef: `ini:${st.name || '?'}` }); return; }
     if (e.target.closest('[data-noimg]')) { st.img = ''; redraw(); return; }
     if (e.target.closest('[data-ok]')) place();
   });
-  function place() {
+  async function place() {
+    if (st.busy) return;
     const name = nameIn.value.trim();
     if (!name) { nameIn.closest('.field').classList.add('error'); nameIn.focus(); return; }
-    placeOwnToken(ctx, { name, size: st.size, img: st.img });
-    closePopover();
+    st.busy = true;
+    n.querySelector('[data-ok]').disabled = true;
+    try { await placeOwnToken(ctx, { name, size: st.size, img: st.img }); if (n.isConnected) closePopover(); }
+    catch (error) { ctx.toast({ title: 'Токен не сохранён', body: error.message || String(error), icon: 'alert-circle' }); }
+    finally { st.busy = false; n.querySelector('[data-ok]').disabled = false; }
   }
 }
 
@@ -601,9 +608,12 @@ export function placeOwnToken(ctx, { name, size = 'small', img = '' }, at = null
   const hero = myHeroToken(ctx);
   const p = spotNear(ctx, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), sizeById(size).cells);
   const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
-  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
-  ctx.select([t.id]);
-  return t;
+  const history = { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } };
+  const sceneId = ctx.sceneId;
+  const placed = () => { if (ctx.sceneId === sceneId) ctx.select([t.id]); return t; };
+  if (isServerMode()) return commitCreatures(ctx, sceneId, [t], null, history).then(placed);
+  ctx.mutateScene((s) => { s.tokens.push(t); }, history);
+  return placed();
 }
 
 function summonPicker(ctx, anchor) {
@@ -641,7 +651,7 @@ function summonPicker(ctx, anchor) {
     const tab = e.target.closest('[data-src]');
     if (tab) { st.src = tab.dataset.src; for (const b of n.querySelectorAll('[data-src]')) b.setAttribute('aria-selected', String(b === tab)); qIn.placeholder = st.src === 'lib' ? 'Найти своё существо' : 'Боевой конь, wolf, КО 1…'; list(); return; }
     const b = e.target.closest('[data-summon]');
-    if (b && placeSummon(ctx, b.dataset.summon)) closePopover();
+    if (b) placeSummon(ctx, b.dataset.summon).then((ok) => { if (ok && n.isConnected) closePopover(); });
   });
 }
 
@@ -649,7 +659,9 @@ function summonPicker(ctx, anchor) {
  * Призыв игрока (план TASK-097, «Призывы игрока»): существо из бестиария или своей библиотеки рядом с героем —
  * дружественное, со ссылкой на призывателя и владельцем-игроком. В бой само не попадает.
  */
-export function placeSummon(ctx, pick, at = null) {
+export function placeSummon(ctx, pick, at = null) { return placing(ctx, () => placeSummonInner(ctx, pick, at)); }
+async function placeSummonInner(ctx, pick, at) {
+  const sceneId = ctx.sceneId;
   const hero = myHeroToken(ctx);
   if (!hero || !ctx.scene) { ctx.toast({ title: 'Нужен ваш герой на сцене', body: 'Призыв встаёт рядом с ним — попросите мастера поставить героя', icon: 'alert-circle' }); return false; }
   const tpl = libTemplate(ctx, pick);
@@ -657,24 +669,23 @@ export function placeSummon(ctx, pick, at = null) {
   if (!m || (tpl && libOffline(ctx))) return false;
   let copyId = null, newCopy = null, pic = null;
   if (tpl) {
-    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && x.ownerId === ctx.userId);
-    copyId = have ? have.id : uid('cc-');
-    if (!have) newCopy = { ...snapshotOf(tpl, copyId), ownerId: ctx.userId };
-    pic = libImageNow(tpl, have, m.name);
+    newCopy = await preparedCopy(ctx, tpl, ctx.userId);
+    copyId = newCopy.id;
+    pic = { now: newCopy.img };
+    if (ctx.sceneId !== sceneId) return false;
   }
   const n = sizeById(m.size).cells;
   const p = spotNear(ctx, at || { x: hero.x, y: hero.y }, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
   const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly', ...(pic ? { img: pic.now } : {}) }, m);
-  ctx.mutateScene((sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(t); }, {
+  await commitCreatures(ctx, sceneId, [t], newCopy, {
     label: 'Призыв',
     undo: (sc, c) => { sc.tokens = sc.tokens.filter((x) => x.id !== t.id); if (newCopy && c.creatures) delete c.creatures[copyId]; },
     redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(structuredClone(t)); },
   });
+  if (ctx.sceneId !== sceneId) return true;
   ctx.select([t.id]);
-  // Копию существа в кампании правит мастер — игрок меняет картинку только у своего токена.
-  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set([t.id]), copyId, ctx.isMaster);
   ctx.toast({ title: `Призыв: ${t.name}`, body: 'Стоит рядом с вашим героем. В бой его добавляет мастер', icon: 'monster' });
   return true;
 }

@@ -926,6 +926,9 @@ body.dragging-creature, body.dragging-creature * { cursor: grabbing !important; 
 
 /* Статблок SRD (TASK-083): английские описания под действиями. У атак — две строки, тап раскрывает. */
 .attack-row.has-desc { align-items: flex-start; }
+.attack-row > .grow { min-width: 0; }
+.monster-rolls { display: flex; flex-direction: column; align-items: stretch; gap: 4px; max-width: 50%; flex: none; }
+.monster-rolls .btn, .monster-rolls .chip { white-space: normal; height: auto; min-height: 32px; overflow-wrap: anywhere; }
 .attack-row.has-desc > .btn, .attack-row.has-desc > .chip { margin-top: 2px; }
 .atk-desc { margin: 6px 0 0; font: 400 12px/17px var(--font-text); color: var(--text-secondary); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .atk-desc[data-desc] { cursor: pointer; }

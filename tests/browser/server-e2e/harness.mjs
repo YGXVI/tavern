@@ -22,6 +22,8 @@ const S = {
   save_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', data: 'json' } },
   portal_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', author: 'uuid', data: 'json' } },
   combats: { pk: ['campaign_id'], cols: { campaign_id: 'text!', data: 'json' } },
+  creatures: { pk: ['owner_id', 'id'], cols: { id: 'text!', owner_id: 'uuid!', data: 'json!', updated_at: 'ts' } },
+  campaign_creatures: { pk: ['campaign_id', 'id'], cols: { campaign_id: 'text!', id: 'text!', owner_id: 'uuid', source_id: 'text', data: 'json!', updated_at: 'ts' } },
 };
 // Not null с значением по умолчанию: можно не передавать, но явный null — ошибка, как в Postgres.
 const NN_DEFAULT = { campaign_invites: ['manual', 'revoked', 'created_at'], campaign_members: ['joined_at'], campaigns: ['data', 'created_at', 'updated_at'], characters: ['data', 'updated_at'], combats: ['data'], drawings: ['ord', 'data'], log_entries: ['vis', 'data'], log_secrets: ['data'], portal_requests: ['data'], profiles: ['hue', 'created_at', 'updated_at'], save_requests: ['data'], scene_explored: ['cells'], scene_secrets: ['data'], scenes: ['ord', 'data'], tokens: ['hidden', 'ord', 'data'] };
@@ -45,6 +47,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
   const subs = new Map();  // chan → {page, uid, topic, pg, self}
   const pres = new Map();  // topic → Map(chan → {key, info})
   const files = new Map();
+  const fileUrls = new Map();
   const log = [];          // журнал вызовов (для отладки)
   const oauth = [];
   const queues = new WeakMap();
@@ -68,6 +71,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     const cid = t === 'campaigns' ? r.id : r.campaign_id;
     switch (t) {
       case 'profiles': return true;
+      case 'creatures': return r.owner_id === uid;
+      case 'campaign_creatures': return isMaster(uid, cid) || (isMember(uid, cid) && r.owner_id === uid);
       case 'campaigns': return isApplicant(uid, cid);
       case 'campaign_members': return r.user_id === uid || isMember(uid, cid);
       case 'campaign_invites': return isMaster(uid, cid);
@@ -165,6 +170,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     const M = isMaster(uid, cid), A = isMember(uid, cid);
     const rls = `new row violates row-level security policy for table "${t}"`;
     switch (t) {
+      case 'creatures': return r.owner_id === uid ? null : rls;
+      case 'campaign_creatures': return op === 'insert' ? M || (A && r.owner_id === uid) ? null : rls : M ? null : 'skip';
       case 'campaigns': return op === 'insert' ? (r.owner_id === uid ? null : rls) : M ? null : 'skip';
       case 'campaign_members':
         if (op === 'insert') return 'permission denied for table campaign_members';
@@ -287,7 +294,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     }
     if (q.action === 'insert' || q.action === 'upsert') {
       for (const r of [].concat(q.payload)) { const e = insertRow(uid, t, r, { upsert: q.action === 'upsert' }); if (e) return err(e, e.startsWith('new row') ? '42501' : '23000'); }
-      return { data: q.wantSelect ? [].concat(q.payload) : null, error: null };
+      const written = [].concat(q.payload).map((row) => clone(find(t, row)));
+      return { data: q.wantSelect ? q.single ? written[0] : written : null, error: null };
     }
     if (q.action === 'update') {
       const bad = validate(t, q.payload, { partial: true }); if (bad) return err(bad);
@@ -322,6 +330,20 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     ensureProfile(uid);
     if (rpcOverride) { const custom = rpcOverride({ uid, name, args: a, tables: T, emit }); if (custom !== undefined) return custom; }
     const ok = (data) => ({ data, error: null });
+    if (name === 'place_creature') {
+      const c = a.p_creature, t = a.p_token;
+      if (!c || !t || c.campaign_id !== t.campaign_id || t.data?.monsterId !== `lib:${c.id}`) return err('Нужны снимок и токен одной кампании', '22023');
+      const had = find('campaign_creatures', c);
+      let failure = had ? null : insertRow(uid, 'campaign_creatures', c, { emitIt: false });
+      if (!failure) failure = insertRow(uid, 'tokens', t, { emitIt: false });
+      if (failure) {
+        if (!had) { const i = T.campaign_creatures.findIndex((x) => x.id === c.id && x.campaign_id === c.campaign_id); if (i >= 0) T.campaign_creatures.splice(i, 1); }
+        return err(failure, /duplicate key/.test(failure) ? '23505' : '42501');
+      }
+      if (!had) emit('campaign_creatures', 'INSERT', find('campaign_creatures', c));
+      emit('tokens', 'INSERT', find('tokens', t));
+      return ok(t.id);
+    }
     if (name === 'invite_preview') {
       const inv = T.campaign_invites.find((i) => i.code === String(a.p_code).trim().toUpperCase());
       if (!inv || inv.revoked || (inv.expires_at && Date.parse(inv.expires_at) < Date.now())) return ok({ ok: false });
@@ -411,6 +433,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
   const auth = { anonymous: true, n: 0 }; // auth.anonymous = false — анонимный вход выключен в Supabase
   async function handle(page, msg) {
     log.push(msg.op === 'query' ? `${msg.q.action} ${msg.q.table}` : msg.op);
+    if (net.writeGate && (msg.op === 'rpc' && msg.name === 'place_creature'
+      || msg.op === 'query' && msg.q.action === 'insert' && ['tokens', 'campaign_creatures'].includes(msg.q.table))) await net.writeGate;
     // Обрыв сети: supabase-js не бросает, а возвращает ошибку без кода.
     if (net.down && ['query', 'rpc'].includes(msg.op)) return { data: null, error: { message: 'TypeError: Failed to fetch', details: '', hint: '', code: '' } };
     switch (msg.op) {
@@ -442,13 +466,13 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
       case 'untrack': pres.get(msg.topic)?.delete(msg.chan); presenceSync(msg.topic); return null;
       case 'upload': {
         const cid = msg.path.split('/')[0];
-        if (!isMaster(msg.uid, cid)) return { data: null, error: { message: 'new row violates row-level security policy' } };
-        files.set(msg.path, msg.size); return { data: { path: msg.path }, error: null };
+        if (msg.bucket === 'library' ? cid !== msg.uid : msg.bucket === 'tokens' ? !isMember(msg.uid, cid) : !isMaster(msg.uid, cid)) return { data: null, error: { message: 'new row violates row-level security policy' } };
+        files.set(msg.path, msg.size); if (msg.dataUrl) fileUrls.set(msg.path, msg.dataUrl); return { data: { path: msg.path }, error: null };
       }
       case 'sign': {
         const cid = msg.path.split('/')[0];
-        if (!isApplicant(msg.uid, cid) || !files.has(msg.path)) return { data: null, error: { message: 'Object not found' } };
-        return { data: { signedUrl: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#3a5"/></svg>') }, error: null };
+        if ((msg.bucket === 'library' ? cid !== msg.uid : !isApplicant(msg.uid, cid)) || !files.has(msg.path)) return { data: null, error: { message: 'Object not found' } };
+        return { data: { signedUrl: fileUrls.get(msg.path) || 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#3a5"/></svg>') }, error: null };
       }
       default: return { error: { message: `unknown op ${msg.op}` } };
     }
