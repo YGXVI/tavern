@@ -72,6 +72,7 @@
 | `campaign_members` | `campaign_id, user_id` | `role`, `status`, `character_id`, `scene_id`, `joined_at` | участники; ожидающий — свою строку | мастер (места проверяет триггер); вступление — `join_campaign`, герой — `claim_character`; уйти может сам |
 | `campaign_invites` | `campaign_id` | `code` `RSP-XXXX`, `expires_at`, `manual`, `revoked` | мастер; по коду — `invite_preview` (и без входа) | мастер |
 | `characters` | `id` | `owner_id`, `data` — лист; TASK-004 добавляет `sheet_version`, `sheet_managed`, `archived_at` | активные участники | прежний путь для legacy; управляемый лист — через `character_command`, см. ниже |
+| `token_operations` (TASK-097 2.6) | `caller_id, operation_id` | `campaign_id`, `token_id`, запрос и ответ прибавки хитов | только свои строки | `adjust_token_once` — повтор с тем же ID возвращает прежний ответ |
 | `character_controllers` (TASK-004) | `campaign_id, character_id, user_id` | назначенные управляющие, `granted_by`, `granted_at` | активные участники | команда владельца/мастера; прямые записи API запрещены |
 | `character_history` (TASK-004) | `campaign_id, character_id, version` | автор, операция, время и изменённые поля | активные участники | сервер; история сохраняется при архивировании |
 | `character_operations` (TASK-004) | `campaign_id, caller_id, operation_id` | исходный запрос и подтверждённый ответ для повтора | недоступна ролям API | только серверная команда |
@@ -345,3 +346,11 @@ Character-миграции имеют порядок 20261030140000/140100/14020
 Итоговый guard_combat сохраняет hero_token_ids + owned_token_ids. Для атомарного архива guard_token_delete допускает снятие токенов только конкретного character_id, указанного в незавершённой закрытой archive-операции текущего caller и транзакции. Прямой DELETE геройского токена игроком остаётся запрещён. Всадники/призывы сохраняются, ссылки снимает существующий token_unlink; restore не возвращает токен/бой/связи.
 
 Дополнительные поля sidekick.canSpeakLanguage: boolean|null и eligibilityNote: string|null описывают явное подтверждение говоримого языка и ручное исключение. CR проверяется по базовому снимку, если он задан; неизвестное значение не ноль. Это помощь мастеру при подтверждении развития, а не серверная полная проверка легальности Sidekick.
+
+
+### Токены: постановка существа и хиты прибавкой (TASK-097, `20261105130000_token_097_rest.sql`)
+
+- `place_creature(creature, token)` — снимок `campaign_creatures` (если его ещё нет) и токен, ссылающийся на него (`data.monsterId = 'lib:<id>'`), одной транзакцией; права — RLS обеих таблиц (функция `security invoker`). Клиент сам собирает пару вставок в одну операцию (`groupPlacements`); без функции на сервере — две вставки, как раньше.
+- `adjust_token_once(id, {hp?, tempHp?}, operationId)` — прибавка хитов токена не-героя с ключом повтора: тот же ID и запрос → прежний ответ (`replayed: true`), другой запрос → `22023`, удалённый токен → `P0002` «Токен удалён мастером». Клиент шлёт разницу, если изменились только числовые `hp`/`tempHp`; иначе — `patch_token`.
+- `campaign_creatures` — в публикации Realtime; клиент подписывается, только если таблица есть на сервере, удаления фильтрует по `campaign_id` из ключа.
+- Картинка удалённого токена (`sb:@tokens/<кампания>/<пользователь>/<файл>`) удаляется из бакета, если на неё больше не ссылаются токены, снимки и листы кампании (мастер или хозяин папки).

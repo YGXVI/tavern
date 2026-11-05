@@ -220,6 +220,39 @@ select pg_temp.err('library: нельзя перенести файл в чуж�
 select pg_temp.rows('library: нельзя удалить чужую картинку', $q$delete from storage.objects where bucket_id='library' and name='00000000-0000-0000-0000-00000000000a/stat.webp'$q$,0);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+-- TASK-097 (остаток): существо на карту одной транзакцией и хиты прибавкой с ключом повтора.
+select pg_temp.cnt('097: снимок и токен одной транзакцией', $q$select 1 where public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097","owner_id":"00000000-0000-0000-0000-00000000000a","data":{"name":"Волк","source":"manual"}}',
+  '{"id":"t-097a","campaign_id":"c-rls","scene_id":"s-1","ord":90,"data":{"kind":"foe","name":"Волк","monsterId":"lib:cr-097","x":10,"y":10,"hp":11,"hpMax":11}}') = 't-097a'$q$, 1);
+select pg_temp.cnt('097: второй токен того же существа не трогает снимок', $q$select 1 where public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097","owner_id":"00000000-0000-0000-0000-00000000000a","data":{"name":"Другое имя","source":"manual"}}',
+  '{"id":"t-097b","campaign_id":"c-rls","scene_id":"s-1","ord":91,"data":{"kind":"foe","name":"Волк","monsterId":"lib:cr-097","x":20,"y":20,"hp":11,"hpMax":11}}') = 't-097b'
+  and (select data->>'name' from public.campaign_creatures where campaign_id='c-rls' and id='cr-097') = 'Волк'$q$, 1);
+select pg_temp.err('097: токен на чужое существо отклоняется', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097x","data":{"name":"Х","source":"manual"}}',
+  '{"id":"t-097x","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:другое"}}')$q$);
+select pg_temp.err('097: отказ токена откатывает снимок', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097y","data":{"name":"Y","source":"manual"}}',
+  '{"id":"t-097a","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:cr-097y"}}')$q$);
+select pg_temp.cnt('097: после отказа снимка нет', $q$select 1 from public.campaign_creatures where id='cr-097y'$q$, 0);
+select pg_temp.cnt('097: урон прибавкой', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'false'$q$, 1);
+select pg_temp.cnt('097: повтор той же операции не бьёт второй раз', $q$select 1 where public.adjust_token_once('t-097a','{"hp":-4}','97000000-0000-0000-0000-000000000001') ->> 'replayed' = 'true'
+  and (select data->>'hp' from public.tokens where id='t-097a') = '7'$q$, 1);
+select pg_temp.err('097: тот же ID операции с другой дельтой', $q$select public.adjust_token_once('t-097a','{"hp":-1}','97000000-0000-0000-0000-000000000001')$q$);
+select pg_temp.err('097: хиты героя прибавкой токена — нельзя', $q$select public.adjust_token_once((select id from public.tokens where character_id is not null limit 1),'{"hp":-1}','97000000-0000-0000-0000-000000000002')$q$);
+select pg_temp.ok('097: мастер удаляет токен', $q$delete from public.tokens where id='t-097b'$q$);
+select pg_temp.err('097: правка удалённого токена — «Токен удалён мастером»', $q$select public.adjust_token_once('t-097b','{"hp":-1}','97000000-0000-0000-0000-000000000003')$q$);
+select pg_temp.cnt('097: существа кампании в Realtime', $q$select 1 from pg_publication_tables where pubname='supabase_realtime' and tablename='campaign_creatures'$q$, 1);
+select pg_temp.ok('097: убрать за собой токен', $q$delete from public.tokens where id='t-097a'$q$);
+select pg_temp.ok('097: убрать за собой снимок', $q$delete from public.campaign_creatures where campaign_id='c-rls' and id='cr-097'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.err('097: посторонний не ставит существо', $q$select public.place_creature(
+  '{"campaign_id":"c-rls","id":"cr-097z","owner_id":"00000000-0000-0000-0000-00000000000c","data":{"name":"Z","source":"manual"}}',
+  '{"id":"t-097z","campaign_id":"c-rls","scene_id":"s-1","data":{"monsterId":"lib:cr-097z"}}')$q$);
+select pg_temp.err('097: чужой журнал операций не читается', $q$select 1/count(*) from public.token_operations$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.cnt('library: мастер не читает личную библиотеку игрока', $q$select 1 from public.creatures where owner_id='00000000-0000-0000-0000-00000000000b'$q$,0);
 select pg_temp.cnt('library: мастер видит обе копии кампании', $q$select 1 from public.campaign_creatures where campaign_id='c-rls'$q$,2);
 select pg_temp.rows('library: мастер может править копию', $q$update public.campaign_creatures set data=data||'{"hp":8}' where id='summon'$q$,1);
