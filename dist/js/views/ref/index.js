@@ -240,6 +240,7 @@ export function mountRef(root, hash) {
     loadSection(s.id).then(() => { if (my === token) render(); }, (err) => { if (my === token) paint(html`<main class="page ref-page"><div class="ref-loading">${ic('alert-circle', 24)}<p>Раздел не загрузился: ${err.message}</p><button class="btn btn-secondary" data-retry>Ещё раз</button></div></main>`); });
   }
   function paint(body) {
+    document.querySelectorAll('.ref-tip').forEach((n) => n.remove());
     root.innerHTML = String(html`<div class="screen ref-screen">${header()}${body}</div>`);
     const u = user(); if (u) bindHeader(root, u);
     root.querySelector('.ref-row-item.current')?.scrollIntoView({ block: 'nearest' });
@@ -317,17 +318,28 @@ export function mountRef(root, hash) {
     catch (err) { toast({ title: 'Не бросить', body: err.message, icon: 'alert-circle' }); }
   });
   L('mouseover', '[data-term]', (e, a) => {
-    if (a.__tip) return;
+    if (a.__tip?.isConnected) return;
     const r = ruleById(a.dataset.term); if (!r) return;
-    a.__tip = true;
+    document.querySelectorAll('.ref-tip').forEach((n) => n.remove());
     const tip = document.createElement('div');
     tip.className = 'ref-tip panel';
+    a.__tip = tip;
     tip.innerHTML = String(html`<b>${r.name}</b><p>${r.text}</p><a href="#/ref/rules/${r.id}">Открыть правило ${ic('arrow-right-02', 14)}</a>`);
     document.body.append(tip);
     const rc = a.getBoundingClientRect();
-    tip.style.left = `${Math.min(innerWidth - 300, Math.max(8, rc.left))}px`;
-    tip.style.top = `${rc.bottom + 6}px`;
-    const off = () => { setTimeout(() => { if (!tip.matches(':hover') && !a.matches(':hover')) { tip.remove(); a.__tip = false; a.removeEventListener('mouseleave', off); } else setTimeout(off, 200); }, 150); };
+    const size = tip.getBoundingClientRect();
+    tip.style.left = `${Math.max(8, Math.min(rc.left, innerWidth - size.width - 8))}px`;
+    const top = rc.bottom + 6 + size.height <= innerHeight - 8 ? rc.bottom + 6 : rc.top - size.height - 6;
+    tip.style.top = `${Math.max(8, Math.min(top, innerHeight - size.height - 8))}px`;
+    const off = () => {
+      setTimeout(() => {
+        if (!tip.isConnected || (!tip.matches(':hover') && !a.matches(':hover'))) {
+          tip.remove();
+          if (a.__tip === tip) a.__tip = null;
+          a.removeEventListener('mouseleave', off);
+        } else setTimeout(off, 200);
+      }, 150);
+    };
     a.addEventListener('mouseleave', off);
   });
   L('click', '[data-feat]', async (e, b) => {
