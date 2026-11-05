@@ -110,7 +110,9 @@ test('Runtime: только добавление ru, все EN и механич
   // SHA JSON модуля до TASK-117, main bf3b426b8a05bab35bac655488fb6439c70fa419.
   // Портреты (TASK-199) меняют только img: для сверки возвращаем прежние буквы имени, остальное — побайтно.
   for (const m of SRD) assert.equal(m.img, `assets/portraits/srd/${m.id.slice(4)}.webp`, m.id);
-  const beforePortraits = SRD.map((m) => ({ ...m, img: `ini:${m.name}` }));
+  // Поправки #196 A (data/bestiary/errata.json) меняют только эти поля: для сверки возвращаем прежние значения снимка.
+  const beforeErrata = { 'srd:blink-dog': ['пассивное Восприятие 13', 'пассивное Восприятие 10'], 'srd:spider': ['пассивное Восприятие 10', 'пассивное Восприятие 12'] };
+  const beforePortraits = SRD.map((m) => ({ ...m, img: `ini:${m.name}`, ...(beforeErrata[m.id] ? { senses: m.senses.replace(...beforeErrata[m.id]) } : {}) }));
   assert.equal(hashEnglish(JSON.stringify(dropRu(beforePortraits))), '929ea66757f2fcae286b35a62a461aad6bea95f239bf02ba371065223a708fc3');
   let count = 0;
   for (const monster of SRD) {
