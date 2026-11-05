@@ -12,7 +12,7 @@
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
-import { heroList, creationView, creationLive, lssImportView, heroActions } from './contract.js';
+import { heroList, heroView, creationView, creationLive, lssImportView, heroActions } from './contract.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
 
@@ -55,7 +55,11 @@ export function mountHero(root, hash) {
     mod.then((m) => { if (alive) m.mount(root, { parts, query, page, L, user }); });
   }
   mountInto();
-  return { unmount: () => { alive = false; cleanup.forEach((f) => f?.()); }, update() {} };
+  // Данные поменялись (действие листа, сервер, соседняя вкладка): лист и «Мои герои» перерисовываются, только если
+  // изменилось то, что они показывают, — иначе события чужих кампаний сбивали бы прокрутку. Мастер создания не трогаем.
+  const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) ? JSON.stringify(heroView(p1)) : '');
+  let last = sig();
+  return { unmount: () => { alive = false; cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }
 
 const tickSvg = String(ic('tick-02', 14));
@@ -71,7 +75,7 @@ function selectIn(root, sel, attr, id, artSel = '.h-choice-art, .h-icard-top, .a
 
 // ——— 88 · Мои герои ———
 function heroesPage() {
-  const { heroes, saved } = heroList();
+  const { heroes, saved, sample } = heroList();
   const card = (h) => {
     const draftCard = h.status === 'draft';
     const tag = draftCard ? chip('Черновик') : h.campaign ? chip(h.campaign.live ? `${h.campaign.name} · сессия идёт` : h.campaign.name, h.campaign.live ? 'accent' : '') : chip('Свободен');
@@ -91,7 +95,7 @@ function heroesPage() {
       <article class="h-card h-card-new"><span class="h-round">${ic('plus-sign', 24)}</span><h3>Новый герой</h3><p class="muted">Пошагово за 15 минут, быстро за три ответа или перенести из Long Story Short</p>
         <a class="btn btn-secondary" href="#/hero/new">Пошагово</a><a class="btn btn-ghost" href="#/hero/quick/1">${ic('sparkles')}Быстрый герой</a></article></div>
     <div class="h-saved-strip">${ic('book-open-01', 18)}<b>Сохранено в справочнике:</b>${saved.map((s) => chip(s))}<span class="spacer"></span><button class="link" data-sort>Разложить по книгам героев →</button></div>
-    ${previewNote()}
+    ${sample === false ? '' : previewNote()}
   </main>`;
 }
 function bindHeroes(L) {

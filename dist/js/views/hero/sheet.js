@@ -33,7 +33,8 @@ export function mount(root, { parts, query, page, L }) {
 }
 
 // ——— общие куски ———
-const hpOf = (v) => { const h = v.vitals.hp; const now = Math.max(0, Math.min(h.max, h.now + (local.hpDelta[v.id] || 0))); return { ...h, now }; };
+// Настоящий герой (v.live) — хиты уже в данных; локальная поправка только у образца.
+const hpOf = (v) => { const h = v.vitals.hp; const now = Math.max(0, Math.min(h.max, h.now + (v.live ? 0 : local.hpDelta[v.id] || 0))); return { ...h, now }; };
 
 function sheetHead(v, mode) {
   const back = mode === 'table' ? '' : html`<a class="icon-btn" href="#/heroes" aria-label="К героям">${ic('arrow-left-02')}</a>`;
@@ -188,7 +189,7 @@ function sheetPage(v, tab, q) {
         <div class="s-tab">${tabBody(v, tab)}</div>
       </section>
     </div>
-    ${previewNote()}
+    ${v.live ? '' : previewNote()}
   </main>`;
 }
 
@@ -235,7 +236,7 @@ function classicPage(v, n) {
   };
   return html`<main class="s-page classic">${sheetHead(v, 'classic')}
     <nav class="c-pages">${[[1, 'Основное'], [2, 'Личность и заметки'], [3, 'Заклинания']].map(([k, t]) => html`<a href="#/hero/${v.id}/classic/${k}" aria-selected="${k === n}">${k} · ${t}</a>`)}</nav>
-    <article class="c-sheet p${n}">${pages[n]}</article>${previewNote()}</main>`;
+    <article class="c-sheet p${n}">${pages[n]}</article>${v.live ? '' : previewNote()}</main>`;
 }
 
 // ——— 61–66 · Лист на карте ———
