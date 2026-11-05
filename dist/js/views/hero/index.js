@@ -12,7 +12,8 @@
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
-import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions, startCreation } from './contract.js';
+import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions, startCreation, uploadPortrait } from './contract.js';
+import { srcOf } from '../../core/assets.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
 
@@ -56,7 +57,7 @@ export function mountHero(root, hash) {
     if (p1 === 'new' && !p2) { const qp = new URLSearchParams(query); if (qp.get('c')) startCreation(qp.get('c')); page(pathPage(qp)); bindPath(L, qp); return; }
     if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({ heroId: 'lira' })); return; }
     if (p1 === 'new') { page(stepPage(p2), 'wizard'); bindStep(root, L, p2, rerender); return; }
-    if (p1 === 'quick') { page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
+    if (p1 === 'quick') { const q = creationView().quick; if (q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
     if (p1 === 'import') { page(importPage()); bindImport(root, L); return; }
     // Лист, лист на карте и повышение уровня — отдельными модулями, они крупные.
     const mod = p2 === 'levelup' ? import('./levelup.js') : import('./sheet.js');
@@ -196,60 +197,64 @@ function realDonePage(cv, r) {
 }
 
 // ——— 89–90 · Быстрый герой ———
+// Три ответа пересобирают черновик мастера целиком (contract.quickBuild): итог — настоящий герой, его можно
+// привести в кампанию сразу или доработать пошагово (#203).
 const QSTEPS = [{ name: 'В бою' }, { name: 'Споры' }, { name: 'Имя и облик' }];
+const uniq = (a) => [...new Set(a.filter(Boolean))];
 function quickPage(step) {
-  const q = creationView().quick;
+  const cv = creationView(), q = cv.quick;
   const href = (k) => `#/hero/quick/${k + 1}`;
-  draft.quick ||= {};
-  if (step === 'done') return quickDone(q, href);
+  if (step === 'done') return quickDone(cv, q, href);
   const n = Math.min(3, Math.max(1, +step || 1));
   const qq = q.questions[n - 1];
-  const picked = draft.quick[qq.id] ?? q.picked[qq.id];
+  const picked = q.picked[qq.id];
   let body;
   if (qq.options) {
     body = html`<div class="h-quick-opts n${qq.options.length}">${qq.options.map((o) => html`<button class="h-qcard ${o.id === picked ? 'on' : ''}" data-q="${o.id}" aria-pressed="${o.id === picked}">
       <span class="art"><img src="${o.img}" alt="" loading="lazy">${o.id === picked ? html`<span class="h-tick">${ic('tick-02', 14)}</span>` : ''}</span>
       <span class="body"><b>${o.name}</b><small>${o.text}</small><span class="note">${o.note}</span></span></button>`)}</div>`;
   } else {
-    const sel = draft.quick.portrait ?? 0;
-    body = html`<div class="h-quick-name"><label class="h-field"><span>Имя</span><span class="input lg"><input data-qname value="${draft.quick.name ?? q.picked.name}" placeholder="Имя героя" maxlength="40"></span></label>
-      <div class="h-field"><span>Портрет</span><div class="h-quick-portraits">${q.portraits.map((p, k) => html`<button class="h-portrait-pick ${k === sel ? 'on' : ''}" data-qportrait="${k}"><img src="${p}" alt=""></button>`)}<button class="h-portrait-pick add" data-qupload aria-label="Загрузить свой">${ic('image-add-01', 22)}</button></div></div></div>`;
+    const sel = q.result.portrait;
+    const shown = uniq([sel, ...q.portraits.filter((p) => p.includes('/portraits/')), ...q.portraits]).slice(0, 10);
+    body = html`<div class="h-quick-name"><label class="h-field"><span>Имя</span><span class="input lg"><input data-qname value="${q.picked.name}" placeholder="Имя героя" maxlength="40"></span></label>
+      <div class="h-field"><span>Портрет — он же токен на карте</span><div class="h-quick-portraits">${shown.map((p) => html`<button class="h-portrait-pick ${p === sel ? 'on' : ''}" data-qportrait="${p}"><img src="${srcOf(p)}" alt=""></button>`)}<button class="h-portrait-pick add" data-qupload aria-label="Загрузить свой">${ic('image-add-01', 22)}</button></div></div></div>`;
   }
   return html`<main class="h-wizard quick">
     ${pathRow({ back: '#/hero/new?quick', title: 'Быстрый герой', steps: QSTEPS, current: n - 1, href })}
     <div class="h-center"><h1>${qq.title}</h1><p class="muted">${qq.hint}</p></div>
     ${body}
-    ${bottomBar({ back: n === 1 ? '#/hero/new?quick' : href(n - 2), backLabel: n === 1 ? 'Другой способ' : 'Назад', hint: 'Мастер «Склепа культа» ждёт героя 5 уровня — уровень выставим сами', next: n < 3 ? href(n) : '#/hero/quick/done', nextLabel: n === 1 ? 'Дальше: как решаете споры' : n === 2 ? 'Дальше: имя и облик' : 'Собрать героя' })}
+    ${bottomBar({ back: n === 1 ? '#/hero/new?quick' : href(n - 2), backLabel: n === 1 ? 'Другой способ' : 'Назад', hint: `Мастер «${cv.campaign.name}» ждёт героя ${cv.campaign.level} уровня — остальное подберём сами`, next: n < 3 ? href(n) : '#/hero/quick/done', nextLabel: n === 1 ? 'Дальше: как решаете споры' : n === 2 ? 'Дальше: имя и облик' : 'Собрать героя' })}
   </main>`;
 }
-function quickDone(q, href) {
+function quickDone(cv, q, href) {
   const r = q.result;
-  const name = draft.quick?.name || r.name;
-  const portrait = q.portraits[draft.quick?.portrait ?? 0] || r.portrait;
+  const name = r.name;
   return html`<main class="h-wizard quick">
     ${pathRow({ back: '#/hero/quick/3', title: 'Быстрый герой', steps: QSTEPS, current: 3, href })}
     <div class="h-qdone">
-      <figure class="h-qdone-art"><img src="${portrait}" alt=""><figcaption><b>${name}</b><span>${r.summary}</span></figcaption><a class="btn btn-secondary btn-sm h-qdone-swap" href="#/hero/quick/3">${ic('edit-02', 14)}Другой облик</a></figure>
-      <section class="h-qdone-main"><h1>${name} готов к драке</h1>
-        <p class="muted">Собрали по трём ответам: «впереди», «кулаком», «${name}». Всё ниже можно поменять — или открыть пошаговый мастер на нужном шаге.</p>
+      <figure class="h-qdone-art"><img src="${srcOf(r.portrait)}" alt=""><figcaption><b>${name}</b><span>${r.summary}</span></figcaption><a class="btn btn-secondary btn-sm h-qdone-swap" href="#/hero/quick/3">${ic('edit-02', 14)}Другой облик</a></figure>
+      <section class="h-qdone-main"><h1>${name} готов${/а$/.test(name) ? 'а' : ''} к приключению</h1>
+        <p class="muted">Собрали по трём ответам: ${r.why.map((w) => `«${w}»`).join(', ')}. Всё ниже можно поменять — или открыть пошаговый мастер на нужном шаге.</p>
         <div class="h-bstats compact">${r.abilities.map((a) => html`<div class="h-bstat"><span class="k">${a.short}</span><b>${a.mod}</b><span class="s">${a.score}</span></div>`)}</div>
         <div class="h-facts4">${r.facts.map((f) => html`<div>${caps(f.label)}<b>${f.value}</b><small>${f.sub}</small></div>`)}</div>
         <div class="h-chosen"><div class="h-chosen-head">${caps('Что мы выбрали за вас')}</div>${r.chosen.map(([k, v, step]) => html`<div class="row"><span class="k">${k}</span><span class="v">${v}</span><a class="link" href="#/hero/new/${step}">Поменять</a></div>`)}</div>
-        <div class="h-actions"><button class="btn btn-primary" data-bring>${ic('arrow-right-02')}Привести в «Склеп культа»</button><a class="btn btn-secondary" href="#/hero/new/race">${ic('edit-02')}Доработать пошагово</a><span class="muted sm">Мастер увидит героя и одобрит</span></div>
+        ${r.ok ? '' : html`<p class="h-info">${ic('alert-circle', 16)}${r.missing.slice(0, 2).join(' ')}</p>`}
+        <div class="h-actions"><button class="btn btn-primary" data-bring ${r.ok ? '' : raw('disabled')}>${ic('arrow-right-02')}Привести в «${cv.campaign.name}»</button><a class="btn btn-secondary" href="#/hero/new/race">${ic('edit-02')}Доработать пошагово</a></div>
       </section>
     </div>
   </main>`;
 }
 function bindQuick(root, L, step) {
-  L('click', '[data-q]', (e, b) => {
-    const qid = creationView().quick.questions[(+step || 1) - 1].id;
-    draft.quick[qid] = b.dataset.q; saveDraft(); heroActions.choose({ step: 'quick', id: qid, value: b.dataset.q });
-    selectIn(root, '[data-q]', 'data-q', b.dataset.q);
-  });
-  L('input', '[data-qname]', (e, t) => { draft.quick.name = t.value; saveDraft(); });
-  L('click', '[data-qportrait]', (e, b) => { draft.quick.portrait = +b.dataset.qportrait; saveDraft(); root.querySelectorAll('.h-portrait-pick').forEach((x) => x.classList.toggle('on', x === b)); });
-  L('click', '[data-qupload]', () => heroActions.editField({ field: 'portrait', value: 'upload' }));
-  L('click', '[data-bring]', () => heroActions.bringToCampaign({ heroId: 'grom', campaignId: 'c-crypt' }));
+  const qid = () => creationView().quick.questions[(+step || 1) - 1].id;
+  L('click', '[data-q]', (e, b) => { selectIn(root, '[data-q]', 'data-q', b.dataset.q); heroActions.choose({ step: 'quick', id: qid(), value: b.dataset.q }); });
+  L('change', '[data-qname]', (e, t) => heroActions.choose({ step: 'quick', id: 'name', value: t.value.trim() }));
+  L('click', '[data-qportrait]', (e, b) => heroActions.choose({ step: 'quick', id: 'portrait', value: b.dataset.qportrait }));
+  L('click', '[data-qupload]', () => pickPortrait((ref) => heroActions.choose({ step: 'quick', id: 'portrait', value: ref })));
+  L('click', '[data-bring]', () => heroActions.finish());
+}
+/** Свой портрет: файл → ссылка (песочница — на устройстве; на сервере — когда включат загрузку игрокам). */
+export function pickPortrait(done) {
+  Promise.all([import('../creature-img.js'), import('../../ui/kit.js')]).then(([{ pickImageFile }, { toast }]) => pickImageFile(toast, async (file) => { const ref = await uploadPortrait(file); if (ref) done(ref); }));
 }
 
 // ——— 72 · Перенос из Long Story Short ———
