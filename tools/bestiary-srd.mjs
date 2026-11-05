@@ -9,12 +9,15 @@
 // Переведённые вручную существа стола не дублируются.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { validateTranslations, translationFor } from './bestiary-srd-ru.mjs';
+import { applyErrata } from '../data/bestiary/errata.mjs';
 
 const root = new URL('../', import.meta.url);
 // Портрет существа: своя картинка dist/assets/portraits/srd/<slug>.webp, если она есть; иначе — буквы имени, как раньше.
 const portrait = (slug, name) => (existsSync(new URL(`dist/assets/portraits/srd/${slug}.webp`, root)) ? `assets/portraits/srd/${slug}.webp` : `ini:${name}`);
 const [inArg, outArg, ruArg] = process.argv.slice(2);
-const src = JSON.parse(readFileSync(inArg || new URL('data/bestiary/bestiary-2014.json', root), 'utf8'));
+// Поправки #196 A к снимку SRD API — до разбора, чтобы стол видел верные числа.
+const src = applyErrata(JSON.parse(readFileSync(inArg || new URL('data/bestiary/bestiary-2014.json', root), 'utf8')),
+  JSON.parse(readFileSync(new URL('data/bestiary/errata.json', root), 'utf8')));
 const translations = JSON.parse(readFileSync(ruArg || new URL('data/bestiary/srd-ru.json', root), 'utf8'));
 // Сначала проверяется весь канонический слой, включая HAND. Для тестового среза дополнительно
 // проверяются все его SRD-описания; неиспользованные записи канонического перевода допустимы в срезе.
