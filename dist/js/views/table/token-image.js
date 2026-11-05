@@ -1,6 +1,6 @@
 // Кадр сохраняется обычной картинкой: карта и все миниатюры показывают один результат.
 import { modal, panelHeader } from '../../ui/kit.js';
-import { imageUrl, pickImageFile } from '../creature-img.js';
+import { imageUrl, pickImageFile, attachImageDrop } from '../creature-img.js';
 
 export function imagePlacement(width, height, zoom = 1, x = 0, y = 0) {
   const scale = Math.max(1 / width, 1 / height) * zoom;
@@ -11,6 +11,7 @@ export function imagePlacement(width, height, zoom = 1, x = 0, y = 0) {
 export function tokenImageEditor({ ref = '', defaultRef = '', title = 'Картинка токена', toast, store, done }) {
   let img = null, sourceRef = ref, localUrl = '', zoom = 1, x = 0, y = 0;
   let revision = 0, dirty = false, saving = false, drag = null;
+  let detachDrop = () => {};
   const m = modal(`${panelHeader(title, 'Перетащите картинку и выберите масштаб')}
     <div class="panel-section token-image-editor">
       <canvas width="512" height="512" data-preview role="img" aria-label="Предпросмотр круглого токена"></canvas>
@@ -21,10 +22,11 @@ export function tokenImageEditor({ ref = '', defaultRef = '', title = 'Карт�
       <div class="row"><button class="btn btn-sm btn-secondary" data-upload>Загрузить другую</button>${defaultRef ? '<button class="btn btn-sm btn-ghost" data-default>Вернуть стандартную</button>' : ''}</div>
     </div><div class="panel-footer"><button class="btn btn-ghost" data-close>Отмена</button><span class="spacer"></span><button class="btn btn-primary" data-save disabled>Сохранить</button></div>`, {
     className: 'token-image-modal',
-    onClose: () => { revision++; if (localUrl) URL.revokeObjectURL(localUrl); },
+    onClose: () => { detachDrop(); revision++; if (localUrl) URL.revokeObjectURL(localUrl); },
   });
   const box = m.box, canvas = box.querySelector('[data-preview]'), save = box.querySelector('[data-save]');
   const status = box.querySelector('[data-status]');
+  detachDrop = attachImageDrop(box, { toast, onFile: (file) => { if (!saving) return load('', file); } });
   const sliders = ['zoom', 'x', 'y'].map((k) => box.querySelector(`[data-${k}]`));
   const sync = () => { [zoom, x, y].forEach((v, i) => { sliders[i].value = v; }); };
   function draw(target = canvas) {

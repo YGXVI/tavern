@@ -8,7 +8,7 @@ import { modal, panelHeader, toast, portrait, confirmDialog } from '../ui/kit.js
 import { ABILITIES, SKILLS, SIZES, sizeById, mod } from '../data/rules.js';
 import { BESTIARY, loadSrdBestiary } from '../data/bestiary.js';
 import { listCreatures, saveCreature, deleteCreature, uploadLibraryImage } from '../core/library.js';
-import { creatureImgTag, hydrateCreatureImages, dropLibraryImages } from './creature-img.js';
+import { creatureImgTag, hydrateCreatureImages, dropLibraryImages, attachImageDrop, imageFileName } from './creature-img.js';
 import { tokenImageEditor } from './table/token-image.js';
 import { normalizeCreature, fromSrd } from '../rules/creature.js';
 
@@ -74,6 +74,11 @@ export function creaturesPage(user) {
 export function bindCreatures(root, user, rerender) {
   if (lib.key !== keyOf(user) || (!lib.list && !lib.error && !lib.loading)) { load(user, rerender); }
   const reload = () => load(user, rerender);
+  const page = root.querySelector('.lib-page');
+  if (page && !page.__imageDropBound) {
+    page.__imageDropBound = true;
+    attachImageDrop(page, { toast, onFile: (file) => openEditor(normalizeCreature({ name: imageFileName(file), size: 'medium', speed: { walk: 30 } }), reload, file) });
+  }
   root.querySelector('[data-lib-q]')?.addEventListener('input', (e) => {
     lib.q = e.target.value;
     const at = e.target.selectionStart;
@@ -208,7 +213,7 @@ function editorBody(d) {
   const own = d.img && !String(d.img).startsWith('ini:');
   const pic = `<div class="lib-pic"><span class="avatar lib-pic-face foe">${creatureImgTag(d.img, d.name)}</span><div class="col grow" style="gap:6px">
       <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-act="pic" ${d.picBusy ? 'disabled' : ''}>${icn('upload-01', 16)}${d.picBusy ? 'Загружаю…' : own ? 'Настроить картинку' : 'Своя картинка'}</button>${own ? `<button class="btn btn-sm btn-ghost" data-act="nopic">Без картинки</button>` : ''}</div>
-      <small class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ. Здесь её видите только вы; на карте — все, кто видит существо.</small></div></div>`;
+      <small class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ — можно перетащить в окно. Здесь её видите только вы; на карте — все, кто видит существо.</small></div></div>`;
   return `
     <section class="lib-sec"><h4>Основное</h4>${pic}
       ${field('Имя', 'name', d.name, { ph: 'Жрец Безликого', cls: 'lib-wide' })}
@@ -242,23 +247,35 @@ function cleaned(d0) {
   return d;
 }
 
-function openEditor(c0, reload) {
+function openEditor(c0, reload, imageFile = null) {
   const isNew = !c0.id;
   const d = normalizeCreature(c0);
   // У копий SRD «мультиатака» и подобные приходят с бонусом атаки 0 — это не атака: прячем пустой блок.
   for (const a of [...LISTS.flatMap(([k]) => d[k] || []), ...(d.legendary?.actions || [])]) {
     if (a.attack && !a.attack.bonus && a.attack.reach == null && a.attack.range == null) delete a.attack;
   }
+  let detachDrop = () => {};
   const m = modal(`${panelHeader(isNew ? 'Новое существо' : esc(d.name), 'Личная библиотека · видите только вы')}
     <div class="modal-body lib-ed"></div>
     <hr class="panel-divider"><div class="panel-footer">${isNew ? '' : `<button class="btn btn-ghost lib-del" data-del>${icn('delete-02')}Удалить</button>`}<span class="spacer"></span>
-      <button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icn('tick-02')}Сохранить</button></div>`, { wide: true, className: 'lib-modal', dismissable: false, onClose: () => { if (!saved) dropLibraryImages([...uploaded].filter((r) => r !== original)); } });
+      <button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${icn('tick-02')}Сохранить</button></div>`, { wide: true, className: 'lib-modal', dismissable: false, onClose: () => { detachDrop(); if (!saved) dropLibraryImages([...uploaded].filter((r) => r !== original)); } });
   const body = m.box.querySelector('.lib-ed');
   const render = () => { const top = body.scrollTop; body.innerHTML = editorBody(d); body.scrollTop = top; hydrateCreatureImages(body); };
   // Картинки, загруженные в этом окне, и прежняя — ненужные уберём из личного бакета после сохранения или отмены.
   const original = d.img || '', uploaded = new Set();
   let saved = false;
   render();
+  const droppedPicture = async (file) => {
+    if (d.picBusy) return;
+    d.picBusy = true; render();
+    try {
+      const ref = await uploadLibraryImage(file); uploaded.add(ref);
+      if (!m.root.isConnected) { dropLibraryImages([ref]); return; }
+      d.img = ref;
+    } finally { delete d.picBusy; if (m.root.isConnected) render(); }
+  };
+  detachDrop = attachImageDrop(m.box, { toast, onFile: droppedPicture });
+  if (imageFile) droppedPicture(imageFile).catch((error) => failed('Картинка не загрузилась', error));
   body.addEventListener('input', (e) => {
     const t = e.target;
     t.closest('.input')?.classList.remove('error');

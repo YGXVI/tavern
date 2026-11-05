@@ -25,6 +25,7 @@ import { attachInput, remoteTrapCheck } from './input.js';
 import { attachGizmo } from './gizmo.js';
 import { attachDrawBar, fitDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
+import { attachCreatureFileDrop } from './file-drop.js';
 import { loadSrdBestiary } from '../../data/bestiary.js';
 import { refreshSheet } from './sheet.js';
 import { renderChrome } from './chrome.js';
@@ -424,6 +425,7 @@ export function mountTable(root, cid) {
   attachGizmo(L, ctx);
   attachDrawBar(L, ctx);
   const detachCreatureDrag = attachCreatureDrag(ctx);
+  const detachCreatureFileDrop = attachCreatureFileDrop(ctx);
 
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
@@ -505,7 +507,7 @@ export function mountTable(root, cid) {
     unmount() {
       gone = true;
       if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
-      unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); removeEventListener('resize', onResize);
+      unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); detachCreatureFileDrop(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();
       cancelAnimationFrame(raf);
     },
