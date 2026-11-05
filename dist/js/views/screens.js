@@ -7,8 +7,7 @@ import { currentUser, signIn, signOut } from '../core/auth.js';
 import { srcOf, BUILTIN_MAP_LIST, storeImage } from '../core/assets.js';
 import { campaignsFor, membership, roleIn, userById, characterOf } from '../core/campaign.js';
 import { modal, panelHeader, toast, userAvatar, portrait, menu, confirmDialog } from '../ui/kit.js';
-import { newCampaign, makeCharacter, DEMO_USERS, seedDB } from '../data/demo.js';
-import { CLASSES, RACES, classById, raceById } from '../data/rules.js';
+import { newCampaign, DEMO_USERS, seedDB } from '../data/demo.js';
 import { replaceDB } from '../core/store.js';
 import { freeSpots } from '../rules/geometry.js';
 import { creaturesPage, bindCreatures } from './creatures.js';
@@ -149,7 +148,7 @@ export function appHeader(user, active = null) {
 /** Навигация (#203): один ряд, одно место — один путь. Карты и свои существа живут в «Мастерской» — она видна тому, кто ведёт кампанию. */
 export function appNav(user, active) {
   const leads = campaignsFor(user.id).some((c) => roleIn(c, user.id) === 'master');
-  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/characters'], leads || active === 'workshop' ? ['workshop', 'Мастерская', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
+  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/heroes'], leads || active === 'workshop' ? ['workshop', 'Мастерская', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
   return html`<nav class="app-nav" aria-label="Разделы">${tabs.map(([id, label, href]) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
 }
 
@@ -189,31 +188,8 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Адреса #/characters и #/creatures (TASK-096, TASK-175) обрабатывает этот же экран: «Герои» и «Мастерская · Существа» в навигации. */
+/** Адреса #/characters (теперь ведёт на #/heroes) и #/creatures (TASK-175, «Мастерская · Существа») обрабатывает этот же экран. */
 const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
-
-/** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
-function charactersPage(user) {
-  const mine = [], led = [];
-  for (const c of campaignsFor(user.id)) {
-    const m = membership(c, user.id);
-    for (const ch of c.characters) {
-      if (ch.ownerId === user.id || (m?.role === 'player' && m.characterId === ch.id)) mine.push({ c, ch });
-      else if (m?.role === 'master') led.push({ c, ch });
-    }
-  }
-  const card = ({ c, ch }) => {
-    const owner = ch.ownerId && ch.ownerId !== user.id ? userById(ch.ownerId)?.name : null;
-    const sub = [ch.className || classById(ch.classId)?.name, ch.level ? `${ch.level} ур.` : '', ch.raceName || raceById(ch.raceId)?.name].filter(Boolean).join(' · ');
-    return html`<a class="char-card" href="#/c/${c.id}/sheet/${encodeURIComponent(ch.id)}">${portrait(ch.portrait, 'lg hero', ch.name)}
-      <span class="cc-text"><b>${ch.name}</b><small>${sub}</small><small class="cc-camp">${c.name}${owner ? ` · играет ${owner}` : ''}</small></span></a>`;
-  };
-  const section = (title, items) => (items.length ? html`<section class="char-section"><h3>${title}</h3><div class="char-cards">${items.map(card)}</div></section>` : '');
-  if (!mine.length && !led.length) {
-    return html`<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
-  }
-  return html`${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
-}
 
 export function mountCampaigns(root) {
   let filter = 'all';
@@ -227,13 +203,8 @@ export function mountCampaigns(root) {
       bindCreatures(root, user, render);
       return;
     }
-    if (homeTab() === 'characters') {
-      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'heroes')}
-        <main class="page page-wide"><div class="title-row page-head"><h1>Герои</h1><span class="spacer"></span>
-          <a class="btn btn-secondary" href="#/heroes">${raw(icon('sparkles', 18))}Новые экраны героя · превью</a></div>${charactersPage(user)}</main></div>`);
-      bindHeader(root, user);
-      return;
-    }
+    // Старый список героев (TASK-096) заменён экраном «Герои» (#/heroes, #203): старые ссылки ведут туда.
+    if (homeTab() === 'characters') { location.replace('#/heroes'); return; }
     const list = campaignsFor(user.id);
     const mine = list.filter((c) => roleIn(c, user.id) === 'master').length;
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
@@ -524,13 +495,14 @@ export function mountHeroPick(root, c0) {
             <span class="chip ${owner ? '' : 'chip-success'}" style="align-self:flex-start">${owner ? `Играет ${owner.name}` : 'Свободен'}</span></div>
           </button>`;
         })}
-        <button class="own-hero" data-own>${raw(icon('plus-sign', 28))}<b>Свой герой</b><span class="t-sm">Создать с нуля по шаблону класса</span></button>
+        <button class="own-hero" data-own>${raw(icon('plus-sign', 28))}<b>Свой герой</b><span class="t-sm">Собрать пошагово по правилам кампании</span></button>
       </div>
       <button class="btn btn-primary btn-lg" data-sit ${chosen ? '' : 'disabled'}>${raw(icon('chess-pawn', 20))}${chosen ? `Сесть за стол как ${chosen.name}` : 'Выберите героя'}</button>
     </main></div>`);
     bindHeader(root, user);
     root.querySelectorAll('[data-h]').forEach((b) => b.addEventListener('click', () => { pick = b.dataset.h; render(); }));
-    root.querySelector('[data-own]').addEventListener('click', () => ownHeroModal(c, user));
+    // «Свой герой» — мастер создания этой кампании (#203); после «Создать» игрок садится за стол новым героем.
+    root.querySelector('[data-own]').addEventListener('click', () => go(`#/hero/new?c=${encodeURIComponent(c.id)}`));
     root.querySelector('[data-sit]').addEventListener('click', () => {
       if (!chosen) return;
       claim(c.id, user.id, chosen.id);
@@ -563,7 +535,24 @@ async function claimServer(cid, userId, chId) {
   go(`#/c/${cid}`);
 }
 
-function claim(cid, userId, chId) {
+/** Новый герой из мастера создания (#203) садится за стол: токен — на сцену игроков, запись в журнал, открывается стол. */
+export function seatHero(cid, userId, chId) {
+  commit((db) => {
+    const c = db.campaigns[cid]; if (!c) return;
+    const ch = c.characters.find((x) => x.id === chId); if (!ch) return;
+    const sc = c.scenes.find((s) => s.id === c.activeSceneId);
+    if (sc && !c.scenes.some((s) => s.tokens.some((t) => t.characterId === chId))) {
+      const friend = sc.tokens.find((t) => t.kind === 'hero');
+      const [p] = freeSpots(sc, friend || { x: sc.map.width / 2, y: sc.map.height / 2 }, 1, 1);
+      sc.tokens.push({ id: `t-${crypto.randomUUID().slice(0, 8)}`, kind: 'hero', characterId: chId, name: ch.name, img: ch.portrait, size: 'medium', x: p.x, y: p.y, hidden: false, conditions: [], light: ch.light || null, aura: ch.aura || null });
+    }
+    c.log.unshift({ id: crypto.randomUUID(), at: Date.now(), userId, kind: 'join', text: `${db.users[userId]?.name || 'Игрок'} за столом — ${ch.name}` });
+  });
+  go(`#/c/${cid}`);
+}
+
+/** Сесть за стол героем chId (выбор героя, перенос из LSS, «Привести в кампанию»): членство, токен, стол. */
+export function claim(cid, userId, chId) {
   if (isServerMode()) { claimServer(cid, userId, chId); return; }
   commit((db) => {
     const c = db.campaigns[cid];
@@ -584,28 +573,3 @@ function claim(cid, userId, chId) {
   go(`#/c/${cid}`);
 }
 
-function ownHeroModal(c, user) {
-  const m = modal(html`${panelHeader('Свой герой', 'Базовый шаблон — детали заполните в листе')}
-    <div class="panel-section">
-      <div class="field"><label>Имя</label><div class="input"><input data-n maxlength="40" placeholder="Как зовут героя" autofocus></div></div>
-      <div class="form-grid">
-        <div class="field"><label>Класс</label><div class="input"><select data-cl>${CLASSES.map((k) => html`<option value="${k.id}">${k.name}</option>`)}</select></div></div>
-        <div class="field"><label>Раса</label><div class="input"><select data-r>${RACES.map((r) => html`<option value="${r.id}">${r.name}</option>`)}</select></div></div>
-      </div>
-    </div>
-    <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Создать и сесть</button></div>`);
-  m.box.querySelector('[data-ok]').addEventListener('click', () => {
-    const name = m.box.querySelector('[data-n]').value.trim() || user.name;
-    const cl = classById(m.box.querySelector('[data-cl]').value);
-    const race = raceById(m.box.querySelector('[data-r]').value);
-    const level = c.level || 1;
-    const conMod = 1;
-    const hpMax = cl.hd + conMod + Math.max(0, level - 1) * (Math.floor(cl.hd / 2) + 1 + conMod);
-    const ch = makeCharacter({ name, portrait: `ini:${name}`, classId: cl.id, className: cl.name, raceId: race.id, raceName: race.name, level, hd: cl.hd, saves: cl.saves, hpMax, hp: hpMax, ac: 12, speed: race.speed, darkvision: race.darkvision, stats: { str: 12, dex: 14, con: 13, int: 10, wis: 12, cha: 10 } });
-    if (isServerMode()) ch.ownerId = user.id;
-    commit((db) => { db.campaigns[c.id].characters.push(ch); });
-    m.close();
-    if (isServerMode()) { server().then((sv) => sv.whenSynced(c.id)).then(() => claim(c.id, user.id, ch.id)); return; }
-    claim(c.id, user.id, ch.id);
-  });
-}

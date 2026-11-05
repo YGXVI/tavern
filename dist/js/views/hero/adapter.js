@@ -4,6 +4,8 @@
 import { readCharacter } from '../table/sheet-model.js';
 import { ABILITIES, SKILLS, CONDITIONS, classById, raceById, mod } from '../../data/rules.js';
 import { srcOf } from '../../core/assets.js';
+import { castKind, diceText, DMG } from '../ref/spell-power.js';
+import { wornItems, armorClass, weaponAttacks, classResources, featureText, flavorFeature } from './gear.js';
 
 const MINUS = '−';
 export const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : `+${n}`) : '—');
@@ -13,7 +15,11 @@ const die = (n) => (n ? `к${n}` : '');
 // Порог опыта следующего уровня (PHB 2014, таблица «Развитие персонажа»).
 const XP_NEXT = [300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000, null];
 const CLASS_REF = (ref) => (typeof ref === 'string' ? ref.split(':').pop() : null);
-const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.test(t) ? 'bonus' : /действ/i.test(t) && !/мин|час/i.test(t) ? 'action' : 'special');
+// Время сотворения → группа боя. Неизвестное время — обычное действие; минуты и часы — «Особое» (#203, ревью листа).
+const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.test(t) ? 'bonus' : !t || (/действ/i.test(t) && !/мин|час/i.test(t)) ? 'action' : 'special');
+// Названия старых листов, которые в справочнике dnd.su записаны иначе.
+const SPELL_ALIAS = { 'духовное оружие': 'божественное оружие' };
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /**
  * Справочники для заклинаний (необязательно): { spells: spells-2014.json, ref: spells-ref-2014.json }.
@@ -22,7 +28,9 @@ const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.
 export function spellIndex(refs = {}) {
   const byId = new Map(), byName = new Map();
   for (const e of refs.spells?.entries || []) { byId.set(e.id, e); if (e.name?.ru) byName.set(e.name.ru.toLowerCase(), e); }
-  return { byId, byName, ref: refs.ref?.spells || {}, schools: refs.ref?.schools || {} };
+  for (const [a, b] of Object.entries(SPELL_ALIAS)) if (byName.has(b) && !byName.has(a)) byName.set(a, byName.get(b));
+  // srd — тексты SRD 5.1 по индексу (spells-srd-2014.json): по ним кости и «атака или спасбросок» в строках боя.
+  return { byId, byName, ref: refs.ref?.spells || {}, schools: refs.ref?.schools || {}, srd: refs.srd?.spells || {} };
 }
 
 /**
@@ -44,6 +52,9 @@ export function legacySpells(text, sp = spellIndex()) {
   }
   return out;
 }
+// Языки конструктора — английскими названиями SRD.
+const LANG = { common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великанский', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий', abyssal: 'Бездны', celestial: 'Небесный', draconic: 'Драконий', 'deep speech': 'Глубинная речь', infernal: 'Инфернальный', primordial: 'Первичный', sylvan: 'Сильван', undercommon: 'Подземный' };
+const ruLangs = (t) => t.split(/,\s*/).map((x) => LANG[x.trim().toLowerCase()] || x.trim()).filter(Boolean).join(', ');
 const legacyList = (text) => String(text || '').split(/[,\n]+/).map((x) => x.trim().replace(/\.$/, '')).filter(Boolean);
 
 /**
@@ -60,7 +71,7 @@ export function toHeroView(ch, ctx = {}) {
 
   const classes = (r.classes.length ? r.classes : []).map((c) => {
     const base = classById(c.classId || CLASS_REF(c.ref)) || classById(s.classId);
-    return { name: str(c.name) || base?.name || 'Класс', short: base?.name || str(c.name), level: num(c.levels ?? c.level ?? r.level, 1), sub: str(c.subclass), hitDie: die(base?.hd || s.hd) };
+    return { id: base?.id || null, name: str(c.name) || base?.name || 'Класс', short: base?.name || str(c.name), level: num(c.levels ?? c.level ?? r.level, 1), sub: str(c.subclass), hitDie: die(base?.hd || s.hd) };
   });
   const classText = classes.map((c) => `${c.name} ${c.level}`).join(' / ') || 'Без класса';
   const race = str(s.raceName) || raceById(s.raceId)?.name || '';
@@ -82,7 +93,7 @@ export function toHeroView(ch, ctx = {}) {
   const resources = [];
   for (const p of r.slotPools || []) {
     const total = num(p.max); if (!total) continue;
-    resources.push({ id: p.id, name: `Ячейки ${p.circle} ур.`, kind: 'slot', total, left: Math.max(0, total - num(p.spent)) });
+    resources.push({ id: p.id, circle: num(p.circle), name: `Ячейки ${p.circle} ур.`, kind: 'slot', total, left: Math.max(0, total - num(p.spent)) });
   }
   for (const p of r.resources || []) {
     const total = num(p.max); if (!total) continue;
@@ -93,6 +104,10 @@ export function toHeroView(ch, ctx = {}) {
   const hdLeft = hd.reduce((n, p) => n + Math.max(0, num(p.total) - num(p.spent)), 0);
   const hdDie = hd.length === 1 ? die(hd[0].die) : hd.map((p) => die(p.die)).join('/');
   for (const p of hd) if (num(p.total)) resources.push({ id: p.id, name: `Кости хитов ${die(p.die)}`, kind: 'use', total: num(p.total), left: Math.max(0, num(p.total) - num(p.spent)) });
+  // Заряды умений класса (Ярость, Второе дыхание, Ци…), которых конструктор ещё не записал: считаем по уровню (gear.js).
+  const mods = Object.fromEntries(ABILITIES.map((a) => [a.id, am(a.id)]));
+  const clsRes = classResources(classes.filter((c) => c.id), mods, s.resources || []);
+  for (const x of clsRes) resources.push({ id: x.id, name: x.name, kind: 'use', total: x.total, left: x.left, recovery: x.recovery, derived: true });
 
   // Заклинания.
   const sources = r.spellSources || [];
@@ -108,7 +123,8 @@ export function toHeroView(ch, ctx = {}) {
       id: k.id, name: str(k.name) || e?.name?.ru || 'Заклинание', level, school: sp.schools[e?.school] || '',
       time: p[0] || '', range: p[1] || '', duration: p[2] || '', comp: p[3] || '',
       prepared: level === 0 ? true : k.prepared !== false, conc: !!e?.concentration || undefined, ritual: !!(k.ritual || e?.ritual) || undefined,
-      text: str(k.description), srd: !!e?.srd,
+      text: str(k.description), srd: !!e?.srd, how: castKind(sp.srd[e?.srd?.index]), dice: diceText(sp.srd[e?.srd?.index], level, num(r.level, 1)),
+      dmgType: (p[4] || []).map((t) => DMG[t]).filter(Boolean)[0] || '', srdText: e?.srd ? sp.srd[e.srd.index]?.text || [] : [],
     };
   }).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, 'ru'));
   const spellcasting = castAb ? {
@@ -120,34 +136,58 @@ export function toHeroView(ch, ctx = {}) {
 
   // Действия: атаки листа и заклинания по времени сотворения.
   const actions = { action: [], bonus: [], reaction: [], special: [] };
+  // Сумка — до действий: атаки нового героя берутся из надетого оружия.
+  const gear = ctx.gear || null;
+  const rawItems = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
+  const worn = wornItems(rawItems, gear);
+  const profText = [s.proficiencies?.tools, s.proficiencies?.weapons].filter(Boolean).join('\n');
+  if (!(r.attacks || []).length) actions.action.push(...weaponAttacks(worn, mods, prof, profText));
+  for (const x of clsRes) if (x.row) actions[x.row].push({ id: x.id, name: x.name, sub: x.sub || '', icon: 'feature', res: x.id, left: x.left });
+  // Строка атаки старого листа с именем заклинания (заговор «Священное пламя») — не отдельная строка, а чипы заклинания.
+  const spellNames = new Set(spells.map((x) => x.name.toLowerCase()));
+  const attackOf = new Map();
   for (const [i, a] of (r.attacks || []).entries()) {
-    const hit = Number.isFinite(a.bonus) ? signed(a.bonus) : undefined;
-    actions.action.push({ id: a.id || `attack-${i}`, name: str(a.name) || 'Атака', sub: [a.note, a.type].filter(Boolean).join(' · '), icon: 'weapon', hit, dmg: str(a.damage).replace(/d/g, 'к') || undefined });
+    const save = /спасбросок\s+([А-ЯЁ]{3})?\s*СЛ\s*(\d+)/i.exec(str(a.note));
+    const hit = save ? undefined : Number.isFinite(a.bonus) ? signed(a.bonus) : undefined;
+    const row = { id: a.id || `attack-${i}`, name: str(a.name) || 'Атака', sub: [a.note, a.type].filter(Boolean).join(' · '), icon: 'weapon', hit, dc: save ? `СЛ ${save[2]}` : undefined, dmg: str(a.damage).replace(/d/g, 'к') || undefined };
+    if (spellNames.has(row.name.toLowerCase())) attackOf.set(row.name.toLowerCase(), row); else actions.action.push(row);
   }
   for (const x of spells) {
     if (x.level > 0 && !x.prepared) continue;
-    const row = { id: x.id, name: x.name, sub: [x.level ? `${x.level} ур.` : 'Заговор', x.range].filter(Boolean).join(' · '), icon: 'spell', slotLevel: x.level || undefined };
+    const old = attackOf.get(x.name.toLowerCase());
+    const hit = old ? old.hit : x.how?.attack && atk != null ? signed(atk) : undefined;
+    const dcChip = old ? old.dc : x.how?.save && dc != null ? `СЛ ${dc}` : undefined;
+    const sub = [x.level ? `${x.level} ур.` : 'Заговор', x.range, x.how?.save ? `спасбросок ${ABILITIES.find((a) => a.id === x.how.save)?.short || ''}` : '', x.dmgType].filter(Boolean).join(' · ');
+    const row = { id: x.id, name: x.name, sub, icon: 'spell', slotLevel: x.level || undefined, hit, dc: dcChip, dmg: old?.dmg || x.dice || undefined, explain: dcChip ? 'dc' : undefined };
     actions[SPELL_TIME(x.time)].push(row);
   }
-  if (!spellcasting) actions.special.push({ empty: true, name: 'Заклинаний пока нет', action: '' });
+  // «Заклинаний пока нет» — только заклинателю без заклинаний; воину эта строка ни к чему.
+  if (spellcasting && !spells.length) actions.special.push({ empty: true, name: 'Заклинаний пока нет', action: 'Выбрать' });
 
   // Сумка.
-  const items = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).map((name) => ({ name, quantity: 1 }));
-  const item = (x) => ({ name: str(x.name) || 'Предмет', sub: [x.weight ? `${x.weight} фнт` : '', str(x.description)].filter(Boolean).join(' · '), qty: num(x.quantity, 1), icon: 'bag', tag: x.attuned ? 'Настроен' : x.equipped ? 'Надето' : undefined });
-  const load = items.reduce((n, x) => n + num(x.weight) * num(x.quantity, 1), 0);
+  // Сумка: имена и вес — из снаряжения SRD (по ref или русскому названию), «надето» — с листа или стартовый комплект (gear.js).
+  const ICON = { armor: 'armor', shield: 'armor', weapon: 'weapon' };
+  const items = worn;
+  const lb = (w) => (w > 0 && w < 1 ? String(Math.round(w * 100) / 100).replace('.', ',') : w);
+  const item = (x) => ({ id: x.id || '', name: x.g?.ru || cap(str(x.name)) || 'Предмет', sub: [(x.weight ?? x.g?.weight) ? `${lb(x.weight ?? x.g?.weight)} фнт` : '', str(x.description)].filter(Boolean).join(' · '), qty: num(x.quantity, 1), icon: ICON[x.g?.kind] || 'bag', tag: x.attuned ? 'Настроен' : undefined, equipped: !!x.equipped, wearable: ['armor', 'shield', 'weapon'].includes(x.g?.kind), auto: !!x.auto });
+  const load = items.reduce((n, x) => n + num(x.weight ?? x.g?.weight) * num(x.quantity, 1), 0);
   const carry = num(score('str'), 10) * 15;
   const coins = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(s.coins || {}) };
 
   const hp = { now: num(r.hp.current), max: num(r.hp.max), temp: num(r.hp.temp) };
   // КД не записан (герой из конструктора: доспехи в сумке, лист ведёт КД вручную) — без доспехов: 10 + Ловкость.
-  const acKnown = Number.isFinite(r.ac), ac = acKnown ? r.ac : 10 + am('dex');
+  const acKnown = Number.isFinite(r.ac);
+  const acCalc = acKnown ? null : armorClass(worn, mods, classes.map((c) => c.id));
+  const ac = acKnown ? r.ac : acCalc.value;
   const perc = 10 + skillVal('perception'), ins = 10 + skillVal('insight'), inv = 10 + skillVal('investigation');
   const strMod = am('str');
   const explain = {
-    ac: acKnown ? `КД ${ac} — записано на листе` : `КД ${ac} = 10 + Ловкость ${signed(am('dex'))} (без доспехов; наденьте доспех в листе за столом)`,
+    ac: acKnown ? `КД ${ac} — записано на листе` : acCalc.explain,
     init: `к20 ${signed(num(r.initiative))} = Ловкость ${signed(am('dex'))}`,
     hp: `${hp.max} хитов — ${classes.map((c) => `${c.name} ${c.level} (${c.hitDie})`).join(', ') || 'по листу'}, Телосложение ${signed(am('con'))} за уровень`,
   };
+  // Подсказки «откуда число» у атак оружием — по ключу строки.
+  for (const row of actions.action) if (row.explain && row.explain.includes(' = ')) { explain[`atk.${row.id}`] = row.explain; row.explain = `atk.${row.id}`; }
   if (spellcasting) explain.dc = `СЛ ${dc} = 8 + ${spellcasting.ability} ${signed(castMod)} + мастерство ${signed(prof)}`;
   for (const a of abilities) explain[`save.${a.key}`] = `к20 ${a.save} = ${a.name} ${a.mod}${a.saveProf ? ` + мастерство ${signed(prof)}` : ''}`;
 
@@ -156,6 +196,7 @@ export function toHeroView(ch, ctx = {}) {
   // Без своего портрета — картинка класса (у всех 12 классов SRD есть арт в assets/hero).
   const clsKey = CLASS_REF(r.classes[0]?.ref) || r.classes[0]?.classId || s.classId;
   const pic = srcOf(s.portrait) || `assets/hero/class-${classById(clsKey) ? clsKey : 'wizard'}.webp`;
+  const pt = profText.toLowerCase();
   return {
     id: s.id, name: str(s.name) || 'Без имени', portrait: pic, art: pic,
     subtitle: [classText, race, background].filter(Boolean).join(' · '),
@@ -167,7 +208,7 @@ export function toHeroView(ch, ctx = {}) {
     campaign: ctx.campaign || null,
     status: s.creation ? 'ready' : 'ready',
     vitals: {
-      hp, ac: { value: ac, note: acKnown ? '' : 'без доспехов' }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
+      hp, ac: { value: ac, note: acKnown ? '' : acCalc.note }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
       size: 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },
       passive: { perception: perc, insight: ins, investigation: inv },
       deathSaves: { ok: num(r.deathSaves.successes), fail: num(r.deathSaves.failures) },
@@ -181,12 +222,12 @@ export function toHeroView(ch, ctx = {}) {
       load: { now: Math.round(load), max: carry }, coins,
       equipped: items.filter((x) => x.equipped).map(item), pack: items.filter((x) => !x.equipped).map(item), attunement: items.filter((x) => x.attuned).map(item),
     },
-    features: r.features.entries?.length ? r.features.entries.map((f) => ({ name: str(f.name), source: str(f.source), text: str(f.description) }))
+    features: r.features.entries?.length ? r.features.entries.filter((f) => !flavorFeature(f.ref)).map((f) => ({ name: str(f.name), source: str(f.source), text: str(f.description) || featureText(f.ref) }))
       : r.features.legacyText ? [{ name: 'Умения', source: 'с листа', text: r.features.legacyText }] : [],
     traits: [],
     proficiencies: {
-      armor: { light: false, medium: false, heavy: false, shield: false }, weapons: { simple: false, martial: false, other: false },
-      languages: str(s.proficiencies?.languages) || '—', tools: str(s.proficiencies?.tools) || '—', weaponsText: '',
+      armor: { light: /лёгк|легк/.test(pt), medium: /средн/.test(pt), heavy: /тяж/.test(pt), shield: /щит/.test(pt) }, weapons: { simple: /просто/.test(pt), martial: /воинск/.test(pt), other: /оружие:[^\n]*(кинжал|рапир|арбалет|лук|меч|посох|дротик|праща|булав)/.test(pt) },
+      languages: ruLangs(str(s.proficiencies?.languages)) || '—', tools: str(s.proficiencies?.tools) || '—', weaponsText: '',
     },
     personality: {
       traits: str(pers.traits), ideals: str(pers.ideals), bonds: str(pers.bonds), flaws: str(pers.flaws),

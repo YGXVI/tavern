@@ -8,7 +8,7 @@ export const caps = (t, cls = '') => html`<span class="h-caps ${cls}">${t}</span
 export const newTag = () => html`<span class="h-new">новое</span>`;
 
 /** Иконки строк листа: заклинание, оружие, умение. */
-export const rowIcon = (kind) => ({ spell: 'sparkles', weapon: 'sword-01', feature: 'star', wand: 'magic-wand-01', scroll: 'scroll', book: 'book-open-01', potion: 'potion', bag: 'package', kit: 'backpack-01', tent: 'tent' }[kind] || 'sparkles');
+export const rowIcon = (kind) => ({ spell: 'sparkles', weapon: 'sword-01', armor: 'shield-01', feature: 'star', wand: 'magic-wand-01', scroll: 'scroll', book: 'book-open-01', potion: 'potion', bag: 'package', kit: 'backpack-01', tent: 'tent' }[kind] || 'sparkles');
 
 /** Шаги мастера: done / current / next. steps — [{name}], current — индекс; href(i) — адрес шага. */
 export function stepper(steps, current, href) {
