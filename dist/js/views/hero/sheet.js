@@ -43,7 +43,7 @@ function sheetHead(v, mode) {
     <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}</small></span>
     <span class="spacer"></span>
     ${mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
-      : html`<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
+      : html`${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
   </header>`;
 }
 

@@ -87,6 +87,20 @@ export async function createHeroSheet(cid, { characterId, operationId, data }, c
   return result;
 }
 
+/**
+ * Повышение уровня (level_up_character): ровно +1 уровень, хиты прибавляет сервер. Ожидаемая версия — подтверждённая
+ * версия листа; operationId и payload вызывающий хранит до ответа (повтор шлёт тот же запрос).
+ */
+export async function levelUpHeroSheet(cid, characterId, { operationId, payload }) {
+  if (!sb || !me) throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  const meta = characterSheetMeta(cid, characterId);
+  if (!meta) throw new SheetCommandError('unavailable');
+  const result = await sheets.levelUp({ campaignId: cid, characterId, version: meta.version, operationId, payload });
+  await loadCampaign(cid);
+  return result;
+}
+
 /** Создание отдельного экземпляра; ID сохраняется вызывающим до ответа для безопасного повтора. */
 export async function createCharacterSheet(cid, character) {
   if(!sb||!me)throw new SheetCommandError('forbidden');

@@ -65,10 +65,10 @@ export function mountHero(root, hash) {
   mountInto();
   // Данные поменялись (действие листа, сервер, соседняя вкладка): лист и «Мои герои» перерисовываются, только если
   // изменилось то, что они показывают, — иначе события чужих кампаний сбивали бы прокрутку. Мастер создания не трогаем.
-  const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) ? JSON.stringify(heroView(p1)) : '');
+  const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) && p2 !== 'levelup' ? JSON.stringify(heroView(p1)) : '');
   let last = sig();
   // Выбор в мастере создания меняет черновик конструктора (не базу) — перерисовать шаг и живой лист.
-  const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick')) rerender(); };
+  const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick' || p2 === 'levelup')) rerender(); };
   window.addEventListener('hero:changed', onChanged);
   return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }

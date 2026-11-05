@@ -153,7 +153,9 @@ export function toHeroView(ch, ctx = {}) {
 
   const conditions = (r.conditions || []).map((id) => ({ id, name: CONDITIONS.find((c) => c.id === id)?.name || id }));
   const pers = s.personality || {};
-  const pic = srcOf(s.portrait) || 'assets/hero/class-wizard.webp';
+  // Без своего портрета — картинка класса (у всех 12 классов SRD есть арт в assets/hero).
+  const clsKey = CLASS_REF(r.classes[0]?.ref) || r.classes[0]?.classId || s.classId;
+  const pic = srcOf(s.portrait) || `assets/hero/class-${classById(clsKey) ? clsKey : 'wizard'}.webp`;
   return {
     id: s.id, name: str(s.name) || 'Без имени', portrait: pic, art: pic,
     subtitle: [classText, race, background].filter(Boolean).join(' · '),

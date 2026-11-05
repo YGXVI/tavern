@@ -20,7 +20,7 @@ export function stepBody(s, cv, d) {
 }
 
 /** «Ещё выбор» расы и класса на настоящем конструкторе (подкласс, стиль, инструменты…) — в стиле блоков навыков. */
-const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box"><div class="h-box-head">${caps(b.title)}<small>${b.note}</small></div>
+export const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box"><div class="h-box-head">${caps(b.title)}<small>${b.note}</small></div>
   <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
 
 /** «Этот шаг дал» — для живого листа справа. */

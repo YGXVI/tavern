@@ -10,6 +10,7 @@ import { toHeroView, toHeroCard, spellIndex } from './adapter.js';
 import { applyHeroAction } from './actions.js';
 import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter } from './creation.js';
 import { isServerMode } from '../../core/store.js';
+import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
 
@@ -50,7 +51,7 @@ const ctxOf = (c, ch, userId) => {
 export function heroView(id, corner = '') {
   const userId = currentUserId();
   const real = findHero(id, userId);
-  if (real) return { ...toHeroView(real.ch, ctxOf(real.c, real.ch, userId)), id: heroKey(real.c.id, real.ch.id), live: true };
+  if (real) return { ...toHeroView(real.ch, ctxOf(real.c, real.ch, userId)), id: heroKey(real.c.id, real.ch.id), live: true, canLevelUp: canLevelUp(heroKey(real.c.id, real.ch.id)) };
   const base = HEROES[id] || LIRA;
   return corner && CORNERS[corner] ? { ...base, ...CORNERS[corner], corner } : base;
 }
@@ -107,8 +108,29 @@ export const creationView = () => { const st = buildState(); return st ? creatio
 export const creationLive = (stepId) => { const st = buildState(); return st ? creationLiveModel(creationIx, st) : CREATION_LIVE[stepId] || CREATION_LIVE.race; };
 /** Итог «Герой готов»: null — витрина. */
 export const creationDone = () => { const st = buildState(); return st ? { ...creationDoneModel(creationIx, st), campaign: campaignName(st) } : null; };
-/** Повышение уровня. */
-export const levelUpView = () => LEVEL_UP;
+// ——— Повышение уровня (#202): план rules/level-up.js, запись — level_up_character ———
+const LU_KEY = 'rasputye-hero-levelup-v1';
+function levelUpState(key) {
+  const real = findHero(key);
+  if (!real || !creationIx) return null;
+  const k = heroKey(real.c.id, real.ch.id);
+  let st = readJSON(LU_KEY);
+  // Черновик — для этого героя и этого уровня; иначе начинаем заново.
+  if (!st || st.v !== 1 || st.key !== k) st = newLevelUp(creationIx, real.ch, { key: k, campaignId: real.c.id });
+  return { st, real, key: k };
+}
+const saveLevelUp = (st) => { try { sessionStorage.setItem(LU_KEY, JSON.stringify(st)); } catch { /* приватный режим */ } };
+/** Повышение уровня героя key; без настоящего героя — витрина. */
+export const levelUpView = (key) => {
+  const s = key && levelUpState(key);
+  if (!s) return LEVEL_UP;
+  return levelUpModel(creationIx, s.st, s.real.ch, heroView(s.key));
+};
+/** Может ли пользователь повысить героя: владелец или мастер кампании. */
+export function canLevelUp(key) {
+  const real = findHero(key), userId = currentUserId();
+  return !!real && (real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
+}
 /** Разбор файла Long Story Short. */
 export const lssImportView = () => LSS_IMPORT;
 
@@ -185,6 +207,50 @@ async function finish() {
   location.hash = `#/hero/${heroKey(c.id, hero.characterId)}`;
 }
 
+let leveling = false;
+async function levelUp(p = {}) {
+  const s = levelUpState(p.heroId);
+  if (!s) return stub('Повышение уровня')(p);
+  const { st, real } = s;
+  if (!p.done) {
+    const note = applyLevelUpChoice(creationIx, st, real.ch, p);
+    saveLevelUp(st);
+    if (note) say(note.title, note.body || '', note.icon);
+    window.dispatchEvent(new CustomEvent('hero:changed'));
+    return;
+  }
+  if (!canLevelUp(p.heroId)) { say('Повышает владелец героя или мастер'); return; }
+  let req;
+  try { req = levelUpRequest(creationIx, st, real.ch); } catch (e) { say('Повышение не готово', e.message, 'alert-circle'); return; }
+  saveLevelUp(st);
+  if (leveling) return;
+  leveling = true;
+  try {
+    if (isServerMode()) {
+      const sync = await import('../../server/sync.js');
+      await sync.levelUpHeroSheet(real.c.id, real.ch.id, req);
+    } else {
+      updateCampaign(real.c.id, (camp) => {
+        const ch = camp.characters.find((x) => x.id === real.ch.id);
+        if (!ch) return;
+        Object.assign(ch, structuredClone(req.payload.patch));
+        if (req.payload.creation) ch.creation = structuredClone(req.payload.creation);
+        if (Number.isFinite(req.gain)) { ch.hpMax = (ch.hpMax || 0) + req.gain; ch.hp = (ch.hp || 0) + req.gain; }
+      });
+    }
+  } catch (e) {
+    leveling = false;
+    const kind = e?.kind;
+    if (kind === 'conflict') { sessionStorage.removeItem(LU_KEY); say('Лист изменился', 'Откройте повышение заново — план пересчитается по новому листу.', 'alert-circle'); return; }
+    say('Уровень не записан', kind === 'network' ? 'Нет связи — нажмите ещё раз, отправим тот же запрос.' : e?.message || 'Сервер не принял повышение.', 'alert-circle');
+    return;
+  }
+  leveling = false;
+  try { sessionStorage.removeItem(LU_KEY); } catch { /* приватный режим */ }
+  say(`${real.ch.name}: ${st.fromLevel + 1} уровень`, Number.isFinite(req.gain) ? `+${req.gain} хитов` : '', 'tick-02');
+  location.hash = `#/hero/${s.key}`;
+}
+
 export const heroActions = {
   createFrom: (p = {}) => (p.path === 'steps' && creationIx ? undefined : stub('Новый герой')(p)), // { path: 'steps' | 'quick' | 'lss' }
   choose,                                      // { step, id, value }
@@ -201,6 +267,6 @@ export const heroActions = {
   cast: live('cast'),                          // { heroId, spellId, slot }
   editField: live('editField'),                // { heroId, field, value }
   addItem: stub('Предмет'),                    // { heroId }
-  levelUp: stub('Повышение уровня'),           // { heroId, hp: 'average' | 'roll', spells: [names] }
+  levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
   importLss: stub('Импорт из LSS'),            // { decisions: { [issue]: choice } }
 };
