@@ -310,8 +310,12 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--rot', `${look.rot}deg`);
     node.style.zIndex = ctx.dragging?.has(t.id) || ctx.remote.drags.has(t.id) ? top : layer.get(t.id);
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
-    node.style.setProperty('--fs', `${Math.max(7, s * 0.15)}px`);
-    node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
+    // Значки, кольцо и подпись — доли клетки, без нижних порогов в пикселях: при мелкой сетке они уменьшаются
+    // вместе с артом и не закрывают его (sol0139, 05.11). У маленьких и уменьшенных токенов — от их размера.
+    const base = Math.min(s, d / 0.9);
+    node.style.setProperty('--cell', base);
+    node.style.setProperty('--fs', `${base * 0.15}px`);
+    node.style.setProperty('--bw', `${base * 0.045}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
     node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''} ${t.pending ? 'pending' : ''}`;
