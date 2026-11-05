@@ -1,5 +1,6 @@
 // Встречи мастера (#203, макет 62): заготовки существ для сцены. Живут на устройстве мастера — игроки их не видят.
 import { uid } from '../../core/dom.js';
+import { monsterById } from '../../data/bestiary.js';
 import { local, updateLocal } from './local.js';
 
 export const encounters = (cid, userId) => local('enc', cid, userId).list || [];
@@ -19,10 +20,14 @@ export function newEncounter(cid, userId, patch = {}) {
 export function deleteEncounter(cid, userId, id) {
   updateLocal('enc', cid, userId, (v) => { v.list = (v.list || []).filter((e) => e.id !== id); });
 }
-/** Добавить существо (id бестиария) во встречу: тот же — +1 к количеству. */
-export function addToEncounter(cid, userId, encId, monsterId, count = 1) {
+/** Добавить существо (id бестиария или libsrc:) во встречу: тот же — +1 к количеству. */
+export function addToEncounter(cid, userId, encId, monsterId, count = 1, creature = null) {
   const enc = encounterById(cid, userId, encId); if (!enc) return null;
   const row = enc.monsters.find((m) => m.id === monsterId);
-  if (row) row.count += count; else enc.monsters.push({ id: monsterId, count });
+  if (row) row.count = Math.min(40, row.count + count); else enc.monsters.push({ id: monsterId, count: Math.min(40, count), ...(creature ? { creature: structuredClone(creature) } : {}) });
   return saveEncounter(cid, userId, enc);
 }
+
+/** Снимок личного существа сохраняется вместе со встречей; справочник остаётся по id. */
+export const encounterCreature = (row, library = []) => String(row.id).startsWith('libsrc:')
+  ? library.find((c) => c.id === row.id.slice(7)) || row.creature || null : monsterById(row.id);

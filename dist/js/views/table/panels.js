@@ -1,3 +1,4 @@
+import { onLocal } from '../camp/local.js';
 import { pendingQueue } from './own-creature.js';
 // Панели стола: принимает действия от кнопок интерфейса и раздаёт их модулям,
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
@@ -66,6 +67,7 @@ export class Panels {
     });
     const mine = (p) => p?.cid === ctx.cid;
     this.offs = [
+      onLocal(() => { if (ctx.ui.panel === 'bestiary' && ctx.ui.bestiary?.src === 'enc') this.renderSide(true); }),
       bus.on('roll', (p) => {
         if (!mine(p)) return;
         showRollToast(ctx, p.entry);

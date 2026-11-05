@@ -1152,3 +1152,9 @@ a.bg-card:hover { box-shadow: inset 0 0 0 1px var(--c), 0 20px 40px -20px var(--
 }
 .it-card { grid-template-areas: "gem t tags" "gem t tags"; }
 .it-card > em { display: none; }
+.cp-mon-create { padding: 0 16px 12px; }
+.cp-mon-pick .grow { min-width: 0; }
+.cp-mon-pick b, .cp-mon-pick small { overflow-wrap: anywhere; }
+.enc-creature-modal { max-width: min(440px, calc(100vw - 24px)); }
+.cp-mons .avatar, .enc-creature-modal .avatar { flex-shrink: 0; overflow: hidden; }
+.cp-mons .avatar img, .enc-creature-modal .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
