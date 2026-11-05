@@ -21,7 +21,7 @@ export function campaignMenu(ctx, anchor) {
     { icon: 'home-01', label: 'Все кампании', href: '#/campaigns', onClick: () => go('#/campaigns') },
     { icon: 'castle', label: 'Дом кампании', href: `#/camp/${ctx.cid}`, onClick: () => go(`#/camp/${ctx.cid}`) },
     { icon: 'book-open-01', label: 'Книга кампании', href: `#/camp/${ctx.cid}/book`, onClick: () => go(`#/camp/${ctx.cid}/book`) },
-    ctx.isMaster && sessionOn(ctx) ? { icon: 'stop-circle', label: 'Завершить сессию', hint: 'глава закроется на столе', onClick: () => endSessionNow(ctx) } : null,
+    ctx.isMaster && sessionOn(ctx) ? { icon: 'stop-circle', label: 'Завершить сессию', onClick: () => endSessionNow(ctx) } : null,
     'divider',
     ctx.isMaster ? { icon: 'maps', label: 'Сцены', onClick: () => ctx.panels.toggleSide('scenes') } : null,
     ctx.isMaster ? { icon: 'user-add-01', label: 'Пригласить игроков', onClick: () => inviteModal(ctx) } : null,
@@ -38,7 +38,7 @@ export function campaignMenu(ctx, anchor) {
 
 const sessionOn = (ctx) => !!(ctx.c?.book?.session && !ctx.c.book.session.endedAt);
 async function endSessionNow(ctx) {
-  const ok = await confirmDialog({ title: 'Завершить сессию?', body: 'Глава закроется на столе. Игроки увидят свои ленточки и смогут вписать версию, пока сохнут чернила.', ok: 'Завершить' });
+  const ok = await confirmDialog({ title: 'Завершить сессию?', body: 'На обложке кампании пропадёт «идёт сейчас». Книга кампании остаётся открытой — писать в неё можно когда угодно.', ok: 'Завершить' });
   if (!ok) return;
   const { endSession } = await import('../camp/book-store.js');
   endSession(ctx.cid);

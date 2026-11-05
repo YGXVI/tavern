@@ -1,268 +1,154 @@
-// Книга кампании (#203): данные, правки и чтение. Открытое отряду — поле `book` кампании (на сервере — campaigns.data,
-// пишет мастер). Записи игроков доходят до книги через журнал (`log`, kind 'book'): игрок пишет свою запись журнала,
-// клиент мастера переплетает её в `book`. «Только мастеру» — скрытая запись журнала (текст в log_secrets: мастер и автор).
-// Тайное мастера (печати, личные сноски) и личное игрока (ленточки, черновики, дневник) — на устройстве (local.js).
-import { getCampaign, updateCampaign, addLog, isMasterOf, characterOf, membership } from '../../core/campaign.js';
+// Книга кампании (#203): общий блокнот. Любой участник пишет заметку, заметка — блоки «заголовок / текст / цитата».
+// Глав, сессий и пера у книги нет. Открытое — поле `book` кампании (на сервере — campaigns.data, пишет мастер).
+// Заметки игроков доходят до книги через журнал (`log`, kind 'book'): игрок пишет запись журнала, клиент мастера
+// переносит её в `book.notes`. Пока мастер не зашёл, заметку уже видят все — она читается прямо из журнала.
+// Рядом в `book` лежат данные дома кампании, к блокноту не привязанные: дата игры, идёт ли игра, раздатки.
+import { getCampaign, updateCampaign, addLog, isMasterOf, characterOf, membership, userById } from '../../core/campaign.js';
 import { uid } from '../../core/dom.js';
-import { local, updateLocal } from './local.js';
 
-export const ROMAN = (n) => { let s = '', x = Math.max(0, Math.floor(n)); for (const [v, r] of [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]) while (x >= v) { s += r; x -= v; } return s || '0'; };
+export const BLOCK_TYPES = ['h', 'p', 'q']; // заголовок, текст, цитата
+const LIM = { block: 6000, blocks: 40, gone: 500 };
 
 /** Книга кампании с пустыми значениями по умолчанию (копия — можно править). */
 export function bookOf(c) {
   const b = structuredClone(c?.book || {});
-  return { chapters: b.chapters || [], threads: b.threads || [], handouts: b.handouts || [], next: b.next || null, session: b.session || null, pen: b.pen || null, rotate: !!b.rotate };
+  return {
+    notes: Array.isArray(b.notes) ? b.notes : [], gone: Array.isArray(b.gone) ? b.gone : [],
+    handouts: b.handouts || [], next: b.next || null, session: b.session || null,
+    // Сыгранные сессии; у кампаний до блокнота их считали по главам.
+    played: b.played || (Array.isArray(b.chapters) ? b.chapters.filter((ch) => ch?.startedAt).length : 0),
+  };
 }
-export const chapterOf = (book, n) => book.chapters.find((ch) => ch.n === n) || null;
-function ensureChapter(book, n, at = Date.now()) {
-  let ch = chapterOf(book, n);
-  if (!ch) { ch = { n, title: null, startedAt: at, endedAt: null, boundAt: null, inkUntil: null, epigraph: null, entries: [] }; book.chapters.push(ch); book.chapters.sort((a, b) => a.n - b.n); }
-  ch.entries ||= [];
-  return ch;
+
+/** Блоки заметки: только известные типы, без пустых, с ограничением длины. */
+export function cleanBlocks(blocks) {
+  return (Array.isArray(blocks) ? blocks : [])
+    .map((x) => ({ type: BLOCK_TYPES.includes(x?.type) ? x.type : 'p', text: String(x?.text ?? '').replace(/\r/g, '').slice(0, LIM.block) }))
+    .filter((x) => x.text.trim())
+    .slice(0, LIM.blocks);
 }
-const findEntry = (book, n, id) => chapterOf(book, n)?.entries.find((e) => e.id === id) || null;
 
 /**
- * Применить правку к книге (на месте). Повтор той же правки ничего не меняет — так клиент мастера может
- * переплетать записи журнала сколько угодно раз. op: entry | margin | agree.
+ * Применить правку к книге (на месте). Повтор той же правки ничего не меняет — клиент мастера может
+ * переносить записи журнала сколько угодно раз. Чужую заметку игрок не правит и не удаляет; мастер удаляет любую.
+ * op: { op: 'note', note: {id, at, rev, blocks} } | { op: 'del', id }. by — автор правки, master — правит мастер.
  */
-export function applyOp(book, op) {
-  if (!op || typeof op !== 'object') return book;
-  if (op.op === 'entry' && op.entry?.id && Number.isInteger(op.entry.n)) {
-    const e = op.entry;
-    const ch = ensureChapter(book, e.n, e.at);
-    const i = ch.entries.findIndex((x) => x.id === e.id);
-    const clean = pickEntry(e);
-    if (i < 0) ch.entries.push(clean);
-    else if ((ch.entries[i].rev || 0) < (clean.rev || 0)) ch.entries[i] = { ...clean, margins: ch.entries[i].margins, agree: ch.entries[i].agree, footnotes: ch.entries[i].footnotes };
+export function applyOp(book, op, by, master = false) {
+  if (!op || typeof op !== 'object' || !by) return book;
+  if (op.op === 'note' && op.note?.id) {
+    const n = op.note;
+    if (book.gone.includes(n.id)) return book;
+    const blocks = cleanBlocks(n.blocks);
+    const i = book.notes.findIndex((x) => x.id === n.id);
+    if (i < 0) { if (blocks.length) book.notes.push({ id: n.id, userId: by, at: n.at || Date.now(), rev: n.rev || 1, blocks }); }
+    else if (book.notes[i].userId === by && (book.notes[i].rev || 0) < (n.rev || 1) && blocks.length) {
+      book.notes[i] = { ...book.notes[i], rev: n.rev, blocks, edited: n.edited || Date.now() };
+    }
   }
-  if (op.op === 'margin' && op.margin?.id) {
-    const e = findEntry(book, op.n, op.entryId);
-    if (e && !(e.margins ||= []).some((m) => m.id === op.margin.id)) e.margins.push({ id: op.margin.id, userId: op.margin.userId, quote: String(op.margin.quote || '').slice(0, 300), text: String(op.margin.text || '').slice(0, 400), at: op.margin.at || Date.now() });
-  }
-  if (op.op === 'agree' && op.userId) {
-    const e = findEntry(book, op.n, op.entryId);
-    if (e && !(e.agree ||= []).includes(op.userId)) e.agree.push(op.userId);
+  if (op.op === 'del' && op.id) {
+    const x = book.notes.find((y) => y.id === op.id);
+    if (x && x.userId !== by && !master) return book;
+    book.notes = book.notes.filter((y) => y.id !== op.id);
+    if (!book.gone.includes(op.id)) book.gone = [...book.gone, op.id].slice(-LIM.gone);
   }
   return book;
 }
-const LIM = { title: 140, text: 12000 };
-function pickEntry(e) {
-  const out = { id: e.id, n: e.n, userId: e.userId || null, kind: e.kind || 'voice', voice: e.voice === 'hero' ? 'hero' : 'self', title: String(e.title || '').slice(0, LIM.title), text: String(e.text || '').slice(0, LIM.text), at: e.at || Date.now(), rev: e.rev || 1 };
-  if (e.heroId) out.heroId = e.heroId;
-  if (e.ribbon) out.ribbon = { at: e.ribbon.at, place: String(e.ribbon.place || '').slice(0, 80), text: String(e.ribbon.text || '').slice(0, 300) };
-  if (e.variantOf) out.variantOf = e.variantOf;
-  if (e.sealed) out.sealed = e.sealed;
-  for (const k of ['margins', 'agree', 'footnotes']) if (e[k]) out[k] = e[k];
-  return out;
-}
 
-/** Правки книги из журнала: [{logId, at, userId, hidden, op}] — открытые и (для автора и мастера) «только мастеру». */
+/** Правки книги из журнала: [{logId, at, userId, op}] — от старых к новым. Автор — из записи журнала, не из текста. */
 export function bookOps(c) {
   const out = [];
   for (const l of c?.log || []) {
-    if (l.kind !== 'book' || l.redacted || !l.text) continue;
+    if (l.kind !== 'book' || l.redacted || l.hidden || !l.text || !l.userId) continue;
     let op = null;
     try { op = JSON.parse(l.text); } catch { continue; }
-    if (!op || typeof op !== 'object') continue;
-    if (op.entry) op.entry = { ...op.entry, userId: l.userId };
-    if (op.margin) op.margin = { ...op.margin, userId: l.userId };
-    if (op.op === 'agree') op.userId = l.userId;
-    out.push({ logId: l.id, at: l.at, userId: l.userId, hidden: !!(l.hidden || (l.vis && l.vis !== 'all')), op });
+    if (!op || typeof op !== 'object' || (op.op !== 'note' && op.op !== 'del')) continue;
+    out.push({ logId: l.id, at: l.at, userId: l.userId, op });
   }
   return out.sort((a, b) => a.at - b.at);
 }
 
-/**
- * Книга глазами участника: открытое из кампании + ещё не переплетённые записи журнала + своё с устройства.
- * Мастер видит входящие «только мастеру» и содержимое печатей; автор — свои закрытые записи.
- */
-export function readBook(c, userId) {
+function withLog(c) {
   const book = bookOf(c);
-  const master = isMasterOf(c, userId);
-  const ops = bookOps(c);
-  for (const o of ops) if (!o.hidden) applyOp(book, o.op);
-  const mark = (e, flag) => { const ch = ensureChapter(book, e.n, e.at); if (!ch.entries.some((x) => x.id === e.id)) ch.entries.push({ ...pickEntry(e), [flag]: true }); };
-  for (const o of ops) if (o.hidden && o.op.op === 'entry' && (master || o.userId === userId)) mark(o.op.entry, 'onlyMaster');
-  if (master) {
-    const sec = local('secret', c.id, userId);
-    for (const e of Object.values(sec.inbox || {})) if (!findEntry(book, e.n, e.id)) mark(e, 'onlyMaster');
-    for (const ch of book.chapters) for (const e of ch.entries) if (e.kind === 'sealed' && sec.sealed?.[e.id]) e.secret = sec.sealed[e.id];
-    for (const ch of book.chapters) for (const e of ch.entries) if (sec.notes?.[e.id]) e.myNotes = sec.notes[e.id];
-  }
-  const mine = local('mine', c.id, userId);
-  for (const e of mine.diary || []) mark(e, 'diary');
-  for (const ch of book.chapters) ch.entries.sort((a, b) => (a.ribbon?.at || a.at) - (b.ribbon?.at || b.at));
+  for (const o of bookOps(c)) applyOp(book, o.op, o.userId, isMasterOf(c, o.userId));
+  book.notes.sort((a, b) => a.at - b.at);
   return book;
 }
+/** Книга глазами участника: открытое из кампании + заметки из журнала, которые мастер ещё не перенёс. */
+export const readBook = (c) => withLog(c);
 
 // ——— Запись ———
-/** Внести запись в книгу. vis: all — отряду, master — только мастеру, me — только себе (на устройстве). */
-export function writeEntry(cid, userId, entry, vis = 'all') {
-  const c = getCampaign(cid); if (!c) return;
-  const e = { ...entry, id: entry.id || uid('be-'), at: entry.at || Date.now(), rev: (entry.rev || 0) + 1, userId };
-  if (vis === 'me') { updateLocal('mine', cid, userId, (m) => { m.diary = (m.diary || []).filter((x) => x.id !== e.id); m.diary.push(e); delete m.drafts[e.id]; }); return e; }
-  updateLocal('mine', cid, userId, (m) => { m.diary = (m.diary || []).filter((x) => x.id !== e.id); delete m.drafts[e.id]; });
-  if (isMasterOf(c, userId) && vis !== 'master') {
-    updateCampaign(cid, (cc) => { const b = bookOf(cc); applyOp(b, { op: 'entry', entry: e }); cc.book = { ...cc.book, chapters: b.chapters }; });
-    return e;
-  }
-  const { userId: _u, ...payload } = e;
-  updateCampaign(cid, (cc) => addLog(cc, { kind: 'book', userId, text: JSON.stringify({ op: 'entry', entry: payload }), ...(vis === 'master' ? { vis: 'gm', hidden: true } : {}) }));
-  return e;
+/** Вписать новую заметку или поправить свою. Возвращает заметку. */
+export function writeNote(cid, userId, { id, rev = 0, blocks }) {
+  const c = getCampaign(cid); if (!c) return null;
+  const clean = cleanBlocks(blocks);
+  if (!clean.length) return null;
+  const note = { id: id || uid('bn-'), at: Date.now(), rev: rev + 1, blocks: clean, ...(id ? { edited: Date.now() } : {}) };
+  if (id) { const old = readBook(c).notes.find((x) => x.id === id); if (old) note.at = old.at; }
+  send(c, userId, { op: 'note', note });
+  return note;
 }
-/** Пометка на полях: видна всем, кто читает главу. */
-export function addMargin(cid, userId, n, entryId, quote, text) {
+/** Удалить заметку: свою — любой, чужую — только мастер. */
+export function deleteNote(cid, userId, id) {
   const c = getCampaign(cid); if (!c) return;
-  const margin = { id: uid('bm-'), quote, text, at: Date.now() };
-  if (isMasterOf(c, userId)) { updateCampaign(cid, (cc) => { const b = bookOf(cc); applyOp(b, { op: 'margin', n, entryId, margin: { ...margin, userId } }); cc.book = { ...cc.book, chapters: b.chapters }; }); return; }
-  updateCampaign(cid, (cc) => addLog(cc, { kind: 'book', userId, text: JSON.stringify({ op: 'margin', n, entryId, margin }) }));
+  send(c, userId, { op: 'del', id });
 }
-/** «Помню так же» — согласиться с чужой версией момента. */
-export function agreeWith(cid, userId, n, entryId) {
-  const c = getCampaign(cid); if (!c) return;
-  if (isMasterOf(c, userId)) { updateCampaign(cid, (cc) => { const b = bookOf(cc); applyOp(b, { op: 'agree', n, entryId, userId }); cc.book = { ...cc.book, chapters: b.chapters }; }); return; }
-  updateCampaign(cid, (cc) => addLog(cc, { kind: 'book', userId, text: JSON.stringify({ op: 'agree', n, entryId }) }));
+function send(c, userId, op) {
+  if (isMasterOf(c, userId)) { updateCampaign(c.id, (cc) => { const b = bookOf(cc); applyOp(b, op, userId, true); cc.book = { ...cc.book, notes: b.notes, gone: b.gone }; }); return; }
+  updateCampaign(c.id, (cc) => addLog(cc, { kind: 'book', userId, text: JSON.stringify(op) }));
 }
+export const canEdit = (note, userId) => note.userId === userId;
+export const canDelete = (c, note, userId) => note.userId === userId || isMasterOf(c, userId);
 
 // ——— Мастер ———
 /** Изменить книгу кампании (только мастер; на сервере игроку запись кампании не разрешена). */
 export function mutateBook(cid, fn) {
-  return updateCampaign(cid, (c) => { const b = bookOf(c); const r = fn(b, c); c.book = b; return r; });
+  return updateCampaign(cid, (c) => { const b = bookOf(c); const r = fn(b, c); c.book = { ...c.book, ...b }; return r; });
 }
 
-/**
- * Клиент мастера переплетает записи игроков из журнала в книгу, забирает «только мастеру» на устройство
- * и ломает печати, чьё время пришло. Повторный вызов без новых записей ничего не пишет.
- */
+/** Клиент мастера переносит заметки игроков из журнала в книгу — журнал хранит только последние записи. */
 let folding = false;
 export function foldInbox(cid, userId) {
   const c = getCampaign(cid);
   if (folding || !c || !isMasterOf(c, userId)) return false;
   folding = true;
   try {
-    const ops = bookOps(c);
-    const inBook = bookOf(c);
-    // Уже открытая или запечатанная запись снова во входящие не попадает.
-    const hidden = ops.filter((o) => o.hidden && o.op.op === 'entry' && !findEntry(inBook, o.op.entry.n, o.op.entry.id));
-    if (hidden.length) {
-      const sec = local('secret', cid, userId);
-      const fresh = hidden.filter((o) => !sec.inbox?.[o.op.entry.id] || (sec.inbox[o.op.entry.id].rev || 0) < (o.op.entry.rev || 0));
-      if (fresh.length) updateLocal('secret', cid, userId, (s) => { for (const o of fresh) s.inbox[o.op.entry.id] = { ...o.op.entry, userId: o.userId }; });
-    }
-    const before = bookOf(c);
-    const after = bookOf(c);
-    for (const o of ops) if (!o.hidden) applyOp(after, o.op);
-    breakDueSeals(c, after, userId);
-    if (JSON.stringify(before) !== JSON.stringify(after)) { updateCampaign(cid, (cc) => { cc.book = after; }); return true; }
-    return false;
+    const before = bookOf(c), after = withLog(c);
+    if (JSON.stringify(before.notes) === JSON.stringify(after.notes) && JSON.stringify(before.gone) === JSON.stringify(after.gone)) return false;
+    updateCampaign(cid, (cc) => { cc.book = { ...cc.book, notes: after.notes, gone: after.gone }; });
+    return true;
   } finally { folding = false; }
 }
 
-/** Печати: пора ли ломать (вход в сцену, начало главы). Возвращает сломанные. */
-function breakDueSeals(c, book, userId) {
-  const sec = local('secret', c.id, userId);
-  const broken = [];
-  const curN = book.session && !book.session.endedAt ? book.session.n : null;
-  for (const ch of book.chapters) for (const [i, e] of ch.entries.entries()) {
-    if (e.kind !== 'sealed' || e.sealed?.brokenAt) continue;
-    const on = e.sealed?.breakOn || '';
-    const due = (on.startsWith('scene:') && on.slice(6) === c.activeSceneId) || (on.startsWith('chapter:') && curN && Number(on.slice(8)) <= curN);
-    const full = sec.sealed?.[e.id];
-    if (due && full) { ch.entries[i] = { ...pickEntry(full), id: e.id, n: ch.n, sealed: { ...e.sealed, brokenAt: Date.now() } }; broken.push(ch.entries[i]); }
-  }
-  return broken;
-}
-
-/** Сломать печать сейчас (мастер). */
-export function breakSeal(cid, userId, n, id) {
-  const sec = local('secret', cid, userId);
-  const full = sec.sealed?.[id];
-  if (!full) return false;
-  mutateBook(cid, (b) => { const ch = chapterOf(b, n); const i = ch?.entries.findIndex((e) => e.id === id) ?? -1; if (i >= 0) ch.entries[i] = { ...pickEntry(full), id, n, sealed: { ...ch.entries[i].sealed, brokenAt: Date.now() } }; });
-  return true;
-}
-
-/** Запечатать запись в главу: отряд видит печать на месте записи, текст — только на устройстве мастера. */
-export function sealEntry(cid, userId, entry, breakOn, label) {
-  const id = entry.id || uid('be-');
-  updateLocal('secret', cid, userId, (s) => { s.sealed[id] = { ...entry, id }; delete s.inbox[entry.id]; });
-  mutateBook(cid, (b) => {
-    const ch = ensureChapter(b, entry.n);
-    ch.entries = ch.entries.filter((e) => e.id !== id);
-    ch.entries.push({ id, n: entry.n, kind: 'sealed', userId: entry.userId || null, at: entry.ribbon?.at || entry.at || Date.now(), rev: 1, title: '', text: '', sealed: { breakOn, label: label || '', at: Date.now() } });
-  });
-}
-
-/** Начать игру: открыть сессию и главу. */
+// ——— Игра (дом кампании, к блокноту не относится) ———
+/** Начать игру: отметить, что сессия идёт. Возвращает номер сессии. */
 export function startSession(cid) {
   return mutateBook(cid, (b) => {
     if (b.session && !b.session.endedAt) return b.session.n;
-    const last = b.chapters.at(-1);
-    const n = last && !last.endedAt && !last.boundAt ? last.n : (last?.n || 0) + 1;
-    const ch = ensureChapter(b, n);
-    ch.startedAt ||= Date.now();
-    if (b.pen?.n === n) ch.pen = b.pen.userId;
-    b.session = { n, startedAt: Date.now(), endedAt: null };
-    return n;
+    b.played = (b.played || 0) + 1;
+    b.session = { n: b.played, startedAt: Date.now(), endedAt: null };
+    return b.played;
   });
 }
-/** Передать перо: кто летописец главы n. */
-export function setPen(cid, userId, n, rotate) {
-  return mutateBook(cid, (b) => {
-    b.pen = { userId, n };
-    if (rotate !== undefined) b.rotate = !!rotate;
-    const ch = chapterOf(b, n); if (ch && !ch.boundAt) ch.pen = userId;
-  });
-}
-/** Кто держал перо: userId → номера глав. */
-export function penHistory(book) {
-  const m = new Map();
-  for (const ch of book.chapters) if (ch.pen) { if (!m.has(ch.pen)) m.set(ch.pen, []); m.get(ch.pen).push(ch.n); }
-  return m;
-}
-/** Завершить сессию: глава закрыта на столе, чернила сохнут до следующей игры. */
+/** Завершить сессию. */
 export function endSession(cid) {
-  return mutateBook(cid, (b) => {
-    const s = b.session; if (!s || s.endedAt) return null;
-    s.endedAt = Date.now();
-    const ch = ensureChapter(b, s.n);
-    ch.endedAt = s.endedAt;
-    ch.inkUntil = b.next?.at && b.next.at > s.endedAt ? b.next.at : s.endedAt + 7 * 86400000;
-    return s.n;
-  });
+  return mutateBook(cid, (b) => { const s = b.session; if (!s || s.endedAt) return null; s.endedAt = Date.now(); return s.n; });
 }
 export const sessionLive = (book) => !!(book.session && !book.session.endedAt);
-/** Можно ли ещё править записи главы. */
-export const inkWet = (ch, now = Date.now()) => !!ch && !(ch.inkUntil && ch.inkUntil <= now);
-
-// ——— Указатель ———
-const MENTION = /@\[([^\]\n]{1,60})\]|@([\p{L}][\p{L}\d-]{1,30})/gu;
-export function mentionsIn(text) { const out = []; for (const m of String(text || '').matchAll(MENTION)) out.push((m[1] || m[2]).trim()); return out; }
-/** Указатель книги: имена, места и вещи по упоминаниям @ в записях. */
-export function bookIndex(book, c) {
-  const heroes = new Set((c?.characters || []).map((h) => h.name.toLowerCase()));
-  const scenes = (c?.scenes || []).map((s) => s.name.toLowerCase());
-  const map = new Map();
-  for (const ch of book.chapters) for (const e of ch.entries) {
-    if (e.kind === 'sealed' && !e.sealed?.brokenAt) continue;
-    for (const name of mentionsIn(`${e.title}\n${e.text}`)) {
-      const key = name.toLowerCase();
-      if (!map.has(key)) map.set(key, { name, kind: heroes.has(key) ? 'hero' : scenes.some((s) => s.includes(key) || key.includes(s)) ? 'place' : 'name', refs: [] });
-      const quote = String(e.text).split(/(?<=[.!?…])\s+/).find((s) => s.toLowerCase().includes(`@${key}`) || s.toLowerCase().includes(`@[${key}`)) || e.title;
-      map.get(key).refs.push({ n: ch.n, entryId: e.id, userId: e.userId, quote: quote.replace(MENTION, (m, a, b) => a || b) });
-    }
-  }
-  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-}
 
 // ——— Помощники ———
 export function heroOfUser(c, userId) { const m = membership(c, userId); return m?.characterId ? characterOf(c, m.characterId) : null; }
-export function voiceLabel(c, e, chapter) {
-  const hero = e.heroId ? characterOf(c, e.heroId) : null;
-  if (e.kind === 'master' || e.kind === 'chronicle') return 'хроника';
-  if (chapter?.pen && e.userId === chapter.pen) return 'летописец';
-  return e.voice === 'hero' && hero ? 'от лица героя' : 'от себя';
+/** Подпись автора: мастер — «Мастер», игрок — имя героя, иначе ник. */
+export function authorName(c, userId) {
+  if (isMasterOf(c, userId)) return 'Мастер';
+  return heroOfUser(c, userId)?.name || userById(userId)?.name || 'Игрок';
+}
+export const authorColor = (c, userId) => (isMasterOf(c, userId) ? 'hsl(38 70% 42%)' : `hsl(${userById(userId)?.hue ?? 30} 48% 42%)`);
+/** Короткий пересказ заметки: заголовок или начало текста. */
+export function noteSummary(note, max = 160) {
+  const h = note?.blocks?.find((x) => x.type === 'h')?.text?.trim();
+  const t = (note?.blocks || []).filter((x) => x.type !== 'h').map((x) => x.text).join(' ').replace(/\s+/g, ' ').trim();
+  const cut = (s) => (s.length > max ? `${s.slice(0, max).replace(/\s+\S*$/, '')}…` : s);
+  return { title: h ? cut(h) : '', text: cut(t) };
 }
 /** Дата по-человечески: «8 ноября» или «суббота, 8 ноября, 19:00». */
 export function fmtDate(ts, { time = false, weekday = false } = {}) {
@@ -274,4 +160,3 @@ export function fmtDate(ts, { time = false, weekday = false } = {}) {
 export const fmtTime = (ts) => (ts ? new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 const CITY = { 'Asia/Dushanbe': 'Душанбе', 'Europe/Moscow': 'Москве', 'Asia/Tashkent': 'Ташкенту', 'Asia/Almaty': 'Алматы', 'Europe/Kyiv': 'Киеву', 'Europe/Kiev': 'Киеву', 'Europe/Minsk': 'Минску', 'Asia/Yekaterinburg': 'Екатеринбургу', 'Asia/Novosibirsk': 'Новосибирску', 'Europe/Berlin': 'Берлину' };
 export const tzCity = () => { try { return CITY[Intl.DateTimeFormat().resolvedOptions().timeZone] || ''; } catch { return ''; } };
-export const newId = (p) => uid(p);

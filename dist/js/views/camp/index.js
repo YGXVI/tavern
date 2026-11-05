@@ -1,5 +1,6 @@
 // Дом кампании (#203, макеты 60–63, 91): обложка, вкладки мастера и игрока, книга кампании.
 // Адрес: #/camp/<кампания>[/<вкладка>[/…]]. Стол остаётся на #/c/<кампания>.
+// Обложка и полоса вкладок одни на все вкладки: при переключении меняется только содержимое под ними — без прыжков.
 import { html, raw, on, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
@@ -15,7 +16,6 @@ import { bindPaletteKeys } from '../ref/palette.js';
 const ic = (n, s = 16) => raw(icon(n, s));
 const MASTER_TABS = [['overview', 'Обзор'], ['scenes', 'Сцены'], ['encounters', 'Встречи'], ['heroes', 'Герои'], ['book', 'Книга кампании'], ['settings', 'Настройки']];
 const PLAYER_TABS = [['overview', 'Обзор'], ['book', 'Книга кампании'], ['party', 'Отряд'], ['handouts', 'Раздатки']];
-const BIG_COVER = new Set(['overview', 'book', 'party', 'handouts']);
 
 /** Модули вкладок грузятся по требованию. */
 const TAB = {
@@ -54,10 +54,10 @@ export function mountCamp(root, hash) {
     toast,
   };
 
-  function cover(c, big) {
+  function cover(c) {
     const master = ctx.master;
     const book = ctx.book();
-    const sessions = book.chapters.filter((ch) => ch.startedAt).length;
+    const sessions = book.played;
     const owner = userById(c.members.find((m) => m.role === 'master')?.userId);
     const hero = heroOfUser(c, user.id);
     const heroes = c.characters.length;
@@ -72,11 +72,8 @@ export function mountCamp(root, hash) {
     const here = atTable(c, user.id);
     const players = c.members.filter((m) => m.role === 'player' && m.status === 'active').length;
     const actions = master
-      ? html`<button class="btn btn-glass btn-sm" data-invite>${ic('user-add-01')}Пригласить</button><button class="btn btn-primary ${big ? 'btn-lg' : ''}" data-start>${ic('play', 18)}${live ? 'Вернуться за стол' : 'Начать игру'}</button>`
-      : html`${here.length ? html`<span class="chip chip-accent cv-live">${here.length} из ${players} уже за столом</span>` : ''}<a class="btn btn-primary ${big ? 'btn-lg' : ''}" href="#/c/${c.id}">${ic('play', 18)}Войти за стол</a>`;
-    if (!big) {
-      return html`<div class="cv-small"><span class="cv-thumb" style="background-image:url(${srcOf(c.cover)})"></span><div class="cv-titles"><h1>${c.name}</h1><p>${meta}${when ? ` · ${when.toLowerCase()}` : ''}</p></div><span class="spacer"></span><div class="cv-actions">${actions}</div></div>`;
-    }
+      ? html`<button class="btn btn-glass btn-sm" data-invite>${ic('user-add-01')}Пригласить</button><button class="btn btn-primary btn-lg" data-start>${ic('play', 18)}${live ? 'Вернуться за стол' : 'Начать игру'}</button>`
+      : html`${here.length ? html`<span class="chip chip-accent cv-live">${here.length} из ${players} уже за столом</span>` : ''}<a class="btn btn-primary btn-lg" href="#/c/${c.id}">${ic('play', 18)}Войти за стол</a>`;
     // Адрес картинки — абсолютный: url() в переменной CSS иначе считается от файла стилей.
     const cov = srcOf(c.cover); const abs = cov ? new URL(cov, location.href).href : '';
     return html`<section class="cv-big" style="${abs ? `--cover:url('${abs}')` : ''}" ${c.cover && !cov ? html`data-bgcover="${c.cover}"` : ''}>
@@ -89,7 +86,7 @@ export function mountCamp(root, hash) {
   function tabsRow(c) {
     const tabs = ctx.master ? MASTER_TABS : PLAYER_TABS;
     const book = ctx.book();
-    const count = { scenes: c.scenes.length, heroes: c.characters.length, handouts: book.handouts.length };
+    const count = { scenes: c.scenes.length, heroes: c.characters.length, handouts: book.handouts.length, book: book.notes.length };
     let encN = null;
     try { encN = JSON.parse(localStorage.getItem(`rasputye-encounters:${c.id}:${user.id}`) || '{}').list?.length; } catch { /* */ }
     if (encN) count.encounters = encN;
@@ -103,19 +100,35 @@ export function mountCamp(root, hash) {
     if (!m || m.status !== 'active') { go(`#/c/${c.id}`); return; }
     const tabs = (ctx.master ? MASTER_TABS : PLAYER_TABS).map((t) => t[0]);
     if (!tabs.includes(st.tab)) { st = { ...st, tab: 'overview', rest: [] }; }
-    const my = ++token;
-    const big = BIG_COVER.has(st.tab);
     const scroll = root.querySelector('.cp-screen') ? scrollY : 0;
     root.innerHTML = String(html`<div class="screen cp-screen">${appHeader(user, 'campaigns')}
-      <main class="page cp-page cp-tab-${st.tab}">${cover(c, big)}<div class="cp-bar">${tabsRow(c)}<div class="cp-bar-tools" data-tools></div></div><div class="cp-body" data-body></div></main></div>`);
+      <main class="page cp-page cp-tab-${st.tab}">${cover(c)}<div class="cp-bar">${tabsRow(c)}<div class="cp-bar-tools" data-tools></div></div><div class="cp-body" data-body></div></main></div>`);
     bindHeader(root, user);
     hydrateCover();
+    mountBody(scroll);
+  }
+
+  /** Содержимое вкладки. Старое держим на месте, пока грузится модуль новой, — страница не схлопывается. */
+  function mountBody(scroll = 0) {
+    const my = ++token;
     TAB[st.tab]().then((mod) => {
       if (my !== token) return;
       tabApi?.unmount?.();
-      tabApi = mod.mountTab(ctx, root.querySelector('[data-body]'), root.querySelector('[data-tools]'), st.tab) || null;
+      const bodyEl = root.querySelector('[data-body]');
+      const tools = root.querySelector('[data-tools]');
+      bodyEl.innerHTML = ''; tools.innerHTML = '';
+      root.querySelector('.cp-page').className = `page cp-page cp-tab-${st.tab}`;
+      tabApi = mod.mountTab(ctx, bodyEl, tools, st.tab) || null;
       if (scroll) scrollTo(0, scroll);
     }).catch((err) => { console.error(err); root.querySelector('[data-body]').textContent = `Не удалось открыть вкладку: ${err.message}`; });
+  }
+  /** Переключить вкладку без перерисовки обложки. */
+  function switchTab() {
+    const c = ctx.c;
+    const tabs = (ctx.master ? MASTER_TABS : PLAYER_TABS).map((t) => t[0]);
+    if (!c || !tabs.includes(st.tab) || !root.querySelector('[data-body]')) { render(); return; }
+    const nav = root.querySelector('.cp-tabs'); if (nav) { const n = document.createElement('div'); n.innerHTML = String(tabsRow(c)); nav.replaceWith(n.firstElementChild); }
+    mountBody(scrollY);
   }
 
   // ——— Действия обложки ———
@@ -125,11 +138,11 @@ export function mountCamp(root, hash) {
   });
   L('click', '[data-start]', () => {
     const c = ctx.c; if (!c) return;
-    if (!sessionLive(ctx.book())) { const n = startSession(c.id); toast({ title: `Глава ${n} началась`, body: 'Игроки увидят, что сессия идёт', icon: 'play' }); }
+    if (!sessionLive(ctx.book())) { startSession(c.id); toast({ title: 'Игра началась', body: 'Игроки увидят, что сессия идёт', icon: 'play' }); }
     go(`#/c/${c.id}`);
   });
 
-  // Мастер переплетает присланные записи; данные и устройство меняются — перерисовка вкладки.
+  // Мастер переносит заметки игроков из журнала в книгу; данные и устройство меняются — перерисовка вкладки.
   const refresh = () => {
     const c = ctx.c;
     if (!c || membership(c, user.id)?.status !== 'active') { render(); return; }
@@ -151,8 +164,8 @@ export function mountCamp(root, hash) {
   }
   function refreshCoverOnly() {
     const c = ctx.c; if (!c) return;
-    const box = root.querySelector('.cv-big, .cv-small'); if (!box) return;
-    const n = document.createElement('div'); n.innerHTML = String(cover(c, BIG_COVER.has(st.tab))); box.replaceWith(n.firstElementChild);
+    const box = root.querySelector('.cv-big'); if (!box) return;
+    const n = document.createElement('div'); n.innerHTML = String(cover(c)); box.replaceWith(n.firstElementChild);
     hydrateCover();
   }
   offs.push(bindPaletteKeys());
@@ -166,6 +179,7 @@ export function mountCamp(root, hash) {
       lastHash = h;
       const prev = st; st = parseCamp(h);
       if (prev.cid === st.cid && prev.tab === st.tab && tabApi?.route) { tabApi.route(st.rest); return; }
+      if (prev.cid === st.cid) { switchTab(); return; }
       render();
     },
     unmount() { token++; tabApi?.unmount?.(); for (const off of offs) off(); },
