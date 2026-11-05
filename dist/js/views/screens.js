@@ -25,7 +25,7 @@ export const go = (path) => {
 
 const d20 = raw(`<svg class="d20" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3e8d2"/><stop offset=".55" stop-color="#d9c49c"/><stop offset="1" stop-color="#9a7f55"/></linearGradient></defs><path d="M50 4 90 27v46L50 96 10 73V27z" fill="url(#dg)"/><path d="M50 4 72 46H28zM28 46 50 96 72 46M10 27l18 19M90 27 72 46M10 73l18-27M90 73 72 46" fill="none" stroke="#9a7f55" stroke-width="1.5" opacity=".8"/><path d="M28 46h44L50 82z" fill="#f3e8d2" opacity=".55"/><text x="50" y="64" text-anchor="middle" font-family="Unbounded, sans-serif" font-weight="600" font-size="20" fill="#2b1e15">20</text></svg>`);
 
-function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
+export function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
 
 function partyStrip(ids = ['elian', 'mira', 'lira', 'torin', 'garr'], names = ['Элиан', 'Мира', 'Лира', 'Торин', 'Гарр'], me = 'lira') {
   return raw(ids.map((id, i) => `<div class="ptoken ${id === me ? 'me' : ''}"><div class="ring"><img src="${srcOf(id)}" alt=""></div><span class="np">${esc(names[i])}</span></div>`).join(''));
@@ -135,8 +135,8 @@ export function openOAuth(onDone, { hint } = {}) {
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
 }
 
-// ——— Шапка ———
-function appHeader(user) {
+// ——— Шапка ——— (экраны героя тоже берут её: views/hero/index.js)
+export function appHeader(user) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
     <span class="spacer"></span>
@@ -144,7 +144,7 @@ function appHeader(user) {
   </header>`;
 }
 
-function bindHeader(root, user) {
+export function bindHeader(root, user) {
   root.querySelector('[data-user]')?.addEventListener('click', (e) => {
     if (isServerMode()) {
       menu([
@@ -197,10 +197,12 @@ function charactersPage(user) {
       <span class="cc-text"><b>${ch.name}</b><small>${sub}</small><small class="cc-camp">${c.name}${owner ? ` · играет ${owner}` : ''}</small></span></a>`;
   };
   const section = (title, items) => (items.length ? html`<section class="char-section"><h3>${title}</h3><div class="char-cards">${items.map(card)}</div></section>` : '');
+  // Новые экраны героя (#203) пока на образце данных — ссылка, чтобы их можно было посмотреть.
+  const preview = html`<a class="hero-preview-link" href="#/heroes">${raw(icon('sparkles', 16))}Новые экраны героя — создание, лист, повышение уровня (превью на образце) →</a>`;
   if (!mine.length && !led.length) {
-    return html`<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
+    return html`${preview}<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
   }
-  return html`${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
+  return html`${preview}${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
 }
 
 export function mountCampaigns(root) {
