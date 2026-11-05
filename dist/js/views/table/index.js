@@ -36,6 +36,7 @@ import { activeSight, sightRadius } from './sight.js';
 import { trackSight, onSightOff } from './sight-ui.js';
 import { trackPending, pendingHidden } from './own-creature.js';
 import { go } from '../screens.js';
+import { mountBookHooks } from './book-hooks.js';
 import { icon } from '../../icons.js';
 
 export function mountTable(root, cid) {
@@ -501,15 +502,19 @@ export function mountTable(root, cid) {
     if (characterOf(ctx.c, chId)) ctx.panels.openSheetFor({ characterId: chId });
   };
   sheetFromHash();
+  // Книга кампании (#203): ленточка, «глава закрыта», переплёт записей мастером, действия из дома кампании.
+  const bookHooks = mountBookHooks(ctx);
+  bookHooks.fromHash();
   setPresence({ userId: ctx.userId, campaignId: ctx.cid, sceneId: ctx.sceneId });
   const onResize = () => ctx.invalidate('chrome');
   addEventListener('resize', onResize);
   viewport.focus({ preventScroll: true });
 
   return {
-    update: sheetFromHash,
+    update: () => { sheetFromHash(); bookHooks.fromHash(); },
     unmount() {
       gone = true;
+      bookHooks.unmount();
       if (ctx.ui.selection.size) bus.send('select', { cid: ctx.cid, sceneId: ctx.sceneId, userId: ctx.userId, ids: [] });
       unsub(); offPresence(); offNet(); offErr(); offSight(); for (const off of offs) off(); detachInput(); detachCreatureDrag(); detachCreatureFileDrop(); removeEventListener('resize', onResize);
       setPresence(null); closePopover(); ctx.panels.destroy();

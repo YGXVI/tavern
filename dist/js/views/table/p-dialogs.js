@@ -19,6 +19,9 @@ export function campaignMenu(ctx, anchor) {
   const c = ctx.c;
   const items = [
     { icon: 'home-01', label: 'Все кампании', href: '#/campaigns', onClick: () => go('#/campaigns') },
+    { icon: 'castle', label: 'Дом кампании', href: `#/camp/${ctx.cid}`, onClick: () => go(`#/camp/${ctx.cid}`) },
+    { icon: 'book-open-01', label: 'Книга кампании', href: `#/camp/${ctx.cid}/book`, onClick: () => go(`#/camp/${ctx.cid}/book`) },
+    ctx.isMaster && sessionOn(ctx) ? { icon: 'stop-circle', label: 'Завершить сессию', hint: 'глава закроется на столе', onClick: () => endSessionNow(ctx) } : null,
     'divider',
     ctx.isMaster ? { icon: 'maps', label: 'Сцены', onClick: () => ctx.panels.toggleSide('scenes') } : null,
     ctx.isMaster ? { icon: 'user-add-01', label: 'Пригласить игроков', onClick: () => inviteModal(ctx) } : null,
@@ -31,6 +34,14 @@ export function campaignMenu(ctx, anchor) {
   ].filter(Boolean);
   const p = menu(items, anchor, { placement: 'bottom' });
   p.node.querySelector('.menu')?.insertAdjacentHTML('afterbegin', `<div class="menu-title"><b>${esc(c.name)}</b><small>${ctx.isMaster ? 'Вы мастер' : 'Вы играете'} · ${c.members.filter((m) => m.status === 'active').length} ${plural(c.members.filter((m) => m.status === 'active').length, 'участник', 'участника', 'участников')}</small></div>`);
+}
+
+const sessionOn = (ctx) => !!(ctx.c?.book?.session && !ctx.c.book.session.endedAt);
+async function endSessionNow(ctx) {
+  const ok = await confirmDialog({ title: 'Завершить сессию?', body: 'Глава закроется на столе. Игроки увидят свои ленточки и смогут вписать версию, пока сохнут чернила.', ok: 'Завершить' });
+  if (!ok) return;
+  const { endSession } = await import('../camp/book-store.js');
+  endSession(ctx.cid);
 }
 
 async function leaveCampaign(ctx) {
@@ -191,6 +202,10 @@ export function settingsModal(ctx) {
 
 // ——— Справочник (TASK-094): кнопка «?» слева снизу. Пока заглушка; управление — по ссылке и на клавише «?» ———
 export function referenceModal(ctx) {
+  // #203: справочник на карте — сразу поиск модалкой, карточка открывается поверх стола.
+  import('../ref/table-ref.js').then((m) => m.openTableReference(ctx)).catch(() => referenceSoon(ctx));
+}
+function referenceSoon(ctx) {
   const parts = [['book-open-01', 'Правила', 'Действия в бою, укрытие, падение, отдых'], ['magic-wand-01', 'Заклинания', 'Круги, школы, концентрация, компоненты'], ['potion', 'Предметы', 'Оружие, доспехи, магические вещи'], ['monster', 'Существа', 'Статблоки бестиария'], ['sparkles', 'Состояния', 'Что делает «Сбит с ног», «Отравлен» и другие']];
   const m = modal(`${panelHeader('Справочник', 'Скоро: правила D&D 5e 2014 с поиском прямо за столом')}
     <div class="modal-body"><div class="panel-section ref-soon">${parts.map(([ic, t, s]) => `<div class="ref-row">${icon(ic, 18)}<span><b>${esc(t)}</b><small>${esc(s)}</small></span></div>`).join('')}</div></div>
@@ -206,7 +221,7 @@ export function referenceModal(ctx) {
  */
 export function logModal(ctx) {
   const rows = () => {
-    const list = (ctx.c.log || []).filter((l) => (l.label || l.total != null ? knowsRoll(ctx, l) : ctx.isMaster && !l.redacted && l.text)).slice(0, 60);
+    const list = (ctx.c.log || []).filter((l) => l.kind !== 'book' && (l.label || l.total != null ? knowsRoll(ctx, l) : ctx.isMaster && !l.redacted && l.text)).slice(0, 60);
     if (!list.length) return '<p class="t-sm muted" style="padding:0 16px 16px">Бросков пока не было.</p>';
     return list.map((l) => {
       const who = userById(l.userId)?.name || '';

@@ -136,12 +136,20 @@ export function openOAuth(onDone, { hint } = {}) {
 }
 
 // ——— Шапка ——— (экраны героя тоже берут её: views/hero/index.js)
-export function appHeader(user) {
+/** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | maps | ref (#203); false — без навигации. */
+export function appHeader(user, active = null) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
     <span class="spacer"></span>
+    ${active === false ? '' : appNav(user, active)}
     <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? (user.provider === 'guest' ? 'гость · тестовая партия' : 'через Discord') : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
   </header>`;
+}
+
+export function appNav(user, active) {
+  const leads = campaignsFor(user.id).some((c) => roleIn(c, user.id) === 'master');
+  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/characters'], leads ? ['maps', 'Карты', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
+  return html`<nav class="app-nav" aria-label="Разделы">${tabs.map(([id, label, href]) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
 }
 
 export function bindHeader(root, user) {
@@ -211,14 +219,14 @@ export function mountCampaigns(root) {
     const user = currentUser();
     if (homeTab() === 'creatures') {
       const { tools, body } = creaturesPage(user);
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
         <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
       bindHeader(root, user);
       bindCreatures(root, user, render);
       return;
     }
     if (homeTab() === 'characters') {
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'heroes')}
         <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
       bindHeader(root, user);
       return;
@@ -227,7 +235,7 @@ export function mountCampaigns(root) {
     const mine = list.filter((c) => roleIn(c, user.id) === 'master').length;
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
     const shown = list.filter((c) => filter === 'all' || (filter === 'master' ? roleIn(c, user.id) === 'master' : membership(c, user.id)?.role === 'player'));
-    root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+    root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
       <main class="page">
         ${list.length ? html`
           <div class="title-row">
@@ -265,14 +273,14 @@ function campaignCard(c, user) {
     ? `${c.characters.length} ${plural(c.characters.length, 'герой', 'героя', 'героев')} · ${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')}${c.status === 'draft' ? ' · черновик' : ''}`
     : m?.status === 'pending' ? `Ведёт ${master?.name || '—'} · ждёт одобрения` : `Ведёт ${master?.name || '—'}${myChar ? ` · вы играете ${myChar.name}` : ''}`;
   // Ссылка, а не кнопка: карточку можно открыть в новой вкладке (TASK-094).
-  return html`<a class="camp-card ${live ? 'live' : ''}" href="#/c/${c.id}">
+  return html`<a class="camp-card ${live ? 'live' : ''}" href="${m?.status === 'active' && (isMaster || m.characterId) ? `#/camp/${c.id}` : `#/c/${c.id}`}">
     <div class="cover" style="background-image:url(${srcOf(c.cover)})"><div class="chips"><span class="chip">${isMaster ? 'Мастер' : 'Игрок'}</span>${live ? html`<span class="chip live"><i class="dot"></i>Сессия идёт</span>` : ''}</div></div>
     <div class="body"><div class="name">${c.name}</div><div class="meta">${meta}</div></div>
     <div class="footer"><span class="avatar-stack">${heroes.map((h) => portrait(h.portrait, 'sm hero', h.name))}</span><span class="btn btn-sm ${live && !isMaster ? 'btn-primary' : 'btn-secondary'}">${isMaster ? 'Открыть' : 'Войти'}</span></div>
   </a>`;
 }
 
-function pasteInvite() {
+export function pasteInvite() {
   const m = modal(html`${panelHeader('Вставить приглашение', 'Ссылка или код от мастера')}
     <div class="panel-section"><div class="input">${raw(icon('link-01', 18))}<input data-v placeholder="rasputye.vercel.app/#/join/RSP-7Q2K или RSP-7Q2K" autofocus></div>${isServerMode() ? '' : html`<p class="t-sm tertiary">Для проверки: код демо-кампании — RSP-7Q2K</p>`}</div>
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);

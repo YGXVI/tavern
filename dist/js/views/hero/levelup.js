@@ -12,7 +12,7 @@ export function mount(root, { parts, L, user }) {
   const lu = levelUpView();
   draft.lu ||= {};
   const render = () => {
-    root.innerHTML = String(html`<div class="screen hero-screen wizard">${appHeader(user)}${body(v, lu, step)}</div>`);
+    root.innerHTML = String(html`<div class="screen hero-screen wizard">${appHeader(user, 'heroes')}${body(v, lu, step)}</div>`);
     bindHeader(root, user);
     const cur = root.querySelector('.h-step.current'); const bar = cur?.closest('.h-steps');
     if (cur && bar) bar.scrollLeft = cur.offsetLeft - bar.clientWidth / 2 + cur.offsetWidth / 2;

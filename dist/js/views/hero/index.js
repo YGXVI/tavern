@@ -35,7 +35,7 @@ export function mountHero(root, hash) {
   const L = (type, sel, fn) => cleanup.push(on(root, type, sel, fn));
   let alive = true;
   const page = (body, cls = '', header = true) => {
-    root.innerHTML = String(html`<div class="screen hero-screen ${cls}">${header ? appHeader(user) : ''}${body}</div>`);
+    root.innerHTML = String(html`<div class="screen hero-screen ${cls}">${header ? appHeader(user, 'heroes') : ''}${body}</div>`);
     if (header) bindHeader(root, user);
     // На узком экране шаги прокручиваются — текущий держим в поле зрения.
     const cur = root.querySelector('.h-step.current'); const bar = cur?.closest('.h-steps');
