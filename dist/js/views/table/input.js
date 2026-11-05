@@ -6,14 +6,16 @@ import { bus } from '../../core/store.js';
 import {
   cellOf, cellCenter, footprintAt, footprintCenter, findPath, reachable, gridDims, gridSize, key, unkey,
   cellDistance, footprintGap, moveBlocked, distToSegment, footprintCells, softSnap, MAGNET, MAGNET_EXPLORE,
-  pathClear, smoothPath, pathCost, cellsAlong, routeLeg,
+  pathClear, smoothPath, pathCost, cellsAlong, routeLeg, pointInPolygon,
 } from '../../rules/geometry.js';
 import { sizeById, TEMPLATES } from '../../data/rules.js';
 import { tokenStats, characterOf } from '../../core/campaign.js';
 import { closePopover, popoverOpen, closeTopModal, hasModal } from '../../ui/kit.js';
-import { currentEntry } from './combat.js';
+import { currentEntry, initiativeOrder, slotMembers } from './combat.js';
+import { expandRideMoves, ridersOf } from './riding.js';
 import { renderChrome } from './chrome.js';
-import { moveDrawing, deleteDrawing, DRAW_SHAPES, shapeFromDrag, nearShape, aimShape } from './drawings.js';
+import { moveDrawing, deleteDrawing, DRAW_SHAPES, BOX_SHAPES, shapeFromDrag, nearShape, aimShape, canEditDrawing, drawingTouchesRect, drawingsShift, applyDrawingPos, validDrawing } from './drawings.js';
+import { drawStyle } from './draw-style.js';
 
 const DRAG_THRESHOLD = 4;
 export const FOCUS_TOOLS = ['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'];
@@ -84,7 +86,7 @@ export function attachInput(ctx) {
     const target = hit(e);
     // Alt + клик — пинг. Исключение: мастер тянет токен с Alt — свободное перемещение сквозь стены.
     const freeDrag = target.kind === 'token' && ctx.isMasterView && ['move', 'select'].includes(toolId());
-    if (e.altKey && toolId() !== 'walls' && !freeDrag) { g = { type: 'ping', start, w, look: e.shiftKey && ctx.isMaster }; return; }
+    if (e.altKey && !['walls', 'draw'].includes(toolId()) && !freeDrag) { g = { type: 'ping', start, w, look: e.shiftKey && ctx.isMaster }; return; }
     const tool = TOOLS[toolId()] || TOOLS.move;
     g = { type: 'tool', tool, start, last: start, w0: w, moved: false, target, shift: e.shiftKey, alt: e.altKey, pointerType: e.pointerType };
     tool.down?.(ctx, g, w, e);
@@ -183,10 +185,11 @@ export function attachInput(ctx) {
     if (e.key === 'Escape') {
       if (popoverOpen()) { closePopover(); return; }
       if (g) { cancelGesture(); ctx.invalidate('overlay', 'tokens'); return; }
+      if (ctx.ui.livePoly) { ctx.ui.livePoly = null; ctx.ui.drawLabel = null; ctx.invalidate('overlay'); return; }
       if (ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
       if (ctx.ui.template || ctx.ui.ruler) { ctx.clearMeasure(); return; }
       if (ctx.ui.selDrawing) { ctx.selectDrawing(null); return; }
-      if (ctx.ui.selection.size) { ctx.select([]); return; }
+      if (ctx.ui.selection.size || ctx.ui.selDrawings.size) { ctx.select([]); return; }
       if (ctx.ui.viewAs) { ctx.setViewAs(null); return; }
       if (toolId() !== 'move') { ctx.setTool('move'); return; }
       if (ctx.ui.layer && ctx.isMasterView) { ctx.setLayer(false); return; }
@@ -194,8 +197,20 @@ export function attachInput(ctx) {
       if (ctx.ui.panel) { ctx.panels.action('side-close'); return; }
       return;
     }
+    if (e.key === 'Enter' && ctx.ui.livePoly) { finishPoly(ctx, false); return; }
     if (e.key === 'Enter' && ctx.ui.wallChain) { ctx.ui.wallChain = null; ctx.ui.wallGhost = null; ctx.invalidate('overlay'); return; }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) { deleteDrawing(ctx, ctx.ui.selDrawing); ctx.invalidate('drawings'); return; }
+    // Группа из рамки (TASK-169): токены (мастер) и рисунки — одним шагом отмены.
+    const grpDraws = [...ctx.ui.selDrawings].filter((id) => ctx.scene?.drawings.some((d) => d.id === id));
+    if ((e.key === 'Delete' || e.key === 'Backspace') && grpDraws.length) { ctx.panels.deleteTokens(ctx.isMasterView ? [...ctx.ui.selection] : [...ctx.ui.selection].filter((id) => ctx.owns(ctx.scene?.tokens.find((t) => t.id === id))), grpDraws); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.ui.selDrawing) {
+      deleteDrawing(ctx, ctx.ui.selDrawing); // закреплённый и чужой не удаляются — проверка внутри (canDeleteDrawing)
+      ctx.invalidate('drawings'); return;
+    }
+    // Игрок удаляет свои токены и призывы (TASK-183); чужие и героев — мастер.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !ctx.isMasterView && ctx.ui.selection.size) {
+      const own = [...ctx.ui.selection].filter((id) => ctx.owns(ctx.scene?.tokens.find((t) => t.id === id)));
+      if (own.length) { ctx.panels.deleteTokens(own); return; }
+    }
     if ((e.key === 'Delete' || e.key === 'Backspace') && ctx.isMasterView) {
       if (ctx.ui.selectedWall) { ctx.panels.deleteWall(ctx.ui.selectedWall); return; }
       if (ctx.ui.selectedLight) { ctx.panels.deleteLight(ctx.ui.selectedLight); return; }
@@ -210,7 +225,10 @@ export function attachInput(ctx) {
     }
     if (e.key.startsWith('Arrow') && ctx.ui.selection.size) { e.preventDefault(); nudge(ctx, e.key); return; }
     // Tab — следующий токен (Shift+Tab — предыдущий): выделить и показать.
-    if (e.key === 'Tab' && ctx.scene && !hasModal()) {
+    // Только когда фокус на карте или ни на чём: иначе Tab ходит по кнопкам листа и панелей, как положено.
+    const ae = document.activeElement;
+    const onMap = !ae || ae === document.body || ae.closest?.('.viewport, .table-viewport, .world') ;
+    if (e.key === 'Tab' && ctx.scene && !hasModal() && onMap) {
       const list = ctx.scene.tokens.filter((t) => ctx.tokenShown(t) && t.kind !== 'item' && (ctx.isMasterView || t.kind === 'hero' || ctx.canControl(t)));
       if (list.length) {
         e.preventDefault();
@@ -241,10 +259,12 @@ export function attachInput(ctx) {
   window.addEventListener('keyup', onKeyUp);
 
   // ——— Общие действия контроллера ———
-  ctx.select = (ids, { focus = false } = {}) => {
+  // keepDrawings (Shift+клик по токену): выделенные рисунки остаются в группе (TASK-169).
+  ctx.select = (ids, { focus = false, keepDrawings = false } = {}) => {
     ctx.ui.selection = new Set(ids);
     ctx.ui.selectedWall = null; ctx.ui.selectedLight = null;
-    if (ctx.ui.selDrawing) { ctx.ui.selDrawing = null; ctx.invalidate('drawings'); }
+    const keep = keepDrawings ? new Set([...ctx.ui.selDrawings, ...(ctx.ui.selDrawing ? [ctx.ui.selDrawing] : [])]) : new Set();
+    if (ctx.ui.selDrawing || ctx.ui.selDrawings.size || keep.size) { ctx.ui.selDrawing = null; ctx.ui.selDrawings = keep; ctx.invalidate('drawings'); }
     updateReach(ctx);
     ctx.invalidate('tokens', 'areas', 'chrome', 'panels');
     if (focus && ids.length === 1) { const t = ctx.scene.tokens.find((x) => x.id === ids[0]); if (t) ctx.camera.centerOn(t.x, t.y); }
@@ -252,8 +272,15 @@ export function attachInput(ctx) {
   /** Выделить рисунок или надпись (TASK-031); выделение токенов при этом снимается. */
   ctx.selectDrawing = (id) => {
     if (ctx.ui.selection.size) ctx.select([]);
+    ctx.ui.selDrawings = new Set();
     ctx.ui.selDrawing = id || null;
     ctx.invalidate('drawings');
+  };
+  /** Выделить группу: токены и рисунки (TASK-169). Один рисунок без токенов — обычное выделение с панелью. */
+  ctx.selectGroup = (tokIds, drawIds) => {
+    if (!tokIds.length && drawIds.length === 1) { ctx.selectDrawing(drawIds[0]); return; }
+    ctx.select(tokIds);
+    if (drawIds.length) { ctx.ui.selDrawings = new Set(drawIds); ctx.invalidate('drawings'); }
   };
   ctx.setTool = (tool, sub) => {
     if (!ctx.isMasterView && ['select', 'fog', 'walls', 'lights', 'terrain', 'gm', 'grid', 'text'].includes(tool)) return;
@@ -271,7 +298,8 @@ export function attachInput(ctx) {
       if (prev === 'grid' && ctx.ui.gridBefore && ctx.scene) { Object.assign(ctx.scene.grid, ctx.ui.gridBefore); }
       if (tool === 'grid') { ctx.ui.gridBefore = structuredClone(ctx.scene.grid); initCalib(ctx); } else { ctx.ui.calib = null; ctx.ui.gridBefore = null; }
       if (['walls', 'lights', 'fog', 'terrain', 'gm', 'grid'].includes(tool)) ctx.ui.selection.clear();
-      if (!['move', 'select', 'text'].includes(tool)) ctx.ui.selDrawing = null;
+      if (!['move', 'select', 'text', 'draw'].includes(tool)) { ctx.ui.selDrawing = null; ctx.ui.selDrawings = new Set(); }
+      ctx.ui.livePoly = null; ctx.ui.drawLabel = null;
       closePopover();
     }
     vp.dataset.tool = tool;
@@ -332,10 +360,10 @@ function moveOpts(ctx, t, { ignoreWalls = false } = {}) {
   return { walls: ignoreWalls ? [] : s.walls, difficult: new Set(s.terrain?.difficult || []), blocked, cols, rows, n: cellsOfToken(t), rule: ctx.c.settings.diagonal || '5' };
 }
 
-/** Сколько футов осталось у токена в текущем ходу (null — не его ход / не бой). */
+/** Сколько футов осталось у токена в текущем ходу (null — не его ход / не бой). У пачки (#198) запас — у каждого. */
 export function movementLeft(ctx, t) {
   const cur = currentEntry(ctx.c, ctx.scene);
-  if (!cur || cur.tokenId !== t.id) return null;
+  if (!cur || (cur.tokenId !== t.id && !slotMembers(initiativeOrder(ctx.c, ctx.scene), cur.tokenId).some((e) => e.tokenId === t.id))) return null;
   const st = tokenStats(ctx.c, t);
   return Math.max(0, (st.speed || 30) - (ctx.c.combat.moved?.[t.id] || 0));
 }
@@ -361,28 +389,78 @@ function nudge(ctx, k) {
   for (const id of ctx.ui.selection) {
     const t = ctx.scene.tokens.find((x) => x.id === id);
     if (!t || !ctx.canControl(t) || t.locked) continue;
-    const to = { x: t.x + d[0] * s, y: t.y + d[1] * s };
+    const to = clampToMap(ctx, { x: t.x + d[0] * s, y: t.y + d[1] * s }, cellsOfToken(t));
+    if (to.x === t.x && to.y === t.y) continue; // край карты
     if (moveBlocked(t, to, ctx.scene.walls)) { ctx.toast({ title: 'Там стена', body: ctx.isMaster ? 'Сквозь стену — перетащить с Alt' : '', icon: 'path' }); continue; }
     moves.push({ id, from: { x: t.x, y: t.y }, to });
   }
-  if (moves.length) commitMoves(ctx, moves, null);
+  if (!moves.length) return;
+  // Шаг стрелкой — тот же ход, что перетаскивание: расход движения, ловушки, переходы, атака по возможности.
+  const leader = ctx.scene.tokens.find((t) => t.id === moves[0].id);
+  const cost = ownCost(ctx, moves[0]);
+  const trapHit = !ctx.ui.viewAs && moves.length === 1 && findTrapOnPath(ctx, leader, { cells: cellsAlong(g, [moves[0].from, moves[0].to], cellsOfToken(leader)) });
+  const threats = ctx.inCombat() && !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
+  const commit = () => {
+    commitMoves(ctx, moves, cost);
+    if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader);
+    if (threats.length) bus.send('opportunity', { cid: ctx.cid, tokenId: leader.id, foes: threats.map((t) => t.id) });
+    checkPortal(ctx, leader, moves[0].to);
+    updateReach(ctx);
+  };
+  if (threats.length && !leader.disengaged) {
+    ctx.panels.opportunityWarning(leader, threats, {
+      go: () => commit(),
+      disengage: () => { ctx.mutateScene((sc) => { const t = sc.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); commitMoves(ctx, moves, cost); checkPortal(ctx, leader, moves[0].to); updateReach(ctx); },
+      cancel: () => {},
+    });
+    return;
+  }
+  commit();
+}
+
+/** Путь члена группы (#198): прямой отрезок от старта до финиша по клеткам, с труднопроходимой местностью. */
+function ownCost(ctx, m) {
+  const t = ctx.scene.tokens.find((x) => x.id === m.id);
+  if (!t) return 0;
+  const g = sceneGrid(ctx), o = moveOpts(ctx, t);
+  return Math.round(pathCost(g, [m.from, m.to], { difficult: o.difficult, rule: o.rule, n: o.n })) * (g.feet || 5);
 }
 
 /** Записать перемещение (с отменой) и расход движения в бою. */
-function commitMoves(ctx, moves, leaderCost) {
-  const leader = moves[0];
+function commitMoves(ctx, moves0, leaderCost, draw = null, leaderId = moves0[0]?.id) {
+  // Езда (TASK-187): с ездовым едут всадники; всадник, сдвинутый без ездового, спешивается.
+  const moves = expandRideMoves(ctx.scene, moves0, { keepLocked: !ctx.isMaster });
+  // Путь (leaderCost) посчитан для того, за кого тащили группу, — ему он и списывается; остальным — свой путь.
+  const leader = moves.find((m) => m.id === leaderId) || moves[0];
+  const rode = new Map(moves.filter((m) => m.dismount).map((m) => [m.id, ctx.scene.tokens.find((t) => t.id === m.id)?.riding]));
+  // Рисунки группы из рамки (TASK-169) едут в той же записи: один шаг отмены.
+  const dz = draw?.ids?.size && (draw.dx || draw.dy) ? drawingsShift(ctx.scene, draw.ids, draw.dx, draw.dy) : null;
+  if (!moves.length && !dz) return;
   // Кого двигали последним — тот рисуется поверх остальных (порядок одинаковый у всех участников).
   const at = Date.now();
+  const charged = {}; // сколько футов списано каждому — отмена их вернёт, повтор спишет снова
+  const spend = (c, sign) => { if (!c.combat?.active) return; for (const [id, ft] of Object.entries(charged)) c.combat.moved[id] = Math.max(0, (c.combat.moved[id] || 0) + sign * ft); };
   ctx.mutateScene((s, c) => {
-    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; } }
-    if (leaderCost != null && c.combat.active) {
+    // Спешенный на месте (закреплённый всадник) не «двигался»: место и movedAt не трогаем — их закрепил мастер.
+    const still = (m) => m.to.x === m.from.x && m.to.y === m.from.y;
+    for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (!still(m)) { t.x = m.to.x; t.y = m.to.y; t.movedAt = at; } if (m.dismount) delete t.riding; } }
+    if (dz) applyDrawingPos(s, dz.after);
+    if (leader && leaderCost != null && c.combat.active) {
+      // Расход — каждому, чей сейчас ход: одиночке или каждому члену пачки (#198) — его же путь (сдвиг общий).
+      // Всадник, которого везёт ездовое, не тратит своё движение.
       const cur = currentEntry(c, s);
-      if (cur?.tokenId === leader.id) c.combat.moved[leader.id] = (c.combat.moved[leader.id] || 0) + leaderCost;
+      const turn = new Set(cur ? slotMembers(initiativeOrder(c, s), cur.tokenId).map((e) => e.tokenId) : []);
+      for (const m of moves) {
+        if (!turn.has(m.id) || m.carried) continue;
+        const ft = m.id === leader.id ? leaderCost : ownCost(ctx, m);
+        charged[m.id] = ft;
+        c.combat.moved[m.id] = (c.combat.moved[m.id] || 0) + ft;
+      }
     }
   }, {
-    label: 'Перемещение',
-    undo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.from.x; t.y = m.from.y; } } },
-    redo: (s) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); } } },
+    label: moves.length ? 'Перемещение' : 'Сдвинуть рисунки',
+    undo: (s, c) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (m.to.x !== m.from.x || m.to.y !== m.from.y) { t.x = m.from.x; t.y = m.from.y; } if (rode.get(m.id)) t.riding = rode.get(m.id); } } if (dz) applyDrawingPos(s, dz.before); if (c) spend(c, -1); },
+    redo: (s, c) => { for (const m of moves) { const t = s.tokens.find((x) => x.id === m.id); if (t) { if (m.to.x !== m.from.x || m.to.y !== m.from.y) { t.x = m.to.x; t.y = m.to.y; t.movedAt = Date.now(); } if (m.dismount) delete t.riding; } } if (dz) applyDrawingPos(s, dz.after); if (c) spend(c, 1); },
   });
 }
 export { commitMoves };
@@ -404,15 +482,36 @@ const tokenTool = {
       if (!t) return;
       if (!ctx.canControl(t)) { g.noDrag = true; return; }
       if (t.locked && !g.shift) { ctx.select([t.id]); g.noDrag = true; g.locked = true; return; }
-      if (g.shift) { const sel = new Set(ctx.ui.selection); sel.has(t.id) ? sel.delete(t.id) : sel.add(t.id); ctx.select([...sel]); g.noDrag = true; return; }
+      if (g.shift) { const sel = new Set(ctx.ui.selection); sel.has(t.id) ? sel.delete(t.id) : sel.add(t.id); ctx.select([...sel], { keepDrawings: true }); g.noDrag = true; return; }
       if (!ctx.ui.selection.has(t.id)) ctx.select([t.id]);
       const group = [...ctx.ui.selection].map((id) => ctx.scene.tokens.find((x) => x.id === id)).filter((x) => x && ctx.canControl(x) && !x.locked);
-      g.drag = { leader: t, items: group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })) };
+      // Рисунки из той же группы едут за ведущим токеном (TASK-169).
+      const draws = new Set([...ctx.ui.selDrawings].filter((id) => ctx.scene.drawings.some((d) => d.id === id)));
+      // Всадники ездовых из группы едут следом, в ту же точку (TASK-187).
+      const inGroup = new Set(group.map((x) => x.id));
+      for (const x of [...group]) for (const r of ridersOf(ctx.scene, x.id)) if (!inGroup.has(r.id)) { group.push(r); inGroup.add(r.id); }
+      const items = group.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x), ride: x.riding && inGroup.has(x.riding) ? x.riding : null }));
+      g.drag = { leader: t.riding && inGroup.has(t.riding) ? group.find((x) => x.id === t.riding) : t, items, draws: draws.size ? draws : null };
       return;
     }
     if (tg.kind === 'drawing') {
-      // Рисунок или надпись: выделить и тянуть (TASK-031).
-      ctx.selectDrawing(tg.id); g.drawDrag = { id: tg.id, w0: w }; return;
+      // Shift+клик — добавить рисунок в группу или убрать из неё (TASK-169).
+      if (g.shift) {
+        const ds = new Set([...ctx.ui.selDrawings, ...(ctx.ui.selDrawing ? [ctx.ui.selDrawing] : [])]);
+        ds.has(tg.id) ? ds.delete(tg.id) : ds.add(tg.id);
+        ctx.selectGroup([...ctx.ui.selection], [...ds]);
+        g.noDrag = true; return;
+      }
+      // Рисунок из группы: тянуть всю группу.
+      if (ctx.ui.selDrawings.has(tg.id)) {
+        const toks = [...ctx.ui.selection].map((id) => ctx.scene.tokens.find((x) => x.id === id)).filter((x) => x && ctx.canControl(x) && !x.locked);
+        g.grp = { w0: w, draws: new Set(ctx.ui.selDrawings), toks: toks.map((x) => ({ id: x.id, x0: x.x, y0: x.y, n: cellsOfToken(x) })) };
+        return;
+      }
+      // Рисунок или надпись: выделить и тянуть (TASK-031); закреплённый — только выделить (TASK-182).
+      ctx.selectDrawing(tg.id);
+      if (!ctx.scene.drawings.find((d) => d.id === tg.id)?.locked) g.drawDrag = { id: tg.id, w0: w };
+      return;
     }
     if (['door', 'light', 'pin', 'portal', 'trap', 'aura'].includes(tg.kind)) return;
     if (ctx.ui.tool === 'select' || (g.shift && ctx.isMasterView)) { ctx.ui.marquee = { x0: w.x, y0: w.y, x1: w.x, y1: w.y }; g.marquee = true; return; }
@@ -420,6 +519,7 @@ const tokenTool = {
   },
   move(ctx, g, w, e) {
     if (g.marquee) { ctx.ui.marquee.x1 = w.x; ctx.ui.marquee.y1 = w.y; ctx.invalidate('overlay'); return; }
+    if (g.grp) { dragGroup(ctx, g, w); return; }
     if (g.drawDrag) { ctx.ui.drawMove = { id: g.drawDrag.id, dx: w.x - g.drawDrag.w0.x, dy: w.y - g.drawDrag.w0.y }; ctx.invalidate('drawings'); return; }
     if (g.locked && !g.lockedTold) { g.lockedTold = true; ctx.toast({ title: 'Токен закреплён', body: ctx.isMasterView ? 'Снимите замок в рамке под токеном' : 'Его закрепил мастер', icon: 'square-lock-02' }); }
     if (!g.drag || g.noDrag) return;
@@ -432,11 +532,25 @@ const tokenTool = {
       ctx.invalidate('drawings');
       return;
     }
+    if (g.grp) {
+      const { dx = 0, dy = 0 } = g.grp, pos = ctx.dragging;
+      ctx.ui.drawMove = null; ctx.dragging = null;
+      if (g.moved && (dx || dy)) {
+        const moves = g.grp.toks.map((it) => ({ id: it.id, from: { x: it.x0, y: it.y0 }, to: pos?.get(it.id) || { x: it.x0, y: it.y0 } }))
+          .filter((m) => m.from.x !== m.to.x || m.from.y !== m.to.y);
+        commitMoves(ctx, moves, null, { ids: g.grp.draws, dx, dy });
+      }
+      ctx.invalidate('drawings', 'tokens', 'overlay');
+      return;
+    }
     if (g.marquee) {
       const m = ctx.ui.marquee; ctx.ui.marquee = null;
-      const x0 = Math.min(m.x0, m.x1), x1 = Math.max(m.x0, m.x1), y0 = Math.min(m.y0, m.y1), y1 = Math.max(m.y0, m.y1);
-      const ids = ctx.scene.tokens.filter((t) => ctx.tokenShown(t) && t.x >= x0 && t.x <= x1 && t.y >= y0 && t.y <= y1).map((t) => t.id);
-      ctx.select(g.shift ? [...new Set([...ctx.ui.selection, ...ids])] : ids);
+      const r = { x0: Math.min(m.x0, m.x1), x1: Math.max(m.x0, m.x1), y0: Math.min(m.y0, m.y1), y1: Math.max(m.y0, m.y1) };
+      const ids = ctx.scene.tokens.filter((t) => ctx.tokenShown(t) && t.x >= r.x0 && t.x <= r.x1 && t.y >= r.y0 && t.y <= r.y1).map((t) => t.id);
+      // Рисунки и надписи — те, которых рамка касается (TASK-169).
+      const dids = g.moved ? drawingsInRect(ctx, r) : [];
+      const had = g.shift ? [...ctx.ui.selDrawings, ...(ctx.ui.selDrawing ? [ctx.ui.selDrawing] : [])] : [];
+      ctx.selectGroup(g.shift ? [...new Set([...ctx.ui.selection, ...ids])] : ids, [...new Set([...had, ...dids])]);
       ctx.invalidate('overlay');
       return;
     }
@@ -445,6 +559,8 @@ const tokenTool = {
   click(ctx, g, w, e, dbl) {
     const tg = g.target;
     if (tg.kind === 'drawing') {
+      // Клик без перетаскивания по рисунку группы — выделить только его (как у токенов).
+      if (g.grp && !g.shift) ctx.selectDrawing(tg.id);
       const d = ctx.scene.drawings.find((x) => x.id === tg.id);
       if (dbl && d?.type === 'text') ctx.panels.textPrompt({ x: d.x, y: d.y }, { x: e.clientX, y: e.clientY }, d);
       return;
@@ -463,11 +579,13 @@ const tokenTool = {
     if (tg.kind === 'portal') { ctx.panels.portalPopover(tg.id, tg.node); return; }
     if (tg.kind === 'trap') { ctx.panels.trapPopover(tg.id, tg.node); return; }
     if (tg.kind === 'light' && ctx.isMasterView) { ctx.setTool('lights'); ctx.ui.selectedLight = tg.id; ctx.panels.lightPopover(tg.id, tg.node); return; }
-    if (ctx.ui.selection.size) ctx.select([]);
+    // Клик по пустому месту снимает выделение — и токенов, и рисунков (TASK-169).
+    if (ctx.ui.selection.size || ctx.ui.selDrawing || ctx.ui.selDrawings.size) ctx.select([]);
     closePopover();
   },
   cancel(ctx, g) {
     if (g.drag) { ctx.dragging = null; ctx.ui.drag = null; ctx.sendDrag({ end: true, ids: g.drag.items.map((i) => i.id) }); ctx.invalidate('tokens', 'overlay'); }
+    if (g.drag?.draws || g.grp || g.drawDrag) { ctx.ui.drawMove = null; if (g.grp) ctx.dragging = null; ctx.invalidate('drawings', 'tokens'); }
     ctx.ui.marquee = null;
   },
 };
@@ -479,6 +597,25 @@ const tokenTool = {
 function legPath(ctx, grid, start, want, n, opts) {
   // Обход строится из настоящего положения токена, каждый отрезок проверен на стены (TASK-026).
   return routeLeg(grid, start, want, { ...opts, n });
+}
+
+/** Рисунки, которых касается рамка r и которые пользователь может править (TASK-169). */
+function drawingsInRect(ctx, r) {
+  const grid = sceneGrid(ctx);
+  const boxOf = (d) => { try { return ctx.L.drawings.querySelector(`[data-did="${CSS.escape(d.id)}"]`)?.getBBox() || null; } catch { return null; } };
+  return (ctx.scene.drawings || []).filter((d) => validDrawing(d) && canEditDrawing(ctx, d) && drawingTouchesRect(grid, d, r, d.type === 'text' ? boxOf(d) : null)).map((d) => d.id);
+}
+
+/** Тянуть группу за её рисунок (TASK-169): с токенами — целыми клетками (фишки остаются в клетках), без — свободно. */
+function dragGroup(ctx, g, w) {
+  const G = g.grp;
+  let dx = w.x - G.w0.x, dy = w.y - G.w0.y;
+  if (G.toks.length) { const s = gridSize(sceneGrid(ctx)); dx = Math.round(dx / s) * s; dy = Math.round(dy / s) * s; }
+  else { dx = Math.round(dx * 10) / 10; dy = Math.round(dy * 10) / 10; }
+  G.dx = dx; G.dy = dy;
+  ctx.ui.drawMove = { ids: G.draws, dx, dy };
+  if (G.toks.length) ctx.dragging = new Map(G.toks.map((it) => [it.id, clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n)]));
+  ctx.invalidate('drawings', 'tokens', 'overlay');
 }
 
 function dragTokens(ctx, g, w, e) {
@@ -520,6 +657,7 @@ function dragTokens(ctx, g, w, e) {
     g.lastF ||= new Map();
     for (const it of g.drag.items) {
       if (it.id === lead.id) { positions.set(it.id, target); continue; }
+      if (it.ride) continue; // всадник — в точке своего ездового, ниже
       const want = clampToMap(ctx, { x: it.x0 + dx, y: it.y0 + dy }, it.n);
       const tok = ctx.scene.tokens.find((t) => t.id === it.id);
       const leg = tok ? legPath(ctx, grid, { x: it.x0, y: it.y0 }, want, it.n, moveOpts(ctx, tok)) : null;
@@ -543,8 +681,10 @@ function dragTokens(ctx, g, w, e) {
     g.cost = feet;
     g.path = { cells: cellsAlong(grid, pts, n) };
   }
+  for (const it of g.drag.items) if (it.ride && positions.has(it.ride)) positions.set(it.id, positions.get(it.ride));
   ctx.dragging = positions;
   ctx.ui.drag = { path };
+  if (g.drag.draws) { const lp = positions.get(lead.id) || { x: lead.x0, y: lead.y0 }; ctx.ui.drawMove = { ids: g.drag.draws, dx: lp.x - lead.x0, dy: lp.y - lead.y0 }; ctx.invalidate('drawings'); }
   // Скрытый токен и тайный ход мастера (Alt) другим не показываем — ни фишку, ни линию пути.
   const secret = ctx.isMaster && (free || g.drag.items.some((it) => ctx.scene.tokens.find((t) => t.id === it.id)?.hidden));
   if (!secret) ctx.sendDrag({ positions: Object.fromEntries(positions), leader: lead.id, path, ids: [...positions.keys()] });
@@ -556,31 +696,38 @@ function finishDrag(ctx, g) {
   const items = g.drag.items;
   const moves = items.map((it) => ({ id: it.id, from: { x: it.x0, y: it.y0 }, to: positions.get(it.id) || { x: it.x0, y: it.y0 } }))
     .filter((m) => m.from.x !== m.to.x || m.from.y !== m.to.y);
-  const done = (moved = false) => { ctx.dragging = null; ctx.ui.drag = null; ctx.sendDrag({ end: true, moved, ids: items.map((i) => i.id) }); ctx.invalidate('tokens', 'overlay'); };
+  const done = (moved = false) => { ctx.dragging = null; ctx.ui.drag = null; if (g.drag.draws) { ctx.ui.drawMove = null; ctx.invalidate('drawings'); } ctx.sendDrag({ end: true, moved, ids: items.map((i) => i.id) }); ctx.invalidate('tokens', 'overlay'); };
+  // Рисунки группы — на итоговый сдвиг ведущего токена (TASK-169).
+  const drawShift = () => { const lm = g.drag.draws && moves.find((m) => m.id === g.drag.leader.id); return lm ? { ids: g.drag.draws, dx: lm.to.x - lm.from.x, dy: lm.to.y - lm.from.y } : null; };
   if (!moves.length) { done(); return; }
   const leader = ctx.scene.tokens.find((t) => t.id === g.drag.leader.id);
   // Ловушка на пути: токен останавливается на ней.
   const trapHit = !ctx.ui.viewAs && findTrapOnPath(ctx, leader, g.path);
+  let cost = g.cost ?? null;
   if (trapHit && moves.length === 1) {
     const n = cellsOfToken(leader);
     const p = footprintCenter(sceneGrid(ctx), trapHit.cell.c, trapHit.cell.r, n);
     moves[0].to = p;
+    // Остановился на ловушке — списываем путь до неё, а не весь задуманный.
+    if (cost != null) cost = Math.min(cost, ownCost(ctx, moves[0]));
   }
+  const lm = moves.find((m) => m.id === leader.id) || moves[0];
   // Атака по возможности: игрок уходит из досягаемости врага.
   const threats = ctx.inCombat() && !ctx.isMaster && leader.kind === 'hero' && moves.length === 1 ? leavingReach(ctx, leader, moves[0]) : [];
   const commit = () => {
-    commitMoves(ctx, moves, g.cost ?? null);
+    commitMoves(ctx, moves, cost, drawShift(), leader.id);
     done(true);
     if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader);
     if (threats.length) bus.send('opportunity', { cid: ctx.cid, tokenId: leader.id, foes: threats.map((t) => t.id) });
-    checkPortal(ctx, leader, moves[0].to);
+    checkPortal(ctx, leader, lm.to);
     updateReach(ctx);
   };
   if (threats.length && !leader.disengaged) {
     ctx.ui.threat = threats.flatMap((t) => { const n = cellsOfToken(t); const fp = footprintAt(sceneGrid(ctx), t.x, t.y, n); return footprintCells(fp.c, fp.r, n).map((x) => key(x.c, x.r)); });
     ctx.panels.opportunityWarning(leader, threats, {
       go: () => { ctx.ui.threat = null; commit(); },
-      disengage: () => { ctx.ui.threat = null; ctx.mutateScene((s) => { const t = s.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); moves.length && commitMoves(ctx, moves, g.cost ?? null); done(); },
+      // «Отход»: тот же ход, что «Всё равно идти» (ловушка, переход, досягаемость), только без атаки вслед.
+      disengage: () => { ctx.ui.threat = null; ctx.mutateScene((s) => { const t = s.tokens.find((x) => x.id === leader.id); if (t) t.disengaged = true; }); if (moves.length) commitMoves(ctx, moves, cost, drawShift(), leader.id); done(true); if (trapHit) ctx.panels.trapTriggered(trapHit.trap, leader); checkPortal(ctx, leader, lm.to); updateReach(ctx); },
       cancel: () => { ctx.ui.threat = null; done(); },
     });
     ctx.invalidate('areas');
@@ -661,6 +808,7 @@ const measureTool = {
       g.mode = 'ruler';
     } else {
       const def = TEMPLATES.find((t) => t.id === sub);
+      // Клик без протягивания ставит шаблон прежнего размера (последний вытянутый или по умолчанию).
       const size = ctx.ui.sub.templateSize?.[sub] || def.size;
       // TASK-042: шаблон ставится свободно; Shift — к узлу сетки, как раньше.
       const origin = !g.shift ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : sub === 'line' || sub === 'cone' ? snapToVertex(ctx, w, 0.5) : snapToVertex(ctx, w);
@@ -679,10 +827,15 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
-      // Угол свободно, липнет к 45° (Shift — по 15°, Alt — без магнита), как у фигур рисования (TASK-042).
-      t.angle = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey }).angle;
+      // TASK-178: тянешь от точки — направление и размер одним движением, как у фигур рисования (TASK-042):
+      // размер по 0,5 фт, угол липнет к 45°; Shift — по 5 фт и 15°; Alt — угол свободно. Размер и угол — у курсора.
+      const aim = aimShape(sceneGrid(ctx), t.origin, w, { shift: e?.shiftKey, alt: e?.altKey });
+      t.angle = aim.angle;
+      if (Math.hypot(w.x - t.origin.x, w.y - t.origin.y) * ctx.camera.z > 8) t.size = aim.size;
+      const ft = String(t.size).replace('.', ',');
+      ctx.ui.templateLabel = { at: w, text: t.type === 'sphere' ? `радиус ${ft} фт` : `${ft} фт · ${aim.deg}°` };
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
-      ctx.invalidate('areas');
+      ctx.invalidate('areas', 'overlay');
     }
   },
   up(ctx, g, w, e) {
@@ -694,12 +847,15 @@ const measureTool = {
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
       const t = ctx.ui.template;
+      ctx.ui.templateLabel = null;
+      (ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {}))[t.type] = t.size;
       if (ctx.ui.shareRuler) ctx.sendTemplate(t);
-      ctx.invalidate('areas');
+      ctx.invalidate('areas', 'overlay');
       const sc = ctx.camera.toScreen(t.origin.x, t.origin.y);
       ctx.panels.templatePopover({ x: e.clientX, y: e.clientY }, sc);
     }
   },
+  cancel(ctx) { if (ctx.ui.templateLabel) { ctx.ui.templateLabel = null; ctx.invalidate('overlay'); } },
 };
 
 export function rulerLabel(ctx, pts) {
@@ -715,27 +871,104 @@ const pingTool = {
   down(ctx, g, w) { if (g.target.kind === 'token') ctx.select([g.target.id]); },
 };
 
+// Рисование (TASK-182, как в Owlbear Rodeo): выделение, многоугольник, карандаш, кисть, линия, фигуры по рамке, шаблоны.
+// Стиль новых рисунков — drawStyle(ctx) (заливка и обводка на панели). Углы фигур и точки многоугольника — к узлам сетки,
+// Alt — свободно; Shift — равные стороны. Размер виден у курсора.
+const ftLabel = (ctx, px) => String(Math.round((px / gridSize(sceneGrid(ctx))) * (sceneGrid(ctx).feet || 5) * 2) / 2).replace('.', ',');
+const styleFields = (ctx) => { const st = drawStyle(ctx); return { color: st.color, width: st.width, opacity: st.opacity, dash: st.dash, fill: st.fill, fillOpacity: st.fillOpacity }; };
+function boxFromDrag(ctx, sub, a, b, mods = {}) {
+  let dx = b.x - a.x, dy = b.y - a.y;
+  if (mods.shift) {
+    const m = Math.max(Math.abs(dx), Math.abs(dy));
+    const k = sub === 'tri' || sub === 'hex' ? Math.sqrt(3) / 2 : 1; // равносторонний треугольник и правильный шестиугольник
+    dx = (Math.sign(dx) || 1) * m; dy = (Math.sign(dy) || 1) * m * k;
+  }
+  const r = (v) => Math.round(v * 10) / 10;
+  return { type: 'shape', shape: sub, c: { x: r(a.x + dx / 2), y: r(a.y + dy / 2) }, w: r(Math.abs(dx)), h: r(Math.abs(dy)), rot: 0, ...styleFields(ctx) };
+}
+function pushDrawing(ctx, d, label) {
+  ctx.mutateScene((sc) => { sc.drawings.push(structuredClone(d)); }, { label, undo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, redo: (sc) => { sc.drawings.push(structuredClone(d)); } });
+}
+/** Закончить многоугольник: closed — замкнуть (заливка), иначе ломаная. */
+function finishPoly(ctx, closed) {
+  const lp = ctx.ui.livePoly; ctx.ui.livePoly = null; ctx.ui.drawLabel = null; ctx.invalidate('overlay');
+  if (!lp) return;
+  const pts = lp.pts.filter((p, i, a) => !i || p.x !== a[i - 1].x || p.y !== a[i - 1].y);
+  if (pts.length < (closed ? 3 : 2)) return;
+  pushDrawing(ctx, { id: uid('d-'), type: 'shape', shape: 'poly', pts, closed, ...styleFields(ctx), author: ctx.userId }, 'Многоугольник');
+}
+const drawSnap = (ctx, w, free) => (free ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : snapToVertex(ctx, w));
+
 const drawTool = {
   down(ctx, g, w) {
     const sub = ctx.ui.sub.draw || 'pen';
     if (sub === 'erase') { g.erase = true; eraseAt(ctx, w); return; }
-    const hue = ctx.user.hue ?? 32;
-    const color = ctx.isMaster ? '#e9b052' : `hsl(${hue} 80% 65%)`;
-    // Фигуры линейки как рисунок (TASK-032): тянем от точки нажатия.
-    if (DRAW_SHAPES.some((x) => x.id === sub)) { g.shape = { sub, from: w, color }; ctx.ui.liveShape = null; return; }
-    ctx.ui.liveStroke = { color, pts: [w] };
+    if (sub === 'select') {
+      const d = g.target.kind === 'drawing' ? ctx.scene.drawings.find((x) => x.id === g.target.id) : null;
+      ctx.selectDrawing(d?.id || null);
+      if (d && !d.locked) g.drawDrag = { id: d.id, w0: w };
+      return;
+    }
+    if (sub === 'poly') { g.poly = true; return; } // точки ставит щелчок
+    if (BOX_SHAPES.includes(sub)) { g.box = { sub, from: drawSnap(ctx, w, g.alt) }; ctx.ui.liveShape = null; return; }
+    // Прямая и шаблоны заклинаний (TASK-032): тянем от точки нажатия.
+    if (DRAW_SHAPES.some((x) => x.id === sub)) { g.shape = { sub, from: w }; ctx.ui.liveShape = null; return; }
+    ctx.ui.liveStroke = { ...styleFields(ctx), pts: [w], closed: sub === 'brush' };
     ctx.invalidate('overlay');
   },
   move(ctx, g, w, e) {
     if (g.erase) { eraseAt(ctx, w); return; }
-    if (g.shape) { ctx.ui.liveShape = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, g.shape.color, { shift: e.shiftKey, alt: e.altKey }); ctx.invalidate('overlay'); return; }
+    if (g.drawDrag) { tokenTool.move(ctx, g, w, e); return; }
+    if (g.box) {
+      const sh = boxFromDrag(ctx, g.box.sub, g.box.from, drawSnap(ctx, w, e.altKey), { shift: e.shiftKey });
+      ctx.ui.liveShape = sh;
+      const round = sh.shape === 'ellipse' && sh.w === sh.h;
+      ctx.ui.drawLabel = { at: w, text: round ? `⌀ ${ftLabel(ctx, sh.w)} фт` : `${ftLabel(ctx, sh.w)}×${ftLabel(ctx, sh.h)} фт` };
+      ctx.invalidate('overlay'); return;
+    }
+    if (g.shape) {
+      const st = styleFields(ctx);
+      const sh = shapeFromDrag(sceneGrid(ctx), g.shape.sub, g.shape.from, w, st.color, { shift: e.shiftKey, alt: e.altKey });
+      // Шаблон без поля fill заливается своим цветом, как раньше; прямой — толщина и пунктир.
+      ctx.ui.liveShape = { ...sh, width: st.width, opacity: st.opacity, dash: st.dash };
+      if (sh.shape === 'seg') ctx.ui.drawLabel = { at: w, text: `${ftLabel(ctx, Math.hypot(sh.b.x - sh.a.x, sh.b.y - sh.a.y))} фт` };
+      ctx.invalidate('overlay'); return;
+    }
     const s = ctx.ui.liveStroke; if (!s) return;
     const last = s.pts.at(-1);
     if (Math.hypot(w.x - last.x, w.y - last.y) * ctx.camera.z < 3) return;
     s.pts.push(w);
     ctx.invalidate('overlay');
   },
-  up(ctx, g) {
+  click(ctx, g, w, e, dbl) {
+    if ((ctx.ui.sub.draw || 'pen') !== 'poly') return;
+    const p = drawSnap(ctx, w, e.altKey);
+    const lp = ctx.ui.livePoly;
+    if (!lp) { ctx.ui.livePoly = { pts: [p], hover: p }; ctx.invalidate('overlay'); return; }
+    if (dbl) { finishPoly(ctx, false); return; }
+    const first = lp.pts[0];
+    if (lp.pts.length >= 3 && Math.hypot(p.x - first.x, p.y - first.y) * ctx.camera.z < 14) { finishPoly(ctx, true); return; }
+    lp.pts.push(p); lp.hover = p;
+    ctx.invalidate('overlay');
+  },
+  hover(ctx, w, e) {
+    const lp = ctx.ui.livePoly; if (!lp) return;
+    lp.hover = drawSnap(ctx, w, e?.altKey);
+    const last = lp.pts.at(-1), first = lp.pts[0];
+    lp.closing = lp.pts.length >= 3 && Math.hypot(lp.hover.x - first.x, lp.hover.y - first.y) * ctx.camera.z < 14;
+    ctx.ui.drawLabel = { at: w, text: lp.closing ? 'Замкнуть' : `${ftLabel(ctx, Math.hypot(lp.hover.x - last.x, lp.hover.y - last.y))} фт` };
+    ctx.invalidate('overlay');
+  },
+  up(ctx, g, w) {
+    if (g?.drawDrag) { tokenTool.up(ctx, g, w); return; }
+    if (g?.poly || g?.erase) return;
+    ctx.ui.drawLabel = null;
+    if (g?.box) {
+      const sh = ctx.ui.liveShape; ctx.ui.liveShape = null; ctx.invalidate('overlay');
+      if (!sh || !g.moved || sh.w * ctx.camera.z < 6 || sh.h * ctx.camera.z < 6) return;
+      pushDrawing(ctx, { id: uid('d-'), ...sh, author: ctx.userId }, 'Фигура');
+      return;
+    }
     if (g?.shape) {
       const sh = ctx.ui.liveShape; ctx.ui.liveShape = null; ctx.invalidate('overlay');
       if (!sh || !g.moved) return;
@@ -744,25 +977,30 @@ const drawTool = {
       const d = { id: uid('d-'), ...sh, author: ctx.userId };
       for (const k of ['a', 'b', 'origin']) if (d[k]) d[k] = r(d[k]);
       if (d.angle != null) d.angle = Math.round(d.angle * 1000) / 1000;
-      ctx.mutateScene((sc) => { sc.drawings.push(structuredClone(d)); }, { label: 'Фигура', undo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, redo: (sc) => { sc.drawings.push(structuredClone(d)); } });
+      pushDrawing(ctx, d, 'Фигура');
       return;
     }
     const s = ctx.ui.liveStroke; ctx.ui.liveStroke = null;
-    if (!s || s.pts.length < 2) { ctx.invalidate('overlay'); return; }
-    const d = { id: uid('d-'), type: 'line', color: s.color, pts: s.pts.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })), author: ctx.userId };
-    ctx.mutateScene((sc) => { sc.drawings.push(d); }, { label: 'Рисунок', undo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, redo: (sc) => { sc.drawings.push(d); } });
+    if (!s || s.pts.length < (s.closed ? 3 : 2)) { ctx.invalidate('overlay'); return; }
+    const d = { ...s, id: uid('d-'), type: 'line', pts: s.pts.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })), author: ctx.userId };
+    if (!d.closed) delete d.closed;
+    pushDrawing(ctx, d, s.closed ? 'Кисть' : 'Рисунок');
   },
-  cancel(ctx) { ctx.ui.liveStroke = null; ctx.ui.liveShape = null; },
+  cancel(ctx) { ctx.ui.liveStroke = null; ctx.ui.liveShape = null; ctx.ui.drawLabel = null; },
 };
 
 function eraseAt(ctx, w) {
   const tol = 10 / ctx.camera.z;
   for (const d of ctx.scene.drawings) {
-    if (!ctx.isMaster && d.author !== ctx.userId) continue;
+    if (!validDrawing(d) || d.locked || (!ctx.isMaster && d.author !== ctx.userId)) continue;
     let near = false;
     if (d.type === 'text') near = Math.abs(d.x - w.x) < 80 && Math.abs(d.y - w.y) < 24;
     else if (d.type === 'shape') near = nearShape(sceneGrid(ctx), d, w, tol);
-    else for (let i = 1; i < d.pts.length && !near; i++) near = distToSegment(w, d.pts[i - 1], d.pts[i]) < tol;
+    else {
+      const ring = d.closed ? [...d.pts, d.pts[0]] : d.pts;
+      for (let i = 1; i < ring.length && !near; i++) near = distToSegment(w, ring[i - 1], ring[i]) < tol;
+      if (!near && d.closed) near = pointInPolygon(w, d.pts);
+    }
     if (near) {
       const copy = structuredClone(d);
       ctx.mutateScene((sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); }, { label: 'Стереть', undo: (sc) => sc.drawings.push(copy), redo: (sc) => { sc.drawings = sc.drawings.filter((x) => x.id !== d.id); } });
@@ -885,9 +1123,11 @@ const wallTool = {
     }
     if (ctx.ui.wallChain) { ctx.ui.wallGhost = { a: ctx.ui.wallChain.a, b: wallSnap(ctx, w, e), kind: ctx.ui.sub.walls || 'wall' }; ctx.invalidate('overlay'); }
   },
+  cancel(ctx, g) { if (g.handle && g.before) { ctx.scene.walls = structuredClone(g.before); ctx.invalidateVision(); ctx.invalidate('walls', 'fog'); } },
   up(ctx, g, w, e) {
     if (g.handle && g.moved) {
       const before = g.before, after = structuredClone(ctx.scene.walls);
+      ctx.scene.walls = structuredClone(before); // предпросмотр → «до», запись увидит разницу (TASK-166)
       ctx.mutateScene((s) => { s.walls = structuredClone(after); }, { label: 'Стена', undo: (s) => { s.walls = structuredClone(before); }, redo: (s) => { s.walls = structuredClone(after); } });
       return;
     }
@@ -971,10 +1211,15 @@ const lightTool = {
     ctx.invalidateVision();
     ctx.invalidate('markers', 'areas', 'fog');
   },
+  cancel(ctx, g) {
+    const l = g.light && ctx.scene.lights.find((x) => x.id === g.light.id);
+    if (l) { l.x = g.light.x0; l.y = g.light.y0; ctx.invalidateVision(); ctx.invalidate('markers', 'areas', 'fog'); }
+  },
   up(ctx, g, w, e) {
     if (g.light && g.moved) {
       const l = ctx.scene.lights.find((x) => x.id === g.light.id);
       const to = { x: l.x, y: l.y }, from = { x: g.light.x0, y: g.light.y0 };
+      Object.assign(l, from); // предпросмотр → «до», запись увидит разницу (TASK-166)
       ctx.mutateScene((s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, to); }, { label: 'Свет', undo: (s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, from); }, redo: (s) => { const x = s.lights.find((q) => q.id === l.id); if (x) Object.assign(x, to); } });
       return;
     }
@@ -994,6 +1239,9 @@ const terrainTool = {
   up(ctx, g) {
     const before = g.before, after = structuredClone(ctx.scene.terrain);
     if (JSON.stringify(before) === JSON.stringify(after)) return;
+    // Кисть рисовала прямо в сцене (предпросмотр). Вернуть «до», иначе запись не увидит разницы
+    // и на сервер ничего не уйдёт — местность пропадёт после обновления (TASK-166).
+    ctx.scene.terrain = structuredClone(before);
     ctx.mutateScene((s) => { s.terrain = structuredClone(after); }, { label: 'Местность', undo: (s) => { s.terrain = structuredClone(before); }, redo: (s) => { s.terrain = structuredClone(after); } });
   },
   cancel(ctx, g) { if (g.before) ctx.scene.terrain = g.before; ctx.invalidate('terrain'); },

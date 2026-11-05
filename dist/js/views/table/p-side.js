@@ -3,13 +3,18 @@ import { el, esc, uid, plural } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc, storeImage, BUILTIN_MAP_LIST } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, sceneOf, tokenStats, updateCampaign, addLog, nextTokenName } from '../../core/campaign.js';
+import { isServerMode } from '../../core/store.js';
+import { listCreatures } from '../../core/library.js';
+import { toMonster } from '../../rules/creature.js';
 import { BESTIARY, monsterById, srdLoaded } from '../../data/bestiary.js';
 import { sizeById } from '../../data/rules.js';
 import { makeScene, monsterToken } from '../../data/demo.js';
-import { gridDims, gridSize, freeSpots } from '../../rules/geometry.js';
+import { gridDims, gridSize, freeSpots, moveBlocked, footprintAt, footprintCells, footprintCenter, key } from '../../rules/geometry.js';
 import { parseUniversalVTT, scaleImport } from '../../rules/uvtt.js';
 import { modal, panelHeader, popover, closePopover, menu, confirmDialog } from '../../ui/kit.js';
 import { endCombat } from './combat.js';
+import { pickTokenImage, storeTokenImage } from './p-token.js';
+import { creatureImgTag, hydrateCreatureImages, campaignImage, isLibRef } from '../creature-img.js';
 import { roll } from '../../../engine.js';
 
 // ——— Общее ———
@@ -18,10 +23,11 @@ export function hydrateImages(root) {
     if (img.getAttribute('src')) continue;
     resolveSrc(img.dataset.ref).then((u) => { if (u) img.src = u; });
   }
+  hydrateCreatureImages(root); // свои картинки «Моих существ» (#190 E)
 }
 const mapImg = (ref, cls = '') => { const s = srcOf(ref); return `<img class="${cls}" alt="" draggable="false" data-ref="${esc(ref)}" ${s ? `src="${esc(s)}"` : ''}>`; };
 
-function viewCenter(ctx) {
+export function viewCenter(ctx) {
   const v = ctx.camera.viewRect();
   const sc = ctx.scene;
   return { x: Math.min(sc.map.width - 1, Math.max(0, v.x + v.w / 2)), y: Math.min(sc.map.height - 1, Math.max(0, v.y + v.h / 2)) };
@@ -100,22 +106,76 @@ function bestiaryList(ctx) {
   const st = bState(ctx);
   const q = st.q.trim().toLowerCase();
   const list = BESTIARY.filter((m) => bMatch(m, q) && (st.type === 'all' || (st.type === 'other' ? !B_NAMED.includes(m.type) : m.type === st.type)));
-  if (!list.length) return `<p class="t-sm muted b-empty">${srdLoaded() ? 'Никого не нашлось. Здесь существа SRD 5.1 — ищите по-русски, по-английски или «КО 5».' : 'Пока никого — догружаем полный бестиарий…'}</p>`;
+  // Своё существо (#190 E): нет в бестиарии — создать по имени из поиска.
+  const create = q ? `<button class="btn btn-sm btn-secondary b-create" data-act="b-create">${icon('plus-sign', 14)}Создать «${esc(st.q.trim())}»</button>` : '';
+  if (!list.length) return `<p class="t-sm muted b-empty">${srdLoaded() ? 'Никого не нашлось. Здесь существа SRD 5.1 — ищите по-русски, по-английски или «КО 5».' : 'Пока никого — догружаем полный бестиарий…'}</p>${srdLoaded() ? `<div class="b-empty">${create}</div>` : ''}`;
   return list.map((m) => {
     const n = ctx.scene?.tokens.filter((t) => t.monsterId === m.id).length || 0;
     return `<button class="list-row b-row ${st.pick === m.id ? 'current' : ''}" data-act="b-pick" data-id="${esc(m.id)}"><span class="avatar sm foe"><img src="${esc(srcOf(m.img))}" alt=""></span><span class="grow col-tight"><span class="primary ellipsis">${esc(m.name)}</span><span class="secondary ellipsis">${esc(m.type)} · КО ${esc(m.cr)} · КД ${m.ac} · ${m.hp} хп${sizeById(m.size).cells > 1 ? ` · ${sizeById(m.size).cells}×${sizeById(m.size).cells}` : ''}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
+  }).join('') + (create ? `<div class="b-empty b-more"><span class="t-sm muted">Нет нужного?</span>${create}</div>` : '');
+}
+
+function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false, src: 'srd' }); }
+
+// ——— Свои существа (TASK-179, TASK-097 п. 4.3): вкладка «Мои» — личная библиотека мастера ———
+// Шаблон из библиотеки выбирают по «libsrc:<id>»; на карту встаёт копия в кампании (`c.creatures`), токен — «lib:<copyId>».
+function libState(ctx) { return ctx.ui.myLib || (ctx.ui.myLib = { list: null, error: null, loading: false }); }
+async function loadLib(ctx) {
+  const L = libState(ctx);
+  L.loading = true;
+  try { L.list = await listCreatures(); L.error = null; } catch (err) { L.error = err; }
+  L.loading = false;
+  ctx.panels.renderSide?.(true);
+}
+const safeMonster = (x) => { try { return toMonster(x); } catch { return null; } };
+const libTemplate = (ctx, pick) => (pick?.startsWith('libsrc:') ? libState(ctx).list?.find((x) => x.id === pick.slice(7)) || null : null);
+/** Статблок выбранного в панели: бестиарий или шаблон библиотеки. */
+export function pickMonster(ctx, pick) {
+  if (!pick) return null;
+  if (!pick.startsWith('libsrc:')) return monsterById(pick);
+  const tpl = libTemplate(ctx, pick);
+  return tpl ? safeMonster(tpl) : null;
+}
+/** Копия шаблона для кампании: без владельца и приватных картинок библиотеки. */
+function snapshotOf(tpl, id) {
+  const { ownerId, updatedAt, statblockImage, ...rest } = structuredClone(tpl);
+  if (String(rest.img || '').startsWith('library:')) rest.img = '';
+  if (rest.source === 'image') rest.source = 'manual';
+  return { ...rest, id, sourceId: tpl.id, ownerId: null };
+}
+/** В серверном режиме снимки живут в таблице campaign_creatures — без неё (#153) ставить свои существа нельзя. */
+const libOffline = (ctx) => isServerMode() && ctx.c.creatures === undefined;
+
+function libList(ctx) {
+  if (libOffline(ctx)) return '<p class="t-sm muted b-empty">Свои существа на сервере появятся после обновления базы: таблицы для копий в кампании ещё нет.</p>';
+  const L = libState(ctx);
+  if (!L.list && !L.error) { if (!L.loading) loadLib(ctx); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
+  if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
+  if (!L.list.length) return '<p class="t-sm muted b-empty">В библиотеке пусто. Соберите существо на главной во вкладке «Существа».</p>';
+  const st = bState(ctx), q = st.q.trim().toLowerCase();
+  const copies = Object.values(ctx.c.creatures || {});
+  const list = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
+  if (!list.length) return '<p class="t-sm muted b-empty">Никого не нашлось.</p>';
+  return list.map((x) => {
+    const ids = new Set(copies.filter((k) => k.sourceId === x.id).map((k) => `lib:${k.id}`));
+    const n = ctx.scene?.tokens.filter((t) => ids.has(t.monsterId)).length || 0;
+    const pick = `libsrc:${x.id}`;
+    const sub = [x.type, x.cr != null ? `КО ${x.cr}` : '', x.ac != null ? `КД ${x.ac}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · ');
+    return `<button class="list-row b-row ${st.pick === pick ? 'current' : ''}" data-act="b-pick" data-id="${esc(pick)}"><span class="avatar sm foe">${creatureImgTag(x.img, x.name)}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(x.name)}</span><span class="secondary ellipsis">${esc(sub || 'Своё существо')}</span></span>${n ? `<span class="chip">×${n}</span>` : ''}</button>`;
   }).join('');
 }
 
-function bState(ctx) { return ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false }); }
-
 function bestiaryHTML(ctx) {
   const st = bState(ctx);
-  const m = st.pick ? monsterById(st.pick) : null;
-  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${srdLoaded() ? '' : ' · догружаем остальных…'}${ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана'}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
-    <div class="panel-section b-search"><div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="Гоблин, dragon, КО 5…" aria-label="Поиск существ"></div>
-      <div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div></div>
-    <div class="side-body scroll b-list">${bestiaryList(ctx)}</div>
+  const mine = st.src === 'lib';
+  const m = pickMonster(ctx, st.pick);
+  const where = ctx.ui.placeAt ? ' · поставим, куда кликнули' : ' · тяните на карту или поставим в центр экрана';
+  const sub = mine ? `Ваша библиотека · копия встанет в кампанию${where}` : `SRD 5.1 · ${BESTIARY.length} ${plural(BESTIARY.length, 'существо', 'существа', 'существ')}${srdLoaded() ? '' : ' · догружаем остальных…'}${where}`;
+  return `<div class="panel-header"><div class="titles"><div class="title lg">Существа</div><div class="subtitle">${sub}</div></div><button class="icon-btn icon-btn-sm" data-act="side-close" aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-act="b-src" data-v="srd" aria-selected="${!mine}">Бестиарий</button><button class="tab" role="tab" data-act="b-src" data-v="lib" aria-selected="${mine}">Мои</button></div>
+      <div class="input">${icon('search-01', 18)}<input data-bsearch value="${esc(st.q)}" placeholder="${mine ? 'Найти своё существо' : 'Гоблин, dragon, КО 5…'}" aria-label="Поиск существ"></div>
+      ${mine ? '' : `<div class="chips-wrap">${B_FILTERS.map(([v, l]) => `<button class="chip chip-md ${st.type === v ? 'chip-accent' : ''}" data-act="b-filter" data-v="${v}">${l}</button>`).join('')}</div>`}</div>
+    <div class="side-body scroll b-list">${mine ? libList(ctx) : bestiaryList(ctx)}</div>
     ${m ? `<div class="panel-footer b-foot"><div class="col grow" style="gap:8px">
       <div class="row"><b class="grow ellipsis">${esc(m.name)}</b><div class="stepper"><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="-1" aria-label="Меньше">${icon('minus-sign', 14)}</button><span>${st.count}</span><button class="icon-btn icon-btn-xs" data-act="b-count" data-d="1" aria-label="Больше">${icon('plus-sign', 14)}</button></div></div>
       <div class="row"><label class="check t-sm"><input type="checkbox" data-act="b-hidden" ${st.hidden ? 'checked' : ''}>Скрыто от игроков</label><label class="check t-sm"><input type="checkbox" data-act="b-rollhp" ${st.rollHp ? 'checked' : ''}>Бросить хиты (${esc(m.hpDice)})</label></div>
@@ -132,7 +192,7 @@ export function sideInput(ctx, e) {
   if (e.target.matches('[data-bsearch]')) {
     bState(ctx).q = e.target.value;
     const list = e.target.closest('.side-panel').querySelector('.b-list');
-    if (list) list.innerHTML = bestiaryList(ctx);
+    if (list) list.innerHTML = bState(ctx).src === 'lib' ? libList(ctx) : bestiaryList(ctx);
   }
 }
 
@@ -141,11 +201,17 @@ export function sideAction(ctx, act, b, e) {
   const st = bState(ctx);
   switch (act) {
     case 'scene-view': ctx.switchScene(b.dataset.id); ctx.panels.renderSide(); return true;
+    case 'b-create': import('./own-creature.js').then((m) => m.creatureCard(ctx, { name: st.q, at: ctx.ui.placeAt || null })); ctx.ui.placeAt = null; return true;
     case 'scene-setup': if (ctx.sceneId !== b.dataset.id) ctx.switchScene(b.dataset.id); ctx.setTool(b.dataset.tool); return true;
     case 'scene-menu': sceneMenu(ctx, b.dataset.id, b); return true;
     case 'scene-new': newSceneModal(ctx); return true;
     case 'scene-activate': activateScene(ctx, b.dataset.id); return true;
     case 'b-filter': st.type = b.dataset.v; ctx.panels.renderSide(true); return true;
+    case 'b-src': {
+      st.src = b.dataset.v === 'lib' ? 'lib' : 'srd'; st.pick = null; st.q = '';
+      if (st.src === 'lib') { const L = libState(ctx); L.list = null; L.error = null; } // свежий список при каждом открытии
+      ctx.panels.renderSide(true); return true;
+    }
     case 'b-pick': {
       const now = performance.now();
       if (st.pick === b.dataset.id && now - (st.pickAt || 0) < 350) { placeCreatures(ctx, st.pick); return true; }
@@ -194,7 +260,16 @@ function duplicateScene(ctx, sid) {
   const copy = structuredClone(s);
   copy.id = uid('s-');
   copy.name = `${s.name} (копия)`;
-  copy.tokens = copy.tokens.filter((t) => t.kind !== 'hero').map((t) => ({ ...t, id: uid('t-') }));
+  // Новые id — токенам и рисункам (на сервере это отдельные строки по id); ссылки езды и призыва — на копии.
+  const ids = new Map(copy.tokens.filter((t) => t.kind !== 'hero').map((t) => [t.id, uid('t-')]));
+  copy.tokens = copy.tokens.filter((t) => ids.has(t.id)).map((t) => {
+    const n = { ...t, id: ids.get(t.id) };
+    if (n.riding) { if (ids.has(n.riding)) n.riding = ids.get(n.riding); else delete n.riding; }
+    if (n.summonedBy) { if (ids.has(n.summonedBy)) n.summonedBy = ids.get(n.summonedBy); else delete n.summonedBy; }
+    delete n.sight; delete n.pending;
+    return n;
+  });
+  copy.drawings = (copy.drawings || []).map((d) => ({ ...d, id: uid('d-') }));
   copy.fog.explored = [];
   copy.status = 'draft';
   copy.createdAt = Date.now();
@@ -270,7 +345,7 @@ export function newSceneModal(ctx) {
       <div class="field"><label>Карта</label><div class="map-pick">
         ${BUILTIN_MAP_LIST.map((mp) => `<button class="map-opt ${!state.upload && state.map.id === mp.id ? 'on' : ''}" data-map="${mp.id}">${mapImg(mp.id)}<span>${esc(mp.name)}</span></button>`).join('')}
         <label class="map-opt upload ${state.upload ? 'on' : ''}">${state.upload ? mapImg(state.upload.ref) : `<span class="up-ic">${icon('image-add-01', 24)}</span>`}<span>${state.upload ? 'Своя карта' : 'Загрузить'}</span><input type="file" accept="image/png,image/jpeg,image/webp,.dd2vtt,.uvtt,.df2vtt" hidden data-upload></label>
-      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана · хранится только в этом браузере` : state.upload ? `${state.upload.width}×${state.upload.height} px · хранится только в этом браузере` : 'JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом. Хранится только в этом браузере.'}</div></div>
+      </div><div class="t-xs tertiary" data-up-msg>${state.imported ? `Карта Universal VTT: ${state.imported.counts.walls} ${plural(state.imported.counts.walls, 'стена', 'стены', 'стен')}, ${state.imported.counts.doors} ${plural(state.imported.counts.doors, 'дверь', 'двери', 'дверей')}, ${state.imported.counts.lights} ${plural(state.imported.counts.lights, 'источник', 'источника', 'источников')} света · сетка уже подогнана${isServerMode() ? '' : ' · хранится только в этом браузере'}` : state.upload ? `${state.upload.width}×${state.upload.height} px${isServerMode() ? '' : ' · хранится только в этом браузере'}` : `JPG, PNG, WebP до 25 МБ или карта Dungeondraft (.dd2vtt, .uvtt) — сразу со стенами, дверьми и светом.${isServerMode() ? '' : ' Хранится только в этом браузере.'}`}</div></div>
       <div class="form-grid">
         <div class="field"><label>Одна клетка</label><div class="chips-wrap">${[5, 10].map((f) => `<button class="chip chip-md ${state.feet === f ? 'chip-accent' : ''}" data-feet="${f}">${f} фт</button>`).join('')}</div></div>
         <div class="field"><label>Освещение</label><div class="chips-wrap"><button class="chip chip-md ${state.lighting === 'bright' ? 'chip-accent' : ''}" data-light="bright">${icon('sun-01', 12)}Светло</button><button class="chip chip-md ${state.lighting === 'dark' ? 'chip-accent' : ''}" data-light="dark">${icon('moon-02', 12)}Темно</button></div></div>
@@ -331,9 +406,42 @@ export function newSceneModal(ctx) {
 }
 
 // ——— Существа ———
+/**
+ * Своя картинка шаблона из «Моих существ» (#190 E). Песочница: ссылка общая — ставим как есть. Сервер: личный бакет
+ * игрокам не виден, поэтому сразу — инициалы (или картинка, уже скопированная в кампанию), а копия — следом.
+ */
+function libImageNow(tpl, have, name) {
+  if (have?.img && !have.img.startsWith('ini:') && !isLibRef(have.img)) return { now: have.img, later: null };
+  if (isLibRef(tpl.img)) return { now: `ini:${name}`, later: isServerMode() ? tpl.img : null };
+  return { now: tpl.img || `ini:${name}`, later: null };
+}
+/** Копия личной картинки в кампании: заменить инициалы у только что поставленных; мастеру — и у копии существа. */
+function fillLibImage(ctx, later, placeholder, ids, copyId, master) {
+  if (!later) return;
+  campaignImage(ctx.cid, later, (b) => storeTokenImage(ctx, b)).then((ref) => {
+    if (!ref) return;
+    updateCampaign(ctx.cid, (c) => {
+      for (const s of c.scenes) for (const t of s.tokens) if (ids.has(t.id) && t.img === placeholder) t.img = ref;
+      const cp = c.creatures?.[copyId];
+      if (master && cp && (!cp.img || cp.img.startsWith('ini:'))) cp.img = ref;
+    });
+  }).catch((err) => ctx.toast({ title: 'Своя картинка не перенеслась', body: `${err.message || err}. На карте пока инициалы — картинку можно поставить: ПКМ → «Картинка…»`, icon: 'alert-circle' }));
+}
+
 export function placeCreatures(ctx, monsterId) {
-  const m = monsterById(monsterId);
+  const tpl = libTemplate(ctx, monsterId);
+  const m = tpl ? safeMonster(tpl) : monsterById(monsterId);
   if (!m || !ctx.scene) return;
+  if (tpl && libOffline(ctx)) return;
+  // Своё существо: копия шаблона в кампании (одна на шаблон — правки библиотеки её не меняют), токен ссылается на неё.
+  let copyId = null, newCopy = null, pic = null;
+  if (tpl) {
+    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && !x.ownerId);
+    copyId = have ? have.id : uid('cc-');
+    if (!have) newCopy = snapshotOf(tpl, copyId);
+    pic = libImageNow(tpl, have, m.name);
+  }
+  const tokenMonsterId = tpl ? `lib:${copyId}` : m.id;
   const st = bState(ctx);
   const n = sizeById(m.size).cells;
   const at = ctx.ui.placeAt || viewCenter(ctx);
@@ -341,18 +449,24 @@ export function placeCreatures(ctx, monsterId) {
   const spots = freeSpots(ctx.scene, at, st.count, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const made = [];
-  ctx.mutateScene((sc) => {
+  ctx.mutateScene((sc, c) => {
+    if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy);
     for (const p of spots) {
       const name = nextTokenName(sc, m.name);
       let hp = m.hp;
       if (st.rollHp) { try { hp = Math.max(1, roll(m.hpDice.replace(/\s/g, '')).total); } catch { /* среднее */ } }
       const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-      const t = monsterToken(m.id, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp });
+      const t = monsterToken(tokenMonsterId, name, c0, r0, { ...g, size: s }, { hidden: st.hidden, hp, hpMax: hp, ...(pic ? { img: pic.now } : {}) }, m);
       sc.tokens.push(t);
       made.push(t);
     }
-  }, { label: 'Существа', undo: (sc) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); }, redo: (sc) => { for (const t of made) sc.tokens.push(structuredClone(t)); } });
+  }, {
+    label: 'Существа',
+    undo: (sc, c) => { const ids = new Set(made.map((t) => t.id)); sc.tokens = sc.tokens.filter((t) => !ids.has(t.id)); if (newCopy && c.creatures) delete c.creatures[copyId]; },
+    redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); for (const t of made) sc.tokens.push(structuredClone(t)); },
+  });
   ctx.select(made.map((t) => t.id));
+  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set(made.map((t) => t.id)), copyId, true);
   if (st.toCombat) { ctx.panels.combatToggle(made.map((t) => t.id)); return; }
   const combat = ctx.c.combat.active;
   ctx.toast({
@@ -396,6 +510,159 @@ export function placeHero(ctx, chId, at = null) {
     if (m) { if (sid === cc.activeSceneId) delete m.sceneId; else m.sceneId = sid; }
   });
   ctx.toast({ title: `${ch.name} на сцене`, body: sid === c.activeSceneId ? '' : 'Игрок теперь видит эту сцену — отряд разделился', icon: 'chess-pawn' });
+}
+
+// ——— «Добавить» у игрока (TASK-183, план TASK-097 п. 3.1–3.3): свой токен и призыв ———
+const OWN_SIZES = [['tiny', 'Крошечный'], ['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']];
+/** Свой герой игрока на этой сцене — рядом с ним встаёт свой токен, от него идёт призыв. */
+const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.hidden) || null;
+/**
+ * Свободное место вплотную к точке (по клеткам, не шагами размера токена), куда можно дойти по прямой — не за
+ * стеной (иначе игрок не вытащит токен сам). Нет такого — как раньше, ближайшее свободное.
+ */
+export function spotNear(ctx, at, n) {
+  const sc = ctx.scene, g = sc.grid;
+  const { cols, rows } = gridDims(g, sc.map.width, sc.map.height);
+  const taken = new Set(sc.terrain?.blocked || []);
+  for (const t of sc.tokens) { const tn = sizeById(t.size).cells; const fp = footprintAt(g, t.x, t.y, tn); for (const x of footprintCells(fp.c, fp.r, tn)) taken.add(key(x.c, x.r)); }
+  const start = footprintAt(g, at.x, at.y, n);
+  let best = null, bestD = Infinity;
+  for (let dr = -n - 3; dr <= n + 3; dr++) for (let dc = -n - 3; dc <= n + 3; dc++) {
+    const c = start.c + dc, r = start.r + dr;
+    if (c < 0 || r < 0 || c + n > cols || r + n > rows) continue;
+    if (footprintCells(c, r, n).some((x) => taken.has(key(x.c, x.r)))) continue;
+    const p = footprintCenter(g, c, r, n);
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if (d < bestD && !moveBlocked(at, p, sc.walls || [])) { best = p; bestD = d; }
+  }
+  return best || freeSpots(sc, at, 1, n)[0] || at;
+}
+
+export function playerAddMenu(ctx, anchor) {
+  if (!ctx.scene) return;
+  menu([
+    { icon: 'user-add-01', label: 'Свой токен…', onClick: () => ownTokenPicker(ctx, anchor) },
+    { icon: 'monster', label: 'Призыв…', onClick: () => summonPicker(ctx, anchor) },
+    { icon: 'chess-pawn', label: 'Своё существо…', onClick: () => import('./own-creature.js').then((m) => m.creatureCard(ctx, { anchor })) },
+  ], anchor, { placement: 'top' });
+}
+
+function ownTokenPicker(ctx, anchor) {
+  const st = { name: '', size: 'small', img: '', busy: false };
+  const face = () => { const ref = st.img || `ini:${st.name.trim() || '?'}`; return `<span class="avatar lg own-face"><img alt="" data-ref="${esc(ref)}" src="${esc(srcOf(ref))}"></span>`; };
+  const pop = popover(`<div class="pick-pop own-pop"><div class="panel-header"><div class="titles"><div class="title">Свой токен</div><div class="subtitle">Фамильяр, иллюзия, метка — встанет рядом с вашим героем</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section">
+      <div class="row own-row"><span data-face>${face()}</span><div class="col grow" style="gap:6px">
+        <div class="field"><label>Имя</label><div class="input"><input data-name maxlength="40" placeholder="Сова" aria-label="Имя токена"></div></div>
+        <div class="row" style="gap:6px"><button class="btn btn-sm btn-secondary" data-img>${icon('upload-01', 16)}Картинка</button><button class="btn btn-sm btn-ghost" data-noimg style="display:none">Без картинки</button></div>
+        <span class="t-xs tertiary">PNG, JPEG или WebP до 5 МБ; без картинки — инициалы</span>
+      </div></div>
+      <div class="field"><label>Размер</label><div class="chips-wrap">${OWN_SIZES.map(([v, l]) => `<button class="chip chip-md ${st.size === v ? 'chip-accent' : ''}" data-size="${v}">${l}</button>`).join('')}</div></div>
+      <span class="t-xs tertiary">Без статов — картинка без плашек и вне боя. Хиты и КД задаются потом: ПКМ → «Статы…».</span>
+      <button class="btn btn-primary btn-block" data-ok>${icon('plus-sign', 16)}Поставить на карту</button>
+    </div></div>`, anchor, { placement: 'top' });
+  const n = pop.node, nameIn = n.querySelector('[data-name]');
+  const redraw = () => { n.querySelector('[data-face]').innerHTML = face(); hydrateImages(n); n.querySelector('[data-noimg]').style.display = st.img ? '' : 'none'; };
+  nameIn.focus();
+  nameIn.addEventListener('input', () => { st.name = nameIn.value; if (!st.img) redraw(); });
+  nameIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') place(); if (e.key === 'Escape') closePopover(); });
+  n.addEventListener('click', (e) => {
+    const sz = e.target.closest('[data-size]');
+    if (sz) { st.size = sz.dataset.size; for (const b of n.querySelectorAll('[data-size]')) b.classList.toggle('chip-accent', b === sz); return; }
+    if (e.target.closest('[data-img]')) { pickTokenImage(ctx, (ref) => { st.img = ref; redraw(); }); return; }
+    if (e.target.closest('[data-noimg]')) { st.img = ''; redraw(); return; }
+    if (e.target.closest('[data-ok]')) place();
+  });
+  function place() {
+    const name = nameIn.value.trim();
+    if (!name) { nameIn.closest('.field').classList.add('error'); nameIn.focus(); return; }
+    placeOwnToken(ctx, { name, size: st.size, img: st.img });
+    closePopover();
+  }
+}
+
+/** Свой токен игрока: вид «custom», владелец — игрок, без хитов (план TASK-097, «Свой токен игрока»). */
+export function placeOwnToken(ctx, { name, size = 'small', img = '' }, at = null) {
+  if (!ctx.scene) return null;
+  const hero = myHeroToken(ctx);
+  const p = spotNear(ctx, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), sizeById(size).cells);
+  const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
+  ctx.mutateScene((s) => { s.tokens.push(t); }, { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } });
+  ctx.select([t.id]);
+  return t;
+}
+
+function summonPicker(ctx, anchor) {
+  const st = { q: '', src: 'srd' };
+  const L = libState(ctx);
+  const hero = myHeroToken(ctx);
+  const rows = () => {
+    if (!hero) return '<p class="t-sm muted b-empty">Призыв встаёт рядом с вашим героем — попросите мастера поставить героя на эту сцену.</p>';
+    const q = st.q.trim().toLowerCase();
+    if (st.src === 'lib') {
+      if (libOffline(ctx)) return '<p class="t-sm muted b-empty">Свои существа на сервере появятся после обновления базы.</p>';
+      if (!L.list && !L.error) { if (!L.loading) loadLib(ctx).then(() => { if (n.isConnected) list(); }); return '<p class="t-sm muted b-empty">Открываю библиотеку…</p>'; }
+      if (L.error) return `<p class="t-sm muted b-empty">Библиотека недоступна: ${esc(L.error.message || String(L.error))}</p>`;
+      const mine = L.list.filter((x) => !q || `${x.name} ${x.en || ''} ${x.type}`.toLowerCase().includes(q));
+      if (!mine.length) return `<p class="t-sm muted b-empty">${L.list.length ? 'Никого не нашлось.' : 'В библиотеке пусто — соберите существо на главной, во вкладке «Существа».'}</p>`;
+      return mine.slice(0, 40).map((x) => row(`libsrc:${x.id}`, x.name, [x.type, x.cr != null ? `КО ${x.cr}` : '', x.hp != null ? `${x.hp} хп` : ''].filter(Boolean).join(' · '), x.img || `ini:${x.name}`)).join('');
+    }
+    const found = BESTIARY.filter((m) => bMatch(m, q)).slice(0, 40);
+    if (!found.length) return '<p class="t-sm muted b-empty">Никого не нашлось.</p>';
+    return found.map((m) => row(m.id, m.name, `${m.type} · КО ${m.cr} · ${m.hp} хп`, m.img)).join('');
+  };
+  const row = (id, name, sub, img) => `<button class="list-row b-row" data-summon="${esc(id)}"><span class="avatar sm foe">${creatureImgTag(img, name)}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(name)}</span><span class="secondary ellipsis">${esc(sub)}</span></span></button>`;
+  const pop = popover(`<div class="pick-pop summon-pop"><div class="panel-header"><div class="titles"><div class="title">Призыв</div><div class="subtitle">${hero ? `Встанет союзником рядом с вашим героем (${esc(hero.name)}); в бой его добавляет мастер` : 'Нужен ваш герой на сцене'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+    <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-src="srd" aria-selected="true">Бестиарий</button><button class="tab" role="tab" data-src="lib" aria-selected="false">Мои</button></div>
+      <div class="input">${icon('search-01', 18)}<input data-q placeholder="Боевой конь, wolf, КО 1…" aria-label="Поиск существ"></div></div>
+    <div class="w-list scroll summon-list" data-list>${rows()}</div></div>`, anchor, { placement: 'top' });
+  const n = pop.node;
+  const list = () => { n.querySelector('[data-list]').innerHTML = rows(); hydrateImages(n); };
+  hydrateImages(n);
+  const qIn = n.querySelector('[data-q]');
+  qIn.focus();
+  qIn.addEventListener('input', () => { st.q = qIn.value; list(); });
+  qIn.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') closePopover(); });
+  n.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-src]');
+    if (tab) { st.src = tab.dataset.src; for (const b of n.querySelectorAll('[data-src]')) b.setAttribute('aria-selected', String(b === tab)); qIn.placeholder = st.src === 'lib' ? 'Найти своё существо' : 'Боевой конь, wolf, КО 1…'; list(); return; }
+    const b = e.target.closest('[data-summon]');
+    if (b && placeSummon(ctx, b.dataset.summon)) closePopover();
+  });
+}
+
+/**
+ * Призыв игрока (план TASK-097, «Призывы игрока»): существо из бестиария или своей библиотеки рядом с героем —
+ * дружественное, со ссылкой на призывателя и владельцем-игроком. В бой само не попадает.
+ */
+export function placeSummon(ctx, pick, at = null) {
+  const hero = myHeroToken(ctx);
+  if (!hero || !ctx.scene) { ctx.toast({ title: 'Нужен ваш герой на сцене', body: 'Призыв встаёт рядом с ним — попросите мастера поставить героя', icon: 'alert-circle' }); return false; }
+  const tpl = libTemplate(ctx, pick);
+  const m = tpl ? safeMonster(tpl) : monsterById(pick);
+  if (!m || (tpl && libOffline(ctx))) return false;
+  let copyId = null, newCopy = null, pic = null;
+  if (tpl) {
+    const have = Object.values(ctx.c.creatures || {}).find((x) => x.sourceId === tpl.id && x.ownerId === ctx.userId);
+    copyId = have ? have.id : uid('cc-');
+    if (!have) newCopy = { ...snapshotOf(tpl, copyId), ownerId: ctx.userId };
+    pic = libImageNow(tpl, have, m.name);
+  }
+  const n = sizeById(m.size).cells;
+  const p = spotNear(ctx, at || { x: hero.x, y: hero.y }, n);
+  const g = ctx.scene.grid, s = gridSize(g);
+  const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
+  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly', ...(pic ? { img: pic.now } : {}) }, m);
+  ctx.mutateScene((sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(t); }, {
+    label: 'Призыв',
+    undo: (sc, c) => { sc.tokens = sc.tokens.filter((x) => x.id !== t.id); if (newCopy && c.creatures) delete c.creatures[copyId]; },
+    redo: (sc, c) => { if (newCopy) (c.creatures ||= {})[copyId] = structuredClone(newCopy); sc.tokens.push(structuredClone(t)); },
+  });
+  ctx.select([t.id]);
+  // Копию существа в кампании правит мастер — игрок меняет картинку только у своего токена.
+  if (pic?.later) fillLibImage(ctx, pic.later, pic.now, new Set([t.id]), copyId, ctx.isMaster);
+  ctx.toast({ title: `Призыв: ${t.name}`, body: 'Стоит рядом с вашим героем. В бой его добавляет мастер', icon: 'monster' });
+  return true;
 }
 
 // ——— Предметы ———

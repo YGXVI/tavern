@@ -2,7 +2,7 @@
 import { html, raw, esc, el, plural, $ } from '../core/dom.js';
 import { icon } from '../icons.js';
 import { getDB, commit, onlineUsers, isServerMode } from '../core/store.js';
-import { serverAllowed, setMode } from '../server/config.js';
+import { serverAllowed, setMode, guestAllowed } from '../server/config.js';
 import { currentUser, signIn, signOut } from '../core/auth.js';
 import { srcOf, BUILTIN_MAP_LIST, storeImage } from '../core/assets.js';
 import { campaignsFor, membership, roleIn, userById, characterOf } from '../core/campaign.js';
@@ -11,6 +11,7 @@ import { newCampaign, makeCharacter, DEMO_USERS, seedDB } from '../data/demo.js'
 import { CLASSES, RACES, classById, raceById } from '../data/rules.js';
 import { replaceDB } from '../core/store.js';
 import { freeSpots } from '../rules/geometry.js';
+import { creaturesPage, bindCreatures } from './creatures.js';
 
 /** Модуль синхронизации — уже загружен в серверном режиме, import вернёт его из кэша. */
 const server = () => import('../server/sync.js');
@@ -30,6 +31,23 @@ function partyStrip(ids = ['elian', 'mira', 'lira', 'torin', 'garr'], names = ['
   return raw(ids.map((id, i) => `<div class="ptoken ${id === me ? 'me' : ''}"><div class="ring"><img src="${srcOf(id)}" alt=""></div><span class="np">${esc(names[i])}</span></div>`).join(''));
 }
 
+// ——— Вход гостем (#194, вариант А): ник без Discord, только по ссылке ?guest=1 и только на сервере ———
+const guestBlock = () => html`<form class="guest-login" data-guest-form>
+    <div class="guest-or"><span>или для тестовой партии</span></div>
+    <div class="row"><div class="input grow">${raw(icon('user', 18))}<input data-guest-name maxlength="40" autocomplete="nickname" placeholder="Ник гостя" aria-label="Ник гостя"></div><button class="btn btn-secondary" type="submit" data-guest>Войти гостем</button></div>
+    <p class="fineprint">Гостевой вход — только на время тестов, до публичного запуска его уберём.</p>
+  </form>`;
+function bindGuest(root, returnHash) {
+  const f = root.querySelector('[data-guest-form]'); if (!f) return;
+  const inp = f.querySelector('[data-guest-name]');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const b = f.querySelector('[data-guest]'); b.disabled = true;
+    try { await (await server()).signInAsGuest(inp.value, returnHash); location.reload(); }
+    catch (err) { b.disabled = false; inp.focus(); toast({ title: 'Не получилось войти гостем', body: err.message, icon: 'alert-circle' }); }
+  });
+}
+
 // ——— Вход ———
 export function mountLogin(root, { onSignedIn, message = null }) {
   const real = isServerMode();
@@ -44,6 +62,7 @@ export function mountLogin(root, { onSignedIn, message = null }) {
           <p class="sub">Стол для D&amp;D 5e (2014): карта, листы героев и кубы в одной вкладке</p>
           ${message ? html`<p class="t-sm negative" role="alert">${message}</p>` : ''}
           <button class="btn btn-lg btn-discord btn-block" data-login>${raw(icon('discord', 20))}Войти через Discord</button>
+          ${real && guestAllowed() ? guestBlock() : ''}
           ${real
             ? html`<button class="btn btn-ghost btn-block" data-sandbox>Попробовать без входа</button><p class="fineprint">Возьмём только ник и аватар. Пароли не нужны. Без входа — песочница: всё живёт только в этом браузере.</p>`
             : html`<p class="fineprint">Возьмём только ник и аватар. Пароли не нужны.</p>${serverAllowed() ? html`<button class="btn btn-ghost btn-sm" data-real style="align-self:center">Это песочница · войти по-настоящему</button>` : ''}`}
@@ -60,6 +79,7 @@ export function mountLogin(root, { onSignedIn, message = null }) {
   });
   root.querySelector('[data-sandbox]')?.addEventListener('click', toSandbox);
   root.querySelector('[data-real]')?.addEventListener('click', toServer);
+  if (real) bindGuest(root, location.hash.startsWith('#/join/') ? location.hash : '#/campaigns');
   return {};
 }
 
@@ -120,7 +140,7 @@ function appHeader(user) {
   return html`<header class="app-header">
     <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
     <span class="spacer"></span>
-    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? 'через Discord' : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
+    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? (user.provider === 'guest' ? 'гость · тестовая партия' : 'через Discord') : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
   </header>`;
 }
 
@@ -154,10 +174,10 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адрес #/characters обрабатывает этот же экран. */
-const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : 'campaigns');
+/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адреса #/characters и #/creatures (TASK-175) обрабатывает этот же экран. */
+const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
 function homeTabs(active) {
-  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a></nav>`;
+  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a><a class="tab" href="#/creatures" aria-selected="${active === 'creatures'}">Существа</a></nav>`;
 }
 
 /** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
@@ -187,6 +207,14 @@ export function mountCampaigns(root) {
   let filter = 'all';
   const render = () => {
     const user = currentUser();
+    if (homeTab() === 'creatures') {
+      const { tools, body } = creaturesPage(user);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
+        <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
+      bindHeader(root, user);
+      bindCreatures(root, user, render);
+      return;
+    }
     if (homeTab() === 'characters') {
       root.innerHTML = String(html`<div class="screen">${appHeader(user)}
         <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
@@ -248,7 +276,7 @@ function pasteInvite() {
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);
   const submit = () => {
     const v = m.box.querySelector('[data-v]').value.trim();
-    const code = (v.match(/RSP-[A-Z0-9]{4}/i) || [])[0];
+    const code = (v.match(/RSP-[A-Z0-9]{4,8}/i) || [])[0];
     if (!code) { m.box.querySelector('.input').classList.add('error'); return; }
     m.close(); go(`#/join/${code.toUpperCase()}`);
   };
@@ -349,7 +377,7 @@ export function mountJoin(root, code, { onSignedIn }) {
           ${user
             ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button><button class="btn btn-ghost btn-sm" data-switch style="align-self:center">Это не я — сменить аккаунт</button>`
             : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
-          <p class="fineprint" style="text-align:center">Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.</p>
+          <p class="fineprint" style="text-align:center">${c.invite?.manual === false ? 'Возьмём только ник и аватар — и сразу за стол.' : 'Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.'}</p>
         </div>
       </div></div></div>`);
     const join = (uidv) => {
@@ -364,6 +392,8 @@ export function mountJoin(root, code, { onSignedIn }) {
         });
       }
       onSignedIn?.(uidv);
+      const now = membership(findByCode(code), uidv);
+      if (now?.status === 'active') { toast({ title: `${u.name}, вы в кампании`, icon: 'tick-02' }); go(`#/c/${cc.id}`); return; }
       toast({ title: `Заявка от ${u.name} отправлена`, icon: 'hourglass' });
       render();
     };
@@ -404,9 +434,11 @@ function mountJoinServer(root, code) {
           ${user
             ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button>`
             : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
+          ${!user && guestAllowed() ? guestBlock() : ''}
           <p class="fineprint" style="text-align:center">Возьмём только ник и аватар.${p.manual ? ' Мастер увидит заявку и пустит за стол.' : ''}</p>
         </div>
       </div></div></div>`);
+    if (!user) bindGuest(root, `#/join/${code}`);
     root.querySelector('[data-join]').addEventListener('click', async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try {
@@ -440,8 +472,7 @@ export function mountWaiting(root, c, user) {
     </div></div></div>`);
   root.querySelector('[data-cancel]').addEventListener('click', async () => {
     if (isServerMode()) {
-      try { await (await server()).deleteMembership(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
-      commit((db) => { delete db.campaigns[c.id]; });
+      try { await (await server()).leaveCampaign(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
       go('#/campaigns'); return;
     }
     commit((db) => { const cc = db.campaigns[c.id]; cc.members = cc.members.filter((m) => m.userId !== user.id); });

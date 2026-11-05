@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedDB } from '../dist/js/data/demo.js';
-import { explode, assemble, diffRows, applyOps, applyChange, emptyRows } from '../dist/js/server/model.js';
+import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves, ownsDeleted, UNFILTERED_DELETES } from '../dist/js/server/model.js';
 
 const clone = (x) => structuredClone(x);
 const demo = () => clone(seedDB().campaigns['c-crypt']);
@@ -176,4 +176,124 @@ test('TASK-123 (review #126): строки SELECT после миграции с
   const own = rows.tokens.get(c.scenes[0].tokens[1].id);
   rows.tokens.set(own.id, { ...own, owner_id: 'u-ася' });
   assert.equal(diffRows(rows, explode(assemble(rows), rows), { isMaster: true }).length, 0);
+});
+
+// ——— TASK-173 (TASK-097 п. 2.5): токены частичной правкой ———
+const tok = (id, data, extra = {}) => ({ id, campaign_id: 'c', scene_id: 's1', character_id: null, hidden: false, ord: 1, data, ...extra });
+const upd = (prev, row) => ({ table: 'tokens', op: 'update', key: row.id, row, prev });
+
+test('tokenPatch: только изменённые поля data и колонки', () => {
+  const a = tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 20, y: 0, hp: 10, hpMax: 10 })), { cols: {}, set: { x: 20 }, unset: [] });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 7 })), { cols: {}, set: { hp: 7 }, unset: ['hpMax'] });
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 }, { hidden: true })).cols, { hidden: true });
+  // Колонка owner_id приходит только после миграции: её нет в обеих строках — не изменение.
+  assert.deepEqual(tokenPatch(a, tok('t1', { x: 0, y: 0, hp: 10, hpMax: 10 })).cols, {});
+  assert.deepEqual(tokenPatch(tok('t1', {}, { owner_id: null }), tok('t1', {}, { owner_id: 'u1' })).cols, { owner_id: 'u1' });
+  // Вложенные значения сравниваются целиком.
+  assert.deepEqual(tokenPatch(tok('t1', { conds: ['prone'] }), tok('t1', { conds: ['prone', 'blinded'] })).set, { conds: ['prone', 'blinded'] });
+});
+
+test('isTokenMove: только место и поворот', () => {
+  const a = tok('t1', { x: 0, y: 0, hp: 10 });
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 7, hp: 10, movedAt: 1 }))), true);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 0, hp: 9 }))), false);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 5, y: 0, hp: 10 }, { hidden: true }))), false);
+  assert.equal(isTokenMove(upd(a, tok('t1', { x: 0, y: 0 }))), false); // убрали поле
+  assert.equal(isTokenMove({ table: 'tokens', op: 'insert', key: 't1', row: a }), false);
+});
+
+test('groupTokenMoves: несколько перемещений сцены — один move_tokens, порядок остальных сохранён', () => {
+  const a1 = tok('t1', { x: 0, y: 0 }), a2 = tok('t2', { x: 0, y: 0 }), a3 = tok('t3', { x: 0, y: 0 }, { scene_id: 's2' });
+  const log = { table: 'log_entries', op: 'insert', key: 'l1', row: { id: 'l1' } };
+  const ops = [upd(a1, tok('t1', { x: 70, y: 0, movedAt: 9 })), upd(a2, tok('t2', { x: 70, y: 70, movedAt: 9 })), upd(a3, tok('t3', { x: 1, y: 1 }, { scene_id: 's2' })), log];
+  const out = groupTokenMoves(ops);
+  assert.equal(out.length, 3);
+  assert.equal(out[0].op, 'move');
+  assert.equal(out[0].scene, 's1');
+  assert.deepEqual(out[0].moves, [{ id: 't1', x: 70, movedAt: 9 }, { id: 't2', x: 70, y: 70, movedAt: 9 }]);
+  assert.deepEqual(out[0].parts.map((o) => o.key), ['t1', 't2']);
+  // Один токен на сцене — обычная частичная правка.
+  assert.equal(out[1].op, 'update'); assert.equal(out[1].key, 't3');
+  assert.equal(out[2], log);
+  // Правка хитов не попадает в группу.
+  const mixed = groupTokenMoves([upd(a1, tok('t1', { x: 70, y: 0 })), upd(a2, tok('t2', { x: 0, y: 0, hp: 3 }))]);
+  assert.deepEqual(mixed.map((o) => o.op), ['update', 'update']);
+});
+
+test('groupTokenMoves: группа одной сцены не делится — предел 50 проверяет отправка целиком', () => {
+  const ops = Array.from({ length: 120 }, (_, i) => upd(tok(`t${i}`, { x: 0, y: 0 }), tok(`t${i}`, { x: 70, y: 0 })));
+  const out = groupTokenMoves(ops);
+  assert.deepEqual(out.map((o) => o.moves.length), [120]);
+});
+
+test('правка токена в мастерском diffRows даёт prev — частичная правка возможна', () => {
+  const c = demo();
+  const a = explode(c);
+  const c2 = clone(c); c2.scenes[0].tokens[0].x += 70;
+  const ops = diffRows(a, explode(c2, a), { isMaster: true }).filter((o) => o.table === 'tokens');
+  assert.equal(ops.length, 1); assert.ok(ops[0].prev);
+  assert.deepEqual(tokenPatch(ops[0].prev, ops[0].row), { cols: {}, set: { x: c.scenes[0].tokens[0].x + 70 }, unset: [] });
+});
+
+// ——— TASK-179 (TASK-097 п. 4.3): снимки своих существ в кампании ———
+const copyOf = (id, extra = {}) => ({ id, ownerId: null, sourceId: 'tpl-1', name: 'Каменный страж', source: 'manual', size: 'large', type: 'конструкт', ac: 17, hp: 60, hpFormula: '8к10+16',
+  speed: { walk: 30, fly: null, swim: null, climb: null, burrow: null }, stats: { str: 18, dex: 8, con: 15, int: 3, wis: 10, cha: 1 }, saves: [], skills: [],
+  traits: [], actions: [{ name: 'Кулак', text: '', attack: { bonus: 6, reach: 5 }, damage: [{ dice: '2к8+4', type: 'дробящий' }] }], bonusActions: [], reactions: [], legendary: { count: null, actions: [] }, ...extra });
+
+test('снимки существ: разложить и собрать — та же копия, колонки отдельно от data', () => {
+  const c = demo(); c.creatures = { 'cc-1': copyOf('cc-1') };
+  const rows = explode(c);
+  const row = rows.creatures.get('cc-1');
+  assert.deepEqual([row.campaign_id, row.id, row.owner_id, row.source_id], [c.id, 'cc-1', null, 'tpl-1']);
+  for (const k of ['id', 'ownerId', 'sourceId', 'updatedAt']) assert.ok(!(k in row.data), k);
+  assert.deepEqual(norm(assemble(rows).creatures), norm(c.creatures));
+});
+
+test('снимки существ: таблицы нет на сервере — кампания без них и без операций', () => {
+  const c = demo(); const server = explode(c); server.creatures = null;
+  const c2 = assemble(server);
+  assert.equal(c2.creatures, undefined);
+  c2.creatures = { 'cc-1': copyOf('cc-1') };
+  const ops = diffRows(explode(demo(), server), explode(c2, server), { isMaster: true });
+  assert.equal(ops.filter((o) => o.table === 'campaign_creatures').length, 0);
+});
+
+test('снимки существ: постановка — вставка копии раньше токена; игрок не правит и не удаляет чужие', () => {
+  const c = demo(); const prev = explode(c); // по умолчанию таблица есть
+  const c2 = clone(c); c2.creatures = { 'cc-1': copyOf('cc-1') };
+  c2.scenes[0].tokens.push({ id: 't-lib', kind: 'foe', monsterId: 'lib:cc-1', name: 'Каменный страж', size: 'large', x: 0, y: 0, hidden: false, conditions: [] });
+  const ops = diffRows(prev, explode(c2, prev), { isMaster: true }).filter((o) => ['campaign_creatures', 'tokens'].includes(o.table));
+  assert.deepEqual(ops.map((o) => `${o.table}:${o.op}`), ['campaign_creatures:insert', 'tokens:insert']);
+  const a = explode(c2, prev); const c3 = clone(c2); c3.creatures['cc-1'].hp = 1; delete c3.creatures['cc-1'];
+  const pops = diffRows(a, explode(c3, a), { isMaster: false });
+  assert.equal(pops.filter((o) => o.table === 'campaign_creatures').length, 0);
+  const rows = applyOps(clone(prev), ops);
+  assert.ok(rows.creatures.has('cc-1'));
+  applyChange(rows, 'campaign_creatures', 'DELETE', { id: 'cc-1' });
+  assert.ok(!rows.creatures.has('cc-1'));
+});
+
+
+// TASK-168: удаления приходят без фильтра по кампании — применяем только ключи своей.
+test('ownsDeleted: своё удаление — да, чужая кампания — нет, ключи scene_id', () => {
+  const db = seedDB();
+  const c = db.campaigns['c-crypt'];
+  const rows = explode(c);
+  const sc = c.scenes[0], tok = sc.tokens[0], ch = c.characters[0];
+  assert.equal(ownsDeleted(rows, 'tokens', { id: tok.id }), true);
+  assert.equal(ownsDeleted(rows, 'characters', { id: ch.id }), true);
+  assert.equal(ownsDeleted(rows, 'scenes', { id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { scene_id: sc.id }), true, 'ключ секретов сцены — scene_id');
+  assert.equal(ownsDeleted(rows, 'scene_explored', { scene_id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { id: sc.id }), false, 'без scene_id — не наше');
+  assert.equal(ownsDeleted(rows, 'tokens', { id: 't-чужой' }), false);
+  assert.equal(ownsDeleted(rows, 'drawings', { id: tok.id }), false, 'id токена в таблице рисунков — не рисунок');
+  assert.equal(ownsDeleted(rows, 'tokens', {}), false);
+  assert.equal(ownsDeleted(undefined, 'tokens', { id: tok.id }), false, 'кампания ещё не загружена');
+  assert.equal(ownsDeleted(rows, 'campaign_members', { campaign_id: c.id, user_id: 'u-asya' }), false, 'эти — по фильтру, как раньше');
+  for (const t of UNFILTERED_DELETES) assert.equal(ownsDeleted(rows, t, { id: 'нет', scene_id: 'нет' }), false, t);
+  // Применение: удаление токена убирает его из кампании.
+  applyChange(rows, 'tokens', 'DELETE', { id: tok.id });
+  assert.equal(assemble(rows).scenes[0].tokens.some((t) => t.id === tok.id), false);
 });
