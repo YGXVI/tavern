@@ -2,7 +2,7 @@
 // Настоящие герои (#202, YGXVI / Claude): лист и «Мои герои» читают персонажей кампаний пользователя через adapter.js,
 // действия листа меняют персонажа теми же путями, что лист за столом (updateCampaign → команды листа на сервере).
 // Адреса образцов (lira, torin, корнеры) и шаги, ещё не подключённые к данным, работают на витрине fixture.js.
-import { LIRA, TORIN, HERO_LIST, SAVED_FROM_REFERENCE, CORNERS, LSS_IMPORT, LEVEL_UP, CREATION, CREATION_LIVE } from './fixture.js';
+import { LIRA, TORIN, CORNERS, LSS_IMPORT, LEVEL_UP, CREATION, CREATION_LIVE } from './fixture.js';
 import { toast } from '../../ui/kit.js';
 import { campaignsFor, membership, updateCampaign, userById } from '../../core/campaign.js';
 import { currentUserId } from '../../core/auth.js';
@@ -11,6 +11,7 @@ import { applyHeroAction } from './actions.js';
 import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter } from './creation.js';
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
+import { GEAR_RU, EQ_RU } from '../ref/world-text.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
 
@@ -19,9 +20,12 @@ let spells = spellIndex();
 const json = (p) => fetch(new URL(p, import.meta.url)).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))));
 // Справочники конструктора для мастера создания (character-options, снаряжение, умения). Без них — витрина.
 let creationIx = null;
-await Promise.all(['spells-2014', 'spells-ref-2014', 'character-options-2014', 'equipment-2014', 'features-2014'].map((n) => json(`../../data/${n}.json`)))
-  .then(([list, ref, options, equipment, features]) => {
-    spells = spellIndex({ spells: list, ref });
+// Снаряжение SRD по русскому названию: вес и вид для сумки старых листов (#203, ревью листа).
+let gear = new Map();
+await Promise.all(['spells-2014', 'spells-ref-2014', 'character-options-2014', 'equipment-2014', 'features-2014', 'spells-srd-2014'].map((n) => json(`../../data/${n}.json`)))
+  .then(([list, ref, options, equipment, features, srd]) => {
+    spells = spellIndex({ spells: list, ref, srd });
+    gear = new Map(equipment.entries.map((e) => [(EQ_RU[e.name.en] || GEAR_RU[e.name.en] || e.name.ru || e.name.en || '').toLowerCase(), { kind: e.kind, weight: e.weight?.lb, en: e.name.en }]));
     creationIx = indexCreation({ options, spells: list, equipment, features }, ref);
   })
   .catch(() => { /* без справочника — подписи с листа и витрина мастера */ });
@@ -42,7 +46,7 @@ export function findHero(key, userId = currentUserId()) {
 const ctxOf = (c, ch, userId) => {
   const m = membership(c, userId);
   return {
-    campaign: { id: c.id, name: c.name, live: false }, userId, spells,
+    campaign: { id: c.id, name: c.name, live: false }, userId, spells, gear,
     ownerName: userById(ch.ownerId)?.name || '', isMine: ch.ownerId === userId || (m?.role === 'player' && m.characterId === ch.id),
   };
 };
@@ -51,8 +55,14 @@ const ctxOf = (c, ch, userId) => {
 export function heroView(id, corner = '') {
   const userId = currentUserId();
   const real = findHero(id, userId);
-  if (real) return { ...toHeroView(real.ch, ctxOf(real.c, real.ch, userId)), id: heroKey(real.c.id, real.ch.id), live: true, canLevelUp: canLevelUp(heroKey(real.c.id, real.ch.id)) };
-  const base = HEROES[id] || LIRA;
+  if (real) {
+    const v = toHeroView(real.ch, ctxOf(real.c, real.ch, userId));
+    // 0 хитов — панель спасбросков от смерти вместо обычного боя (корнер 67 на настоящих данных).
+    return { ...v, id: heroKey(real.c.id, real.ch.id), live: true, canLevelUp: canLevelUp(heroKey(real.c.id, real.ch.id)), down: v.vitals.hp.max > 0 && v.vitals.hp.now === 0 };
+  }
+  // Образцы макета (lira, torin, корнеры) — только для превью листа на карте; остальные адреса — «героя нет».
+  if (!HEROES[id]) return null;
+  const base = HEROES[id];
   return corner && CORNERS[corner] ? { ...base, ...CORNERS[corner], corner } : base;
 }
 
@@ -60,19 +70,36 @@ export function heroView(id, corner = '') {
 function savedFromRef() {
   try { const p = JSON.parse(localStorage.getItem('rasputye-ref-v1') || '{}'); return (p.saved || []).map((k) => p.names?.[k]).filter(Boolean); } catch { return []; }
 }
-/** «Мои герои»: свои герои во всех кампаниях; пока своих нет — образцы. */
+/**
+ * «Герои»: свои герои во всех кампаниях; у мастера — ещё герои его кампаний (party, с именем игрока).
+ * Образцов больше нет (#203): пусто — значит пусто.
+ */
 export function heroList() {
   const userId = currentUserId();
-  const mine = [];
+  const mine = [], party = [];
   for (const c of userId ? campaignsFor(userId) : []) {
     const m = membership(c, userId);
     for (const ch of c.characters || []) {
       if ((ch.profile || 'pc') !== 'pc') continue;
-      if (ch.ownerId === userId || (m?.role === 'player' && m.characterId === ch.id)) mine.push({ ...toHeroCard(ch, ctxOf(c, ch, userId)), id: heroKey(c.id, ch.id) });
+      const card = { ...toHeroCard(ch, ctxOf(c, ch, userId)), id: heroKey(c.id, ch.id) };
+      if (ch.ownerId === userId || (m?.role === 'player' && m.characterId === ch.id)) mine.push(card);
+      else if (m?.role === 'master') {
+        const seat = c.members.find((x) => x.characterId === ch.id && x.status === 'active');
+        party.push({ ...card, player: seat ? userById(seat.userId)?.name || 'игрок' : '' });
+      }
     }
   }
-  const real = savedFromRef();
-  return { heroes: mine.length ? mine : HERO_LIST, saved: real.length ? real : SAVED_FROM_REFERENCE, sample: !mine.length };
+  return { heroes: mine, party, saved: savedFromRef(), sample: false };
+}
+/** Мастер создания для кампании cid (из «Кем сядете за стол?»): черновик другой кампании начинается заново. */
+export function startCreation(cid) {
+  if (!cid || !creationIx) return;
+  const st = readJSON(BUILD_KEY);
+  if (st?.campaignId === cid && st.userId === currentUserId()) return;
+  const c = campaignsFor(currentUserId()).find((x) => x.id === cid);
+  if (!c) return;
+  try { sessionStorage.removeItem(BUILD_KEY); sessionStorage.removeItem(UI_KEY); } catch { /* приватный режим */ }
+  saveBuild({ ...newCreation(creationIx, { campaign: c, userId: currentUserId() }), userId: currentUserId() });
 }
 // ——— Мастер создания на конструкторе (#200/#202, P3) ———
 // Черновик конструктора живёт в sessionStorage вкладки до отправки; имя, мировоззрение и черты — из черновика окна.
@@ -204,6 +231,12 @@ async function finish() {
   finishing = false;
   try { sessionStorage.removeItem(BUILD_KEY); sessionStorage.removeItem(UI_KEY); } catch { /* приватный режим */ }
   say(`${hero.data.name} готов`, `Герой в кампании «${c.name}».`, 'tick-02');
+  // Игрок садится за стол этим героем: токен встаёт на сцену, открывается стол. Иначе — лист нового героя.
+  if (claim) {
+    const { seatHero } = await import('../screens.js');
+    seatHero(c.id, userId, hero.characterId);
+    return;
+  }
   location.hash = `#/hero/${heroKey(c.id, hero.characterId)}`;
 }
 

@@ -46,11 +46,11 @@ function heroes(ctx, masterView) {
   const free = c.members.filter((m) => m.role === 'player' && m.status === 'active' && !m.characterId);
   return html`<div class="cp-people">
     <div class="cp-heroes">${ps.map((p) => html`<article class="cp-hero-card ${p.online ? 'online' : ''}">
-      <a class="cp-hero-art" href="#/c/${c.id}/sheet/${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'xl hero', p.ch.name, p.member ? p.online : null)}</a>
+      <a class="cp-hero-art" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'xl hero', p.ch.name, p.member ? p.online : null)}</a>
       <div class="cp-hero-t"><b>${p.ch.name}</b><small>${[p.ch.raceName, heroSub(p.ch)].filter(Boolean).join(' · ')}</small>
         <div class="cp-hero-stats"><span><small>Хиты</small><b>${p.ch.hp ?? '—'}/${p.ch.hpMax ?? '—'}</b></span><span><small>КД</small><b>${p.ch.ac ?? '—'}</b></span><span><small>Скорость</small><b>${p.ch.speed ?? 30}</b></span></div>
         <p class="t-xs tertiary">${p.user ? `${p.user.name}${p.user.id === me ? ' — вы' : ''} · ${p.online ? 'за столом' : 'не в сети'}` : 'без игрока — свободен'}${(p.ch.conditions || []).length ? ` · ${p.ch.conditions.map((x) => x.name || x).join(', ')}` : ''}</p>
-        <div class="row"><a class="btn btn-secondary btn-sm" href="#/c/${c.id}/sheet/${encodeURIComponent(p.ch.id)}">${ic('book-open-01')}Лист</a>${masterView && p.member ? html`<button class="icon-btn icon-btn-sm" data-member="${p.member.userId}" aria-label="Действия">${ic('more-horizontal', 18)}</button>` : ''}</div></div>
+        <div class="row"><a class="btn btn-secondary btn-sm" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${ic('book-open-01')}Лист</a>${masterView && p.member ? html`<button class="icon-btn icon-btn-sm" data-member="${p.member.userId}" aria-label="Действия">${ic('more-horizontal', 18)}</button>` : ''}</div></div>
     </article>`)}${!ps.length ? html`<div class="cp-empty">${ic('user-group', 28)}<h3>Героев пока нет</h3><p>Игроки соберут их, когда придут по ссылке-приглашению.</p></div>` : ''}</div>
     ${masterView && (pending.length || free.length) ? html`<aside class="cp-card cp-people-side">
       ${pending.length ? html`${caps(`Ждут одобрения · ${pending.length}`)}${pending.map((m) => { const u = userById(m.userId); return html`<div class="cp-pending">${userAvatar(u, 'sm')}<span><b>${u?.name || 'Игрок'}</b><small>заявка ${timeAgo(m.joinedAt)}</small></span><button class="icon-btn icon-btn-sm" data-decline="${m.userId}" aria-label="Отклонить">${ic('cancel-01', 18)}</button><button class="icon-btn icon-btn-sm cp-yes" data-accept="${m.userId}" aria-label="Принять">${ic('tick-02', 18)}</button></div>`; })}` : ''}
@@ -63,7 +63,7 @@ function memberMenu(ctx, userId, anchor) {
   const c = ctx.c; const mm = c.members.find((x) => x.userId === userId); if (!mm) return;
   const u = userById(userId); const ch = characterOf(c, mm.characterId);
   menu([
-    ch ? { icon: 'book-open-01', label: 'Открыть лист', href: `#/c/${c.id}/sheet/${encodeURIComponent(ch.id)}` } : null,
+    ch ? { icon: 'book-open-01', label: 'Открыть лист', href: `#/hero/${c.id}~${encodeURIComponent(ch.id)}` } : null,
     ch ? { icon: 'shuffle', label: 'Сменить героя', hint: 'игрок выберет заново', onClick: () => updateCampaign(ctx.cid, (cc) => { const a = cc.members.find((x) => x.userId === userId); const h = cc.characters.find((x) => x.id === a?.characterId); if (h) h.ownerId = null; if (a) a.characterId = null; addLog(cc, { kind: 'member', text: `${u?.name || 'Игрок'} выбирает другого героя` }); }) } : null,
     'divider',
     { icon: 'user-remove-01', label: 'Исключить из кампании', danger: true, onClick: async () => {

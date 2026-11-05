@@ -241,7 +241,11 @@
 .h-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
 .h-card { display: flex; flex-direction: column; border-radius: var(--r-20); background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--stroke-subtle); overflow: hidden; min-height: 440px; }
 .h-card.draft { box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
-.h-card-art { position: relative; aspect-ratio: 282 / 220; background: var(--bg-control); }
+.h-card-art { position: relative; display: block; aspect-ratio: 282 / 220; background: var(--bg-control); }
+.h-sec { margin: 8px 0 16px; font: 600 13px/16px var(--font-text); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); }
+.h-cards + .h-sec { margin-top: 40px; }
+.h-empty-note { display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 24px; max-width: 360px; }
+.h-empty-note b { font: 600 20px/24px var(--font-display); }
 .h-card-art img { width: 100%; height: 100%; object-fit: cover; }
 .h-card-art .chip { position: absolute; left: 12px; top: 12px; background: rgb(0 0 0 / .7); }
 .h-card-art .chip-accent { background: var(--bg-accent-subtle); }
@@ -397,7 +401,9 @@
 .s-res-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 32px; gap: 10px; align-items: center; min-height: 22px; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .s-res-row b { font: 600 12px/1 var(--font-text); color: var(--text-primary); text-align: right; }
 .s-rest { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.s-rest .btn { justify-content: center; }
+.s-rest .btn { justify-content: center; min-width: 0; height: 36px; padding: 0 10px; gap: 6px; font: 600 12px/16px var(--font-text); white-space: nowrap; }
+.s-none { margin: 0 0 8px; color: var(--text-tertiary); font: 400 12px/16px var(--font-text); }
+.s-srd { color: var(--text-secondary); font-style: italic; }
 .s-tabbar { display: flex; align-items: center; gap: 12px; }
 .s-tabs { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 4px; border-radius: var(--r-full); box-shadow: inset 0 0 0 1px var(--stroke-divider); }
 .s-tabs a { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 32px; border-radius: var(--r-full); color: var(--text-secondary); font: 600 12px/14px var(--font-text); white-space: nowrap; }
@@ -738,3 +744,6 @@
   .c-4, .c-4.sp, .c-cards { grid-template-columns: minmax(0, 1fr); }
   .c-table { display: block; overflow-x: auto; }
 }
+/* Героя нет (#203) */
+.h-missing { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 80px 16px; text-align: center; }
+.h-missing > .ic { color: var(--icon-tertiary, var(--text-tertiary)); }

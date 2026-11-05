@@ -4,6 +4,7 @@
 import { readCharacter } from '../table/sheet-model.js';
 import { ABILITIES, SKILLS, CONDITIONS, classById, raceById, mod } from '../../data/rules.js';
 import { srcOf } from '../../core/assets.js';
+import { castKind, diceText, DMG } from '../ref/spell-power.js';
 
 const MINUS = '−';
 export const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : `+${n}`) : '—');
@@ -13,7 +14,11 @@ const die = (n) => (n ? `к${n}` : '');
 // Порог опыта следующего уровня (PHB 2014, таблица «Развитие персонажа»).
 const XP_NEXT = [300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000, 120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000, null];
 const CLASS_REF = (ref) => (typeof ref === 'string' ? ref.split(':').pop() : null);
-const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.test(t) ? 'bonus' : /действ/i.test(t) && !/мин|час/i.test(t) ? 'action' : 'special');
+// Время сотворения → группа боя. Неизвестное время — обычное действие; минуты и часы — «Особое» (#203, ревью листа).
+const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.test(t) ? 'bonus' : !t || (/действ/i.test(t) && !/мин|час/i.test(t)) ? 'action' : 'special');
+// Названия старых листов, которые в справочнике dnd.su записаны иначе.
+const SPELL_ALIAS = { 'духовное оружие': 'божественное оружие' };
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 /**
  * Справочники для заклинаний (необязательно): { spells: spells-2014.json, ref: spells-ref-2014.json }.
@@ -22,7 +27,9 @@ const SPELL_TIME = (t) => (/реакц/i.test(t) ? 'reaction' : /бонусн/i.
 export function spellIndex(refs = {}) {
   const byId = new Map(), byName = new Map();
   for (const e of refs.spells?.entries || []) { byId.set(e.id, e); if (e.name?.ru) byName.set(e.name.ru.toLowerCase(), e); }
-  return { byId, byName, ref: refs.ref?.spells || {}, schools: refs.ref?.schools || {} };
+  for (const [a, b] of Object.entries(SPELL_ALIAS)) if (byName.has(b) && !byName.has(a)) byName.set(a, byName.get(b));
+  // srd — тексты SRD 5.1 по индексу (spells-srd-2014.json): по ним кости и «атака или спасбросок» в строках боя.
+  return { byId, byName, ref: refs.ref?.spells || {}, schools: refs.ref?.schools || {}, srd: refs.srd?.spells || {} };
 }
 
 /**
@@ -82,7 +89,7 @@ export function toHeroView(ch, ctx = {}) {
   const resources = [];
   for (const p of r.slotPools || []) {
     const total = num(p.max); if (!total) continue;
-    resources.push({ id: p.id, name: `Ячейки ${p.circle} ур.`, kind: 'slot', total, left: Math.max(0, total - num(p.spent)) });
+    resources.push({ id: p.id, circle: num(p.circle), name: `Ячейки ${p.circle} ур.`, kind: 'slot', total, left: Math.max(0, total - num(p.spent)) });
   }
   for (const p of r.resources || []) {
     const total = num(p.max); if (!total) continue;
@@ -108,7 +115,8 @@ export function toHeroView(ch, ctx = {}) {
       id: k.id, name: str(k.name) || e?.name?.ru || 'Заклинание', level, school: sp.schools[e?.school] || '',
       time: p[0] || '', range: p[1] || '', duration: p[2] || '', comp: p[3] || '',
       prepared: level === 0 ? true : k.prepared !== false, conc: !!e?.concentration || undefined, ritual: !!(k.ritual || e?.ritual) || undefined,
-      text: str(k.description), srd: !!e?.srd,
+      text: str(k.description), srd: !!e?.srd, how: castKind(sp.srd[e?.srd?.index]), dice: diceText(sp.srd[e?.srd?.index], level, num(r.level, 1)),
+      dmgType: (p[4] || []).map((t) => DMG[t]).filter(Boolean)[0] || '', srdText: e?.srd ? sp.srd[e.srd.index]?.text || [] : [],
     };
   }).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, 'ru'));
   const spellcasting = castAb ? {
@@ -120,20 +128,35 @@ export function toHeroView(ch, ctx = {}) {
 
   // Действия: атаки листа и заклинания по времени сотворения.
   const actions = { action: [], bonus: [], reaction: [], special: [] };
+  // Строка атаки старого листа с именем заклинания (заговор «Священное пламя») — не отдельная строка, а чипы заклинания.
+  const spellNames = new Set(spells.map((x) => x.name.toLowerCase()));
+  const attackOf = new Map();
   for (const [i, a] of (r.attacks || []).entries()) {
-    const hit = Number.isFinite(a.bonus) ? signed(a.bonus) : undefined;
-    actions.action.push({ id: a.id || `attack-${i}`, name: str(a.name) || 'Атака', sub: [a.note, a.type].filter(Boolean).join(' · '), icon: 'weapon', hit, dmg: str(a.damage).replace(/d/g, 'к') || undefined });
+    const save = /спасбросок\s+([А-ЯЁ]{3})?\s*СЛ\s*(\d+)/i.exec(str(a.note));
+    const hit = save ? undefined : Number.isFinite(a.bonus) ? signed(a.bonus) : undefined;
+    const row = { id: a.id || `attack-${i}`, name: str(a.name) || 'Атака', sub: [a.note, a.type].filter(Boolean).join(' · '), icon: 'weapon', hit, dc: save ? `СЛ ${save[2]}` : undefined, dmg: str(a.damage).replace(/d/g, 'к') || undefined };
+    if (spellNames.has(row.name.toLowerCase())) attackOf.set(row.name.toLowerCase(), row); else actions.action.push(row);
   }
   for (const x of spells) {
     if (x.level > 0 && !x.prepared) continue;
-    const row = { id: x.id, name: x.name, sub: [x.level ? `${x.level} ур.` : 'Заговор', x.range].filter(Boolean).join(' · '), icon: 'spell', slotLevel: x.level || undefined };
+    const old = attackOf.get(x.name.toLowerCase());
+    const hit = old ? old.hit : x.how?.attack && atk != null ? signed(atk) : undefined;
+    const dcChip = old ? old.dc : x.how?.save && dc != null ? `СЛ ${dc}` : undefined;
+    const sub = [x.level ? `${x.level} ур.` : 'Заговор', x.range, x.how?.save ? `спасбросок ${ABILITIES.find((a) => a.id === x.how.save)?.short || ''}` : '', x.dmgType].filter(Boolean).join(' · ');
+    const row = { id: x.id, name: x.name, sub, icon: 'spell', slotLevel: x.level || undefined, hit, dc: dcChip, dmg: old?.dmg || x.dice || undefined, explain: dcChip ? 'dc' : undefined };
     actions[SPELL_TIME(x.time)].push(row);
   }
   if (!spellcasting) actions.special.push({ empty: true, name: 'Заклинаний пока нет', action: '' });
 
   // Сумка.
-  const items = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).map((name) => ({ name, quantity: 1 }));
-  const item = (x) => ({ name: str(x.name) || 'Предмет', sub: [x.weight ? `${x.weight} фнт` : '', str(x.description)].filter(Boolean).join(' · '), qty: num(x.quantity, 1), icon: 'bag', tag: x.attuned ? 'Настроен' : x.equipped ? 'Надето' : undefined });
+  // Сумка. Старый лист — строкой: названия сверяются со снаряжением SRD (ctx.gear) — вес, а доспех, щит и оружие — «надето».
+  const gearOf = (name) => ctx.gear?.get(String(name).toLowerCase()) || null;
+  const items = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).map((name) => {
+    const g = gearOf(name);
+    return { name: cap(name), quantity: 1, weight: g?.weight, kind: g?.kind, equipped: !!g && ['armor', 'shield', 'weapon'].includes(g.kind) };
+  });
+  const ICON = { armor: 'armor', shield: 'armor', weapon: 'weapon' };
+  const item = (x) => ({ name: cap(str(x.name)) || 'Предмет', sub: [x.weight ? `${x.weight} фнт` : '', str(x.description)].filter(Boolean).join(' · '), qty: num(x.quantity, 1), icon: ICON[x.kind || gearOf(x.name)?.kind] || 'bag', tag: x.attuned ? 'Настроен' : undefined });
   const load = items.reduce((n, x) => n + num(x.weight) * num(x.quantity, 1), 0);
   const carry = num(score('str'), 10) * 15;
   const coins = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(s.coins || {}) };

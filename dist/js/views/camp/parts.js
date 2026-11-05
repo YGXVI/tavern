@@ -21,7 +21,7 @@ export function party(c) {
 export const heroSub = (ch) => [ch.className, ch.level ? `${ch.level} ур.` : ''].filter(Boolean).join(' · ');
 export function partyRow(c, p, me, { hp = true } = {}) {
   const who = p.user ? `${p.user.name}${p.user.id === me ? ' — вы' : ''}` : 'без игрока';
-  return html`<a class="cp-party" href="#/c/${c.id}/sheet/${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'md hero', p.ch.name, p.member ? p.online : null)}
+  return html`<a class="cp-party" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'md hero', p.ch.name, p.member ? p.online : null)}
     <span class="cp-party-t"><b>${p.ch.name}</b><small>${heroSub(p.ch)}${hp ? ` · ${p.ch.hp ?? '—'}/${p.ch.hpMax ?? '—'}` : ''}</small></span>
     <span class="cp-party-who ${p.online ? '' : 'off'}">${p.member && !p.online && p.user?.id !== me ? 'не в сети' : who}</span></a>`;
 }

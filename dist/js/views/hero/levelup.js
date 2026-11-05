@@ -10,6 +10,8 @@ import { draft, saveDraft } from './index.js';
 export function mount(root, { parts, L, user }) {
   const [, id = 'lira', , step = 'hp'] = parts;
   const v = heroView(id);
+  // Повышение — только у настоящего героя (#203): по чужой или старой ссылке — к героям.
+  if (!v) { location.replace('#/heroes'); return; }
   const lu = levelUpView(id);
   draft.lu ||= {};
   const render = () => {

@@ -12,7 +12,7 @@
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
-import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions } from './contract.js';
+import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions, startCreation } from './contract.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
 
@@ -53,7 +53,7 @@ export function mountHero(root, hash) {
   };
   function mountInto() {
     if (p0 === 'heroes') { page(heroesPage()); bindHeroes(L); return; }
-    if (p1 === 'new' && !p2) { page(pathPage(query)); bindPath(L); return; }
+    if (p1 === 'new' && !p2) { const qp = new URLSearchParams(query); if (qp.get('c')) startCreation(qp.get('c')); page(pathPage(qp)); bindPath(L, qp); return; }
     if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({ heroId: 'lira' })); return; }
     if (p1 === 'new') { page(stepPage(p2), 'wizard'); bindStep(root, L, p2, rerender); return; }
     if (p1 === 'quick') { page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
@@ -84,51 +84,56 @@ function selectIn(root, sel, attr, id, artSel = '.h-choice-art, .h-icard-top, .a
   });
 }
 
-// ——— 88 · Мои герои ———
+// ——— 88 · Герои ———
+// Только настоящие герои (#203): свои — во всех кампаниях, у мастера ещё и герои его кампаний. Пусто — так и говорим.
 function heroesPage() {
-  const { heroes, saved, sample } = heroList();
-  const card = (h) => {
-    const draftCard = h.status === 'draft';
-    const tag = draftCard ? chip('Черновик') : h.campaign ? chip(h.campaign.live ? `${h.campaign.name} · сессия идёт` : h.campaign.name, h.campaign.live ? 'accent' : '') : chip('Свободен');
-    const body = draftCard
-      ? html`<div class="h-bar wide"><i style="width:${Math.round((h.draft.step / h.draft.of) * 100)}%"></i></div><small class="muted">Шаг ${h.draft.step} из ${h.draft.of} — ${h.draft.stepName.toLowerCase()}</small>`
-      : html`<div class="h-mini">${[['Хиты', h.stats.hp], ['КД', h.stats.ac], ['Ур.', h.stats.level]].map(([k, v]) => html`<span>${caps(k)}<b>${v}</b></span>`)}</div>`;
-    const foot = draftCard
-      ? html`<a class="btn btn-primary" href="#/hero/new/abilities">${ic('arrow-right-02')}Продолжить</a>`
-      : html`<a class="btn btn-secondary" href="#/hero/${h.id === 'mira' ? 'lira' : h.id}">Открыть лист</a>`;
-    return html`<article class="h-card ${draftCard ? 'draft' : ''}"><div class="h-card-art"><img src="${h.portrait}" alt="" loading="lazy">${tag}</div>
-      <div class="h-card-body"><h3>${h.name}</h3><small class="muted">${h.summary}</small>${body}<span class="spacer"></span><div class="h-card-foot">${foot}<span class="spacer"></span><button class="icon-btn icon-btn-sm" data-more="${h.id}" aria-label="Ещё">${ic('more-horizontal')}</button></div></div></article>`;
-  };
-  return html`<main class="page h-page">
-    <div class="title-row"><h2>Герои</h2>${chip(`Все · ${heroes.length}`, 'accent')}${chip(`В кампаниях · ${heroes.filter((h) => h.campaign).length}`)}${chip(`Черновики · ${heroes.filter((h) => h.status === 'draft').length}`)}<span class="spacer"></span>
-      <a class="btn btn-secondary" href="#/hero/import">${ic('upload-01')}Из Long Story Short</a><a class="btn btn-primary" href="#/hero/new">${ic('plus-sign')}Новый герой</a></div>
-    <div class="h-cards">${heroes.map(card)}
-      <article class="h-card h-card-new"><span class="h-round">${ic('plus-sign', 24)}</span><h3>Новый герой</h3><p class="muted">Пошагово за 15 минут, быстро за три ответа или перенести из Long Story Short</p>
-        <a class="btn btn-secondary" href="#/hero/new">Пошагово</a><a class="btn btn-ghost" href="#/hero/quick/1">${ic('sparkles')}Быстрый герой</a></article></div>
-    <div class="h-saved-strip">${ic('book-open-01', 18)}<b>Сохранено в справочнике:</b>${saved.map((s) => chip(s))}<span class="spacer"></span><button class="link" data-sort>Разложить по книгам героев →</button></div>
-    ${sample === false ? '' : previewNote()}
+  const { heroes, party, saved } = heroList();
+  const card = (h) => html`<article class="h-card"><a class="h-card-art" href="#/hero/${h.id}"><img src="${h.portrait}" alt="" loading="lazy">${h.campaign ? chip(h.campaign.name) : chip('Свободен')}</a>
+    <div class="h-card-body"><h3>${h.name}</h3><small class="muted">${h.summary}${h.player ? ` · играет ${h.player}` : ''}</small>
+      <div class="h-mini">${[['Хиты', h.stats.hp], ['КД', h.stats.ac], ['Ур.', h.stats.level]].map(([k, v]) => html`<span>${caps(k)}<b>${v}</b></span>`)}</div>
+      <span class="spacer"></span><div class="h-card-foot"><a class="btn btn-secondary" href="#/hero/${h.id}">Открыть лист</a><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-more="${h.id}" aria-label="Ещё">${ic('more-horizontal')}</button></div></div></article>`;
+  const newCard = html`<article class="h-card h-card-new"><span class="h-round">${ic('plus-sign', 24)}</span><h3>Новый герой</h3><p class="muted">Пошагово по правилам кампании, быстро за три ответа или перенести из Long Story Short</p>
+    <a class="btn btn-secondary" href="#/hero/new">Пошагово</a><a class="btn btn-ghost" href="#/hero/quick/1">${ic('sparkles')}Быстрый герой</a></article>`;
+  const head = html`<div class="title-row"><h2>Герои</h2>${heroes.length ? chip(`Мои · ${heroes.length}`, 'accent') : ''}${party.length ? chip(`В моих кампаниях · ${party.length}`) : ''}<span class="spacer"></span>
+    <a class="btn btn-secondary" href="#/hero/import">${ic('upload-01')}Из Long Story Short</a><a class="btn btn-primary" href="#/hero/new">${ic('plus-sign')}Новый герой</a></div>`;
+  const savedStrip = saved.length ? html`<div class="h-saved-strip">${ic('book-open-01', 18)}<b>Сохранено в справочнике:</b>${saved.map((s) => chip(s))}<span class="spacer"></span><a class="link" href="#/ref">Открыть справочник →</a></div>` : '';
+  if (!heroes.length && !party.length) {
+    return html`<main class="page h-page">${head}<div class="h-cards">${newCard}<div class="h-empty-note"><b>Героев пока нет</b><p class="muted">Герой живёт в кампании: соберите его здесь или войдите в кампанию по приглашению мастера и нажмите «Свой герой».</p></div></div>${savedStrip}</main>`;
+  }
+  return html`<main class="page h-page">${head}
+    ${party.length ? html`<h3 class="h-sec">Мои герои</h3>` : ''}<div class="h-cards">${heroes.map(card)}${newCard}</div>
+    ${party.length ? html`<h3 class="h-sec">Герои моих кампаний</h3><div class="h-cards">${party.map(card)}</div>` : ''}
+    ${savedStrip}
   </main>`;
 }
 function bindHeroes(L) {
-  L('click', '[data-more]', (e, b) => heroActions.editField({ heroId: b.dataset.more, field: 'menu' }));
-  L('click', '[data-sort]', () => heroActions.editField({ field: 'saved-from-reference' }));
+  L('click', '[data-more]', (e, b) => heroMenu(b));
+}
+/** Меню «…» карточки героя: лист, классический лист, повышение, дом кампании. */
+function heroMenu(anchor) {
+  const id = anchor.dataset.more, v = heroView(id);
+  if (!v) return;
+  const [cid] = id.split('~');
+  const item = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
+  import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${item(`#/hero/${id}`, 'book-open-01', 'Удобный лист')}${item(`#/hero/${id}/classic/1`, 'pen-tool-01', 'Классический лист')}
+    ${v.canLevelUp ? item(`#/hero/${id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${item(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`)}</div>`, anchor, { placement: 'auto' }));
 }
 export const previewNote = () => html`<p class="h-preview-note">${ic('information-circle', 16)}Экран на образце данных: числа ненастоящие, кнопки отвечают подсказкой. Все экраны героя — <a href="#/hero/lira">лист</a> · <a href="#/hero/lira/classic/1">классический</a> · <a href="#/hero/lira/table">на карте</a> · <a href="#/hero/lira/levelup/hp">повышение</a> · <a href="#/hero/import">импорт LSS</a> · корнеры: <a href="#/hero/lira/table?down">0 хитов</a>, <a href="#/hero/lira/table?concentration">концентрация</a>, <a href="#/hero/lira/table?noSlots">нет ячеек</a>, <a href="#/hero/lira?multiclass">мультикласс</a>, <a href="#/hero/lira?unfinished">не закончен</a>.</p>`;
 
 // ——— 45 · Как привести героя ———
-function pathPage(query) {
+function pathPage(qp) {
   const cv = creationView();
-  const sel = ['steps', 'quick', 'lss'].includes(query) ? query : draft.path || 'steps';
+  const sel = ['steps', 'quick', 'lss'].find((k) => qp.has(k)) || draft.path || 'steps';
   const start = { steps: ['#/hero/new/race', 'Начать пошагово'], quick: ['#/hero/quick/1', 'Начать быстро'], lss: ['#/hero/import', 'Загрузить файл'] }[sel];
   return html`<main class="page h-path-page">
     <div class="h-center"><h1>Как приведёте героя?</h1><p class="muted">Мастер «${cv.campaign.name}» ждёт героя ${cv.campaign.level} уровня. Выберите, как удобнее его собрать.</p></div>
     <div class="h-grid3 paths">${cv.paths.map((p) => iconCard(p, { selected: p.id === sel, attr: 'data-path', cls: 'path' }))}</div>
     <section class="h-rules"><div class="h-rules-head">${ic('crown', 16)}<b>Правила этой кампании — их задал мастер</b></div><div class="h-tags">${cv.campaign.rules.map((r) => chip(r))}</div></section>
-    <div class="h-center h-actions"><a class="btn btn-ghost" href="#/heroes">Отмена</a><a class="btn btn-primary" href="${start[0]}" data-start>${ic('arrow-right-02')}${start[1]}</a></div>
+    <div class="h-center h-actions"><a class="btn btn-ghost" href="${qp.get('c') ? `#/c/${qp.get('c')}` : '#/heroes'}">Отмена</a><a class="btn btn-primary" href="${start[0]}" data-start>${ic('arrow-right-02')}${start[1]}</a></div>
   </main>`;
 }
-function bindPath(L) {
-  L('click', '[data-path]', (e, b) => { draft.path = b.dataset.path; saveDraft(); location.hash = '#/hero/new?' + draft.path; });
+function bindPath(L, qp) {
+  L('click', '[data-path]', (e, b) => { draft.path = b.dataset.path; saveDraft(); location.hash = `#/hero/new?${qp.get('c') ? `c=${encodeURIComponent(qp.get('c'))}&` : ''}${draft.path}`; });
   L('click', '[data-start]', () => heroActions.createFrom({ path: draft.path || 'steps' }));
 }
 

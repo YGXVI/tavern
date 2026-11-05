@@ -132,7 +132,7 @@ function player(ctx) {
     <section class="cp-card cp-hero">${cardHead('Ваш герой')}
       ${hero ? html`<div class="cp-hero-head">${portrait(hero.portrait, 'lg hero', hero.name)}<span><b>${hero.name}</b><small>${[hero.raceName, `${hero.className || ''} ${hero.level || ''}`.trim()].filter(Boolean).join(' · ')}</small></span></div>
         <div class="cp-stats"><div><small>Хиты</small><b>${hero.hp ?? '—'}/${hero.hpMax ?? '—'}</b></div><div><small>КД</small><b>${hero.ac ?? '—'}</b></div><div><small>Ячейки</small><b>${slotsText(hero)}</b></div></div>
-        <div class="row"><a class="btn btn-secondary btn-sm" href="#/c/${c.id}/sheet/${encodeURIComponent(hero.id)}">Открыть лист</a></div>
+        <div class="row"><a class="btn btn-secondary btn-sm" href="#/hero/${c.id}~${encodeURIComponent(hero.id)}">Открыть лист</a></div>
         <p class="t-xs tertiary">${(hero.conditions || []).length ? `Сейчас: ${hero.conditions.map((x) => x.name || x).join(', ')}` : hero.hp < hero.hpMax ? `Ранен: не хватает ${hero.hpMax - hero.hp} хитов` : 'Цел и готов — всё восстановлено'}</p>`
     : html`<p class="t-sm muted">Героя ещё нет.</p><a class="btn btn-primary btn-sm" href="#/c/${c.id}">Выбрать героя</a>`}
     </section>

@@ -3,7 +3,7 @@
 import { BESTIARY, loadSrdBestiary } from '../../data/bestiary.js';
 import { CONDITIONS, CLASSES, RACES, ABILITIES, mod } from '../../data/rules.js';
 import { RULES } from './rules-text.js';
-import { GEAR_RU } from './world-text.js';
+import { GEAR_RU, EQ_RU } from './world-text.js';
 
 const url = (f) => new URL(`../../data/${f}`, import.meta.url);
 const cache = new Map();
@@ -263,16 +263,6 @@ export const DMG_RU = { slashing: 'рубящий', piercing: 'колющий', 
 const EQ_KIND = { gear: 'Снаряжение', weapon: 'Оружие', tool: 'Инструменты', focus: 'Фокусировка', armor: 'Доспех', pack: 'Набор', ammunition: 'Боеприпасы', shield: 'Щит' };
 export const EQ_KINDS = EQ_KIND;
 export const WEAPON_PROPS = { versatile: 'универсальное', finesse: 'фехтовальное', light: 'лёгкое', heavy: 'тяжёлое', 'two-handed': 'двуручное', two_handed: 'двуручное', thrown: 'метательное', reach: 'досягаемость', loading: 'перезарядка', ammunition: 'боеприпасы', special: 'особое', monk: 'монашеское' };
-const EQ_RU = {
-  Battleaxe: 'Боевой топор', Blowgun: 'Духовая трубка', 'Blowgun needles': 'Иглы для трубки', Breastplate: 'Кираса', 'Chain mail': 'Кольчуга', 'Chain shirt': 'Кольчужная рубаха', Club: 'Дубинка',
-  'Crossbow bolts': 'Арбалетные болты', 'Crossbow, hand': 'Ручной арбалет', 'Crossbow, heavy': 'Тяжёлый арбалет', 'Crossbow, light': 'Лёгкий арбалет', Dagger: 'Кинжал', Dart: 'Дротик', Flail: 'Цеп', Glaive: 'Глефа',
-  Greataxe: 'Секира', Greatclub: 'Палица', Greatsword: 'Двуручный меч', Halberd: 'Алебарда', 'Half plate': 'Полулаты', Handaxe: 'Ручной топор', Hide: 'Шкурный доспех', Javelin: 'Метательное копьё', Lance: 'Длинное копьё',
-  Leather: 'Кожаный доспех', 'Light hammer': 'Лёгкий молот', Longbow: 'Длинный лук', Longsword: 'Длинный меч', Mace: 'Булава', Maul: 'Молот', Morningstar: 'Моргенштерн', Net: 'Сеть', Padded: 'Стёганый доспех', Pike: 'Пика',
-  Plate: 'Латы', Quarterstaff: 'Боевой посох', Rapier: 'Рапира', 'Ring mail': 'Колечный доспех', 'Scale mail': 'Чешуйчатый доспех', Scimitar: 'Скимитар', Shield: 'Щит', Shortbow: 'Короткий лук', Shortsword: 'Короткий меч',
-  Sickle: 'Серп', Sling: 'Праща', 'Sling bullets': 'Снаряды для пращи', Spear: 'Копьё', Splint: 'Наборный доспех', 'Studded leather': 'Проклёпанный кожаный доспех', Trident: 'Трезубец', 'War pick': 'Боевая кирка', Warhammer: 'Боевой молот', Whip: 'Кнут',
-  Arrows: 'Стрелы', Crystal: 'Кристалл', Orb: 'Сфера', Rod: 'Жезл', Staff: 'Посох', Wand: 'Волшебная палочка', Amulet: 'Амулет', Emblem: 'Эмблема', Reliquary: 'Реликварий', 'Sprig of mistletoe': 'Веточка омелы', Totem: 'Тотем', 'Wooden staff': 'Деревянный посох', 'Yew wand': 'Тисовая палочка',
-  'Burglar’s Pack': 'Набор взломщика', 'Diplomat’s Pack': 'Набор дипломата', 'Dungeoneer’s Pack': 'Набор исследователя подземелий', 'Entertainer’s Pack': 'Набор артиста', 'Explorer’s Pack': 'Набор путешественника', 'Priest’s Pack': 'Набор священника', 'Scholar’s Pack': 'Набор учёного',
-};
 const CONDITION_EN = { blinded: 'Blinded', charmed: 'Charmed', deafened: 'Deafened', frightened: 'Frightened', grappled: 'Grappled', incapacitated: 'Incapacitated', invisible: 'Invisible', paralyzed: 'Paralyzed', petrified: 'Petrified', poisoned: 'Poisoned', prone: 'Prone', restrained: 'Restrained', stunned: 'Stunned', unconscious: 'Unconscious', exhaustion: 'Exhaustion', concentration: 'Concentration' };
 
 /** Количество записей раздела: точное — когда раздел загружен, иначе по известным размерам каталогов. */
