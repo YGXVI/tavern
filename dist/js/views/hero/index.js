@@ -12,7 +12,7 @@
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
-import { heroList, heroView, creationView, creationLive, lssImportView, heroActions } from './contract.js';
+import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions } from './contract.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
 
@@ -42,7 +42,15 @@ export function mountHero(root, hash) {
     if (cur && bar) bar.scrollLeft = cur.offsetLeft - bar.clientWidth / 2 + cur.offsetWidth / 2;
   };
   const [p0, p1, p2] = parts;
-  const rerender = () => { if (alive) { cleanup.splice(0).forEach((f) => f()); mountInto(); } };
+  // Перерисовка на месте не уводит к началу страницы: прокрутку окна и колонок мастера сохраняем.
+  const rerender = () => {
+    if (!alive) return;
+    const SCROLLERS = '.screen, .h-wiz-main, .h-spell-list';
+    const y = window.scrollY, inner = [...root.querySelectorAll(SCROLLERS)].map((x) => x.scrollTop);
+    cleanup.splice(0).forEach((f) => f()); mountInto();
+    window.scrollTo(0, y);
+    root.querySelectorAll(SCROLLERS).forEach((x, i) => { x.scrollTop = inner[i] || 0; });
+  };
   function mountInto() {
     if (p0 === 'heroes') { page(heroesPage()); bindHeroes(L); return; }
     if (p1 === 'new' && !p2) { page(pathPage(query)); bindPath(L); return; }
@@ -59,7 +67,10 @@ export function mountHero(root, hash) {
   // изменилось то, что они показывают, — иначе события чужих кампаний сбивали бы прокрутку. Мастер создания не трогаем.
   const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) ? JSON.stringify(heroView(p1)) : '');
   let last = sig();
-  return { unmount: () => { alive = false; cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
+  // Выбор в мастере создания меняет черновик конструктора (не базу) — перерисовать шаг и живой лист.
+  const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick')) rerender(); };
+  window.addEventListener('hero:changed', onChanged);
+  return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }
 
 const tickSvg = String(ic('tick-02', 14));
@@ -151,6 +162,8 @@ function bindStep(root, L, stepId, rerender) {
 // ——— 53 · Героиня готова ———
 function donePage() {
   const cv = creationView();
+  const real = creationDone();
+  if (real) return realDonePage(cv, real);
   const v = creationLive('look');
   const lira = { name: draft.name || 'Лира' };
   const checks = html`<section class="h-checks"><div class="h-box-head">${caps('Проверка')}<small>можно вернуться к любому шагу</small></div>
@@ -164,6 +177,17 @@ function donePage() {
     abilities: v.stats.map((a, k) => ({ ...a, name: ['Сила', 'Ловкость', 'Телосложение', 'Интеллект', 'Мудрость', 'Харизма'][k], save: ['−1', '+3', '+0', '+7', '+4', '+0'][k], saveProf: k === 3 || k === 4 })),
     extra: checks,
   })}</main>`;
+}
+
+// Итог на настоящем конструкторе: числа из сборки, «Создать» отправляет героя (contract.finish).
+function realDonePage(cv, r) {
+  const ok = r.status === 'valid';
+  const checks = html`<section class="h-checks"><div class="h-box-head">${caps('Проверка')}<small>можно вернуться к любому шагу</small></div>
+    <div class="h-tags">${cv.done.checks.map((c) => html`<a class="h-check-chip ${c.ok ? '' : 'warn'}" href="#/hero/new/${c.step}">${ic(c.ok ? 'tick-02' : 'alert-circle', 14)}${c.name}</a>`)}</div></section>
+    ${ok ? '' : html`<p class="h-info">${ic('alert-circle', 16)}${r.missing.slice(0, 3).join(' ')}</p>`}
+    <p class="h-info">${ic('eye', 16)}${cv.done.note}</p>
+    <div class="h-actions"><button class="btn btn-primary btn-lg" data-act="finish" ${ok ? '' : raw('disabled')}>${ic('arrow-right-02')}${r.campaign ? `Создать героя в «${r.campaign}»` : 'Создать героя'}</button><a class="btn btn-secondary btn-lg" href="#/hero/new/race">${ic('pencil-edit-02')}К шагам</a></div>`;
+  return html`<main class="page h-done-page">${summaryHero({ art: r.art, badge: ok ? 'Герой готов' : 'Почти готов', name: r.name, line: r.line, facts: r.facts, abilities: r.abilities, extra: checks })}</main>`;
 }
 
 // ——— 89–90 · Быстрый герой ———

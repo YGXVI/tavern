@@ -139,10 +139,12 @@ export function toHeroView(ch, ctx = {}) {
   const coins = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(s.coins || {}) };
 
   const hp = { now: num(r.hp.current), max: num(r.hp.max), temp: num(r.hp.temp) };
+  // КД не записан (герой из конструктора: доспехи в сумке, лист ведёт КД вручную) — без доспехов: 10 + Ловкость.
+  const acKnown = Number.isFinite(r.ac), ac = acKnown ? r.ac : 10 + am('dex');
   const perc = 10 + skillVal('perception'), ins = 10 + skillVal('insight'), inv = 10 + skillVal('investigation');
   const strMod = am('str');
   const explain = {
-    ac: `КД ${num(r.ac, 10)} — записано на листе`,
+    ac: acKnown ? `КД ${ac} — записано на листе` : `КД ${ac} = 10 + Ловкость ${signed(am('dex'))} (без доспехов; наденьте доспех в листе за столом)`,
     init: `к20 ${signed(num(r.initiative))} = Ловкость ${signed(am('dex'))}`,
     hp: `${hp.max} хитов — ${classes.map((c) => `${c.name} ${c.level} (${c.hitDie})`).join(', ') || 'по листу'}, Телосложение ${signed(am('con'))} за уровень`,
   };
@@ -163,7 +165,7 @@ export function toHeroView(ch, ctx = {}) {
     campaign: ctx.campaign || null,
     status: s.creation ? 'ready' : 'ready',
     vitals: {
-      hp, ac: { value: num(r.ac, 10), note: '' }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
+      hp, ac: { value: ac, note: acKnown ? '' : 'без доспехов' }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
       size: 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },
       passive: { perception: perc, insight: ins, investigation: inv },
       deathSaves: { ok: num(r.deathSaves.successes), fail: num(r.deathSaves.failures) },

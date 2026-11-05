@@ -75,6 +75,18 @@ export async function submitCharacterCommand(request) {
   return result;
 }
 
+/**
+ * Новый герой из конструктора (P4a, create_character_sheet): лист, история create и, если claim, выбор героя игроком —
+ * одной транзакцией. characterId и operationId вызывающий хранит до ответа: повтор после обрыва шлёт тот же запрос.
+ */
+export async function createHeroSheet(cid, { characterId, operationId, data }, claim = false) {
+  if (!sb || !me) throw new SheetCommandError('forbidden');
+  await whenSynced(cid);
+  const result = await sheets.create({ campaignId: cid, characterId, operationId, data, claim });
+  await loadCampaign(cid);
+  return result;
+}
+
 /** Создание отдельного экземпляра; ID сохраняется вызывающим до ответа для безопасного повтора. */
 export async function createCharacterSheet(cid, character) {
   if(!sb||!me)throw new SheetCommandError('forbidden');

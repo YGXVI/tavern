@@ -8,8 +8,8 @@ import { heroActions } from './contract.js';
 export function stepBody(s, cv, d) {
   const head = stepTitle(s.title, s.hint, s.tip, s.tipIcon);
   switch (s.id) {
-    case 'race': return html`${head}<div class="h-grid4">${cv.races.map((o) => artCard(o, { selected: o.id === (d.race || 'human') }))}</div>`;
-    case 'class': return html`${head}<div class="h-grid4">${cv.classes.map((o) => artCard(o, { selected: o.id === (d.class || 'wizard') }))}</div>`;
+    case 'race': return html`${head}<div class="h-grid4">${cv.races.map((o) => artCard(o, { selected: o.id === (cv.live ? cv.selected.race : d.race || 'human') }))}</div>${extraBoxes(cv.extra?.race)}`;
+    case 'class': return html`${head}<div class="h-grid4">${cv.classes.map((o) => artCard(o, { selected: o.id === (cv.live ? cv.selected.class : d.class || 'wizard') }))}</div>${extraBoxes(cv.extra?.class)}`;
     case 'abilities': return abilitiesStep(head, cv.abilities, d);
     case 'background': return backgroundStep(head, cv, d);
     case 'equipment': return equipmentStep(head, cv.equipment, d);
@@ -19,10 +19,14 @@ export function stepBody(s, cv, d) {
   }
 }
 
+/** «Ещё выбор» расы и класса на настоящем конструкторе (подкласс, стиль, инструменты…) — в стиле блоков навыков. */
+const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box"><div class="h-box-head">${caps(b.title)}<small>${b.note}</small></div>
+  <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
+
 /** «Этот шаг дал» — для живого листа справа. */
 export function stepGave(s, cv, d) {
-  if (s.id === 'race') return cv.raceGave[d.race || 'human'] || ['Особенности расы появятся в листе'];
-  if (s.id === 'class') return cv.classGave[d.class || 'wizard'] || ['Хиты, спасброски и умения класса'];
+  if (s.id === 'race') return cv.raceGave[cv.live ? cv.selected.race : d.race || 'human'] || ['Особенности расы появятся в листе'];
+  if (s.id === 'class') return cv.classGave[cv.live ? cv.selected.class : d.class || 'wizard'] || ['Хиты, спасброски и умения класса'];
   if (s.id === 'abilities') return cv.abilities.gave;
   if (s.id === 'background') return cv.backgroundGave;
   if (s.id === 'equipment') return cv.equipment.gave;
@@ -33,12 +37,12 @@ export function stepGave(s, cv, d) {
 
 // ——— 48 · Характеристики ———
 function abilitiesStep(head, ab, d) {
-  const mode = d.abMode || 'buy';
+  const mode = ab.mode || d.abMode || 'buy';
   const b = ab.budget;
   const card = (a) => html`<div class="h-ab ${a.main ? 'main' : ''}" data-ab="${a.key}">
     <div class="h-ab-head">${caps(a.name)}${a.main ? html`<span class="h-mini-chip accent">главная</span>` : a.tag ? html`<span class="h-mini-chip">${a.tag}</span>` : ''}</div>
     <div class="h-stepper"><button data-ab-dec="${a.key}" aria-label="Меньше">${ic('minus-sign', 16)}</button><b>${a.base}</b><button data-ab-inc="${a.key}" aria-label="Больше">${ic('plus-sign', 16)}</button></div>
-    <dl class="h-ab-rows"><div><dt>Цена</dt><dd>${a.cost} оч.</dd></div><div><dt>Человек</dt><dd>${a.race}</dd></div>${a.asi ? html`<div class="accent"><dt>4 уровень</dt><dd>${a.asi}</dd></div>` : ''}</dl>
+    <dl class="h-ab-rows"><div><dt>Цена</dt><dd>${a.cost} оч.</dd></div><div><dt>Раса</dt><dd>${a.race}</dd></div>${a.asi ? html`<div class="accent"><dt>4 уровень</dt><dd>${a.asi}</dd></div>` : ''}</dl>
     <div class="h-ab-total"><b>${a.final}</b><span class="h-modpill">${a.mod}</span></div>
   </div>`;
   return html`${head}
@@ -52,7 +56,7 @@ function abilitiesStep(head, ab, d) {
 
 // ——— 49 · Предыстория ———
 function backgroundStep(head, cv, d) {
-  const sel = d.background || 'sage';
+  const sel = cv.live ? cv.selected.background : d.background || 'sage';
   const pills = (box, attr) => html`<section class="h-box"><div class="h-box-head">${caps(box.title)}<small>${box.note}</small></div>
     <div class="h-pills">${box.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''} ${p.from ? 'fixed' : ''}" ${raw(attr)}="${p.name}" ${p.from ? raw('disabled') : ''}>${p.from ? ic('information-circle', 14) : p.on ? ic('tick-02', 14) : ''}${p.name}${p.from ? html`<small>${p.from}</small>` : ''}</button>`)}</div>
     ${box.hint ? html`<p class="h-box-hint">${box.hint}</p>` : ''}${box.tip ? html`<p class="h-box-tip">${ic('crown', 14)}${box.tip}</p>` : ''}</section>`;
@@ -73,7 +77,7 @@ function equipmentStep(head, eq, d) {
 
 // ——— 51 · Заклинания ———
 function spellsStep(head, sp, d) {
-  const tab = d.spTab ?? sp.tab;
+  const tab = sp.live ? sp.tab : d.spTab ?? sp.tab;
   const focus = d.spFocus || sp.list.find((x) => x.focus)?.name;
   return html`${head}
     <div class="h-grid3 progress">${sp.progress.map((p) => html`<div class="h-prog">${caps(p.label)}<span class="ok">${ic('tick-02', 14)}</span><b>${p.now} из ${p.max}</b><span class="h-bar magic"><i style="width:${Math.round((p.now / p.max) * 100)}%"></i></span></div>`)}</div>
@@ -118,6 +122,7 @@ export function bindStepExtras(root, L, stepId, d, save, rerender) {
   L('click', '[data-align]', (e, b) => { set('alignment', b.dataset.align); rerender(); });
   L('input', '[data-name]', (e, t) => { d.name = t.value; save(); });
   L('input', '[data-text]', (e, t) => { d[t.dataset.text] = t.value; save(); });
+  L('click', '[data-extra]', (e, b) => heroActions.choose({ step: stepId, id: 'extra', value: b.dataset.extra }));
   L('click', '[data-ab-inc],[data-ab-dec],[data-asi],[data-auto],[data-skill],[data-lang],[data-eq],[data-roll-gold],[data-replace],[data-upload],[data-crop],[data-trait]', (e, b) => {
     const key = Object.keys(b.dataset)[0];
     heroActions.choose({ step: stepId, id: key, value: b.dataset[key] });
