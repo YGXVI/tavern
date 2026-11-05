@@ -161,7 +161,7 @@ function topRight(ctx) {
     const pending = c.members.filter((m) => m.status === 'pending').length;
     return `<div class="tr-row"><button class="toolbar scene-pill ${ctx.ui.panel === 'scenes' ? 'active' : ''}" data-act="scenes" data-tip="Сцены"><span class="icon-btn icon-btn-sm ${ctx.ui.panel === 'scenes' ? 'active' : ''}">${icon('maps', 20)}</span><span class="scene-pill-text"><small>Сцена</small><b>${esc(sc?.name || 'нет сцен')}</b></span></button></div>
       ${party.length ? `<div class="toolbar toolbar-v party-col">${party.map((ch) => avatarBtn(ch)).join('')}</div>` : ''}
-      <div class="toolbar">${ib('invite', 'user-add-01', pending ? `Заявки: ${pending}` : 'Пригласить игроков', { count: pending })}</div>`;
+      <div class="toolbar">${ib('token-requests', 'hourglass', 'Запросы токенов', { count: c.scenes.reduce((n, s) => n + s.tokens.filter((t) => t.pending).length, 0) })}${ib('invite', 'user-add-01', pending ? `Заявки: ${pending}` : 'Пригласить игроков', { count: pending })}</div>`;
   }
   const me = myCharacter(c, ctx.userId);
   const others = party.filter((ch) => ch.id !== me?.id);

@@ -66,7 +66,7 @@ export function creatureCard(ctx, { at = null, name = '', anchor = null, img = '
     <div class="panel-footer cc-foot">
       <label class="check t-sm"><input type="checkbox" data-opt="save" ${st.save ? 'checked' : ''}>Сохранить в «Мои существа»</label>
       ${master ? `<label class="check t-sm"><input type="checkbox" data-opt="hidden" ${st.hidden ? 'checked' : ''}>Скрыть от игроков</label><label class="check t-sm"><input type="checkbox" data-opt="combat" ${st.combat ? 'checked' : ''}>Сразу в бой</label>` : ''}
-      <button class="btn btn-primary btn-block" data-ok>${icon(master ? 'plus-sign' : 'chess-pawn', 16)}${master ? 'Поставить на карту' : 'Поставить и показать мастеру'}</button>
+      <button class="btn btn-primary btn-block" data-ok>${icon(master ? 'plus-sign' : 'chess-pawn', 16)}${master ? 'Поставить на карту' : 'Отправить мастеру'}</button>
     </div></div>`;
   let detachDrop = () => {};
   const pop = popover(html(), anchor || { x: innerWidth / 2, y: innerHeight / 2 }, { placement: anchor ? 'right' : 'auto', className: 'cc-popover', onClose: () => detachDrop() });
@@ -182,7 +182,7 @@ const pendingOf = (ctx) => (ctx.scene?.tokens || []).filter((t) => t.pending);
 
 /** Решение мастера: patch — поправленные числа (или null); approve=false — убрать. */
 export function decidePending(ctx, id, { approve = true, patch = null } = {}) {
-  const t0 = ctx.scene?.tokens.find((t) => t.id === id); if (!t0) return;
+  const t0 = ctx.scene?.tokens.find((t) => t.id === id); if (!ctx.isMasterView || !t0?.pending) return;
   if (!approve) { deleteTokens(ctx, [id]); return; }
   const before = structuredClone(t0);
   const apply = (s) => {
@@ -198,7 +198,7 @@ export function decidePending(ctx, id, { approve = true, patch = null } = {}) {
 
 /** Окно мастера: посмотреть, поправить числа, разрешить или убрать. */
 export function reviewPending(ctx, id, anchor = null) {
-  const t = ctx.scene?.tokens.find((x) => x.id === id); if (!t?.pending) return;
+  const t = ctx.scene?.tokens.find((x) => x.id === id); if (!ctx.isMasterView || !t?.pending) return;
   const owner = userById(t.ownerId);
   const st = { ac: t.ac ?? '', hp: t.hpMax ?? '', speed: t.speed ?? '', init: t.initBonus ?? '' };
   const pos = anchor || (() => { const s = ctx.camera.toScreen(t.x, t.y); return { x: s.x + 24, y: s.y }; })();
@@ -236,13 +236,13 @@ export function pendingItems(ctx, t) {
     { icon: 'delete-02', label: 'Убрать', danger: true, onClick: () => decidePending(ctx, t.id, { approve: false }) },
     'divider',
   ];
-  if (ctx.owns(t)) return [{ icon: 'cancel-01', label: 'Отменить — мастер ещё не ответил', onClick: () => { ctx.ui.pendingCancel ||= new Set(); ctx.ui.pendingCancel.add(t.id); deleteTokens(ctx, [t.id]); } }, 'divider'];
+  if (ctx.owns(t) || ctx.isMine(t)) return [{ icon: 'cancel-01', label: 'Отменить — мастер ещё не ответил', onClick: () => { ctx.ui.pendingCancel ||= new Set(); ctx.ui.pendingCancel.add(t.id); deleteTokens(ctx, [t.id]); } }, 'divider'];
   return [];
 }
 
 /**
  * Следить за «ждёт мастера»: мастеру — тост о новом существе с «Посмотреть»; владельцу — итог решения.
- * Первый проход на сцене только запоминает.
+ * После входа на стол существующие заявки также доступны мастеру.
  */
 export function trackPending(ctx) {
   const sc = ctx.scene; if (!sc) return;
@@ -250,15 +250,15 @@ export function trackPending(ctx) {
   if (ctx.isMaster) {
     const now = new Set(pendingOf(ctx).map((t) => t.id));
     ctx.ui.pendingSeen = { sceneId: ctx.sceneId, ids: now };
-    if (!prev || prev.sceneId !== ctx.sceneId) return;
+    if (prev && prev.sceneId !== ctx.sceneId) return;
     for (const id of now) {
-      if (prev.ids?.has(id)) continue;
+      if (prev?.ids?.has(id)) continue;
       const t = sc.tokens.find((x) => x.id === id);
       ctx.toast({ title: `${userById(t.ownerId)?.name || 'Игрок'} ставит своё существо`, body: `«${t.name}» ждёт вашего решения`, icon: 'hourglass', action: { label: 'Посмотреть', onClick: () => reviewPending(ctx, id) } });
     }
     return;
   }
-  const mine = new Map(sc.tokens.filter((t) => t.ownerId === ctx.userId && (t.pending || prev?.mine?.has(t.id))).map((t) => [t.id, { name: t.name, pending: !!t.pending, nums: { ac: t.ac, hpMax: t.hpMax, speed: t.speed, initBonus: t.initBonus } }]));
+  const mine = new Map(sc.tokens.filter((t) => (t.ownerId === ctx.userId || ctx.isMine(t)) && (t.pending || prev?.mine?.has(t.id))).map((t) => [t.id, { name: t.name, pending: !!t.pending, nums: { ac: t.ac, hpMax: t.hpMax, speed: t.speed, initBonus: t.initBonus } }]));
   ctx.ui.pendingSeen = { sceneId: ctx.sceneId, mine: new Map([...mine].filter(([, v]) => v.pending)) };
   if (!prev?.mine || prev.sceneId !== ctx.sceneId) return;
   for (const [id, was] of prev.mine) {
@@ -276,6 +276,18 @@ export function trackPending(ctx) {
 }
 
 /** Видит ли зритель токен «ждёт мастера»: мастер и владелец — да, остальные — нет. */
-export const pendingHidden = (ctx, t) => !!t.pending && !ctx.isMasterView && !ctx.owns(t);
+export const pendingHidden = (ctx, t) => !!t.pending && !ctx.isMasterView && !ctx.owns(t) && !ctx.isMine(t);
 
 export { tokenStats };
+
+/** Постоянная очередь, включая заявки на других сценах и после перезагрузки. */
+export function pendingQueue(ctx, anchor) {
+  if (!ctx.isMasterView) return;
+  const entries = ctx.c.scenes.flatMap((s) => s.tokens.filter((t) => t.pending).map((t) => ({ s, t })));
+  const p = popover(`<div class="pick-pop"><div class="panel-header"><div class="title">Запросы токенов</div><button class="icon-btn" data-close>${icon('cancel-01', 18)}</button></div><div class="w-list scroll">${entries.length ? entries.map(({s,t},i) => `<button class="list-row" data-request="${i}"><span class="grow col-tight"><b>${esc(t.name)}</b><small>${esc(s.name)} · ${esc(userById(t.ownerId)?.name || 'Игрок')}</small></span>${icon('arrow-right-01',16)}</button>`).join('') : '<p class="panel-section muted">Запросов нет</p>'}</div></div>`, anchor, { placement: 'left' });
+  p.node.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-request]'); if (!b) return;
+    const {s,t} = entries[Number(b.dataset.request)];
+    closePopover(); ctx.switchScene(s.id); reviewPending(ctx,t.id,anchor);
+  });
+}
