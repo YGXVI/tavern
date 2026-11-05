@@ -442,6 +442,7 @@ async function placing(ctx, work) {
 }
 
 export async function commitCreatures(ctx, sceneId, tokens, copy, history) {
+  if (!ctx.isMasterView) for (const t of tokens) t.pending = true;
   if (isServerMode()) {
     const { persistCreatureTokens } = await import('../../server/sync.js');
     await persistCreatureTokens(ctx.cid, sceneId, tokens, copy);
@@ -457,6 +458,7 @@ export async function commitCreatures(ctx, sceneId, tokens, copy, history) {
 export function placeCreatures(ctx, monsterId) { return placing(ctx, () => placeCreaturesInner(ctx, monsterId)); }
 async function placeCreaturesInner(ctx, monsterId) {
   if (!ctx.scene) return false;
+  if (!ctx.isMasterView) { const at = ctx.ui.placeAt; ctx.ui.placeAt = null; return placeSummonInner(ctx, monsterId, at); }
   const sceneId = ctx.sceneId;
   const st = { ...bState(ctx) };
   const at = ctx.ui.placeAt || viewCenter(ctx);
@@ -543,7 +545,7 @@ export function placeHero(ctx, chId, at = null) {
 // ——— «Добавить» у игрока (TASK-183, план TASK-097 п. 3.1–3.3): свой токен и призыв ———
 const OWN_SIZES = [['tiny', 'Крошечный'], ['small', 'Маленький'], ['medium', 'Средний'], ['large', 'Большой']];
 /** Свой герой игрока на этой сцене — рядом с ним встаёт свой токен, от него идёт призыв. */
-const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.hidden) || null;
+const myHeroToken = (ctx) => ctx.scene?.tokens.find((t) => ctx.isMine(t) && !t.hidden && !t.pending) || null;
 /**
  * Свободное место вплотную к точке (по клеткам, не шагами размера токена), куда можно дойти по прямой — не за
  * стеной (иначе игрок не вытащит токен сам). Нет такого — как раньше, ближайшее свободное.
@@ -578,7 +580,7 @@ export function playerAddMenu(ctx, anchor) {
 function ownTokenPicker(ctx, anchor) {
   const st = { name: '', size: 'small', img: '', busy: false };
   const face = () => { const ref = st.img || `ini:${st.name.trim() || '?'}`; return `<span class="avatar lg own-face"><img alt="" data-ref="${esc(ref)}" src="${esc(srcOf(ref))}"></span>`; };
-  const pop = popover(`<div class="pick-pop own-pop"><div class="panel-header"><div class="titles"><div class="title">Свой токен</div><div class="subtitle">Фамильяр, иллюзия, метка — встанет рядом с вашим героем</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+  const pop = popover(`<div class="pick-pop own-pop"><div class="panel-header"><div class="titles"><div class="title">Свой токен</div><div class="subtitle">Фамильяр, иллюзия, метка — после разрешения мастера</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
     <div class="panel-section">
       <div class="row own-row"><span data-face>${face()}</span><div class="col grow" style="gap:6px">
         <div class="field"><label>Имя</label><div class="input"><input data-name maxlength="40" placeholder="Сова" aria-label="Имя токена"></div></div>
@@ -587,7 +589,7 @@ function ownTokenPicker(ctx, anchor) {
       </div></div>
       <div class="field"><label>Размер</label><div class="chips-wrap">${OWN_SIZES.map(([v, l]) => `<button class="chip chip-md ${st.size === v ? 'chip-accent' : ''}" data-size="${v}">${l}</button>`).join('')}</div></div>
       <span class="t-xs tertiary">Без статов — картинка без плашек и вне боя. Хиты и КД задаются потом: ПКМ → «Статы…».</span>
-      <button class="btn btn-primary btn-block" data-ok>${icon('plus-sign', 16)}Поставить на карту</button>
+      <button class="btn btn-primary btn-block" data-ok>${icon('plus-sign', 16)}Отправить мастеру</button>
     </div></div>`, anchor, { placement: 'top' });
   const n = pop.node, nameIn = n.querySelector('[data-name]');
   const redraw = () => { n.querySelector('[data-face]').innerHTML = face(); hydrateImages(n); n.querySelector('[data-noimg]').style.display = st.img ? '' : 'none'; };
@@ -618,10 +620,10 @@ export function placeOwnToken(ctx, { name, size = 'small', img = '' }, at = null
   if (!ctx.scene) return null;
   const hero = myHeroToken(ctx);
   const p = spotNear(ctx, at || (hero ? { x: hero.x, y: hero.y } : viewCenter(ctx)), sizeById(size).cells);
-  const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
+  const t = { id: uid('t-'), kind: 'custom', ownerId: ctx.userId, pending: !ctx.isMasterView, name: nextTokenName(ctx.scene, name), img: img || `ini:${name}`, size, x: p.x, y: p.y, hidden: false, conditions: [], disposition: 'friendly', light: null, aura: null };
   const history = { label: 'Свой токен', undo: (s) => { s.tokens = s.tokens.filter((x) => x.id !== t.id); }, redo: (s) => { s.tokens.push(structuredClone(t)); } };
   const sceneId = ctx.sceneId;
-  const placed = () => { if (ctx.sceneId === sceneId) ctx.select([t.id]); return t; };
+  const placed = () => { if (ctx.sceneId === sceneId) ctx.select([t.id]); if (t.pending) ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Запрос отправлен', icon: 'hourglass' }); return t; };
   if (isServerMode()) return commitCreatures(ctx, sceneId, [t], null, history).then(placed);
   ctx.mutateScene((s) => { s.tokens.push(t); }, history);
   return placed();
@@ -647,7 +649,7 @@ function summonPicker(ctx, anchor) {
     return found.map((m) => row(m.id, m.name, `${m.type} · КО ${m.cr} · ${m.hp} хп`, m.img)).join('');
   };
   const row = (id, name, sub, img) => `<button class="list-row b-row" data-summon="${esc(id)}"><span class="avatar sm foe">${creatureImgTag(img, name)}</span><span class="grow col-tight"><span class="primary ellipsis">${esc(name)}</span><span class="secondary ellipsis">${esc(sub)}</span></span></button>`;
-  const pop = popover(`<div class="pick-pop summon-pop"><div class="panel-header"><div class="titles"><div class="title">Призыв</div><div class="subtitle">${hero ? `Встанет союзником рядом с вашим героем (${esc(hero.name)}); в бой его добавляет мастер` : 'Нужен ваш герой на сцене'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
+  const pop = popover(`<div class="pick-pop summon-pop"><div class="panel-header"><div class="titles"><div class="title">Призыв</div><div class="subtitle">${hero ? `После разрешения мастера встанет рядом с вашим героем (${esc(hero.name)}); в бой его добавляет мастер` : 'Нужен ваш герой на сцене'}</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>
     <div class="panel-section b-search"><div class="tabs b-src" role="tablist"><button class="tab" role="tab" data-src="srd" aria-selected="true">Бестиарий</button><button class="tab" role="tab" data-src="lib" aria-selected="false">Мои</button></div>
       <div class="input">${icon('search-01', 18)}<input data-q placeholder="Боевой конь, wolf, КО 1…" aria-label="Поиск существ"></div></div>
     <div class="w-list scroll summon-list" data-list>${rows()}</div></div>`, anchor, { placement: 'top' });
@@ -690,7 +692,7 @@ async function placeSummonInner(ctx, pick, at) {
   const p = spotNear(ctx, at || { x: hero.x, y: hero.y }, n);
   const g = ctx.scene.grid, s = gridSize(g);
   const c0 = Math.round((p.x - (g.offsetX || 0)) / s - n / 2), r0 = Math.round((p.y - (g.offsetY || 0)) / s - n / 2);
-  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, summonedBy: hero.id, disposition: 'friendly', ...(pic ? { img: pic.now } : {}) }, m);
+  const t = monsterToken(tpl ? `lib:${copyId}` : m.id, nextTokenName(ctx.scene, m.name), c0, r0, { ...g, size: s }, { ownerId: ctx.userId, pending: !ctx.isMasterView, summonedBy: hero.id, disposition: 'friendly', ...(pic ? { img: pic.now } : {}) }, m);
   await commitCreatures(ctx, sceneId, [t], newCopy, {
     label: 'Призыв',
     undo: (sc, c) => { sc.tokens = sc.tokens.filter((x) => x.id !== t.id); if (newCopy && c.creatures) delete c.creatures[copyId]; },
@@ -698,7 +700,7 @@ async function placeSummonInner(ctx, pick, at) {
   });
   if (ctx.sceneId !== sceneId) return true;
   ctx.select([t.id]);
-  ctx.toast({ title: `Призыв: ${t.name}`, body: 'Стоит рядом с вашим героем. В бой его добавляет мастер', icon: 'monster' });
+  ctx.toast({ title: `«${t.name}» ждёт мастера`, body: 'Запрос отправлен. До разрешения токен недоступен для игры', icon: 'monster' });
   return true;
 }
 

@@ -1,3 +1,4 @@
+import { pendingQueue } from './own-creature.js';
 // Панели стола: принимает действия от кнопок интерфейса и раздаёт их модулям,
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
 import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
@@ -671,7 +672,7 @@ export class Panels {
 
   openSheetFor(t) {
     const ctx = this.ctx;
-    if (!t) return;
+    if (!t || (t.pending && !ctx.isMasterView)) return;
     if (t.kind === 'item') return;
     ctx.ui.panel = null; this.renderSide();
     if (t.characterId) openCharacterSheet(ctx, t.characterId);
@@ -787,6 +788,7 @@ export class Panels {
         break;
       }
       case 'statblock': if (one) this.openSheetFor(one); break;
+      case 'token-requests': pendingQueue(ctx, b); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
       case 'reference': D.referenceModal(this.ctx); break;
