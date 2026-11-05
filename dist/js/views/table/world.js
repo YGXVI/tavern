@@ -261,6 +261,19 @@ export function renderAuras(L, ctx) {
 }
 
 // ——— Токены ———
+const localPortraitLoads = new WeakMap();
+function loadLocalPortrait(ctx, ref) {
+  if (!ref?.startsWith('idb:') || srcOf(ref)) return;
+  let requested = localPortraitLoads.get(ctx);
+  if (!requested) localPortraitLoads.set(ctx, (requested = new Set()));
+  // Один запрос на файл в этом столе, включая отсутствующие файлы: не читать IndexedDB на каждом кадре.
+  if (requested.has(ref)) return;
+  requested.add(ref);
+  resolveSrc(ref).then((src) => {
+    if (src && ctx.root.isConnected) ctx.invalidate('tokens');
+  }).catch(() => {});
+}
+
 function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const conds = (st.conditions || []).slice(0, 3).map((id) => { const c = conditionById(id); return c ? `<span class="tok-cond" title="${esc(c.name)}">${icon(c.icon, 12)}</span>` : ''; }).join('');
   const more = (st.conditions || []).length > 3 ? `<span class="tok-cond more">+${st.conditions.length - 3}</span>` : '';
@@ -290,6 +303,7 @@ export function renderTokens(L, ctx) {
   const marks = ctx.packMarks(); // пачки в инициативе (#198): цветная метка с номером
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
+    loadLocalPortrait(ctx, t.img);
     seen.add(t.id);
     const st = tokenStats(c, t);
     const size = sizeById(t.size);
