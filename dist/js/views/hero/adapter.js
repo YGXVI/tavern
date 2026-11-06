@@ -6,9 +6,20 @@ import { attackBonus } from '../table/sheet-fields.js';
 import { ABILITIES, SKILLS, CONDITIONS, classById, raceById, mod } from '../../data/rules.js';
 import { srcOf } from '../../core/assets.js';
 import { castKind, diceText, DMG } from '../ref/spell-power.js';
-import { wornItems, armorClass, weaponAttacks, classResources, featureText, flavorFeature } from './gear.js';
+import { wornItems, armorClass, weaponAttacks, unarmedAttack, classResources, featureText, flavorFeature } from './gear.js';
+import { heroPerks } from '../../rules/hero-derived.js';
 
 const MINUS = '−';
+// Маленькие расы SRD; подраса записана в raceId как её родитель (gnome, halfling).
+const SMALL_RACES = new Set(['halfling', 'gnome']);
+// Кто готовит заклинания: характеристика заклинателя + уровень (у паладина — половина). Остальные просто знают свои.
+const PREPARES = { cleric: ['wis', 1], druid: ['wis', 1], wizard: ['int', 1], paladin: ['cha', 0.5] };
+/** Подготовлено и предел. Всегда подготовленные (домен, клятва) в предел не входят. Кто не готовит — считаем известные. */
+function preparedCount(spells, classes, am) {
+  const counted = spells.filter((x) => x.level > 0 && !x.always);
+  const limits = classes.filter((c) => PREPARES[c.id]).map((c) => Math.max(1, am(PREPARES[c.id][0]) + Math.floor(c.level * PREPARES[c.id][1])));
+  return { now: counted.filter((x) => x.prepared).length, max: limits.length ? limits.reduce((a, b) => a + b, 0) : counted.length };
+}
 export const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : `+${n}`) : '—');
 const num = (n, d = 0) => (Number.isFinite(n) ? n : d);
 const str = (s) => (typeof s === 'string' ? s : '');
@@ -138,7 +149,7 @@ export function toHeroView(ch, ctx = {}) {
     return {
       id: k.id, name: str(k.name) || e?.name?.ru || 'Заклинание', level, school: sp.schools[e?.school] || '',
       time: p[0] || '', range: p[1] || '', duration: p[2] || '', comp: p[3] || '',
-      prepared: level === 0 ? true : k.prepared !== false, conc: !!e?.concentration || undefined, ritual: !!(k.ritual || e?.ritual) || undefined,
+      prepared: level === 0 ? true : k.prepared !== false, always: k.alwaysPrepared === true || undefined, conc: !!e?.concentration || undefined, ritual: !!(k.ritual || e?.ritual) || undefined,
       text: str(k.description), srd: !!e?.srd, how: castKind(sp.srd[e?.srd?.index]), dice: diceText(sp.srd[e?.srd?.index], level, num(r.level, 1)),
       dmgType: (p[4] || []).map((t) => DMG[t]).filter(Boolean)[0] || '', srdText: e?.srd ? sp.srd[e.srd.index]?.text || [] : [],
     };
@@ -146,7 +157,7 @@ export function toHeroView(ch, ctx = {}) {
   const spellcasting = castAb ? {
     ability: ABILITIES.find((a) => a.id === castAb)?.name || '', short: ABILITIES.find((a) => a.id === castAb)?.short || '',
     mod: signed(castMod), dc, attack: signed(atk), abilityId: castAb, sourceId: src0?.id || null, extra: src0?.id === 'src-extra',
-    prepared: { now: spells.filter((x) => x.level > 0 && x.prepared).length, max: spells.filter((x) => x.level > 0).length },
+    prepared: preparedCount(spells, classes, am),
     book: { now: spells.length, max: spells.length }, spells,
   } : null;
 
@@ -162,11 +173,13 @@ export function toHeroView(ch, ctx = {}) {
     return !m;
   }).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
   const worn = wornItems(rawItems, gear);
+  const perks = heroPerks(s);
   const profText = [s.proficiencies?.tools, s.proficiencies?.weapons].filter(Boolean).join('\n');
   // Атаки надетым оружием (#203, правка героя): у героя из конструктора и у того, кто сам надевал оружие, — рядом со
   // своими атаками (атака с тем же именем заменяет строку оружия). Перенесённый лист с атаками ведёт их сам, как раньше.
   const ownAttack = new Set((r.attacks || []).map((a) => str(a.name).trim().toLowerCase()).filter(Boolean));
-  if (!ownAttack.size || s.creation || rawItems.some((x) => x.equipped === true)) actions.action.push(...weaponAttacks(worn, mods, prof, profText).filter((w) => !ownAttack.has(w.name.toLowerCase())));
+  if (!ownAttack.size || s.creation || rawItems.some((x) => x.equipped === true)) actions.action.push(...[...weaponAttacks(worn, mods, prof, profText, perks), unarmedAttack(mods, prof, perks)].filter((w) => !ownAttack.has(w.name.toLowerCase())));
+  if (perks.monkLevel > 0) actions.bonus.push({ ...unarmedAttack(mods, prof, perks), id: 'weapon-unarmed-bonus', sub: 'после атаки действием · боевые искусства' });
   for (const x of clsRes) if (x.row) actions[x.row].push({ id: x.id, name: x.name, sub: x.sub || '', icon: 'feature', res: x.id, left: x.left });
   // Строка атаки старого листа с именем заклинания (заговор «Священное пламя») — не отдельная строка, а чипы заклинания.
   const spellNames = new Set(spells.map((x) => x.name.toLowerCase()));
@@ -204,7 +217,7 @@ export function toHeroView(ch, ctx = {}) {
   const hp = { now: num(r.hp.current), max: num(r.hp.max), temp: num(r.hp.temp) };
   // КД не записан (герой из конструктора: доспехи в сумке, лист ведёт КД вручную) — без доспехов: 10 + Ловкость.
   const acKnown = Number.isFinite(r.ac);
-  const acCalc = acKnown ? null : armorClass(worn, mods, classes.map((c) => c.id));
+  const acCalc = acKnown ? null : armorClass(worn, mods, classes.map((c) => c.id), perks);
   const ac = acKnown ? r.ac : acCalc.value;
   const perc = 10 + skillVal('perception'), ins = 10 + skillVal('insight'), inv = 10 + skillVal('investigation');
   const strMod = am('str');
@@ -237,7 +250,7 @@ export function toHeroView(ch, ctx = {}) {
     verified: s.creation?.verified || null, // 'server' — сборку пересчитал сервер (P4b), 'client' — только браузер
     vitals: {
       hp, ac: { value: ac, note: acKnown ? '' : acCalc.note }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
-      size: 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },
+      size: SMALL_RACES.has(s.raceId) ? 'Маленький' : 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },
       passive: { perception: perc, insight: ins, investigation: inv },
       deathSaves: { ok: num(r.deathSaves.successes), fail: num(r.deathSaves.failures) },
       inspiration: !!s.inspiration, exhaustion: num(s.exhaustion), hitDice: { left: hdLeft, total: hdTotal, die: hdDie },

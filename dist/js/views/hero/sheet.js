@@ -135,6 +135,8 @@ function actionRow(v, a) {
 }
 // «3 × 1к4+1» (Волшебная стрела) — одним броском 3к4+3; остальное — как написано.
 export function dmgFormula(t) {
+  // Постоянный урон (безоружный удар): голое число бросок читает как к20 + число.
+  if (/^\d+$/.test(String(t).trim())) return `${String(t).trim()}+0`;
   const m = /^(\d+)×(\d*)к(\d+)(?:([+−-])(\d+))?$/.exec(String(t).replace(/\s+/g, ''));
   if (!m) return t;
   const n = +m[1], c = +(m[2] || 1), f = m[5] ? +m[5] * n : 0;

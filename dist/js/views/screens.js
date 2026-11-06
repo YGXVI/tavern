@@ -9,6 +9,7 @@ import { campaignsFor, membership, roleIn, userById, characterOf } from '../core
 import { modal, panelHeader, toast, userAvatar, portrait, menu, confirmDialog } from '../ui/kit.js';
 import { newCampaign, DEMO_USERS, seedDB } from '../data/demo.js';
 import { replaceDB } from '../core/store.js';
+import { heroAc } from '../rules/hero-derived.js';
 import { freeSpots } from '../rules/geometry.js';
 import { creaturesPage, bindCreatures } from './creatures.js';
 
@@ -491,7 +492,7 @@ export function mountHeroPick(root, c0) {
           return html`<button class="hero-card" data-h="${ch.id}" aria-pressed="${pick === ch.id}" ${owner ? 'disabled' : ''}>
             <div class="portrait" style="background-image:url(${srcOf(ch.portrait)})">${pick === ch.id ? html`<span class="status-badge accent">${raw(icon('tick-02', 13))}</span>` : ''}</div>
             <div class="body"><div class="name">${ch.name}</div><div class="class">${ch.className} · ${ch.level} ур.</div>
-            <div class="stats"><span class="chip">ХП ${ch.hpMax}</span><span class="chip">КД ${ch.ac}</span></div>
+            <div class="stats"><span class="chip">ХП ${ch.hpMax}</span><span class="chip">КД ${heroAc(ch)}</span></div>
             <span class="chip ${owner ? '' : 'chip-success'}" style="align-self:flex-start">${owner ? `Играет ${owner.name}` : 'Свободен'}</span></div>
           </button>`;
         })}

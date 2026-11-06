@@ -7,10 +7,13 @@ import { ABILITIES, SKILLS, mod } from '../../data/rules.js';
 import { CREATION } from './fixture.js';
 import { EQ_RU, GEAR_RU } from '../ref/world-text.js';
 import { gearIndex, wornItems, armorClass } from './gear.js';
+import { heroPerks } from '../../rules/hero-derived.js';
 
 const MINUS = '−';
 const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : `+${n}`) : '—');
 const tail = (id) => String(id || '').split(':').pop();
+// Умения сборки, меняющие КД на итоговом экране: те же правила, что на листе.
+const draftPerks = (di) => heroPerks({ featureEntries: di?.features || [] });
 export const PORTS = Object.freeze({ abilityModifier: (s) => (Number.isInteger(s) ? mod(s) : null), creationHitPoints });
 const LANG_RU = {
   common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великаний', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий',
@@ -249,7 +252,9 @@ function autoSpells(ix, st) {
     const c = spellChoices(ev).find((x) => (x.selected?.length || 0) < x.count && optionsOf(x, ev).length);
     if (!c) break;
     const have = new Set(c.selected || []);
-    const pick = optionsOf(c, ev).filter((id) => !have.has(id) && !(c.unavailable || []).some((u) => u.option === id))
+    // Заклинания домена и клятвы и так всегда подготовлены: не тратим на них выбор.
+    const always = new Set((ev.derivedInputs?.spells?.granted || []).filter((g) => g.alwaysPrepared).map((g) => g.ref));
+    const pick = optionsOf(c, ev).filter((id) => !have.has(id) && !always.has(id) && !(c.unavailable || []).some((u) => u.option === id))
       .sort((a, b) => spellName(ix, a).localeCompare(spellName(ix, b), 'ru'));
     change(ix, st, { type: 'setSelection', choiceId: c.id, value: [...have, ...pick].slice(0, c.count) });
   }
@@ -429,7 +434,7 @@ export function creationDoneModel(ix, st) {
   // КД — по выбранному стартовому снаряжению (доспех, щит, Защита без доспехов), как его посчитает лист (gear.js).
   const mods = Object.fromEntries(ABILITIES.map((a) => [a.id, Number.isInteger(di?.abilityScores?.[a.id]) ? mod(di.abilityScores[a.id]) : 0]));
   const items = (di?.equipment?.items || []).map((it, i) => ({ id: `eq-${i}`, ref: it.ref, quantity: it.quantity }));
-  const ac = Number.isInteger(dex) ? armorClass(wornItems(items, gearOf(ix)), mods, [tail(cls?.id)]) : null;
+  const ac = Number.isInteger(dex) ? armorClass(wornItems(items, gearOf(ix)), mods, [tail(cls?.id)], draftPerks(di)) : null;
   return {
     name: live.name, line: [live.summary, ix.defs.get(st.draft.background.backgroundId)?.name.ru, st.look.alignment].filter(Boolean).join(' · '),
     art: cls ? `assets/hero/class-${tail(cls.id)}.webp` : 'assets/hero/race-human.webp',

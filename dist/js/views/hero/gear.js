@@ -4,6 +4,7 @@
 import { GEAR_RU, EQ_RU } from '../ref/world-text.js';
 import { SUM, SUB_INTRO } from '../ref/class-text.js';
 import { RACE_SUM } from '../ref/world-text.js';
+import { gearOf, wornItems, armorClass, martialDie } from '../../rules/hero-derived.js';
 
 const DMG_RU = { acid: 'кислота', bludgeoning: 'дробящий', cold: 'холод', fire: 'огонь', force: 'силовое поле', lightning: 'электричество', necrotic: 'некротический', piercing: 'колющий', poison: 'яд', psychic: 'психический', radiant: 'излучение', slashing: 'рубящий', thunder: 'звук' };
 const PROP_RU = { finesse: 'фехтовальное', light: 'лёгкое', heavy: 'тяжёлое', 'two-handed': 'двуручное', versatile: 'универсальное', thrown: 'метательное', reach: 'досягаемость', loading: 'перезарядка', ammunition: 'боеприпасы' };
@@ -20,61 +21,56 @@ export function gearIndex(equipment) {
   }
   return { byId, byName };
 }
-export const gearOf = (gear, x) => (gear ? gear.byId.get(x?.ref) || gear.byName.get(String(x?.name || x || '').toLowerCase()) || null : null);
+export { gearOf, wornItems, armorClass };
 
 /**
- * Предметы героя глазами листа: русское имя, вид, вес и «надето». Если игрок ещё ничего не надевал (новый герой из
- * мастера создания), надеты лучший доспех, щит и оружие — как на старте приключения.
+ * Владеет ли оружием: «простое», «воинское» или само оружие названо в строке владений. Конструктор пишет названия
+ * по-английски (Dagger, Rapier), старые листы — по-русски; сверяем в строке «Оружие:», если она есть.
  */
-export function wornItems(items, gear) {
-  const list = items.map((x) => ({ ...x, g: gearOf(gear, x) }));
-  if (!list.some((x) => x.equipped)) {
-    const armor = list.filter((x) => x.g?.kind === 'armor').sort((a, b) => (b.g.armor?.baseAc || 0) - (a.g.armor?.baseAc || 0))[0];
-    const shield = list.find((x) => x.g?.kind === 'shield');
-    for (const x of list) if (x === armor || x === shield || x.g?.kind === 'weapon') x.equipped = true, x.auto = true;
-  }
-  return list;
-}
-
-/** КД: доспех + Ловкость (с пределом), щит +2; без доспеха — 10 + Ловкость, у варвара и монаха — их Защита без доспехов. */
-export function armorClass(list, mods, classIds = []) {
-  const armor = list.filter((x) => x.equipped && x.g?.kind === 'armor').map((x) => x.g)[0];
-  const shield = list.some((x) => x.equipped && x.g?.kind === 'shield');
-  const parts = [];
-  let ac;
-  if (armor) {
-    const a = armor.armor, dex = a.addDex ? (a.dexMax == null ? mods.dex : Math.min(mods.dex, a.dexMax)) : 0;
-    ac = a.baseAc + dex; parts.push(`${armor.ru} ${a.baseAc}`); if (a.addDex) parts.push(`Ловкость ${signed(dex)}${a.dexMax != null ? ` (не больше ${a.dexMax})` : ''}`);
-  } else if (classIds.includes('barbarian')) { ac = 10 + mods.dex + mods.con; parts.push('10', `Ловкость ${signed(mods.dex)}`, `Телосложение ${signed(mods.con)} (Защита без доспехов)`); }
-  else if (classIds.includes('monk') && !shield) { ac = 10 + mods.dex + mods.wis; parts.push('10', `Ловкость ${signed(mods.dex)}`, `Мудрость ${signed(mods.wis)} (Защита без доспехов)`); }
-  else { ac = 10 + mods.dex; parts.push('10', `Ловкость ${signed(mods.dex)} (без доспехов)`); }
-  if (shield) { ac += 2; parts.push('щит +2'); }
-  return { value: ac, note: armor ? armor.ru : shield ? 'щит' : 'без доспехов', explain: `КД ${ac} = ${parts.join(' + ')}` };
-}
-
-/** Владеет ли оружием: «простое», «воинское» или само оружие названо в строке владений. */
 function proficientWith(g, text) {
-  const t = String(text || '').toLowerCase();
+  const all = String(text || '').toLowerCase();
+  const t = /оружие:(.*)/.exec(all)?.[1] ?? all;
   if (/воинск/.test(t) && g.weapon?.category === 'martial') return true;
   if (/просто/.test(t) && g.weapon?.category === 'simple') return true;
+  if (g.en && t.includes(String(g.en).toLowerCase())) return true;
   const stem = g.ru.toLowerCase().split(/[\s,]+/).map((w) => w.slice(0, 5)).find((w) => w.length >= 4);
   return !!stem && t.includes(stem);
 }
 
-/** Атаки надетым оружием: бонус = характеристика + мастерство (если владеет), урон = кость + характеристика. */
-export function weaponAttacks(list, mods, prof, profText) {
+const dieSize = (dice) => Number(/к?d?(\d+)$/.exec(String(dice).replace('к', 'd'))?.[1]) || 0;
+// Оружие монаха: короткий меч и простое рукопашное, если оно не двуручное и не тяжёлое.
+const monkWeapon = (g) => g.id === 'srd51:equipment:shortsword' || (g.weapon.category === 'simple' && g.weapon.range !== 'ranged' && !(g.weapon.properties || []).some((p) => ['two-handed', 'heavy'].includes(p)));
+
+/**
+ * Атаки надетым оружием: бонус = характеристика + мастерство (если владеет), урон = кость + характеристика.
+ * perks — heroPerks: стрельба, дуэлянт, боевые искусства монаха.
+ */
+export function weaponAttacks(list, mods, prof, profText, perks = {}) {
   return list.filter((x) => x.equipped && x.g?.weapon).map((x) => {
-    const w = x.g.weapon, props = w.properties || [];
-    const ab = w.range === 'ranged' ? 'dex' : props.includes('finesse') ? (mods.dex > mods.str ? 'dex' : 'str') : 'str';
+    const w = x.g.weapon, props = w.properties || [], ranged = w.range === 'ranged';
+    const monk = perks.monkLevel > 0 && monkWeapon(x.g);
+    const best = mods.dex > mods.str ? 'dex' : 'str';
+    const ab = props.includes('finesse') || monk ? best : ranged ? 'dex' : 'str';
     const m = mods[ab], own = proficientWith(x.g, profText);
-    const hit = m + (own ? prof : 0);
+    const style = ranged && perks.archery ? 2 : 0;
+    const duel = !ranged && perks.dueling && !props.includes('two-handed') ? 2 : 0;
+    const hit = m + (own ? prof : 0) + style, dmgMod = m + duel;
+    const die = monk && martialDie(perks.monkLevel) > dieSize(w.damage.dice) ? `1к${martialDie(perks.monkLevel)}` : k(w.damage.dice);
     const range = w.normalRange ? `${w.normalRange}/${w.longRange} фт` : props.includes('reach') ? '10 фт' : '5 фт';
     return {
-      id: `weapon-${x.id || x.g.id}`, name: x.g.ru, icon: 'weapon', hit: signed(hit), dmg: `${k(w.damage.dice)}${m ? signed(m) : ''}`,
-      sub: [DMG_RU[w.damage.type] || w.damage.type, range, w.versatileDice ? `двумя руками ${k(w.versatileDice)}` : '', ...props.filter((p) => !['versatile', 'ammunition'].includes(p)).map((p) => PROP_RU[p] || p)].filter(Boolean).join(' · '),
-      explain: `${x.g.ru}: к20 ${signed(hit)} = ${ab === 'dex' ? 'Ловкость' : 'Сила'} ${signed(m)}${own ? ` + мастерство ${signed(prof)}` : ' (не владеет — без мастерства)'}`,
+      id: `weapon-${x.id || x.g.id}`, name: x.g.ru, icon: 'weapon', hit: signed(hit), dmg: `${die}${dmgMod ? signed(dmgMod) : ''}`,
+      sub: [DMG_RU[w.damage.type] || w.damage.type, range, w.versatileDice ? `двумя руками ${k(w.versatileDice)}` : '', ...props.filter((p) => !['versatile', 'ammunition'].includes(p)).map((p) => PROP_RU[p] || p), duel ? 'дуэлянт +2, если другая рука без оружия' : ''].filter(Boolean).join(' · '),
+      explain: `${x.g.ru}: к20 ${signed(hit)} = ${ab === 'dex' ? 'Ловкость' : 'Сила'} ${signed(m)}${own ? ` + мастерство ${signed(prof)}` : ' (не владеет — без мастерства)'}${style ? ' + стрельба +2' : ''}`,
     };
   });
+}
+
+/** Безоружный удар есть у всех: 1 + Сила; у монаха — кость боевых искусств и лучшая из Силы и Ловкости. */
+export function unarmedAttack(mods, prof, perks = {}) {
+  const monk = perks.monkLevel > 0, ab = monk && mods.dex > mods.str ? 'dex' : 'str', m = mods[ab], hit = m + prof;
+  const dmg = monk ? `1к${martialDie(perks.monkLevel)}${m ? signed(m) : ''}` : String(Math.max(0, 1 + m));
+  return { id: 'weapon-unarmed', name: 'Безоружный удар', icon: 'weapon', hit: signed(hit), dmg, sub: monk ? 'дробящий · 5 фт · боевые искусства' : 'дробящий · 5 фт',
+    explain: `Безоружный удар: к20 ${signed(hit)} = ${ab === 'dex' ? 'Ловкость' : 'Сила'} ${signed(m)} + мастерство ${signed(prof)}` };
 }
 
 // Умения класса с зарядами (PHB 2014): сколько на уровне и когда восстанавливаются.

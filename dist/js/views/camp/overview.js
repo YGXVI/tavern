@@ -4,6 +4,7 @@ import { html, raw, on, esc, plural } from '../../core/dom.js';
 import { userById, updateCampaign, addLog, characterOf, sceneOf } from '../../core/campaign.js';
 import { joinUrl } from '../../server/config.js';
 import { isServerMode } from '../../core/store.js';
+import { heroAc } from '../../rules/hero-derived.js';
 import { modal, panelHeader, copyText, userAvatar, portrait } from '../../ui/kit.js';
 import { mutateBook, sessionLive, fmtDate, heroOfUser, tzCity, authorName, noteSummary } from './book-store.js';
 import { local, updateLocal } from './local.js';
@@ -131,7 +132,7 @@ function player(ctx) {
   return html`<div class="cp-grid cp-grid-player">
     <section class="cp-card cp-hero">${cardHead('Ваш герой')}
       ${hero ? html`<div class="cp-hero-head">${portrait(hero.portrait, 'lg hero', hero.name)}<span><b>${hero.name}</b><small>${[hero.raceName, `${hero.className || ''} ${hero.level || ''}`.trim()].filter(Boolean).join(' · ')}</small></span></div>
-        <div class="cp-stats"><div><small>Хиты</small><b>${hero.hp ?? '—'}/${hero.hpMax ?? '—'}</b></div><div><small>КД</small><b>${hero.ac ?? '—'}</b></div><div><small>Ячейки</small><b>${slotsText(hero)}</b></div></div>
+        <div class="cp-stats"><div><small>Хиты</small><b>${hero.hp ?? '—'}/${hero.hpMax ?? '—'}</b></div><div><small>КД</small><b>${heroAc(hero)}</b></div><div><small>Ячейки</small><b>${slotsText(hero)}</b></div></div>
         <div class="row"><a class="btn btn-secondary btn-sm" href="#/hero/${c.id}~${encodeURIComponent(hero.id)}">Открыть лист</a></div>
         <p class="t-xs tertiary">${(hero.conditions || []).length ? `Сейчас: ${hero.conditions.map((x) => x.name || x).join(', ')}` : hero.hp < hero.hpMax ? `Ранен: не хватает ${hero.hpMax - hero.hp} хитов` : 'Цел и готов — всё восстановлено'}</p>`
     : html`<p class="t-sm muted">Героя ещё нет.</p><a class="btn btn-primary btn-sm" href="#/c/${c.id}">Выбрать героя</a>`}

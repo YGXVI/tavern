@@ -1,4 +1,5 @@
 // Атомарные локальные переходы песочницы; сервер выполняет их в SQL-транзакции.
+import { heroInit } from '../../rules/hero-derived.js';
 export function applyZeroHp(character,previousHp) {
   if(!['pc','sidekick'].includes(character.profile||'pc')||character.hp===null||character.hp===previousHp)return;
   character.conditions??=[];
@@ -9,7 +10,7 @@ export function archiveLocalCharacter(c,id) {
   const character=c.characters.find(ch=>ch.id===id);if(!character)throw new Error('Лист не найден');
   const removed=new Set(c.scenes.flatMap(s=>s.tokens.filter(t=>t.characterId===id).map(t=>t.id)));
   const scene=c.scenes.find(s=>s.id===c.combat?.sceneId);
-  const order=(c.combat?.entries||[]).filter(e=>scene?.tokens.some(t=>t.id===e.tokenId)).map(e=>{const t=scene.tokens.find(t=>t.id===e.tokenId),ch=c.characters.find(ch=>ch.id===t.characterId);return {...e,bonus:(ch||t).initBonus??0,name:(ch||t).name||''};}).sort((a,b)=>(b.init??-99)-(a.init??-99)||b.bonus-a.bonus||a.name.localeCompare(b.name,'ru')); 
+  const order=(c.combat?.entries||[]).filter(e=>scene?.tokens.some(t=>t.id===e.tokenId)).map(e=>{const t=scene.tokens.find(t=>t.id===e.tokenId),ch=c.characters.find(ch=>ch.id===t.characterId);return {...e,bonus:ch?heroInit(ch):t.initBonus??0,name:(ch||t).name||''};}).sort((a,b)=>(b.init??-99)-(a.init??-99)||b.bonus-a.bonus||a.name.localeCompare(b.name,'ru')); 
   const cb=c.combat,current=cb?.current||order[cb?.turn||0]?.tokenId;
   if(cb&&order.some(e=>removed.has(e.tokenId))){
     const kept=order.filter(e=>!removed.has(e.tokenId));let next=current,wrapped=false;

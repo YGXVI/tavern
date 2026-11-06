@@ -5,6 +5,7 @@ import { srcOf } from '../../core/assets.js';
 import { onlineUsers } from '../../core/store.js';
 import { characterOf, ownerOfCharacter, tokenStats, myCharacter } from '../../core/campaign.js';
 import { LIGHTS, conditionById, woundLabel } from '../../data/rules.js';
+import { heroAc } from '../../rules/hero-derived.js';
 import { diceWidget } from './dice.js';
 import { visionFields } from './p-token.js';
 import { currentEntry, combatRound, tiedMoves } from './combat.js';
@@ -96,7 +97,7 @@ function party(ctx) {
       <span class="grow col-tight"><span class="row-tight"><span class="primary ellipsis">${esc(ch.name)}</span>${conds.slice(0, 3).map((x) => `<span class="mini-cond" title="${esc(x.name)}">${icon(x.icon, 12)}</span>`).join('')}</span>
       <span class="secondary ellipsis">${esc(ch.className)} ${esc(ch.level)} · ${owner ? esc(owner.name) + (on ? '' : ' · не в сети') : 'без игрока'}${tok ? '' : ' · не на сцене'}</span>
       <span class="hp-line"><span class="hp-bar ${frac > 0.5 ? 'ok' : ''}"><i style="width:${frac * 100}%"></i></span><b class="${ch.hp <= 0 ? 'negative' : ''}">${esc(ch.hp)}/${esc(ch.hpMax)}</b></span></span>
-      <span class="chip">КД ${esc(ch.ac)}</span></button>`;
+      <span class="chip">КД ${esc(heroAc(ch))}</span></button>`;
   }).join('');
   return `<div class="widget panel party-widget">${head('Отряд', `${chars.length} ${plural(chars.length, 'герой', 'героя', 'героев')} · ${onCount} в сети`)}
     <div class="w-list scroll">${rows || '<p class="t-sm muted" style="padding:0 16px 12px">Пока никого — пригласите игроков</p>'}</div>

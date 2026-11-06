@@ -1,6 +1,7 @@
 // Вкладки «Герои» (мастер), «Отряд» (игрок) и «Настройки» (мастер) дома кампании (#203).
 import { html, raw, on, timeAgo } from '../../core/dom.js';
 import { commit, isServerMode } from '../../core/store.js';
+import { heroAc } from '../../rules/hero-derived.js';
 import { userById, updateCampaign, addLog, characterOf } from '../../core/campaign.js';
 import { confirmDialog, menu, userAvatar, portrait } from '../../ui/kit.js';
 import { go } from '../screens.js';
@@ -48,7 +49,7 @@ function heroes(ctx, masterView) {
     <div class="cp-heroes">${ps.map((p) => html`<article class="cp-hero-card ${p.online ? 'online' : ''}">
       <a class="cp-hero-art" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'xl hero', p.ch.name, p.member ? p.online : null)}</a>
       <div class="cp-hero-t"><b>${p.ch.name}</b><small>${[p.ch.raceName, heroSub(p.ch)].filter(Boolean).join(' · ')}</small>
-        <div class="cp-hero-stats"><span><small>Хиты</small><b>${p.ch.hp ?? '—'}/${p.ch.hpMax ?? '—'}</b></span><span><small>КД</small><b>${p.ch.ac ?? '—'}</b></span><span><small>Скорость</small><b>${p.ch.speed ?? 30}</b></span></div>
+        <div class="cp-hero-stats"><span><small>Хиты</small><b>${p.ch.hp ?? '—'}/${p.ch.hpMax ?? '—'}</b></span><span><small>КД</small><b>${heroAc(p.ch)}</b></span><span><small>Скорость</small><b>${p.ch.speed ?? 30}</b></span></div>
         <p class="t-xs tertiary">${p.user ? `${p.user.name}${p.user.id === me ? ' — вы' : ''} · ${p.online ? 'за столом' : 'не в сети'}` : 'без игрока — свободен'}${(p.ch.conditions || []).length ? ` · ${p.ch.conditions.map((x) => x.name || x).join(', ')}` : ''}</p>
         <div class="row"><a class="btn btn-secondary btn-sm" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${ic('book-open-01')}Лист</a>${masterView && p.member ? html`<button class="icon-btn icon-btn-sm" data-member="${p.member.userId}" aria-label="Действия">${ic('more-horizontal', 18)}</button>` : ''}</div></div>
     </article>`)}${!ps.length ? html`<div class="cp-empty">${ic('user-group', 28)}<h3>Героев пока нет</h3><p>Игроки соберут их, когда придут по ссылке-приглашению.</p></div>` : ''}</div>

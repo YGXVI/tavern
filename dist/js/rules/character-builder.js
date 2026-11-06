@@ -586,12 +586,12 @@ export function toCharacterData(evaluation, draft, catalogues, { ids = {}, makeI
     if (!sources.has(key)) sources.set(key, { id: id(`spellSource:${key}`), name: names(definitionId), ability: null, kind: SPELL_MODE_RU.innate, attackOverride: null, dcOverride: null });
     return sources.get(key);
   };
-  const addSpell = (ref, definitionId, prepared, ability) => {
+  const addSpell = (ref, definitionId, prepared, ability, always = false) => {
     const source = sourceFor(definitionId);
     if (ability && !source.ability) source.ability = ability;
     const key = `spell:${source.id}:${ref}`, spell = cat.spellById.get(ref), prior = knownSpells.get(key);
-    if (prior) { prior.prepared ||= prepared; return; }
-    knownSpells.set(key, { id: id(`spell:${definitionId}:${ref}`), name: ru(ref), circle: spell?.level ?? null, sourceId: source.id, prepared, ritual: Boolean(spell?.ritual), description: null, ref });
+    if (prior) { prior.prepared ||= prepared; if (always) prior.alwaysPrepared = true; return; }
+    knownSpells.set(key, { id: id(`spell:${definitionId}:${ref}`), name: ru(ref), circle: spell?.level ?? null, sourceId: source.id, prepared, ritual: Boolean(spell?.ritual), description: null, ref, ...(always ? { alwaysPrepared: true } : {}) });
   };
   const preparedSel = new Set(d.spells.selected.filter(s => s.choiceId.endsWith(':spells:prepared')).flatMap(s => s.refs));
   for (const s of d.spells.selected) {
@@ -601,7 +601,7 @@ export function toCharacterData(evaluation, draft, catalogues, { ids = {}, makeI
     if (choice.dependsOnSpellbook) continue; // Spell Mastery / Signature Spells pick spells already in the book
     s.refs.forEach(ref => addSpell(ref, definitionId, book ? preparedSel.has(ref) : true, choice.ability));
   }
-  for (const g of d.spells.granted) addSpell(g.ref, g.origin.definitionId, true, g.ability);
+  for (const g of d.spells.granted) addSpell(g.ref, g.origin.definitionId, true, g.ability, g.alwaysPrepared);
 
   // Features: one entry per feature ref, labelled by where it first came from.
   const featureEntries = new Map();
