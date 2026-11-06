@@ -442,3 +442,69 @@ export function creationCharacter(ix, st, { newId = () => crypto.randomUUID(), u
   const data = { ...res.data, alignment: st.look.alignment || res.data.alignment || '' };
   return { characterId: st.characterId, operationId: st.operationId, data, ownerId: userId };
 }
+
+// ——— Быстрый герой (экраны 89–90): три ответа → сборка конструктором ———
+// Роль в бою и способ решать споры выбирают класс; раса — подходящая классу; остальное — первые варианты
+// конструктора и стандартный набор. Всё можно доработать пошагово: состояние то же, что у пошагового мастера.
+const QUICK_CLASS = {
+  front: { fist: 'barbarian', word: 'paladin', trick: 'fighter', book: 'fighter' },
+  range: { fist: 'ranger', word: 'ranger', trick: 'ranger', book: 'ranger' },
+  magic: { fist: 'sorcerer', word: 'sorcerer', trick: 'warlock', book: 'wizard' },
+  heal: { fist: 'cleric', word: 'bard', trick: 'bard', book: 'druid' },
+  shadow: { fist: 'monk', word: 'rogue', trick: 'rogue', book: 'rogue' },
+};
+const QUICK_RACE = { barbarian: 'half-orc', fighter: 'human', paladin: 'dragonborn', ranger: 'elf', sorcerer: 'tiefling', warlock: 'tiefling',
+  wizard: 'gnome', cleric: 'dwarf', bard: 'half-elf', druid: 'halfling', monk: 'human', rogue: 'halfling' };
+const isFull = (note) => /выбрано (\d+) из \1/.test(note || '');
+
+/** Собрать героя по ответам быстрого мастера. Возвращает новое состояние мастера создания. */
+export function quickCreation(ix, { campaign = null, userId = 'me', role = 'front', talk = 'fist', name = '', newId } = {}) {
+  const st = newCreation(ix, { campaign, userId, ...(newId ? { newId } : {}) });
+  const cls = QUICK_CLASS[role]?.[talk] || 'fighter';
+  const ch = (x) => applyCreationChoice(ix, st, x);
+  ch({ step: 'race', id: QUICK_RACE[cls] || 'human' }); ch({ step: 'class', id: cls });
+  const bg = [...ix.defs.values()].find((d) => d.kind === 'background');
+  if (bg) ch({ step: 'background', id: tail(bg.id) });
+  ch({ step: 'abilities', id: 'auto' });
+  for (let guard = 0; guard < 12; guard += 1) {
+    const m = creationModel(ix, st);
+    const box = [...m.extra.race, ...m.extra.class].find((b) => !isFull(b.note) && b.list.some((x) => !x.on));
+    if (!box) break;
+    ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${box.list.find((x) => !x.on).value}` });
+  }
+  for (let guard = 0; guard < 8; guard += 1) {
+    const m = creationModel(ix, st);
+    if (isFull(m.backgroundSkills.note)) break;
+    const s = m.backgroundSkills.list.find((x) => !x.from && !x.on);
+    if (!s || applyCreationChoice(ix, st, { step: 'background', id: 'skill', value: s.name })) break;
+  }
+  for (let guard = 0; guard < 8; guard += 1) {
+    const m = creationModel(ix, st);
+    if (isFull(m.backgroundLangs.note)) break;
+    const l = m.backgroundLangs.list.find((x) => !x.from && !x.on);
+    if (!l || applyCreationChoice(ix, st, { step: 'background', id: 'lang', value: l.name })) break;
+  }
+  for (const g of creationModel(ix, st).equipment.groups) if (g.options[0]) ch({ step: 'equipment', id: 'eq', value: `${g.title}|${g.options[0].name}` });
+  ch({ step: 'spells', id: 'auto' });
+  if (name) ch({ step: 'look', id: 'name', value: name });
+  st.quick = { role, talk };
+  return st;
+}
+
+/** Итог быстрого героя: форма CREATION.quick.result. */
+export function quickResultModel(ix, st) {
+  const d = creationDoneModel(ix, st), m = creationModel(ix, st);
+  const cls = ix.defs.get(st.draft.levelHistory[0]?.classId), race = ix.defs.get(st.draft.ancestry.raceId);
+  const skills = m.backgroundSkills.list.filter((x) => x.on || x.from).map((x) => x.name).join(', ');
+  return {
+    portrait: d.art, name: d.name, summary: creationLiveModel(ix, st).summary,
+    abilities: d.abilities.map((a) => ({ short: a.short, mod: a.mod, score: a.score })),
+    facts: d.facts.slice(0, 4),
+    chosen: [
+      ['Раса', race ? `${race.name.ru} — ${raceSub(race)}` : '—', 'race'], ['Класс', cls ? `${cls.name.ru} — к${cls.class.hitDie}` : '—', 'class'],
+      ['Характеристики', 'Стандартный набор по главным характеристикам класса', 'abilities'], ['Навыки', skills || '—', 'background'],
+      ['Снаряжение', 'Первый вариант в каждой группе набора', 'equipment'], ['Заклинания', m.spells.progress.length ? m.spells.progress.map((p) => `${p.label} ${p.now}/${p.max}`).join(', ') : 'нет', 'spells'],
+    ],
+    status: d.status, missing: d.missing,
+  };
+}

@@ -8,7 +8,8 @@ import { campaignsFor, membership, updateCampaign, userById } from '../../core/c
 import { currentUserId } from '../../core/auth.js';
 import { toHeroView, toHeroCard, spellIndex } from './adapter.js';
 import { applyHeroAction } from './actions.js';
-import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter } from './creation.js';
+import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter, quickCreation, quickResultModel } from './creation.js';
+import { parseLss } from './lss.js';
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 
@@ -93,9 +94,10 @@ function buildState() {
     const c = targetCampaign(userId);
     st = { ...newCreation(creationIx, { campaign: c, userId: userId || 'guest' }), userId };
   }
-  // Имя — из окна (шаг «Образ» пишет его только в свой черновик).
+  // Имя — из окна (шаг «Образ» и быстрый герой пишут его только в свой черновик).
   const ui = readJSON(UI_KEY) || {};
-  if (typeof ui.name === 'string' && ui.name !== st.draft.identity.name) applyCreationChoice(creationIx, st, { step: 'look', id: 'name', value: ui.name });
+  if (st.quick && typeof ui.quick?.name === 'string' && ui.quick.name !== st.draft.identity.name) applyCreationChoice(creationIx, st, { step: 'look', id: 'name', value: ui.quick.name });
+  else if (!st.quick && typeof ui.name === 'string' && ui.name !== st.draft.identity.name) applyCreationChoice(creationIx, st, { step: 'look', id: 'name', value: ui.name });
   for (const k of ['pronoun', 'alignment', 'traits', 'ideals', 'bonds', 'flaws']) if (ui[k] !== undefined) st.look[k] = ui[k];
   return st;
 }
@@ -103,7 +105,19 @@ const saveBuild = (st) => { try { sessionStorage.setItem(BUILD_KEY, JSON.stringi
 const campaignName = (st) => (st?.campaignId ? campaignsFor(currentUserId()).find((c) => c.id === st.campaignId)?.name : '') || '';
 
 /** Мастер создания: шаги, варианты, правила кампании, быстрый герой. */
-export const creationView = () => { const st = buildState(); return st ? creationModel(creationIx, st, { campaignName: campaignName(st) }) : CREATION; };
+export const creationView = () => {
+  const st = buildState();
+  if (!st) return CREATION;
+  const cv = creationModel(creationIx, st, { campaignName: campaignName(st) });
+  // Быстрый герой: итог — по сборке из ответов (если её ещё нет — по ответам по умолчанию).
+  const q = st.quick ? st : quickState();
+  return { ...cv, quick: { ...CREATION.quick, live: true, campaign: campaignName(q), result: quickResultModel(creationIx, q) } };
+};
+function quickState() {
+  const ui = readJSON(UI_KEY) || {}, a = { ...CREATION.quick.picked, ...(ui.quick || {}) };
+  const userId = currentUserId();
+  return quickCreation(creationIx, { campaign: targetCampaign(userId), userId: userId || 'guest', role: a.role, talk: a.talk, name: a.name });
+}
 /** Живой лист справа на шаге stepId. */
 export const creationLive = (stepId) => { const st = buildState(); return st ? creationLiveModel(creationIx, st) : CREATION_LIVE[stepId] || CREATION_LIVE.race; };
 /** Итог «Герой готов»: null — витрина. */
@@ -131,8 +145,54 @@ export function canLevelUp(key) {
   const real = findHero(key), userId = currentUserId();
   return !!real && (real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
 }
-/** Разбор файла Long Story Short. */
-export const lssImportView = () => LSS_IMPORT;
+// ——— Перенос из Long Story Short (lss.js): файл — в sessionStorage до принятия ———
+const LSS_KEY = 'rasputye-hero-lss-v1';
+/** Разбор загруженного файла; файла ещё нет — { needFile: true } (витрина — без справочников). */
+export const lssImportView = () => {
+  if (!creationIx) return LSS_IMPORT;
+  const f = readJSON(LSS_KEY);
+  if (!f) return { live: true, needFile: true, campaign: campaignName({ campaignId: targetCampaign(currentUserId())?.id }) };
+  const r = parseLss(f.text, f);
+  return r.error ? { live: true, needFile: true, error: r.error } : { ...r.view, campaign: campaignName({ campaignId: targetCampaign(currentUserId())?.id }) };
+};
+async function importLss(p = {}) {
+  if (!creationIx) return stub('Импорт из LSS')(p);
+  if (p.file) {
+    try { sessionStorage.setItem(LSS_KEY, JSON.stringify({ text: p.file.text, fileName: p.file.name, size: p.file.size })); } catch { say('Файл слишком большой для вкладки'); return; }
+    window.dispatchEvent(new CustomEvent('hero:changed'));
+    return;
+  }
+  if (p.reset) { sessionStorage.removeItem(LSS_KEY); window.dispatchEvent(new CustomEvent('hero:changed')); return; }
+  if (!p.accept && !p.later) return; // решения по расхождениям — пометки на экране
+  const f = readJSON(LSS_KEY);
+  const r = f && parseLss(f.text, f);
+  if (!r || r.error) { say('Нет файла', r?.error || 'Загрузите .json из Long Story Short.'); return; }
+  const userId = currentUserId();
+  const c = targetCampaign(userId);
+  if (!c) { say('Нет кампании', 'Войдите в кампанию по приглашению мастера — герой появится в ней.'); return; }
+  const m = membership(c, userId);
+  const claim = m?.role === 'player' && !m.characterId;
+  const id = f.characterId || `ch-${crypto.randomUUID().slice(0, 12)}`;
+  f.characterId = id; sessionStorage.setItem(LSS_KEY, JSON.stringify(f)); // повтор не создаст второго героя
+  const hero = { ...r.hero, id, ownerId: isServerMode() ? userId : r.hero.ownerId ?? userId };
+  try {
+    updateCampaign(c.id, (camp) => {
+      if (camp.characters.some((x) => x.id === id)) return;
+      camp.characters.push(hero);
+      const me = camp.members.find((x) => x.userId === userId);
+      if (claim && me && !isServerMode()) me.characterId = id;
+    });
+    if (isServerMode()) {
+      const sync = await import('../../server/sync.js');
+      await sync.whenSynced(c.id);
+      if (claim) await sync.rpc('claim_character', { p_campaign: c.id, p_character: id });
+      await sync.loadCampaign(c.id, { silent: true });
+    }
+  } catch (e) { say('Герой не перенесён', e?.message || 'Сервер не принял лист.', 'alert-circle'); return; }
+  sessionStorage.removeItem(LSS_KEY);
+  say(`${hero.name} перенесён`, `Герой в кампании «${c.name}».`, 'tick-02');
+  location.hash = `#/hero/${heroKey(c.id, id)}`;
+}
 
 const say = (title, body, icon = 'information-circle') => toast({ title, body, icon, timeout: 2600 });
 const stub = (name) => (payload) => {
@@ -158,7 +218,17 @@ const live = (name) => (payload = {}) => {
  */
 function choose(payload = {}) {
   const st = buildState();
-  if (!st || payload.step === 'quick') return stub('Выбор в мастере')(payload);
+  if (!st) return stub('Выбор в мастере')(payload);
+  if (payload.step === 'quick') {
+    // Ответ быстрого мастера — пересобрать героя; дорабатывать можно пошагово (то же состояние).
+    const ui = readJSON(UI_KEY) || {};
+    const a = { ...CREATION.quick.picked, ...(ui.quick || {}), [payload.id]: payload.value };
+    const userId = currentUserId();
+    const q = { ...quickCreation(creationIx, { campaign: targetCampaign(userId, st.campaignId), userId: userId || 'guest', role: a.role, talk: a.talk, name: a.name }), userId };
+    saveBuild(q);
+    window.dispatchEvent(new CustomEvent('hero:changed'));
+    return;
+  }
   const note = applyCreationChoice(creationIx, st, payload);
   saveBuild(st);
   if (note) say(note.title, note.body || '', note.icon);
@@ -255,7 +325,12 @@ export const heroActions = {
   createFrom: (p = {}) => (p.path === 'steps' && creationIx ? undefined : stub('Новый герой')(p)), // { path: 'steps' | 'quick' | 'lss' }
   choose,                                      // { step, id, value }
   finish,                                      // { draftId }
-  bringToCampaign: stub('Привести в кампанию'),// { heroId, campaignId }
+  bringToCampaign: (p = {}) => { // { heroId, campaignId }
+    if (!creationIx) return stub('Привести в кампанию')(p);
+    // Быстрый герой по ответам по умолчанию ещё не сохранён — сохранить его, а не черновик пошагового мастера.
+    if (!buildState()?.quick) saveBuild({ ...quickState(), userId: currentUserId() });
+    return finish();
+  },
   setHp: live('setHp'),                        // { heroId, delta, temp }
   roll: live('roll'),                          // { heroId, what, formula }
   useResource: live('useResource'),            // { heroId, id }
@@ -268,5 +343,5 @@ export const heroActions = {
   editField: live('editField'),                // { heroId, field, value }
   addItem: stub('Предмет'),                    // { heroId }
   levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
-  importLss: stub('Импорт из LSS'),            // { decisions: { [issue]: choice } }
+  importLss,                                   // { file? , decisions, later?, accept?, reset? }
 };

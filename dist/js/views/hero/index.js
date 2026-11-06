@@ -68,7 +68,7 @@ export function mountHero(root, hash) {
   const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) && p2 !== 'levelup' ? JSON.stringify(heroView(p1)) : '');
   let last = sig();
   // Выбор в мастере создания меняет черновик конструктора (не базу) — перерисовать шаг и живой лист.
-  const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick' || p2 === 'levelup')) rerender(); };
+  const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick' || p1 === 'import' || p2 === 'levelup')) rerender(); };
   window.addEventListener('hero:changed', onChanged);
   return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }
@@ -214,23 +214,23 @@ function quickPage(step) {
     ${pathRow({ back: '#/hero/new?quick', title: 'Быстрый герой', steps: QSTEPS, current: n - 1, href })}
     <div class="h-center"><h1>${qq.title}</h1><p class="muted">${qq.hint}</p></div>
     ${body}
-    ${bottomBar({ back: n === 1 ? '#/hero/new?quick' : href(n - 2), backLabel: n === 1 ? 'Другой способ' : 'Назад', hint: 'Мастер «Склепа культа» ждёт героя 5 уровня — уровень выставим сами', next: n < 3 ? href(n) : '#/hero/quick/done', nextLabel: n === 1 ? 'Дальше: как решаете споры' : n === 2 ? 'Дальше: имя и облик' : 'Собрать героя' })}
+    ${bottomBar({ back: n === 1 ? '#/hero/new?quick' : href(n - 2), backLabel: n === 1 ? 'Другой способ' : 'Назад', hint: q.live ? `Уровень и правила — как решил мастер${q.campaign ? ` «${q.campaign}»` : ''}` : 'Мастер «Склепа культа» ждёт героя 5 уровня — уровень выставим сами', next: n < 3 ? href(n) : '#/hero/quick/done', nextLabel: n === 1 ? 'Дальше: как решаете споры' : n === 2 ? 'Дальше: имя и облик' : 'Собрать героя' })}
   </main>`;
 }
 function quickDone(q, href) {
   const r = q.result;
   const name = draft.quick?.name || r.name;
-  const portrait = q.portraits[draft.quick?.portrait ?? 0] || r.portrait;
+  const portrait = q.live ? r.portrait : q.portraits[draft.quick?.portrait ?? 0] || r.portrait;
   return html`<main class="h-wizard quick">
     ${pathRow({ back: '#/hero/quick/3', title: 'Быстрый герой', steps: QSTEPS, current: 3, href })}
     <div class="h-qdone">
       <figure class="h-qdone-art"><img src="${portrait}" alt=""><figcaption><b>${name}</b><span>${r.summary}</span></figcaption><a class="btn btn-secondary btn-sm h-qdone-swap" href="#/hero/quick/3">${ic('edit-02', 14)}Другой облик</a></figure>
-      <section class="h-qdone-main"><h1>${name} готов к драке</h1>
-        <p class="muted">Собрали по трём ответам: «впереди», «кулаком», «${name}». Всё ниже можно поменять — или открыть пошаговый мастер на нужном шаге.</p>
+      <section class="h-qdone-main"><h1>${q.live ? `${name} готов` : `${name} готов к драке`}</h1>
+        <p class="muted">${q.live ? 'Собрали по трём ответам конструктором: всё по правилам SRD. Ниже — что выбрали за вас; поменять можно в пошаговом мастере.' : `Собрали по трём ответам: «впереди», «кулаком», «${name}». Всё ниже можно поменять — или открыть пошаговый мастер на нужном шаге.`}</p>
         <div class="h-bstats compact">${r.abilities.map((a) => html`<div class="h-bstat"><span class="k">${a.short}</span><b>${a.mod}</b><span class="s">${a.score}</span></div>`)}</div>
         <div class="h-facts4">${r.facts.map((f) => html`<div>${caps(f.label)}<b>${f.value}</b><small>${f.sub}</small></div>`)}</div>
         <div class="h-chosen"><div class="h-chosen-head">${caps('Что мы выбрали за вас')}</div>${r.chosen.map(([k, v, step]) => html`<div class="row"><span class="k">${k}</span><span class="v">${v}</span><a class="link" href="#/hero/new/${step}">Поменять</a></div>`)}</div>
-        <div class="h-actions"><button class="btn btn-primary" data-bring>${ic('arrow-right-02')}Привести в «Склеп культа»</button><a class="btn btn-secondary" href="#/hero/new/race">${ic('edit-02')}Доработать пошагово</a><span class="muted sm">Мастер увидит героя и одобрит</span></div>
+        <div class="h-actions"><button class="btn btn-primary" data-bring>${ic('arrow-right-02')}${q.live ? (q.campaign ? `Привести в «${q.campaign}»` : 'Привести в кампанию') : 'Привести в «Склеп культа»'}</button><a class="btn btn-secondary" href="#/hero/new/race">${ic('edit-02')}Доработать пошагово</a><span class="muted sm">Мастер увидит героя и одобрит</span></div>
       </section>
     </div>
   </main>`;
@@ -250,6 +250,12 @@ function bindQuick(root, L, step) {
 // ——— 72 · Перенос из Long Story Short ———
 function importPage() {
   const v = lssImportView();
+  // Настоящий импорт: сначала файл .json из Long Story Short.
+  if (v.needFile) return html`<main class="page h-import"><section class="h-import-main"><h1>Перенести героя из Long Story Short</h1>
+      <p class="muted">В Long Story Short откройте героя и выгрузите его в .json. Мы перенесём числа, атаки, заклинания и снаряжение текстом, а спорное покажем пометками.${v.campaign ? ` Герой появится в кампании «${v.campaign}».` : ''}</p>
+      ${v.error ? html`<p class="h-info">${ic('alert-circle', 16)}${v.error}</p>` : ''}
+      <label class="btn btn-primary">${ic('upload-01')}Выбрать файл .json<input type="file" accept=".json,application/json" data-lss-file hidden></label>
+      <div class="h-import-foot"><a class="btn btn-ghost" href="#/heroes">Отмена</a></div></section></main>`;
   const d = draft.lss || {};
   const issue = (x, k) => html`<article class="h-issue ${x.kind}"><span class="h-sq ${x.kind}">${ic(x.kind === 'error' ? 'cancel-01' : 'alert-circle', 18)}</span>
     <div><b>${x.title}</b><p>${x.text}</p><div class="h-issue-acts">
@@ -257,10 +263,10 @@ function importPage() {
       ${x.secondary ? html`<button class="btn btn-sm btn-ghost ${d[k] === 'secondary' ? 'picked' : ''}" data-lss="${k}|secondary">${x.secondary}</button>` : ''}</div></div></article>`;
   return html`<main class="page h-import">
     <section class="h-import-main"><h1>Перенесли лист из Long Story Short</h1>
-      <p class="muted">Почти всё совпало. Посмотрите четыре места, где файл и наши правила расходятся — решите сейчас или позже в листе.</p>
+      <p class="muted">${v.live ? `Посмотрите пометки (${v.issues.length}) — что перенесли не полностью или надо проверить. Решить можно и позже в листе.` : 'Почти всё совпало. Посмотрите четыре места, где файл и наши правила расходятся — решите сейчас или позже в листе.'}</p>
       <div class="h-ok-bar">${ic('tick-02', 18)}<span><b>Совпало ${v.matched.ok} из ${v.matched.of}</b><small>${v.matched.text}</small></span></div>
       ${v.issues.map(issue)}
-      <div class="h-import-foot"><a class="btn btn-ghost" href="#/heroes">Отменить импорт</a><span class="spacer"></span><button class="btn btn-secondary" data-later>Решить потом</button><a class="btn btn-primary" href="#/hero/lira" data-accept>${ic('arrow-right-02')}Принять и открыть лист</a></div>
+      <div class="h-import-foot"><a class="btn btn-ghost" href="#/heroes">Отменить импорт</a><span class="spacer"></span><button class="btn btn-secondary" data-later>Решить потом</button>${v.live ? html`<button class="btn btn-ghost" data-lss-reset>Другой файл</button><button class="btn btn-primary" data-accept>${ic('arrow-right-02')}${v.campaign ? `Перенести в «${v.campaign}»` : 'Принять и открыть лист'}</button>` : html`<a class="btn btn-primary" href="#/hero/lira" data-accept>${ic('arrow-right-02')}Принять и открыть лист</a>`}</div>
     </section>
     <aside class="h-import-card"><span class="h-initials">${v.hero.initials}</span><h2>${v.hero.name}</h2><small class="muted">${v.hero.summary}</small>
       <div class="h-import-stats">${[['Хп', v.hero.hp], ['КД', v.hero.ac], ['Сл', v.hero.dc]].map(([k, n]) => html`<span>${caps(k)}<b>${n}</b></span>`)}</div>
@@ -277,6 +283,11 @@ function bindImport(root, L) {
     heroActions.importLss({ decisions: { ...draft.lss } });
   });
   L('click', '[data-later],[data-accept]', () => heroActions.importLss({ decisions: { ...draft.lss }, later: true }));
+  L('click', '[data-lss-reset]', () => heroActions.importLss({ reset: true }));
+  L('change', '[data-lss-file]', async (e, t) => {
+    const f = t.files?.[0];
+    if (f) heroActions.importLss({ file: { name: f.name, size: f.size, text: await f.text() } });
+  });
 }
 
 export { segmented, artCard, raw };
