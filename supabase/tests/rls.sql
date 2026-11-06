@@ -679,6 +679,23 @@ select pg_temp.cnt('лист 3.2: осталось 3 хита и 0 времен�
 select pg_temp.ok('лист 3.2: лечение 100', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000002','adjust','{"hp":100}') from public.characters where id = 'ch-heal'$q$);
 select pg_temp.cnt('лист 3.2: лечение остановилось на максимуме', $q$select 1 from public.characters where id='ch-heal' and data->'hp'='12'$q$,1);
 select pg_temp.cnt('лист 3.2: токена у героя нет', $q$select 1 from public.tokens where character_id='ch-heal'$q$,0);
+-- Личность героя (#202, 20261106150000): поле сборки, меняют владелец и мастер.
+select pg_temp.ok('личность: владелец пишет черты', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000011','edit','{"patch":{"personality":{"traits":"Шутит не к месту"}}}') from public.characters where id = 'ch-heal'$q$);
+select pg_temp.ok('личность: второе поле не стирает первое', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000012','edit','{"patch":{"personality":{"ideals":"Честь"}}}') from public.characters where id = 'ch-heal'$q$);
+select pg_temp.cnt('личность: оба поля на листе', $q$select 1 from public.characters where id='ch-heal' and data#>>'{personality,traits}'='Шутит не к месту' and data#>>'{personality,ideals}'='Честь'$q$,1);
+select pg_temp.code('личность: неизвестное поле — отказ', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000013','edit','{"patch":{"personality":{"html":"x"}}}') from public.characters where id = 'ch-heal'$q$,'22023');
+select pg_temp.code('личность: не текст — отказ', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000014','edit','{"patch":{"personality":{"traits":5}}}') from public.characters where id = 'ch-heal'$q$,'22023');
+select pg_temp.code('личность: не объект — отказ', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000015','edit','{"patch":{"personality":"x"}}') from public.characters where id = 'ch-heal'$q$,'22023');
+select pg_temp.code('личность: слишком длинный текст — отказ', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000016','edit',jsonb_build_object('patch',jsonb_build_object('personality',jsonb_build_object('backstory',repeat('я',20001))))) from public.characters where id = 'ch-heal'$q$,'22023');
+select pg_temp.code('личность: прямая вставка тоже проверяется', $q$insert into public.characters(id,campaign_id,owner_id,data) values('ch-pers','c-rls','00000000-0000-0000-0000-00000000000b','{"name":"Х","personality":{"bonds":7}}')$q$,'22023');
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.code('личность: чужой игрок не меняет', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000017','edit','{"patch":{"personality":{"traits":"чужое"}}}') from public.characters where id = 'ch-heal'$q$,'42501');
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('личность: мастер меняет', $q$select public.character_command('c-rls','ch-heal',sheet_version,'71000000-0000-0000-0000-000000000018','edit','{"patch":{"personality":{"flaws":"Боится воды"}}}') from public.characters where id = 'ch-heal'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.ok('edit: dirty patch и уже рассчитанный урон атомарны', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000001','edit','{"patch":{"name":"После"},"adjust":{"currentHp":-2,"tempHp":-3}}') from public.characters where id='ch-edit'$q$);
 select pg_temp.cnt('edit: temp не поглощает урон второй раз', $q$select 1 from public.characters where id='ch-edit' and data->>'name'='После' and data->'hp'='8' and data->'tempHp'='0'$q$,1);
 select pg_temp.code('edit: владелец не передаёт права себе произвольно', $q$select public.character_command('c-rls','ch-edit',sheet_version,'70000000-0000-0000-0000-000000000002','edit','{"ownerId":null}') from public.characters where id='ch-edit'$q$,'42501');

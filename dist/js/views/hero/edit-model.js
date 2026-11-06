@@ -15,7 +15,7 @@ const abMod = (score) => Math.floor((Number(score) - 10) / 2);
 export const SERVER_EDITABLE = new Set(['name', 'portrait', 'profile', 'classId', 'className', 'raceId', 'raceName', 'level', 'classes', 'background', 'alignment', 'stats', 'saves', 'skills',
   'ac', 'hp', 'hpMax', 'tempHp', 'speed', 'darkvision', 'hitDice', 'hitDicePools', 'deathSaves', 'conditions', 'attacks', 'actions', 'bonusActions', 'reactions', 'slots', 'slotPools',
   'spells', 'spellSources', 'knownSpells', 'inventory', 'inventoryItems', 'features', 'featureEntries', 'resources', 'notes', 'initBonus', 'profBonus', 'light', 'aura',
-  'sidekick', 'overrides', 'proficiencies', 'coins', 'movement', 'defenses', 'concentration', 'statblock']);
+  'sidekick', 'overrides', 'proficiencies', 'coins', 'movement', 'defenses', 'concentration', 'statblock', 'personality']);
 
 /** Разделы экрана правки и поля листа, которые они меняют (подпись «что изменено»). */
 export const EDIT_SECTIONS = [

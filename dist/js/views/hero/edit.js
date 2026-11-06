@@ -225,12 +225,11 @@ export function mount(root, { parts, page, L }) {
     </div>`);
   }
   function personSec() {
-    const pers = draft.personality || {}, off = st.server;
-    return sec('person', 'Личность и заметки', off ? 'Черты характера сервер пока не хранит — заметки сохраняются' : 'Характер, внешность, история', html`
-      ${off ? html`<p class="e-note warn">${ic('information-circle', 16)}<span>В кампании на сервере сохраняются только заметки. Черты характера, внешность и историю пока пишите туда.</span></p>` : ''}
-      <div class="e-grid2">${PERSON.map(([k, label, ph]) => field(label, area(`personality.${k}`, pers[k], ph, 2, off)))}</div>
-      ${field('Внешность', area('personality.appearance', pers.appearance, 'Рост, шрамы, во что одет', 2, off))}
-      ${field('История', area('personality.backstory', pers.backstory, 'Откуда герой и что его ведёт', 4, off))}
+    const pers = draft.personality || {};
+    return sec('person', 'Личность и заметки', 'Характер, внешность, история', html`
+      <div class="e-grid2">${PERSON.map(([k, label, ph]) => field(label, area(`personality.${k}`, pers[k], ph, 2)))}</div>
+      ${field('Внешность', area('personality.appearance', pers.appearance, 'Рост, шрамы, во что одет', 2))}
+      ${field('История', area('personality.backstory', pers.backstory, 'Откуда герой и что его ведёт', 4))}
       ${field('Заметки', area('notes', draft.notes, 'Имена, долги, обещания — всё, что не хочется забыть', 4))}`);
   }
   function preview(v) {

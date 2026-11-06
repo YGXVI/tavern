@@ -129,7 +129,7 @@ test('заклинания любому герою: воин получает «
   assert.equal(after.abilityId, 'wis', 'жрица колдует Мудростью');
 });
 
-test('старая сумка строкой: «23 зм» — монеты, а не предмет; черты характера сохраняются в песочнице', () => {
+test('старая сумка строкой: «23 зм» — монеты, а не предмет; черты характера сохраняются', () => {
   const lira = structuredClone(seedDB().campaigns['c-crypt'].characters.find((c) => c.id === 'ch-lira'));
   const v = view(lira);
   if (/\d+\s*зм/.test(String(lira.inventory || ''))) {
@@ -138,7 +138,6 @@ test('старая сумка строкой: «23 зм» — монеты, а �
   }
   assert.match(applyHeroAction(lira, 'editField', { field: 'traits', value: 'Говорит шёпотом' }).title, /Сохранено/);
   assert.equal(view(lira).personality.traits, 'Говорит шёпотом');
-  assert.match(applyHeroAction(lira, 'editField', { field: 'traits', value: 'x', server: true }).title, /Пока не сохраняется/);
 });
 
 test('трата ячейки и заряда возвращается («Вернуть» в подсказке), но не ниже нуля', () => {

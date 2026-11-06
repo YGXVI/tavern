@@ -243,10 +243,10 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
     case 'editField': {
       if (p.field === 'name' && typeof p.value === 'string' && p.value.trim()) { ch.name = p.value.trim(); return null; }
       if (/^note-\d+$/.test(p.field || '')) { ch.notes = String(p.value ?? ''); return { title: 'Заметка сохранена' }; }
-      // Черты характера и внешность (песочница; на сервере поля personality пока нет — #202).
-      if (['traits', 'ideals', 'bonds', 'flaws', 'appearance', 'backstory'].includes(p.field) && !p.server) { ch.personality = { ...(ch.personality || {}), [p.field]: String(p.value ?? '') }; return { title: 'Сохранено', icon: 'tick-02' }; }
+      // Черты характера и внешность: поле personality листа (на сервере — 20261106150000, #202).
+      if (['traits', 'ideals', 'bonds', 'flaws', 'appearance', 'backstory'].includes(p.field)) { ch.personality = { ...(ch.personality || {}), [p.field]: String(p.value ?? '') }; return { title: 'Сохранено', icon: 'tick-02' }; }
       if (p.field === 'menu') return { title: 'Меню листа', body: 'Портрет, архив и передача героя — за столом, в листе героя.' };
-      return { title: 'Пока не сохраняется', body: 'На сервере черты характера и внешность ещё не хранятся — запишите их в заметки, они сохранятся.' };
+      return null;
     }
     default: return null;
   }

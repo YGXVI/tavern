@@ -453,6 +453,13 @@ export function creationCharacter(ix, st, { newId = () => crypto.randomUUID(), u
   st.ids = res.ids;
   st.characterId ||= newId(); st.operationId ||= newId();
   const data = { ...res.data, alignment: st.look.alignment || res.data.alignment || '' };
+  // Черты с шага «Образ» — в личность героя (пустые не пишем).
+  const personality = Object.fromEntries(['traits', 'ideals', 'bonds', 'flaws'].map((k) => [k, String(st.look[k] ?? '').trim()]).filter(([, v]) => v));
+  if (Object.keys(personality).length) data.personality = personality;
+  // Образ правят и после неудачной отправки: другой запрос — другой ID операции, иначе сервер откажет.
+  const lookSig = JSON.stringify([data.alignment, data.personality ?? null]);
+  if (st.lookSig && st.lookSig !== lookSig) st.operationId = newId();
+  st.lookSig = lookSig;
   return { characterId: st.characterId, operationId: st.operationId, data, ownerId: userId };
 }
 

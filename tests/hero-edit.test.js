@@ -144,13 +144,13 @@ test('старый лист: сумка и умения строкой стан�
   assert.ok(s.draft.inventoryItems.every((x) => x.id && !x.id.startsWith('legacy-')));
 });
 
-test('сервер: черты характера не уходят командой edit, остальное уходит; пустое имя не сохраняется', () => {
+test('сервер: черты характера и заметки уходят командой edit; пустое имя не сохраняется', () => {
   const ch = hero('fighter1'), s = edit(ch);
   s.op('set', { path: 'personality.traits', value: 'Шутит не к месту' });
   s.op('set', { path: 'notes', value: 'Должен гному' });
   const srv = finishEdit(s.base, s.draft, { server: true });
-  assert.deepEqual(srv.changed, ['notes']);
-  assert.deepEqual(srv.dropped, ['personality']);
+  assert.deepEqual(srv.changed.sort(), ['notes', 'personality']);
+  assert.deepEqual(srv.dropped, []); // с 20261106150000 сервер хранит личность
   assert.ok(srv.changed.every((k) => SERVER_EDITABLE.has(k)));
   assert.deepEqual(finishEdit(s.base, s.draft).changed.sort(), ['notes', 'personality']);
   s.op('set', { path: 'name', value: '   ' });

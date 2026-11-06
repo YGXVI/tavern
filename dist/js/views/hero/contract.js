@@ -329,12 +329,6 @@ async function placeHero(c, data, { title }) {
   const userId = currentUserId();
   const id = (typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `ch-${Date.now().toString(36)}`);
   const hero = structuredClone(data);
-  // Черт характера сервер пока не хранит (#202): переносим их в заметки, чтобы не потерять.
-  if (isServerMode() && hero.personality) {
-    const p = hero.personality, lines = [['Черты', p.traits], ['Идеалы', p.ideals], ['Привязанности', p.bonds], ['Слабости', p.flaws], ['Предыстория', p.backstory], ['Внешность', p.appearance]].filter(([, x]) => x);
-    if (lines.length) hero.notes = [hero.notes, lines.map(([k, x]) => `${k}: ${x}`).join('\n')].filter(Boolean).join('\n\n');
-    delete hero.personality;
-  }
   const m = membership(c, userId);
   const seat = m?.role === 'player' && !m.characterId;
   try {
@@ -389,10 +383,9 @@ const live = (name) => (payload = {}) => {
   if (!real) return stub(name)(payload);
   // Заклинания старого листа (строкой) — списком со ссылками на справочник: первая правка переносит их в knownSpells.
   if (['addSpell', 'removeSpell'].includes(name) && !(real.ch.knownSpells || []).length) payload = { ...payload, legacy: legacySpells(real.ch.spells, spells).map((s) => ({ name: s.name, circle: s.circle, ref: s.ref })) };
-  if (name === 'editField') payload = { ...payload, server: isServerMode() };
   let note = null;
   // Свой герой вне кампаний меняется в «Моих героях»; его черты характера хранятся и в серверном режиме (на устройстве).
-  if (real.lib) note = updateLibraryHero(currentUserId(), chid, (ch) => applyHeroAction(ch, name, name === 'editField' ? { ...payload, server: false } : payload, { random: Math.random }));
+  if (real.lib) note = updateLibraryHero(currentUserId(), chid, (ch) => applyHeroAction(ch, name, payload, { random: Math.random }));
   else updateCampaign(real.c.id, (c) => {
     const ch = c.characters.find((x) => x.id === chid);
     if (ch) note = applyHeroAction(ch, name, payload, { random: Math.random });
@@ -519,7 +512,7 @@ function saveEdit(p = {}) {
   const chid = real.ch.id;
   if (real.lib) updateLibraryHero(currentUserId(), chid, (ch) => { applyEdit(ch, res.patch); });
   else if (res.changed.length) updateCampaign(real.c.id, (c) => { const ch = c.characters.find((x) => x.id === chid); if (ch) applyEdit(ch, res.patch); });
-  say(`${res.patch.name || real.ch.name}: сохранено`, res.dropped.includes('personality') ? 'Черты характера сервер пока не хранит — перенесите их в заметки.' : '', res.dropped.length ? 'information-circle' : 'tick-02');
+  say(`${res.patch.name || real.ch.name}: сохранено`, res.dropped.length ? `Сервер не хранит: ${res.dropped.join(', ')}.` : '', res.dropped.length ? 'information-circle' : 'tick-02');
   return true;
 }
 

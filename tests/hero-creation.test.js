@@ -97,3 +97,15 @@ test('смена класса сбрасывает выборы прежнего
   assert.equal(st.characterId, null);
   assert.equal(creationModel(ix, st).status, 'incomplete');
 });
+
+test('черты с шага «Образ» попадают в личность героя, пустые не пишутся', () => {
+  const st = build('human', 'wizard');
+  applyCreationChoice(ix, st, { step: 'look', id: 'traits', value: ' Шутит не к месту ' });
+  applyCreationChoice(ix, st, { step: 'look', id: 'ideals', value: '' });
+  assert.deepEqual(creationCharacter(ix, st, { newId: uuid() }).data.personality, { traits: 'Шутит не к месту' });
+  assert.equal(creationCharacter(ix, build('human', 'wizard'), { newId: uuid() }).data.personality, undefined);
+  const first = creationCharacter(ix, st, { newId: () => '10000000-0000-4000-8000-000000000001' });
+  assert.equal(creationCharacter(ix, st).operationId, first.operationId, 'без правок — тот же запрос');
+  applyCreationChoice(ix, st, { step: 'look', id: 'flaws', value: 'Боится воды' });
+  assert.notEqual(creationCharacter(ix, st).operationId, first.operationId, 'образ изменился — новый запрос');
+});
