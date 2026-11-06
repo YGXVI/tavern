@@ -59,7 +59,7 @@ export function mountHero(root, hash) {
     if (p1 === 'new' && !p2) { const qp = new URLSearchParams(query); if (qp.get('c')) startCreation(qp.get('c')); page(pathPage(qp)); bindPath(L, qp); return; }
     if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({})); return; }
     if (p1 === 'new') { page(stepPage(p2), 'wizard'); bindStep(root, L, p2, rerender); return; }
-    if (p1 === 'quick') { const q = creationView().quick; if (q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
+    if (p1 === 'quick') { const q = creationView().quick; if (p2 === 'done' && q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
     if (p1 === 'import') { const c = new URLSearchParams(query).get('c') || ''; page(importPage(c)); bindImport(root, L, c); return; }
     if (p2 === 'bring') { page(bringPage(p1, new URLSearchParams(query).get('c') || '')); L('click', '[data-bring-camp]', (e, b) => heroActions.bringToCampaign({ heroId: p1, campaignId: b.dataset.bringCamp })); return; }
     // Правка героя — свой экран со своим черновиком (edit.js); его слушатели снимаются вместе с экраном.
