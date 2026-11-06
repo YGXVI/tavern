@@ -1287,3 +1287,11 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .h-eq-pick { display: grid; gap: 4px; margin: 2px 0 6px 44px; font-size: 11px; color: var(--text-tertiary); }
 .h-eq-pick select { width: 100%; background: transparent; color: var(--text-primary, inherit); border: 0; font: 600 13px/18px var(--font-text); }
 .h-eq-pick select option { color: #111; }
+/* Выбор конкретного оружия: видно, что это выпадающий список. */
+.h-eq-pick .input { position: relative; }
+.h-eq-pick select { appearance: none; padding-right: 28px; cursor: pointer; }
+.h-eq-pick .input::after { content: ''; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px; border-right: 1.5px solid var(--text-secondary); border-bottom: 1.5px solid var(--text-secondary); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+/* В два столбца выпадашка не выталкивает соседний вариант на новую строку: варианты — парой, выбор оружия — под ними. */
+.c-sec .h-grid2 { grid-auto-flow: row dense; }
+.c-sec .h-grid2 > .h-eq-pick { grid-column: 1 / -1; margin: 0 0 4px; padding-left: 44px; grid-template-columns: auto minmax(0, 300px); justify-content: start; align-items: center; column-gap: 12px; }
+@media (max-width: 720px) { .c-sec .h-grid2 > .h-eq-pick { grid-template-columns: minmax(0, 1fr); } }

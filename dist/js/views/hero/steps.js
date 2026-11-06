@@ -78,7 +78,7 @@ function equipmentStep(head, eq, d) {
   return html`${head}
     ${segmented(eq.modes, mode, 'data-eqmode', 'dark')}
     ${mode === 'gold' ? html`<section class="h-box"><b>Золото вместо набора</b><p class="h-box-hint">Бросьте 4к4 × 10 — получится от 40 до 160 зм. Всё купите сами в «Сумке» листа; книга заклинаний и вещи мудреца останутся.</p><button class="btn btn-primary" data-roll-gold>${ic('dice-faces-06')}Бросить 4к4</button></section>` : eq.groups.map((g) => html`<div class="h-group">${caps(g.title)}<small>${g.note}</small></div><div class="h-grid2">${g.options.map((o) => row(g, o))}</div>`)}
-    <section class="h-box"><div class="h-box-head">${caps('Всегда с вами')}<small>без выбора</small></div>${eq.always.map((a) => html`<p class="h-always">${ic(rowIcon(a.icon), 16)}${a.text}</p>`)}</section>`;
+    ${eq.always.length ? html`<section class="h-box"><div class="h-box-head">${caps('Всегда с вами')}<small>без выбора</small></div>${eq.always.map((a) => html`<p class="h-always">${ic(rowIcon(a.icon), 16)}${a.text}</p>`)}</section>` : ''}`;
 }
 
 // ——— 51 · Заклинания ———
