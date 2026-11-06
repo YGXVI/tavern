@@ -109,3 +109,45 @@ test('черты с шага «Образ» попадают в личность
   applyCreationChoice(ix, st, { step: 'look', id: 'flaws', value: 'Боится воды' });
   assert.notEqual(creationCharacter(ix, st).operationId, first.operationId, 'образ изменился — новый запрос');
 });
+
+test('характеристики: герою без кампании открыта покупка очков, набор выбирается числом из списка (#203)', () => {
+  // Кампания по умолчанию — только стандартный набор (D3); герой «Моих героев» — оба способа.
+  const camp = newCreation(ix, { campaign: { id: 'c1' }, newId: uuid() });
+  assert.deepEqual(camp.context.allowedAbilityMethods, ['standard_array']);
+  assert.ok(applyCreationChoice(ix, camp, { step: 'abilities', id: 'abMode', value: 'buy' }), 'в кампании покупка закрыта');
+  const st = newCreation(ix, { campaign: null, newId: uuid() });
+  assert.equal(st.draft.abilityMethod, 'standard_array', 'по умолчанию — набор');
+  assert.ok(creationModel(ix, st).abilities.modes.find((m) => m.id === 'buy').disabled === false);
+  const ch = (x) => applyCreationChoice(ix, st, x);
+  ch({ step: 'class', id: 'fighter' });
+  // Покупка: все восьмёрки, 27 очков; «+» гаснет, когда очков не хватает.
+  assert.equal(ch({ step: 'abilities', id: 'abMode', value: 'buy' }), null);
+  assert.deepEqual(Object.values(st.draft.baseScores), [8, 8, 8, 8, 8, 8]);
+  for (let i = 0; i < 7; i += 1) ch({ step: 'abilities', id: 'abInc', value: 'str' });
+  for (let i = 0; i < 7; i += 1) ch({ step: 'abilities', id: 'abInc', value: 'con' });
+  let ab = creationModel(ix, st).abilities;
+  assert.equal(st.draft.baseScores.str, 15);
+  assert.equal(ab.budget.left, 9);
+  assert.equal(ab.list.find((a) => a.key === 'str').canUp, false, '15 — потолок покупки');
+  for (let i = 0; i < 5; i += 1) ch({ step: 'abilities', id: 'abInc', value: 'dex' }); // 13: ещё 5 очков
+  for (let i = 0; i < 3; i += 1) ch({ step: 'abilities', id: 'abInc', value: 'wis' }); // 11: ещё 3
+  ab = creationModel(ix, st).abilities;
+  assert.equal(ab.budget.left, 1);
+  assert.equal(ab.list.find((a) => a.key === 'dex').canUp, false, 'следующая единица дороже остатка');
+  assert.equal(creationModel(ix, st).done.checks.find((c) => c.step === 'abilities').ok, true);
+  // Набор: число в характеристику; занятое меняется местами, пустое место уступает число.
+  ch({ step: 'abilities', id: 'abMode', value: 'array' });
+  assert.deepEqual(Object.values(st.draft.baseScores), [null, null, null, null, null, null]);
+  ch({ step: 'abilities', id: 'abSet', value: 'str|15' });
+  ch({ step: 'abilities', id: 'abSet', value: 'dex|14' });
+  const swap = ch({ step: 'abilities', id: 'abSet', value: 'str|14' });
+  assert.equal(swap.title, 'Поменялись местами');
+  assert.deepEqual([st.draft.baseScores.str, st.draft.baseScores.dex], [14, 15]);
+  const took = ch({ step: 'abilities', id: 'abSet', value: 'con|15' });
+  assert.match(took.body, /Ловкость/);
+  assert.deepEqual([st.draft.baseScores.dex, st.draft.baseScores.con], [null, 15]);
+  ch({ step: 'abilities', id: 'abSet', value: 'con|' });
+  assert.equal(st.draft.baseScores.con, null, 'можно снять число');
+  assert.equal(ch({ step: 'abilities', id: 'abSet', value: 'int|17' }), null);
+  assert.equal(st.draft.baseScores.int, null, 'числа не из набора не ставятся');
+});

@@ -1327,3 +1327,15 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .c-sec .h-grid2 { grid-auto-flow: row dense; }
 .c-sec .h-grid2 > .h-eq-pick { grid-column: 1 / -1; margin: 0 0 4px; padding-left: 44px; grid-template-columns: auto minmax(0, 300px); justify-content: start; align-items: center; column-gap: 12px; }
 @media (max-width: 720px) { .c-sec .h-grid2 > .h-eq-pick { grid-template-columns: minmax(0, 1fr); } }
+/* Стандартный набор: число характеристики — список, а не «+/−» (#203, sol0139 06.11). */
+.h-ab-pick { position: relative; display: flex; height: 36px; border-radius: var(--r-full); background: var(--bg-control); }
+.h-ab-pick select { appearance: none; width: 100%; height: 100%; padding: 0 34px; border: 0; border-radius: inherit; background: transparent; color: var(--text-primary); font: 600 14px/1 var(--font-text); text-align: center; text-align-last: center; cursor: pointer; }
+.h-ab-pick select option { color: #111; text-align: left; }
+.h-ab-pick::after { content: ''; position: absolute; right: 16px; top: 50%; width: 7px; height: 7px; border-right: 1.5px solid var(--text-secondary); border-bottom: 1.5px solid var(--text-secondary); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+.h-ab-pick.unset { box-shadow: inset 0 0 0 1.5px var(--h-ring); }
+.h-ab-pick.unset select { color: var(--text-secondary); font-weight: 500; }
+.h-ab-pick:hover { background: var(--bg-hover); }
+.h-ab-pick:focus-within { box-shadow: inset 0 0 0 2px var(--gold); }
+.h-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.h-stepper button:disabled:hover { background: none; }
+@media (max-width: 720px) { .h-ab-pick { height: 44px; } }

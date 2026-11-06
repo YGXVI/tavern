@@ -71,7 +71,15 @@ function extraBoxes(ix, ev) {
 export function newCreation(ix, { campaign = null, userId = 'me', newId = () => crypto.randomUUID() } = {}) {
   const { context } = creationContextFromCampaign(campaign);
   const draft = createDraft({ draftId: newId(), accountScope: userId, mode: 'pc', context, rulesRevision: ix.cats.options.revision });
-  return { v: 1, campaignId: campaign?.id ?? null, context, draft, tab: 0, focus: null, look: {}, ids: {}, characterId: null, operationId: null };
+  return freeHeroContext({ v: 1, campaignId: campaign?.id ?? null, context, draft, tab: 0, focus: null, look: {}, ids: {}, characterId: null, operationId: null });
+}
+/**
+ * Герой без кампании (#203, «Мои герои»): правил мастера над ним ещё нет, поэтому открыты оба способа книги игрока —
+ * стандартный набор (по умолчанию) и покупка очков. У героя кампании способы задаёт политика кампании (D3).
+ */
+export function freeHeroContext(st) {
+  if (st && !st.campaignId && st.context && !st.context.allowedAbilityMethods.includes('point_buy')) st.context = { ...st.context, allowedAbilityMethods: [...st.context.allowedAbilityMethods, 'point_buy'] };
+  return st;
 }
 
 const evaluate = (ix, st) => evaluateBuild(st.context, ix.cats, st.draft, PORTS);
@@ -128,11 +136,15 @@ function applyChoice(ix, st, { step, id, value } = {}) {
     if (id === 'abMode') {
       const method = UI_METHOD[value];
       if (!st.context.allowedAbilityMethods.includes(method)) return { title: 'Мастер этот способ не разрешил' };
+      if (st.draft.abilityMethod === method) return null;
       change(ix, st, { type: 'setAbilityMethod', method });
-      change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, null])) });
+      // Покупка очков начинается со всех восьмёрок (27 очков свободны), набор — с пустых мест.
+      const start = method === 'point_buy' ? ix.cats.options.abilityMethods.pointBuy.min : null;
+      change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, start])) });
       return null;
     }
     if (id === 'auto') return autoAbilities(ix, st, Array.isArray(value) ? value : null);
+    if (id === 'abSet') { const [key, v] = String(value).split('|'); return setAbility(ix, st, key, v); }
     if (id === 'abInc' || id === 'abDec') return stepAbility(ix, st, value, id === 'abInc' ? 1 : -1);
     return null;
   }
@@ -223,6 +235,24 @@ function stepAbility(ix, st, key, dir) {
   } else return { title: 'Броски характеристик — у мастера', body: 'Этот способ пока не подключён.' };
   change(ix, st, { type: 'setBaseScores', scores });
   return swapped;
+}
+/** Стандартный набор: число из списка прямо в характеристику; если оно было у другой — они меняются местами. */
+function setAbility(ix, st, key, raw) {
+  if (st.draft.abilityMethod !== 'standard_array' || !ABILITIES.some((a) => a.id === key)) return null;
+  const arr = ix.cats.options.abilityMethods.standardArray;
+  const v = raw === '' || raw == null ? null : Number(raw);
+  if (v !== null && !arr.includes(v)) return null;
+  const scores = { ...st.draft.baseScores }, cur = scores[key] ?? null;
+  if (cur === v) return null;
+  const holder = v === null ? null : Object.keys(scores).find((k) => k !== key && scores[k] === v);
+  if (holder) scores[holder] = cur;
+  scores[key] = v;
+  change(ix, st, { type: 'setBaseScores', scores });
+  const name = (id) => ABILITIES.find((a) => a.id === id)?.name;
+  if (!holder) return null;
+  return cur === null
+    ? { title: `Число ${v} перенесли`, body: `Характеристике «${name(holder)}» выберите другое.` }
+    : { title: 'Поменялись местами', body: `${name(key)} ${v}, ${name(holder)} ${cur}.` };
 }
 // Лучшая раскладка набора: сумма модификаторов с весом важности характеристики, прибавки расы учтены.
 const WEIGHTS = [8, 5, 3, 1, 1, 1];
@@ -355,13 +385,16 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
   const abilities = {
     mode: METHOD_UI[method],
     modes: [['buy', 'Покупка очков', 'point_buy'], ['array', 'Стандартный набор', 'standard_array'], ['roll', 'Бросить 4к6', 'rolled']]
-      .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m) || m === 'rolled' })),
-    budget: { spent, of, left: Math.max(0, of - spent) },
+      .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m) || m === 'rolled',
+        title: m === 'rolled' ? 'Броски характеристик пока не подключены' : !st.context.allowedAbilityMethods.includes(m) ? 'Мастер кампании этот способ не включил' : '' })),
+    budget: { spent, of, left: Math.max(0, of - spent), min: pb.min, max: pb.max },
     array: method === 'standard_array' ? [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a).map((v) => ({ value: v, used: Object.values(d.baseScores).includes(v) })) : null,
     list: ABILITIES.map((a) => {
       const base = d.baseScores[a.id], fin = di?.abilityScores?.[a.id];
       const race = (di?.abilityIncreases || []).filter((x) => x.ability === a.id).reduce((s, x) => s + x.value, 0);
-      return { key: a.id, name: a.name, base: base ?? '—', cost: method === 'point_buy' ? pb.cost[base ?? pb.min] : '—', race: race ? `+${race}` : '—',
+      // Покупка: сколько стоит следующая единица — «+» гаснет, если не хватает очков.
+      const now = base ?? pb.min, up = method === 'point_buy' && now < pb.max ? pb.cost[now + 1] - pb.cost[now] : null;
+      return { key: a.id, name: a.name, base: base ?? '—', cost: method === 'point_buy' ? pb.cost[now] : '—', up, canUp: up !== null && up <= of - spent, canDown: method === 'point_buy' && now > pb.min, race: race ? `+${race}` : '—',
         final: fin ?? '—', mod: Number.isInteger(fin) ? signed(mod(fin)) : '—', main: a.id === main || undefined };
     }),
     asi: { title: 'Улучшение характеристик — с 4 уровня', note: `Герой начинает с ${levels(st)} уровня`, options: [] },

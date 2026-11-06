@@ -43,15 +43,20 @@ export function stepGave(s, cv, d) {
 function abilitiesStep(head, ab, d) {
   const mode = ab.mode || d.abMode || 'buy';
   const b = ab.budget;
+  // Стандартный набор — число из списка; занятое другой характеристикой подписано, выбор меняет их местами.
+  const holderOf = (v, key) => ab.list.find((x) => x.key !== key && x.base === v);
+  const pick = (a) => html`<span class="h-ab-pick ${a.base === '—' ? 'unset' : ''}"><select data-ab-set="${a.key}" aria-label="${a.name}: число из набора">
+    <option value="" ${a.base === '—' ? raw('selected') : ''}>Выбрать…</option>
+    ${ab.array.map((x) => { const h = holderOf(x.value, a.key); return html`<option value="${x.value}" ${x.value === a.base ? raw('selected') : ''}>${x.value}${h ? ` · ${h.name}` : ''}</option>`; })}</select></span>`;
   const card = (a) => html`<div class="h-ab ${a.main ? 'main' : ''}" data-ab="${a.key}">
     <div class="h-ab-head">${caps(a.name)}${a.main ? html`<span class="h-mini-chip accent">главная</span>` : a.tag ? html`<span class="h-mini-chip">${a.tag}</span>` : ''}</div>
-    <div class="h-stepper"><button data-ab-dec="${a.key}" aria-label="Меньше">${ic('minus-sign', 16)}</button><b>${a.base}</b><button data-ab-inc="${a.key}" aria-label="Больше">${ic('plus-sign', 16)}</button></div>
+    ${ab.array ? pick(a) : html`<div class="h-stepper"><button data-ab-dec="${a.key}" aria-label="${a.name}: меньше" ${a.canDown ? '' : raw('disabled')}>${ic('minus-sign', 16)}</button><b>${a.base}</b><button data-ab-inc="${a.key}" aria-label="${a.name}: больше${a.up ? `, стоит ${a.up} оч.` : ''}" title="${a.up ? `+1 стоит ${a.up} оч.` : 'Больше 15 покупкой не поднять'}" ${a.canUp ? '' : raw('disabled')}>${ic('plus-sign', 16)}</button></div>`}
     <dl class="h-ab-rows">${ab.array ? '' : html`<div><dt>Цена</dt><dd>${a.cost} оч.</dd></div>`}<div><dt>Раса</dt><dd>${a.race}</dd></div>${a.asi ? html`<div class="accent"><dt>4 уровень</dt><dd>${a.asi}</dd></div>` : ''}</dl>
     <div class="h-ab-total"><b>${a.final}</b><span class="h-modpill">${a.mod}</span></div>
   </div>`;
   return html`${head}
     <div class="h-ab-top">${segmented(ab.modes.map((m) => ({ ...m, icon: m.id === 'roll' ? 'dice-faces-06' : '' })), mode, 'data-abmode', 'dark')}
-      ${ab.array ? html`<div class="h-array" aria-label="Стандартный набор">${ab.array.map((x) => html`<span class="${x.used ? 'used' : ''}">${x.value}</span>`)}<small>Шесть чисел на шесть характеристик: «+» и «−» меняют их местами</small></div>`
+      ${ab.array ? html`<div class="h-array" aria-label="Стандартный набор">${ab.array.map((x) => html`<span class="${x.used ? 'used' : ''}">${x.value}</span>`)}<small>Шесть чисел на шесть характеристик: выберите число у каждой. Занятое поменяется местами</small></div>`
     : html`<div class="h-budget"><span>Потрачено ${b.spent} из ${b.of}</span><span class="h-mini-chip accent">${b.left} свободны</span><span class="h-bar"><i style="width:${Math.round((b.spent / b.of) * 100)}%"></i></span></div>`}</div>
     <div class="h-grid3">${ab.list.map(card)}</div>
     <section class="h-box"><div class="h-box-head"><b>${ab.asi.title}</b><small>${ab.asi.note}</small></div>
@@ -123,6 +128,7 @@ export function bindStepExtras(root, L, stepId, d, save, rerender) {
   const stepOf = (el) => (typeof stepId === 'function' ? stepId(el) : stepId);
   const set = (k, v, el) => { d[k] = v; save(); heroActions.choose({ step: stepOf(el), id: k, value: v }); };
   L('click', '[data-abmode]', (e, b) => { if (!b.disabled) { set('abMode', b.dataset.abmode, b); rerender(); } });
+  L('change', '[data-ab-set]', (e, t) => heroActions.choose({ step: stepOf(t), id: 'abSet', value: `${t.dataset.abSet}|${t.value}` }));
   L('change', '[data-eqpick]', (e, t) => heroActions.choose({ step: stepOf(t), id: 'eqPick', value: `${t.dataset.eqpick}|${t.value}` }));
   L('click', '[data-eqmode]', (e, b) => { set('eqMode', b.dataset.eqmode, b); rerender(); });
   L('click', '[data-sptab]', (e, b) => { set('spTab', +b.dataset.sptab, b); rerender(); });
