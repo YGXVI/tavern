@@ -499,7 +499,13 @@ button.init-num:hover { background: var(--bg-control-off); }
 /* Свой токен и призыв игрока (TASK-183) */
 .summon-pop .summon-list { max-height: min(46vh, 360px); }
 .own-pop .own-row { gap: 12px; align-items: center; }
-.tpl-pop { width: 300px; }
+/* Шаблон области: «Убрать» + «Урон» + «Спасброски» не влезали в 300 px и вылезали за край.
+   Кнопки действий растягиваются до правого края; на узком экране переносятся, а не торчат наружу. */
+.tpl-pop { width: 360px; max-width: 100%; }
+.tpl-actions { flex-wrap: wrap; }
+.tpl-actions .btn:not(.btn-ghost) { padding: 0 var(--s-14); }
+.tpl-actions .btn-ghost + .btn { margin-left: auto; }
+.tpl-actions .btn-primary { flex: 1 0 auto; }
 .hp-editor { width: 300px; }
 .cond-picker { width: 340px; }
 .token-settings { width: 340px; }
