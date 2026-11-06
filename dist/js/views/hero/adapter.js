@@ -144,7 +144,7 @@ export function toHeroView(ch, ctx = {}) {
   }).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, 'ru'));
   const spellcasting = castAb ? {
     ability: ABILITIES.find((a) => a.id === castAb)?.name || '', short: ABILITIES.find((a) => a.id === castAb)?.short || '',
-    mod: signed(castMod), dc, attack: signed(atk),
+    mod: signed(castMod), dc, attack: signed(atk), abilityId: castAb, sourceId: src0?.id || null, extra: src0?.id === 'src-extra',
     prepared: { now: spells.filter((x) => x.level > 0 && x.prepared).length, max: spells.filter((x) => x.level > 0).length },
     book: { now: spells.length, max: spells.length }, spells,
   } : null;
@@ -153,7 +153,13 @@ export function toHeroView(ch, ctx = {}) {
   const actions = { action: [], bonus: [], reaction: [], special: [] };
   // Сумка — до действий: атаки нового героя берутся из надетого оружия.
   const gear = ctx.gear || null;
-  const rawItems = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
+  // Старая сумка строкой: «…, 23 зм» — это деньги, а не предмет (если монет на листе нет).
+  const COIN = { зм: 'gp', см: 'sp', мм: 'cp', пм: 'pp', эм: 'ep' }, legacyCoins = {};
+  const rawItems = r.inventory.entries?.length ? r.inventory.entries : legacyList(r.inventory.legacyText).filter((name) => {
+    const m = /^(\d+)\s*(зм|см|мм|пм|эм)$/i.exec(name.trim());
+    if (m) legacyCoins[COIN[m[2].toLowerCase()]] = (legacyCoins[COIN[m[2].toLowerCase()]] || 0) + Number(m[1]);
+    return !m;
+  }).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
   const worn = wornItems(rawItems, gear);
   const profText = [s.proficiencies?.tools, s.proficiencies?.weapons].filter(Boolean).join('\n');
   if (!(r.attacks || []).length) actions.action.push(...weaponAttacks(worn, mods, prof, profText));
@@ -187,7 +193,7 @@ export function toHeroView(ch, ctx = {}) {
   const item = (x) => ({ id: x.id || '', name: x.g?.ru || cap(str(x.name)) || 'Предмет', sub: [(x.weight ?? x.g?.weight) ? `${lb(x.weight ?? x.g?.weight)} фнт` : '', str(x.description)].filter(Boolean).join(' · '), qty: num(x.quantity, 1), icon: ICON[x.g?.kind] || 'bag', tag: x.attuned ? 'Настроен' : undefined, equipped: !!x.equipped, wearable: ['armor', 'shield', 'weapon'].includes(x.g?.kind), auto: !!x.auto });
   const load = items.reduce((n, x) => n + num(x.weight ?? x.g?.weight) * num(x.quantity, 1), 0);
   const carry = num(score('str'), 10) * 15;
-  const coins = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(s.coins || {}) };
+  const coins = { pp: 0, ep: 0, gp: 0, sp: 0, cp: 0, ...(s.coins && Object.values(s.coins).some((x) => x > 0) ? s.coins : legacyCoins) };
 
   const hp = { now: num(r.hp.current), max: num(r.hp.max), temp: num(r.hp.temp) };
   // КД не записан (герой из конструктора: доспехи в сумке, лист ведёт КД вручную) — без доспехов: 10 + Ловкость.
@@ -256,5 +262,5 @@ export function toHeroView(ch, ctx = {}) {
 /** Карточка «Моих героев». */
 export function toHeroCard(ch, ctx = {}) {
   const v = toHeroView(ch, ctx);
-  return { id: v.id, name: v.name, portrait: v.portrait, summary: [v.summary, ctx.campaign?.name].filter(Boolean).join(' · '), campaign: ctx.campaign || null, stats: { hp: String(v.vitals.hp.max), ac: String(v.vitals.ac.value), level: String(v.level) }, status: 'ready' };
+  return { id: v.id, name: v.name, portrait: v.portrait, line: v.summary, summary: [v.summary, ctx.campaign?.name].filter(Boolean).join(' · '), campaign: ctx.campaign || null, hp: v.vitals.hp, stats: { hp: String(v.vitals.hp.max), ac: String(v.vitals.ac.value), level: String(v.level) }, status: 'ready' };
 }
