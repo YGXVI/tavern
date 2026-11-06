@@ -13,6 +13,7 @@ import { indexCreation, newCreation, applyCreationChoice, creationModel, creatio
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 import { gearIndex } from './gear.js';
+import { LIB, isLibKey, libraryHeroes, archivedLibraryHeroes, libraryHero, saveLibraryHero, updateLibraryHero, archiveLibraryHero, restoreLibraryHero } from './library.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
 
@@ -32,10 +33,12 @@ await Promise.all(['spells-2014', 'spells-ref-2014', 'character-options-2014', '
   .catch(() => { /* без справочника — подписи с листа и витрина мастера */ });
 
 // Адрес настоящего героя — «кампания~персонаж»: один и тот же персонаж бывает в нескольких кампаниях (копии).
+// Свой герой вне кампаний («Мои герои», library.js) — «lib~персонаж».
 export const heroKey = (cid, chid) => `${cid}~${chid}`;
-/** Настоящий герой по адресу (или по ID персонажа — первый найденный): кампания и персонаж, видимые пользователю. */
+/** Настоящий герой по адресу: кампания и персонаж, видимые пользователю, или свой герой вне кампаний ({ c: null, lib }). */
 export function findHero(key, userId = currentUserId()) {
   if (!key || !userId) return null;
+  if (isLibKey(key)) { const ch = libraryHero(userId, String(key).split('~')[1]); return ch ? { c: null, ch, lib: true } : null; }
   const [cid, chid] = String(key).includes('~') ? String(key).split('~') : [null, key];
   for (const c of campaignsFor(userId)) {
     if (cid && c.id !== cid) continue;
@@ -45,6 +48,7 @@ export function findHero(key, userId = currentUserId()) {
   return null;
 }
 const ctxOf = (c, ch, userId) => {
+  if (!c) return { campaign: null, userId, spells, gear, ownerName: '', isMine: true };
   const m = membership(c, userId);
   return {
     campaign: { id: c.id, name: c.name, live: false }, userId, spells, gear,
@@ -59,8 +63,8 @@ export function heroView(id, corner = '') {
   if (real) {
     const v = toHeroView(real.ch, ctxOf(real.c, real.ch, userId));
     // 0 хитов — панель спасбросков от смерти вместо обычного боя (корнер 67 на настоящих данных).
-    const key = heroKey(real.c.id, real.ch.id), can = canLevelUp(key);
-    return { ...v, id: key, live: true, canLevelUp: can, canEdit: can, down: v.vitals.hp.max > 0 && v.vitals.hp.now === 0 };
+    const key = heroKey(real.lib ? LIB : real.c.id, real.ch.id), can = canLevelUp(key);
+    return { ...v, id: key, live: true, lib: !!real.lib, canLevelUp: can, canEdit: can, down: v.vitals.hp.max > 0 && v.vitals.hp.now === 0 };
   }
   // Образцы макета (lira, torin, корнеры) — только для превью листа на карте; остальные адреса — «героя нет».
   if (!HEROES[id]) return null;
@@ -78,7 +82,8 @@ function savedFromRef() {
  */
 export function heroList() {
   const userId = currentUserId();
-  const mine = [], party = [];
+  // Свои герои вне кампаний — первыми: их приводят в кампании копией (bringToCampaign).
+  const mine = libraryHeroes(userId).map((h) => ({ ...toHeroCard(h, ctxOf(null, h, userId)), id: heroKey(LIB, h.id), lib: true })), party = [];
   for (const c of userId ? campaignsFor(userId) : []) {
     const m = membership(c, userId);
     for (const ch of c.characters || []) {
@@ -94,7 +99,9 @@ export function heroList() {
   // Удалённые свои герои (архив кампаний) — их можно вернуть.
   const archived = (userId ? campaignsFor(userId) : []).flatMap((c) => (c.archivedCharacters || []).filter((ch) => ch.ownerId === userId && (ch.profile || 'pc') === 'pc')
     .map((ch) => ({ id: heroKey(c.id, ch.id), name: ch.name, portrait: toHeroCard(ch, ctxOf(c, ch, userId)).portrait, campaign: c.name })));
-  return { heroes: mine, party, archived, saved: savedFromRef(), sample: false };
+  archived.unshift(...archivedLibraryHeroes(userId).map((h) => ({ id: heroKey(LIB, h.id), name: h.name, portrait: toHeroCard(h, ctxOf(null, h, userId)).portrait, campaign: 'Мои герои' })));
+  // На сервере «Мои герои» пока хранятся на этом устройстве — до таблицы личных героев (#202).
+  return { heroes: mine, party, archived, saved: savedFromRef(), sample: false, deviceOnly: isServerMode() };
 }
 /** Мастер создания для кампании cid (из «Кем сядете за стол?»): черновик другой кампании начинается заново. */
 export function startCreation(cid) {
@@ -110,21 +117,12 @@ export function startCreation(cid) {
 // Черновик конструктора живёт в sessionStorage вкладки до отправки; имя, мировоззрение и черты — из черновика окна.
 const BUILD_KEY = 'rasputye-hero-build-v1', UI_KEY = 'rasputye-hero-draft';
 const readJSON = (k, store = sessionStorage) => { try { return JSON.parse(store.getItem(k)) || null; } catch { return null; } };
-/** Кампания для нового героя: где игрок ещё без героя, иначе любая, где он играет или ведёт. */
-function targetCampaign(userId, preferred) {
-  const list = userId ? campaignsFor(userId).filter((c) => membership(c, userId)?.status === 'active') : [];
-  const role = (c) => membership(c, userId);
-  return list.find((c) => c.id === preferred) || list.find((c) => role(c).role === 'player' && !role(c).characterId)
-    || list.find((c) => role(c).role === 'player') || list[0] || null;
-}
 function buildState() {
   if (!creationIx) return null;
   const userId = currentUserId();
   let st = readJSON(BUILD_KEY);
-  if (!st || st.v !== 1 || st.userId !== userId) {
-    const c = targetCampaign(userId);
-    st = { ...newCreation(creationIx, { campaign: c, userId: userId || 'guest' }), userId };
-  }
+  // Герой собирается сам по себе (#203): кампания есть, только если мастер создания открыт из неё («Свой герой»).
+  if (!st || st.v !== 1 || st.userId !== userId) st = { ...newCreation(creationIx, { campaign: null, userId: userId || 'guest' }), userId };
   // Имя — из окна (шаг «Образ» пишет его только в свой черновик).
   const ui = readJSON(UI_KEY) || {};
   if (typeof ui.name === 'string' && ui.name !== st.draft.identity.name) applyCreationChoice(creationIx, st, { step: 'look', id: 'name', value: ui.name });
@@ -144,7 +142,8 @@ const defaultPortrait = (st) => st.look.portrait || `assets/hero/class-${CLASS_I
 
 // ——— Быстрый герой (89–90, #203): три ответа → класс, раса, навыки (creation.js → quickCreation) ———
 function quickBuild(st, answers) {
-  const c = campaignsFor(currentUserId()).find((x) => x.id === st.campaignId) || targetCampaign(currentUserId());
+  // Кампания — только если быстрого героя открыли из неё; иначе герой ничей, правила по умолчанию.
+  const c = st.campaignId ? campaignsFor(currentUserId()).find((x) => x.id === st.campaignId) || null : null;
   const next = { ...quickCreation(creationIx, { campaign: c, userId: currentUserId(), answers }), userId: currentUserId(), quick: answers };
   next.look.portrait = answers.portrait || `assets/hero/class-${quickClass(answers.role, answers.talk)}.webp`;
   return next;
@@ -168,6 +167,7 @@ export const creationView = () => {
   if (!st) return CREATION;
   const m = creationModel(creationIx, st, { campaignName: campaignName(st) });
   m.look = { ...m.look, portrait: defaultPortrait(st), portraits: PORTRAITS };
+  m.campaignId = st.campaignId || null;
   const a = st.quick || {};
   m.quick = { ...CREATION.quick, built: !!st.quick, portraits: PORTRAITS, picked: { role: a.role || 'front', talk: a.talk || 'fist', name: a.name ?? m.look.name ?? '' }, result: quickResult(st) };
   return m;
@@ -194,10 +194,10 @@ const LU_KEY = 'rasputye-hero-levelup-v1';
 function levelUpState(key) {
   const real = findHero(key);
   if (!real || !creationIx) return null;
-  const k = heroKey(real.c.id, real.ch.id);
+  const k = heroKey(real.lib ? LIB : real.c.id, real.ch.id);
   let st = readJSON(LU_KEY);
   // Черновик — для этого героя и этого уровня; иначе начинаем заново.
-  if (!st || st.v !== 1 || st.key !== k) st = newLevelUp(creationIx, real.ch, { key: k, campaignId: real.c.id });
+  if (!st || st.v !== 1 || st.key !== k) st = newLevelUp(creationIx, real.ch, { key: k, campaignId: real.c?.id ?? null });
   return { st, real, key: k };
 }
 const saveLevelUp = (st) => { try { sessionStorage.setItem(LU_KEY, JSON.stringify(st)); } catch { /* приватный режим */ } };
@@ -210,7 +210,7 @@ export const levelUpView = (key) => {
 /** Может ли пользователь повысить героя: владелец или мастер кампании. */
 export function canLevelUp(key) {
   const real = findHero(key), userId = currentUserId();
-  return !!real && (real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
+  return !!real && (!!real.lib || real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
 }
 /**
  * Свой портрет из файла: в песочнице — на устройстве (idb:), на сервере — в хранилище картинок токенов кампании (тот же
@@ -219,7 +219,7 @@ export function canLevelUp(key) {
 export async function uploadPortrait(file, cid = readJSON(BUILD_KEY)?.campaignId) {
   try {
     if (isServerMode()) {
-      if (!cid) throw new Error('Сначала выберите кампанию — портрет хранится в ней.');
+      if (!cid || cid === LIB) throw new Error('Свой файл сервер пока хранит только в кампании: выберите портрет из набора или загрузите свой, когда приведёте героя в кампанию.');
       return await (await import('../../server/sync.js')).uploadTokenImage(cid, file);
     }
     const { storeImage } = await import('../../core/assets.js'); return (await storeImage(file)).ref;
@@ -232,6 +232,7 @@ function setPortrait(p = {}) {
   const real = findHero(p.heroId);
   if (!real || !p.ref) return;
   if (!canEditHero(p.heroId)) { say('Портрет меняет владелец героя или мастер'); return; }
+  if (real.lib) { updateLibraryHero(currentUserId(), real.ch.id, (ch) => { ch.portrait = p.ref; }); say('Портрет обновлён', 'Копии героя в кампаниях меняются в их листах.', 'tick-02'); return; }
   updateCampaign(real.c.id, (c) => {
     const ch = c.characters.find((x) => x.id === real.ch.id);
     if (ch) ch.portrait = p.ref;
@@ -244,6 +245,12 @@ async function deleteHero(p = {}) {
   const real = findHero(p.heroId);
   if (!real) return;
   if (!canEditHero(p.heroId)) { say('Удалить героя может владелец или мастер'); return; }
+  if (real.lib) {
+    archiveLibraryHero(currentUserId(), real.ch.id);
+    toast({ title: `${real.ch.name} — в удалённых`, body: 'Копии в кампаниях остались. Вернуть героя можно со страницы «Герои».', icon: 'delete-02', action: { label: 'Вернуть', onClick: () => restoreHero({ heroId: p.heroId }) } });
+    location.hash = '#/heroes';
+    return;
+  }
   const userId = currentUserId(), cid = real.c.id, chid = real.ch.id, name = real.ch.name;
   const master = membership(real.c, userId)?.role === 'master';
   try {
@@ -261,6 +268,7 @@ async function deleteHero(p = {}) {
 }
 async function restoreHero(p = {}) {
   const [cid, chid] = String(p.heroId || '').split('~');
+  if (cid === LIB) { const h = restoreLibraryHero(currentUserId(), chid); if (h) say(`${h.name} снова в «Моих героях»`, '', 'tick-02'); return; }
   const c = campaignsFor(currentUserId()).find((x) => x.id === cid);
   const ch = c?.archivedCharacters?.find((x) => x.id === chid);
   if (!ch) return;
@@ -295,22 +303,8 @@ export const SPELL_CLASSES = Object.values(SPELL_CLASS);
 export const gearCatalog = () => (gear ? [...gear.byId.values()].map((g) => ({ ref: g.id, name: g.ru, kind: g.kind, weight: g.weight })) : []);
 // ——— Перенос из Long Story Short (72, #203): разбор файла — lss.js, разобранный лист живёт в вкладке до переноса ———
 const LSS_KEY = 'rasputye-hero-lss-v1', LSS_ERR = 'rasputye-hero-lss-err';
-/**
- * Разобранный файл LSS или null — тогда экран просит файл (error — почему не подошёл прошлый). targets — кампании,
- * куда можно перенести: free — игрок там ещё без героя (сядет за стол), dup — там уже есть его герой с таким именем.
- * campaignId — выбранная (по умолчанию ?c=, иначе кампания, где игрок без героя).
- */
-export function lssImportView(prefer = '') {
-  const v = readJSON(LSS_KEY);
-  if (!v) return null;
-  const userId = currentUserId();
-  const targets = (userId ? campaignsFor(userId) : []).filter((c) => membership(c, userId)?.status === 'active').map((c) => {
-    const m = membership(c, userId);
-    return { id: c.id, name: c.name, free: m.role === 'player' && !m.characterId, master: m.role === 'master', dup: (c.characters || []).some((x) => x.ownerId === userId && String(x.name).trim().toLowerCase() === v.hero.name.trim().toLowerCase()) };
-  });
-  const pick = targets.find((c) => c.id === v.campaignId) || targets.find((c) => c.id === prefer) || targets.find((c) => c.free) || targets.find((c) => !c.master) || targets[0] || null;
-  return { ...v, targets, campaignId: pick?.id || null, target: pick };
-}
+/** Разобранный файл LSS или null — тогда экран просит файл (lssError — почему не подошёл прошлый). */
+export const lssImportView = () => readJSON(LSS_KEY);
 export const lssError = () => readJSON(LSS_ERR);
 export async function loadLssFile(file) {
   try {
@@ -325,13 +319,6 @@ export async function loadLssFile(file) {
   window.dispatchEvent(new CustomEvent('hero:changed'));
 }
 export const dropLss = () => { try { sessionStorage.removeItem(LSS_KEY); sessionStorage.removeItem(LSS_ERR); } catch { /* приватный режим */ } window.dispatchEvent(new CustomEvent('hero:changed')); };
-/** Выбрать кампанию переноса. */
-function lssCampaign(p = {}) {
-  const v = readJSON(LSS_KEY);
-  if (!v) return;
-  try { sessionStorage.setItem(LSS_KEY, JSON.stringify({ ...v, campaignId: p.campaignId || null })); } catch { /* приватный режим */ }
-  window.dispatchEvent(new CustomEvent('hero:changed'));
-}
 
 /**
  * Положить готового героя (данные листа) в кампанию: песочница — сразу, сервер — createCharacterSheet. Если у игрока
@@ -354,31 +341,40 @@ async function placeHero(c, data, { title }) {
     else updateCampaign(c.id, (camp) => { camp.characters.push({ ...hero, id, ownerId: userId }); });
   } catch (e) { say(`${title} не удалось`, e?.message || 'Сервер не принял героя.', 'alert-circle'); return null; }
   say(`${hero.name} — в «${c.name}»`, seat ? 'Садитесь за стол.' : 'Лист открыт.', 'tick-02');
-  // Сел за стол этим героем — токен на сцене и сразу стол, как после мастера создания; иначе — лист.
-  if (seat) { const { seatHero } = await import('../screens.js'); seatHero(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
+  // Игрок без героя садится им за стол: место в кампании, токен на сцене, стол (claim; на сервере — claim_character).
+  if (seat) { const { claim } = await import('../screens.js'); claim(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
   return id;
 }
-let importing = false;
-async function importLss(p = {}) {
-  const v = lssImportView(p.campaignId);
-  if (!v || importing) return;
-  const c = v.campaignId && campaignsFor(currentUserId()).find((x) => x.id === v.campaignId);
-  if (!c) { say('Нет кампании', 'Войдите в кампанию по приглашению мастера — герой появится в ней.'); return; }
-  importing = true;
-  const id = await placeHero(c, v.hero, { title: 'Перенос' });
-  importing = false;
-  if (id) try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ }
+/** Перенос из LSS: герой ложится в «Мои герои», дальше — «Куда привести» (кампания из ?c= — первой). */
+function importLss(p = {}) {
+  const v = lssImportView();
+  const userId = currentUserId();
+  if (!v || !userId) return;
+  const id = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `ch-${Date.now().toString(36)}`;
+  saveLibraryHero(userId, { ...v.hero, id });
+  try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ }
+  say(`${v.hero.name} — в «Моих героях»`, 'Осталось выбрать кампанию.', 'tick-02');
+  location.hash = `#/hero/${heroKey(LIB, id)}/bring${p.campaignId ? `?c=${encodeURIComponent(p.campaignId)}` : ''}`;
 }
-/** Привести героя в другую кампанию — копией листа (у каждой кампании свой экземпляр, как при выборе героя). */
+/** Привести героя в кампанию — копией листа (у каждой кампании свой экземпляр); свой герой остаётся в «Моих героях». */
 async function bringToCampaign(p = {}) {
   const real = findHero(p.heroId);
   const c = campaignsFor(currentUserId()).find((x) => x.id === p.campaignId);
   if (!real || !c) { say('Не нашёл героя или кампанию'); return; }
-  const { id, ownerId, ...data } = structuredClone(real.ch);
+  const { id, ownerId, updatedAt, archivedAt, ...data } = structuredClone(real.ch);
   await placeHero(c, data, { title: 'Перенос героя' });
 }
-/** Кампании, куда можно привести героя key: где пользователь играет или ведёт, кроме текущей. */
-export const bringTargets = (key) => { const real = findHero(key); return campaignsFor(currentUserId()).filter((c) => c.id !== real?.c.id && membership(c, currentUserId())?.status === 'active').map((c) => ({ id: c.id, name: c.name, free: membership(c, currentUserId())?.role === 'player' && !membership(c, currentUserId()).characterId })); };
+/**
+ * Кампании, куда можно привести героя key (кроме той, где он уже лежит): free — игрок там без героя и сядет за стол,
+ * master — пользователь ведёт её, dup — там уже есть его герой с тем же именем.
+ */
+export const bringTargets = (key) => {
+  const real = findHero(key), userId = currentUserId(), name = String(real?.ch?.name || '').trim().toLowerCase();
+  return campaignsFor(userId).filter((c) => c.id !== real?.c?.id && membership(c, userId)?.status === 'active').map((c) => {
+    const m = membership(c, userId);
+    return { id: c.id, name: c.name, free: m.role === 'player' && !m.characterId, master: m.role === 'master', dup: !!name && (c.characters || []).some((x) => x.ownerId === userId && String(x.name).trim().toLowerCase() === name) };
+  });
+};
 
 const say = (title, body, icon = 'information-circle') => toast({ title, body, icon, timeout: 2600 });
 const stub = (name) => (payload) => {
@@ -394,7 +390,9 @@ const live = (name) => (payload = {}) => {
   if (['addSpell', 'removeSpell'].includes(name) && !(real.ch.knownSpells || []).length) payload = { ...payload, legacy: legacySpells(real.ch.spells, spells).map((s) => ({ name: s.name, circle: s.circle, ref: s.ref })) };
   if (name === 'editField') payload = { ...payload, server: isServerMode() };
   let note = null;
-  updateCampaign(real.c.id, (c) => {
+  // Свой герой вне кампаний меняется в «Моих героях»; его черты характера хранятся и в серверном режиме (на устройстве).
+  if (real.lib) note = updateLibraryHero(currentUserId(), chid, (ch) => applyHeroAction(ch, name, name === 'editField' ? { ...payload, server: false } : payload, { random: Math.random }));
+  else updateCampaign(real.c.id, (c) => {
     const ch = c.characters.find((x) => x.id === chid);
     if (ch) note = applyHeroAction(ch, name, payload, { random: Math.random });
   });
@@ -422,53 +420,28 @@ function choose(payload = {}) {
   window.dispatchEvent(new CustomEvent('hero:changed'));
 }
 let finishing = false;
+/**
+ * «Создать героя» (мастер и быстрый герой): герой ложится в «Мои герои», дальше — экран «Куда привести»
+ * (#203: герой создаётся отдельно от кампаний). Кампания, из которой открыли мастер, там предложена первой.
+ */
 async function finish() {
   const st = buildState();
   if (!st) return stub('Готово')();
   const userId = currentUserId();
-  const c = targetCampaign(userId, st.campaignId);
-  if (!c) { say('Нет кампании', 'Войдите в кампанию по приглашению мастера — герой появится в ней.'); return; }
-  st.campaignId = c.id;
+  if (!userId) { say('Войдите, чтобы сохранить героя'); return; }
   let hero;
   try { hero = creationCharacter(creationIx, st, { userId }); } catch (e) {
     say('Герой ещё не готов', (e.missing || []).slice(0, 3).map((m) => m.message).join(' ') || e.message, 'alert-circle');
     return;
   }
   hero.data.portrait = defaultPortrait(st); // портрет — он же токен на карте
-  saveBuild(st); // ID героя и операции — до отправки: повтор после обрыва пошлёт тот же запрос
   if (finishing) return;
   finishing = true;
-  const m = membership(c, userId);
-  const claim = m?.role === 'player' && !m.characterId;
-  try {
-    if (isServerMode()) {
-      const sync = await import('../../server/sync.js');
-      await sync.createHeroSheet(c.id, hero, claim);
-    } else {
-      updateCampaign(c.id, (camp) => {
-        if (camp.characters.some((x) => x.id === hero.characterId)) return;
-        camp.characters.push({ ...hero.data, id: hero.characterId, ownerId: userId });
-        const me = camp.members.find((x) => x.userId === userId);
-        if (claim && me) me.characterId = hero.characterId;
-      });
-    }
-  } catch (e) {
-    finishing = false;
-    const kind = e?.kind;
-    say('Герой не создан', kind === 'network' ? 'Нет связи — нажмите ещё раз, отправим тот же запрос.' : kind === 'duplicate' ? 'Такой ID уже занят — начните заново.' : e?.message || 'Сервер не принял героя.', 'alert-circle');
-    if (kind === 'duplicate') sessionStorage.removeItem(BUILD_KEY);
-    return;
-  }
+  saveLibraryHero(userId, { ...hero.data, id: hero.characterId });
   finishing = false;
   try { sessionStorage.removeItem(BUILD_KEY); sessionStorage.removeItem(UI_KEY); } catch { /* приватный режим */ }
-  say(`${hero.data.name} готов`, `Герой в кампании «${c.name}».`, 'tick-02');
-  // Игрок садится за стол этим героем: токен встаёт на сцену, открывается стол. Иначе — лист нового героя.
-  if (claim) {
-    const { seatHero } = await import('../screens.js');
-    seatHero(c.id, userId, hero.characterId);
-    return;
-  }
-  location.hash = `#/hero/${heroKey(c.id, hero.characterId)}`;
+  say(`${hero.data.name} — в «Моих героях»`, 'Осталось выбрать кампанию.', 'tick-02');
+  location.hash = `#/hero/${heroKey(LIB, hero.characterId)}/bring${st.campaignId ? `?c=${encodeURIComponent(st.campaignId)}` : ''}`;
 }
 
 let leveling = false;
@@ -489,17 +462,20 @@ async function levelUp(p = {}) {
   saveLevelUp(st);
   if (leveling) return;
   leveling = true;
+  const grow = (ch) => {
+    Object.assign(ch, structuredClone(req.payload.patch));
+    if (req.payload.creation) ch.creation = structuredClone(req.payload.creation);
+    if (Number.isFinite(req.gain)) { ch.hpMax = (ch.hpMax || 0) + req.gain; ch.hp = (ch.hp || 0) + req.gain; }
+  };
   try {
-    if (isServerMode()) {
+    if (real.lib) updateLibraryHero(currentUserId(), real.ch.id, grow);
+    else if (isServerMode()) {
       const sync = await import('../../server/sync.js');
       await sync.levelUpHeroSheet(real.c.id, real.ch.id, req);
     } else {
       updateCampaign(real.c.id, (camp) => {
         const ch = camp.characters.find((x) => x.id === real.ch.id);
-        if (!ch) return;
-        Object.assign(ch, structuredClone(req.payload.patch));
-        if (req.payload.creation) ch.creation = structuredClone(req.payload.creation);
-        if (Number.isFinite(req.gain)) { ch.hpMax = (ch.hpMax || 0) + req.gain; ch.hp = (ch.hp || 0) + req.gain; }
+        if (ch) grow(ch);
       });
     }
   } catch (e) {
@@ -542,5 +518,4 @@ export const heroActions = {
   setPortrait,                                 // { heroId, ref } — портрет и картинка токенов
   deleteHero,                                  // { heroId } — в архив кампании (вернуть — restoreHero)
   restoreHero,                                 // { heroId }
-  lssCampaign,                                 // { campaignId } — куда переносить
 };

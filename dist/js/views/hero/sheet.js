@@ -26,7 +26,7 @@ export function mount(root, { parts, query, page, L }) {
     return;
   }
   // Лист на карте у настоящего героя — это стол кампании с панелью листа (#203), а не картинка-образец.
-  if (sub === 'table' && v.live) { const [cid, chid] = String(v.id).split('~'); location.replace(`#/c/${cid}/sheet/${encodeURIComponent(chid)}`); return; }
+  if (sub === 'table' && v.live && !v.lib) { const [cid, chid] = String(v.id).split('~'); location.replace(`#/c/${cid}/sheet/${encodeURIComponent(chid)}`); return; }
   const tab = TABS.some((t) => t.id === sub) ? sub : 'combat';
   // Перерисовка на месте: слушатели делегированы на корень и переживают её.
   const render = () => {
@@ -57,7 +57,7 @@ function sheetHead(v, mode) {
     <span class="spacer"></span>
     ${mode === 'drawer' ? html`<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${ic('cancel-01', 18)}</button>`
       : mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
-      : html`${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
+      : html`${v.lib ? html`<a class="btn btn-sm btn-primary" href="#/hero/${v.id}/bring">${ic('arrow-right-02', 16)}В кампанию</a>` : ''}${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
   </header>`;
 }
 
@@ -341,7 +341,7 @@ function sheetMenu(v, anchor, opts) {
   const [cid] = String(v.id).split('~');
   const a = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
   const pop = popover(html`<div class="menu">${opts.edit ? html`<button class="menu-item" data-menu-edit>${ic('pencil-edit-02', 16)}Все поля листа</button>${a(`#/hero/${v.id}`, 'maximize-01', 'Открыть полностью')}` : ''}
-    ${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}
+    ${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live && !v.lib ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}${v.live && v.isMine !== false ? a(`#/hero/${v.id}/bring`, 'arrow-right-02', v.lib ? 'Привести в кампанию' : 'Привести в другую кампанию') : ''}
     ${v.live && v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-menu-portrait>${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-menu-delete>${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' });
   pop.node.addEventListener('click', (e) => {
     if (e.target.closest('[data-menu-edit]')) { closePopover(); opts.edit?.(); }
