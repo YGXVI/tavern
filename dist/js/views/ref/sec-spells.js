@@ -19,6 +19,8 @@ export const SCHOOL = {
 const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 const href = (it) => `#/ref/spells/${encodeURIComponent(it.id)}`;
 const sch = (it) => SCHOOL[it.school] || { name: it.schoolName, color: '#e9b052', icon: 'magic-wand-01', about: '' };
+// Иконка заклинания (#203): 256 px для страницы и соседей, 64 px для строк галереи; имя файла — номер dnd.su.
+export const spellArt = (id, small = false) => new URL(`../../../assets/spells/${small ? 'sm/' : ''}${encodeURIComponent(id)}.webp`, import.meta.url).href;
 const lvlName = (l) => (l ? `${l} круг` : 'Заговор');
 const classId = (name) => CLASSES.find((c) => c.name === name)?.id;
 const shortTime = (t) => String(t).replace(/^1 действие$/, '1 действие').replace(/^1 бонусное действие$/, 'бонусное').replace(/^1 реакция.*/, 'реакция');
@@ -35,7 +37,7 @@ const matches = (it, q, text) => {
   if (text && !it.hay.includes(norm(text))) return false;
   return true;
 };
-const row = (it) => html`<a class="rx-row sp-row" href="${href(it)}"><i class="rx-dot" style="background:${sch(it).color}"></i>
+const row = (it) => html`<a class="rx-row sp-row" href="${href(it)}" style="--c:${sch(it).color}"><img class="sp-row-art" src="${spellArt(it.id, true)}" alt="" width="32" height="32" loading="lazy" decoding="async">
   <span class="rx-name"><b>${it.name}</b><small>${it.en}</small></span><span class="rx-col">${sch(it).name}</span><span class="rx-col">${shortTime(it.time)}</span><span class="rx-col">${it.range}</span>
   <span class="rx-marks">${it.conc ? html`<abbr title="Концентрация">К</abbr>` : ''}${it.ritual ? html`<abbr title="Ритуал">Р</abbr>` : ''}${it.srdText ? html`<abbr title="Полный текст SRD">T</abbr>` : ''}</span></a>`;
 export function grid(items, q, text = '') {
@@ -85,7 +87,7 @@ TOOLS.spells = {
 // ——— Страница ———
 function seal(it) {
   const s = sch(it);
-  return html`<div class="sp-seal" aria-hidden="true"><i class="r1"></i><i class="r2"></i><i class="r3"></i><span class="sp-seal-ic">${ic(s.icon, 44)}</span><b>${it.level ? ROMAN[it.level] : '∞'}</b></div>`;
+  return html`<div class="sp-seal" aria-hidden="true"><i class="r1"></i><i class="r2"></i><i class="r3"></i><img class="sp-seal-art" src="${spellArt(it.id)}" alt="" width="256" height="256" decoding="async"><span class="sp-seal-sch" title="${s.name}">${ic(s.icon, 16)}</span><b>${it.level ? ROMAN[it.level] : '∞'}</b></div>`;
 }
 export function page(it, items, q, o = {}) {
   const s = sch(it);
@@ -124,7 +126,7 @@ export function page(it, items, q, o = {}) {
         ${p ? toolBox('spells', it, { v: it.level || 1, cantrip: !it.level }, { title: p.heal ? 'Сколько лечит' : 'Сколько бьёт', hint: it.level ? 'Двигайте ячейку — урон пересчитается' : 'Двигайте уровень героя — заговор растёт' })
           : html`<div class="cls-now"><p class="cls-now-hint">Коротко</p><div class="cls-tiles"><div class="cls-tile"><small>Круг</small><b>${it.level || '0'}</b><span>${it.level ? 'тратит ячейку' : 'без ячейки'}</span></div><div class="cls-tile"><small>Школа</small><b class="sp-tile-sch">${s.name}</b></div></div>
             ${it.conc ? html`<p class="t-sm muted">${ic('brain-02', 14)} Концентрация: второе такое заклинание сбрасывает первое, урон — спасбросок Телосложения.</p>` : ''}${it.ritual ? html`<p class="t-sm muted">${ic('hourglass', 14)} Ритуал: +10 минут — и без ячейки.</p>` : ''}</div>`}
-        ${near.length ? html`<div class="cls-now rx-near"><p class="cls-now-hint">Та же школа и круг</p>${near.map((x) => html`<a class="rx-near-row sp-near" href="${href(x)}"><span class="sp-ic">${ic(sch(x).icon, 14)}</span><span><b>${x.name}</b><small>${x.en}</small></span></a>`)}</div>` : ''}
+        ${near.length ? html`<div class="cls-now rx-near"><p class="cls-now-hint">Та же школа и круг</p>${near.map((x) => html`<a class="rx-near-row sp-near" href="${href(x)}" style="--c:${sch(x).color}"><span class="sp-ic"><img src="${spellArt(x.id)}" alt="" width="40" height="40" loading="lazy" decoding="async"></span><span><b>${x.name}</b><small>${x.en}</small></span></a>`)}</div>` : ''}
       </aside>`}
     </div>
   </div>`;
