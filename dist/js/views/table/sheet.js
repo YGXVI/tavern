@@ -4,6 +4,7 @@ import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
 import { tokenStats, monsterOf, characterOf } from '../../core/campaign.js';
 import { npcMonster } from './sheet-creature.js';
+import { conditionRoll } from './effects-roll.js';
 import { ABILITIES, SIZES, conditionById, woundLabel } from '../../data/rules.js';
 import { conditionPicker } from './p-token.js';
 import { doRoll, parseFormula, poolVis } from './dice.js';
@@ -50,7 +51,13 @@ async function openHeroDrawer(ctx,id,box){
 function heroRoll(ctx,v,what,formula){
   const f=String(formula||'').replace(/\s+/g,'').replace(/[−–]/g,'-');
   const d20=/^к20([+-]\d+)?$/i.exec(f);
-  if(d20){doRoll(ctx,{label:`${v.name}: ${what}`,dice:{20:1},mod:Number(d20[1]||0),kind:/атак|меч|лук|топор|кинжал|булав|посох|арбалет/i.test(what)?'attack':'check',vis:poolVis(ctx)});return;}
+  if(d20){
+   const kind=/атак|меч|лук|топор|кинжал|булав|посох|арбалет/i.test(what)?'attack':/спасбросок/i.test(what)?'save':'check';
+   const plan=conditionRoll(characterOf(ctx.c,v.id?.split('~').pop()),{kind,what});
+   if(plan.autoFail){ctx.toast?.({title:`${v.name}: автопровал`,body:plan.why.join(', '),icon:'alert-circle'});return;}
+   if(plan.adv)ctx.toast?.({title:plan.adv==='adv'?'С преимуществом':'С помехой',body:plan.why.join(', ')});
+   doRoll(ctx,{label:`${v.name}: ${what}`,dice:{20:1},mod:Number(d20[1]||0),adv:plan.adv,kind:kind==='attack'?'attack':'check',vis:poolVis(ctx)});return;
+  }
   const p=parseFormula(f.replace(/\+мод\.?/,''));
   if(p){doRoll(ctx,{label:`${v.name}: ${what}`,dice:p.dice,mod:p.mod,kind:'damage',vis:poolVis(ctx)});return;}
   if(/^СЛ\d+$/i.test(f)){ctx.toast?.(`${what}: ${f.replace(/^СЛ/i,'СЛ ')} — бросает цель`);return;}
@@ -222,9 +229,11 @@ function monsterRoll(ctx,b){
  if(kind==='mcheck'||kind==='msave'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(!ab)return;
   const mod=abilityModifier(m.stats?.[ab.id]),bonus=kind==='msave'&&Number.isSafeInteger(m.saves?.[ab.id])?m.saves[ab.id]:mod;
   if(bonus===null){ctx.toast('Характеристика неизвестна: бросок не выполнен');return;}
-  doRoll(ctx,{label:`${who}: ${kind==='msave'?'спасбросок':'проверка'} ${AB_NAMES[ab.id]||ab.name}`,dice:{20:1},mod:bonus,vis});return;}
+  const plan=conditionRoll(t,{kind:kind==='msave'?'save':'check',ability:ab.id});
+  if(plan.autoFail){ctx.toast({title:`${who}: автопровал`,body:plan.why.join(', '),icon:'alert-circle'});return;}
+  doRoll(ctx,{label:`${who}: ${kind==='msave'?'спасбросок':'проверка'} ${AB_NAMES[ab.id]||ab.name}`,dice:{20:1},mod:bonus,adv:plan.adv,vis});return;}
  const a=(m[b.dataset.list]||m.actions)?.[Number(b.dataset.i)];
- if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1},mod:bonus,kind:'attack',vis});}
+ if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1},mod:bonus,adv:conditionRoll(t,{kind:'attack'}).adv,kind:'attack',vis});}
  if(kind==='mdamage'&&a){const part=String(m.id).startsWith('lib:')?a.damageComponents?.[Number(b.dataset.part)]:{dice:a.damage,type:a.type};const f=part&&parseFormula(part.dice);if(f)doRoll(ctx,{label:`${who}: ${a.name} — урон${part.type?` (${part.type})`:''}`,...f,vis});}
 }
 export {conditionById};

@@ -9,7 +9,7 @@ const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
 // Поля записи журнала, которые для скрытого броска уходят в log_secrets.
 const SECRET_LOG_KEYS = ['label', 'text', 'total', 'detail', 'nat', 'dice', 'results'];
 // Поля кампании, которые живут отдельными таблицами или не сохраняются на сервере.
-const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'archivedCharacters', 'scenes', 'combat', 'log', 'saveRequests', 'portalRequests', 'doorAttempt', 'creatures']);
+const CAMPAIGN_SKIP = new Set(['id', 'name', 'ownerId', 'members', 'invite', 'characters', 'archivedCharacters', 'scenes', 'combat', 'log', 'effects', 'saveRequests', 'portalRequests', 'doorAttempt', 'creatures']);
 
 const ms = (t) => (t ? Date.parse(t) || null : null);
 const iso = (n) => (n ? new Date(n).toISOString() : null);
@@ -21,7 +21,7 @@ export function emptyRows(withCreatures = false) {
   return {
     campaign: null, invite: null,
     members: new Map(), characters: new Map(), scenes: new Map(), secrets: new Map(), explored: new Map(),
-    tokens: new Map(), drawings: new Map(), log: new Map(), logSecrets: new Map(), saves: new Map(), portals: new Map(),
+    tokens: new Map(), drawings: new Map(), log: new Map(), logSecrets: new Map(), saves: new Map(), portals: new Map(), effects: new Map(),
     combat: null,
     // Снимки личных существ в кампании (TASK-179): Map — таблица campaign_creatures есть; null — её ещё нет на сервере.
     creatures: withCreatures ? new Map() : null,
@@ -170,6 +170,7 @@ export function assemble(rows0) {
     return entry;
   }).sort((a, b) => b.at - a.at).slice(0, 120);
   c.saveRequests = [...rows.saves.values()].map((x) => ({ ...x.data, id: x.id })).sort((a, b) => (a.at || 0) - (b.at || 0));
+  c.effects = [...rows.effects.values()].map((x) => ({ ...x.data, id: x.id, target: x.target, ref: x.ref, cast: x.cast_id || null, by: x.by || null, visible: x.visible }));
   c.portalRequests = [...rows.portals.values()].map((x) => ({ ...x.data, id: x.id, userId: x.author || x.data?.userId })).sort((a, b) => (a.at || 0) - (b.at || 0));
   return c;
 }
@@ -243,6 +244,7 @@ export function explode(c, prev = emptyRows(true), now = Date.now()) {
     }
   }
   for (const r of c.saveRequests || []) { const { id, ...rest } = r; rows.saves.set(id, { id, campaign_id: c.id, data: rest }); }
+  for (const e of c.effects || []) { const { id, target, ref, cast, by, visible, ...data } = e; rows.effects.set(id, { id, campaign_id: c.id, target, ref, cast_id: cast || null, by: by || null, visible: visible !== false, data }); }
   for (const r of c.portalRequests || []) { const { id, userId, ...rest } = r; rows.portals.set(id, { id, campaign_id: c.id, author: userId || null, data: { ...rest, userId } }); }
   rows.combat = { campaign_id: c.id, data: { ...(c.combat || EMPTY_COMBAT()) } };
   return rows;
@@ -294,9 +296,10 @@ export function diffRows(a, b, { isMaster = false } = {}) {
   cmpMap('log_secrets', a.logSecrets, b.logSecrets, { update: false, del: false });
   cmpMap('save_requests', a.saves, b.saves);
   cmpMap('portal_requests', a.portals, b.portals, { update: false });
+  cmpMap('effects', a.effects, b.effects);
   if (!same(a.combat, b.combat)) ops.push({ table: 'combats', op: a.combat ? 'update' : 'insert', key: b.combat.campaign_id, row: b.combat, prev: a.combat });
   // Порядок: сначала родители, удаления детей — до удаления родителей.
-  const order = ['campaigns', 'campaign_invites', 'campaign_members', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'campaign_creatures', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
+  const order = ['campaigns', 'campaign_invites', 'campaign_members', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'campaign_creatures', 'tokens', 'effects', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests', 'combats'];
   const rank = (o) => (o.op === 'delete' ? 100 - order.indexOf(o.table) : order.indexOf(o.table));
   return ops.sort((x, y) => rank(x) - rank(y));
 }
@@ -371,7 +374,7 @@ export function groupPlacements(ops) {
 export function applyOps(rows, ops0) {
   // Копии: строки операций собраны из живой кампании, и её дальнейшие правки не должны менять кэш.
   const ops = structuredClone(ops0);
-  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', campaign_creatures: 'creatures' };
+  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', effects: 'effects', campaign_creatures: 'creatures' };
   for (const o of ops) {
     if (o.table === 'campaigns') { rows.campaign = o.row; continue; }
     if (o.table === 'campaign_invites') { rows.invite = o.row; continue; }
@@ -391,7 +394,7 @@ export function applyOps(rows, ops0) {
 /** Строка из события реального времени → в кэш. table — имя таблицы, row — новая строка (или старая при удалении). */
 export function applyChange(rows, table, type, row) {
   const keyOf = { campaign_members: (r) => r.user_id, scene_secrets: (r) => r.scene_id, scene_explored: (r) => r.scene_id };
-  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', campaign_creatures: 'creatures' };
+  const map = { campaign_members: 'members', characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', effects: 'effects', campaign_creatures: 'creatures' };
   if (table === 'campaigns') { if (type === 'DELETE') rows.campaign = null; else rows.campaign = row; return rows; }
   if (table === 'campaign_invites') { rows.invite = type === 'DELETE' ? null : row; return rows; }
   if (table === 'combats') { rows.combat = type === 'DELETE' ? null : row; return rows; }
@@ -414,8 +417,8 @@ export function applyChange(rows, table, type, row) {
  * ключ, поэтому по подписке с campaign_id=eq.<id> удаления этих таблиц не доходят. Клиент слушает их без фильтра
  * и применяет только своё: ключ удалённой строки уже есть в кэше этой кампании.
  */
-export const UNFILTERED_DELETES = ['combat_public', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests'];
-const DELETE_MAP = { characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals' };
+export const UNFILTERED_DELETES = ['effects', 'combat_public', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'save_requests', 'portal_requests'];
+const DELETE_MAP = { characters: 'characters', scenes: 'scenes', scene_secrets: 'secrets', scene_explored: 'explored', tokens: 'tokens', drawings: 'drawings', log_entries: 'log', log_secrets: 'logSecrets', save_requests: 'saves', portal_requests: 'portals', effects: 'effects' };
 const DELETE_KEY = { scene_secrets: 'scene_id', scene_explored: 'scene_id' };
 export function ownsDeleted(rows, table, row) {
   const m = rows?.[DELETE_MAP[table]];
@@ -444,6 +447,7 @@ export function rowsFrom(server) {
   put(rows.logSecrets, server.logSecrets);
   put(rows.saves, server.saves);
   put(rows.portals, server.portals);
+  put(rows.effects, server.effects);
   // Таблицы снимков ещё нет на сервере — null: кампания грузится без них, вкладка «Мои» за столом недоступна.
   if (server.creatures) { rows.creatures = new Map(); put(rows.creatures, server.creatures); }
   return rows;

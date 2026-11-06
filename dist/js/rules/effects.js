@@ -3,7 +3,8 @@
 // Источник — черта, заклинание, предмет, состояние; его механика — рецепт (dist/js/data/effect-recipes.json).
 // Экземпляр — рецепт на этом существе: { ref, recipe, key?, by?, cast?, since?, level?, option?, bonus?, equipped?, attuned?, off? }.
 
-export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility']);
+// set, halve, autoFail, autoCrit добавлены для состояний (этап 2): план называет их «обнулить», «вдвое меньше», автопровал и автокрит.
+export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility', 'set', 'halve', 'autoFail', 'autoCrit']);
 export const MODES = Object.freeze(['auto', 'ask', 'note']);
 export const EVENTS = Object.freeze(['hit', 'miss', 'crit', 'reduced-to-0', 'died', 'turn-start', 'turn-end']);
 export const WINDOWS = Object.freeze(['before-roll', 'after-roll', 'after-result']);
@@ -91,6 +92,7 @@ function collect(instances, tags, ctx) {
     if (why) { skipped.push({ ref: x.ref, reason: why }); continue; }
     for (const part of x.recipe?.parts || []) {
       if (part.option && part.option !== x.option) continue;
+      if (part.minLevel && !(x.level >= part.minLevel)) continue;
       const fit = whenMatches(part.when, tags, ctx);
       if (fit === false) continue;
       const row = { x, part };
@@ -100,6 +102,7 @@ function collect(instances, tags, ctx) {
   }
   return { auto, ask, notes, skipped };
 }
+// «check» подходит и к check:str, «save» — к save:dex: общая метка стоит на броске рядом с точной.
 const touches = (e, tags) => !e.to || e.to.some((t) => tags.includes(t));
 const label = (x) => x.label || x.recipe?.label || x.ref;
 const paramsOf = (x, ctx) => ({ bonus: x.bonus, slotLevel: ctx.numbers?.spellLevel, ...x.params });
@@ -140,20 +143,22 @@ export function armorClass({ armorBase, mods, wearingArmor = false, shield = 0 }
  */
 export function rollPlan({ tags, base = [] }, instances, ctx = {}, target = []) {
   const mine = collect(instances, tags, ctx), theirs = collect(target, tags, ctx);
-  const rows = [...mine.auto, ...theirs.auto.filter(({ part }) => part.side === 'target')];
-  const lines = base.map((b) => ({ ...b })), dice = [];
-  let adv = false, dis = false, crit = 20;
+  const rows = [...mine.auto.filter(({ part }) => part.side !== 'target'), ...theirs.auto.filter(({ part }) => part.side === 'target')];
+  const lines = base.map((b) => ({ ...b })), dice = [], why = [];
+  let adv = false, dis = false, crit = 20, autoFail = false, autoCrit = false;
   for (const { x, part } of rows) for (const e of part.effects || []) {
     if (!touches(e, tags)) continue;
-    if (e.op === 'advantage') adv = true;
-    else if (e.op === 'disadvantage') dis = true;
+    if (e.op === 'advantage') { adv = true; why.push(label(x)); }
+    else if (e.op === 'disadvantage') { dis = true; why.push(label(x)); }
+    else if (e.op === 'autoFail') { autoFail = true; why.push(label(x)); }
+    else if (e.op === 'autoCrit') autoCrit = true;
     else if (e.op === 'critRange') crit = Math.min(crit, e.value);
     else if (e.op === 'add' && !e.stat) {
       const v = valueOf(e.value, paramsOf(x, ctx));
       if (typeof v === 'number') lines.push({ value: v, label: label(x) }); else if (v) dice.push({ dice: v, label: label(x) });
     }
   }
-  return { mode: adv && dis ? 'normal' : adv ? 'advantage' : dis ? 'disadvantage' : 'normal', lines, dice, crit, ask: mine.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })), notes: mine.notes.map(({ part }) => part.label), skipped: mine.skipped };
+  return { mode: adv && dis ? 'normal' : adv ? 'advantage' : dis ? 'disadvantage' : 'normal', lines, dice, crit, autoFail, autoCrit, why: [...new Set(why)], ask: mine.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })), notes: mine.notes.map(({ part }) => part.label), skipped: mine.skipped };
 }
 
 /** Итог броска как чек: d20 — выпавшие кости (две при преимуществе), diceRolled — результаты бонусных кубов по порядку. */
@@ -184,6 +189,17 @@ export function damagePlan({ tags, dice, flat = 0, hit = true, crit = false }, i
     if (typeof v === 'number') sum += v; else if (v) out.push(v);
   }
   return { dice: crit ? out.flatMap((d) => [d, d]) : out, flat: sum, maxDice: max, ask: c.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })) };
+}
+
+/** Скорость: сначала прибавки, потом «вдвое меньше», в конце «обнулить» — бонусы к скорости тогда не помогают. */
+export function speedOf(base, instances, ctx = {}) {
+  let halve = false, zero = false;
+  for (const { part } of collect(instances, [], ctx).auto) for (const e of part.effects || []) {
+    if (e.stat !== 'speed') continue;
+    if (e.op === 'halve') halve = true;
+    if (e.op === 'set' && e.value === 0) zero = true;
+  }
+  return zero ? 0 : halve ? Math.floor(base / 2) : base;
 }
 
 /** Сопротивления не умножаются: иммунитет — 0, уязвимость и сопротивление применяются по разу. */

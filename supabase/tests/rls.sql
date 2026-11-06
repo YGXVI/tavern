@@ -257,6 +257,24 @@ select pg_temp.login('00000000-0000-0000-0000-00000000000c');
 select pg_temp.err('ожидающий не просит переход', $q$insert into public.portal_requests (id, campaign_id, author, data) values ('q-c', 'c-rls', '00000000-0000-0000-0000-00000000000c', '{}')$q$);
 reset role;
 
+-- ——— #193: наложения эффектов ———
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.ok('эффекты: игрок накладывает от своего имени', $q$insert into public.effects (id, campaign_id, target, ref, by) values ('e-open', 'c-rls', 't-q2', 'dndsu:spell:9', auth.uid())$q$);
+select pg_temp.err('эффекты: чужим именем нельзя', $q$insert into public.effects (id, campaign_id, target, ref, by) values ('e-fake', 'c-rls', 't-q2', 'dndsu:spell:9', '00000000-0000-0000-0000-00000000000a')$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('эффекты: мастер накладывает тайный', $q$insert into public.effects (id, campaign_id, target, ref, visible) values ('e-secret', 'c-rls', 't-q2', 'example:curse', false)$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('эффекты: тайного игрок не видит', $q$select 1 from public.effects where id = 'e-secret'$q$, 0);
+select pg_temp.cnt('эффекты: свой видит', $q$select 1 from public.effects where id = 'e-open'$q$, 1);
+select pg_temp.rows('эффекты: чужой тайный не снять', $q$delete from public.effects where id = 'e-secret'$q$, 0);
+select pg_temp.rows('эффекты: свой снимает', $q$delete from public.effects where id = 'e-open'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000c');
+select pg_temp.cnt('эффекты: посторонний не видит', $q$select 1 from public.effects$q$, 0);
+reset role;
+
 -- ——— DEC-019 D4: скрытые участники боя ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 insert into public.tokens (id, campaign_id, scene_id, hidden, data) select 't-sneak', 'c-rls', id, true, '{"name":"Засада","kind":"foe"}' from public.scenes where campaign_id = 'c-rls' limit 1;

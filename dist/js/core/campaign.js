@@ -6,6 +6,8 @@ import { toMonster } from '../rules/creature.js';
 import { sizeById } from '../data/rules.js';
 import { uid } from './dom.js';
 import { heroAc, heroInit, heroSpeed } from '../rules/hero-derived.js';
+import { speedOf } from '../rules/effects.js';
+import { conditionInstances } from '../rules/condition-recipes.js';
 
 export const getCampaign = (id) => getDB().campaigns[id] || null;
 
@@ -56,7 +58,7 @@ export function tokenStats(c, t) {
     const ch = characterOf(c, t.characterId);
     if (ch) {
       return {
-        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: heroSpeed(ch),
+        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: speedOf(heroSpeed(ch), conditionInstances(ch)),
         initBonus: heroInit(ch), darkvision: ch.darkvision || 0, conditions: ch.conditions || [],
         deathSaves: ch.deathSaves, subtitle: ch.statblock ? [ch.statblock.type, ch.statblock.cr != null && ch.statblock.cr !== '' ? `КО ${ch.statblock.cr}` : ''].filter(Boolean).join(' · ') || 'NPC' : `${ch.className} ${ch.level} ур.`, character: ch,
       };
@@ -64,7 +66,7 @@ export function tokenStats(c, t) {
   }
   const m = t.monsterId ? monsterOf(c, t.monsterId) : null;
   return {
-    name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: t.ac ?? 10, speed: t.speed ?? 30,
+    name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: t.ac ?? 10, speed: speedOf(t.speed ?? 30, conditionInstances(t)),
     initBonus: t.initBonus ?? 0, darkvision: t.darkvision || 0, conditions: t.conditions || [],
     subtitle: m ? [m.type, m.cr != null && m.cr !== '' ? `КО ${m.cr}` : ''].filter(Boolean).join(' · ') || 'Существо' : t.kind === 'hero' ? 'Герой' : 'Существо', monster: m,
   };

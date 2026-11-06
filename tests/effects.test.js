@@ -153,3 +153,64 @@ test('значения: параметр и сумма; строки-выраж�
   assert.equal(valueOf({ sum: [2, '$slotLevel'] }, {}), null);
   assert.equal(valueOf('process.exit(1)'), 'process.exit(1)', 'строка остаётся строкой');
 });
+
+test('состояния SRD: броски, цель, автопровал, скорость', async () => {
+  const { conditionInstances, CONDITION_RECIPES } = await import('../dist/js/rules/condition-recipes.js');
+  const { speedOf } = await import('../dist/js/rules/effects.js');
+  assert.equal(Object.keys(CONDITION_RECIPES).length, 15);
+  for (const [id, r] of Object.entries(CONDITION_RECIPES)) assert.deepEqual(validateRecipe(id, r), []);
+  const has = (...conditions) => conditionInstances({ conditions });
+  const attack = { tags: ['attack'] }, close = { tags: ['attack', 'within:5'] };
+  // Свои броски
+  assert.equal(rollPlan(attack, has('blinded')).mode, 'disadvantage');
+  assert.equal(rollPlan(attack, has('invisible')).mode, 'advantage');
+  assert.equal(rollPlan(attack, has('poisoned')).mode, 'disadvantage');
+  assert.equal(rollPlan({ tags: ['check', 'check:str'] }, has('poisoned')).mode, 'disadvantage');
+  assert.equal(rollPlan({ tags: ['save', 'save:str'] }, has('poisoned')).mode, 'normal');
+  assert.equal(rollPlan(attack, has('blinded', 'invisible')).mode, 'normal', 'преимущество и помеха гасятся');
+  assert.equal(rollPlan({ tags: ['save', 'save:dex'] }, has('restrained')).mode, 'disadvantage');
+  assert.equal(rollPlan({ tags: ['save', 'save:str'] }, has('restrained')).mode, 'normal');
+  // Автопровал
+  for (const id of ['paralyzed', 'stunned', 'unconscious', 'petrified']) {
+    assert.equal(rollPlan({ tags: ['save', 'save:str'] }, has(id)).autoFail, true, id);
+    assert.equal(rollPlan({ tags: ['save', 'save:dex'] }, has(id)).autoFail, true, id);
+    assert.equal(rollPlan({ tags: ['save', 'save:wis'] }, has(id)).autoFail, false, id);
+  }
+  // По цели
+  for (const id of ['blinded', 'paralyzed', 'petrified', 'restrained', 'stunned', 'unconscious']) assert.equal(rollPlan(attack, [], {}, has(id)).mode, 'advantage', id);
+  assert.equal(rollPlan(attack, [], {}, has('invisible')).mode, 'disadvantage');
+  assert.equal(rollPlan(close, [], {}, has('prone')).mode, 'advantage');
+  assert.equal(rollPlan(attack, [], {}, has('prone')).mode, 'disadvantage');
+  assert.equal(rollPlan(close, [], {}, has('paralyzed')).autoCrit, true);
+  assert.equal(rollPlan(attack, [], {}, has('paralyzed')).autoCrit, false, 'издалека не крит');
+  assert.equal(rollPlan(close, [], {}, has('stunned')).autoCrit, false, 'у ошеломлённого автокрита нет');
+  assert.equal(rollPlan(attack, has('prone'), {}).mode, 'disadvantage', 'своя часть цели не применяется к себе');
+  // Испуг зависит от источника
+  assert.equal(rollPlan(attack, has('frightened'), { rel: { 'fear:in-sight': false } }).mode, 'normal');
+  assert.equal(rollPlan(attack, has('frightened'), { rel: { 'fear:in-sight': true } }).mode, 'disadvantage');
+  assert.equal(rollPlan(attack, has('frightened')).ask.length, 1, 'неизвестное спрашиваем');
+  // Скорость
+  for (const id of ['grappled', 'restrained', 'paralyzed', 'stunned', 'unconscious', 'petrified']) assert.equal(speedOf(30, has(id)), 0, id);
+  assert.equal(speedOf(30, has('poisoned')), 30);
+  // Истощение: эта степень и все меньшие
+  const ex = (n) => conditionInstances({ exhaustion: n });
+  assert.equal(rollPlan({ tags: ['check'] }, ex(1)).mode, 'disadvantage');
+  assert.equal(rollPlan(attack, ex(2)).mode, 'normal');
+  assert.equal(speedOf(30, ex(1)), 30); assert.equal(speedOf(30, ex(2)), 15);
+  assert.equal(rollPlan(attack, ex(3)).mode, 'disadvantage'); assert.equal(rollPlan({ tags: ['save'] }, ex(3)).mode, 'disadvantage');
+  assert.equal(speedOf(30, ex(5)), 0);
+  assert.equal(conditionInstances({ conditions: ['exhaustion'] })[0].level, 1, 'отметка без степени — первая');
+  assert.equal(conditionInstances({ conditions: [{ id: 'prone' }] }).length, 1, 'запись объектом');
+});
+
+test('бросок стола: автопровал и помеха от состояний', async () => {
+  globalThis.self ??= {}; globalThis.window ??= { addEventListener() {}, removeEventListener() {} };
+  const { conditionRoll, rollTags } = await import('../dist/js/views/table/effects-roll.js');
+  assert.deepEqual(rollTags({ kind: 'save', what: 'Спасбросок: Ловкость' }), ['save', 'save:dex']);
+  assert.deepEqual(rollTags({ kind: 'check', ability: 'str' }), ['check', 'check:str']);
+  assert.equal(conditionRoll({ conditions: ['poisoned'] }, { kind: 'attack' }).adv, 'dis');
+  assert.equal(conditionRoll({ conditions: ['stunned'] }, { kind: 'save', what: 'Спасбросок: Сила' }).autoFail, true);
+  assert.equal(conditionRoll({ conditions: ['frightened'] }, { kind: 'attack' }).adv, 'dis');
+  assert.equal(conditionRoll({}, { kind: 'attack' }).adv, null);
+  assert.deepEqual(conditionRoll({ conditions: ['poisoned'] }, { kind: 'attack' }).why, ['Отравлен']);
+});

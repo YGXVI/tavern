@@ -20,6 +20,7 @@ const S = {
   log_entries: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', author: 'uuid', at: 'int!', vis: 'text', data: 'json' } },
   log_secrets: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', author: 'uuid', vis: 'text!', data: 'json' } },
   save_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', data: 'json' } },
+  effects: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', target: 'text!', ref: 'text!', cast_id: 'text', by: 'uuid', visible: 'bool', data: 'json' } },
   portal_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', author: 'uuid', data: 'json' } },
   combats: { pk: ['campaign_id'], cols: { campaign_id: 'text!', data: 'json' } },
   heroes: { pk: ['id'], cols: { id: 'text!', owner_id: 'uuid!', data: 'json!', archived_at: 'ts', updated_at: 'ts' } },

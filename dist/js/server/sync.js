@@ -11,7 +11,7 @@ import { createCharacterSheetClient, SheetCommandError } from './character-sheet
 import { commandFromCharacterChange, sameSheetValue, rebaseCharacterDraft } from './character-sheet-ops.js';
 import { advanceTurn, turnTokenId, initiativeOrder, turnIndexOf } from '../views/table/combat.js';
 
-const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'combat_public', 'save_requests', 'portal_requests', 'combats'];
+const CAMPAIGN_TABLES = ['campaign_members', 'campaign_invites', 'characters', 'scenes', 'scene_secrets', 'scene_explored', 'tokens', 'drawings', 'log_entries', 'log_secrets', 'combat_public', 'save_requests', 'portal_requests', 'combats', 'effects'];
 const PK = { campaigns: ['id'], campaign_invites: ['campaign_id'], campaign_members: ['campaign_id', 'user_id'], scene_secrets: ['scene_id'], combats: ['campaign_id'], campaign_creatures: ['campaign_id', 'id'] };
 const pkOf = (table, row) => Object.fromEntries((PK[table] || ['id']).map((k) => [k, row[k]]));
 const HIDDEN_VIS = new Set(['gm', 'blind', 'self']);
@@ -257,12 +257,12 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   let rows;
   try {
     const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, combatPublic, creatures, tokenSecrets, sceneHidden] = await Promise.all([
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, effects, combat, combatPublic, creatures, tokenSecrets, sceneHidden] = await Promise.all([
       sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
       q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
       q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
       sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
-      q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(), sb.from('combat_public').select('*').eq('campaign_id', cid).maybeSingle(),
+      q('save_requests'), q('portal_requests'), q('effects'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(), sb.from('combat_public').select('*').eq('campaign_id', cid).maybeSingle(),
       q('campaign_creatures'), q('token_secrets'), q('scene_hidden'),
     ]);
     const logRows = must(log);
@@ -271,7 +271,7 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
     rows = rowsFrom({
       campaign: must(campaign), members: must(members), invite: must(invite), characters: must(characters), scenes: must(scenes),
       secrets: must(secrets), explored: must(explored), tokens: must(tokens), drawings: must(drawings), log: logRows, logSecrets,
-      saves: must(saves), portals: must(portals), combat: must(combat) || must(combatPublic), // полная строка боя — только мастеру (DEC-019 D4)
+      saves: must(saves), portals: must(portals), effects: must(effects), combat: must(combat) || must(combatPublic), // полная строка боя — только мастеру (DEC-019 D4)
       // Снимки существ (TASK-179): таблицы ещё нет на живой базе (миграция #150 не применена) — кампания грузится без них.
       creatures: noTable(creatures.error) ? null : (hasCreatures = true, must(creatures)),
       // Тайное мастера в токенах: игроку RLS отдаёт пустой список; до миграции таблицы нет — токены как раньше.
