@@ -38,6 +38,8 @@ try {
   await page.click('[data-tab="combat"]');
   await page.waitForSelector('[data-attack="0"]');
  }
+ // Обзор тумана дописывается сам, пока открыт стол: к действиям листа он не относится.
+ const noFog=(scenes)=>scenes.map(({fog,...x})=>x);
  const state=()=>page.evaluate(async()=>{const c=(await import('/js/core/campaign.js')).getCampaign('c-crypt');return{pc:c.characters.find(c=>c.id==='action-pc'),npc:c.characters.find(c=>c.id==='action-npc'),scenes:c.scenes,log:c.log};});
  await open('action-pc');
  const before=await state();
@@ -53,7 +55,7 @@ try {
  assert.equal(await page.evaluate(()=>globalThis.executedFromAction),undefined);
  await page.click('[data-action-formula="bonusActions.0"]');count++;
  await page.click('[data-action-formula="reactions.0"]');count++;
- after=await state();assert.equal(after.log.length,count);assert.deepEqual(after.pc,before.pc);assert.deepEqual(after.scenes,before.scenes);
+ after=await state();assert.equal(after.log.length,count);assert.deepEqual(after.pc,before.pc);assert.deepEqual(noFog(after.scenes),noFog(before.scenes));
  await open('action-npc','u-asya');count=(await state()).log.length;await page.click('[data-attack="0"]');assert.equal((await state()).log.length,count,'игра за товарища не расширяется на NPC');
  await open('action-pc','u-asya');await page.click('[data-attack="0"]');assert.equal((await state()).log.length,count+1,'бросок за другого полноценного героя сохраняется');
  // Каталожный статблок: typed +0 — атака; null и legacy 0 не исполняются как атака.
@@ -75,7 +77,7 @@ try {
  assert.equal(await page.locator('[data-roll="mcheck"][data-ab="dex"] b').innerText(),'−5');
  assert.equal(await page.locator('.sheet-drawer .s-hp [data-hp-now]').innerText(),'—');assert.equal(await page.locator('.sheet-drawer .s-hp .max').innerText(),'/ 20');
  count=(await state()).log.length;await page.click('[data-roll="mattack"][data-i="0"]');after=await state();assert.equal(after.log.length,count+1);assert.equal(after.log[0].total-after.log[0].nat,0);
- assert.deepEqual(after.pc,before.pc);assert.deepEqual(after.npc,before.npc);assert.deepEqual(after.scenes,before.scenes);
+ assert.deepEqual(after.pc,before.pc);assert.deepEqual(after.npc,before.npc);assert.deepEqual(noFog(after.scenes),noFog(before.scenes));
  assert.deepEqual(errors,[]);
  console.log('actions browser OK: ability/PB once, zero/unknown, explicit dice only, unchanged HP/resources, PC/NPC roles, catalogue unknowns');
 } finally {await browser.close();}
