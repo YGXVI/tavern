@@ -54,11 +54,26 @@ function extraOptionName(ix, kind, o) {
   return nameOf(ix, o);
 }
 const stepOfChoice = (id = '') => (/^srd51:(race|subrace):/.test(id) ? 'race' : /:skills$/.test(id) || /^srd51:background:/.test(id) && !/starting/.test(id) ? 'background' : /starting/.test(id) ? 'equipment' : /:spells:/.test(id) ? 'spells' : 'class');
+/** Улучшение характеристик героя выше 3 уровня: +2 к одной или +1 к двум. Выше 20 не предлагаем. */
+function asiBox(c, ev) {
+  const s = c.selected, inc = s?.type === 'asi' ? s.increases || {} : {};
+  const two = Object.keys(inc).find((k) => inc[k] === 2), ones = Object.keys(inc).filter((k) => inc[k] === 1);
+  const score = (id) => ev.derivedInputs?.abilityScores?.[id] ?? 0;
+  const room = (a, n) => a.id === two || ones.includes(a.id) || score(a.id) + n <= 20;
+  const lvl = /:L(\d+):/.exec(c.id)?.[1];
+  return { title: `Улучшение характеристик${lvl ? `, ${lvl} уровень` : ''}`, note: `выбрано ${two || ones.length === 2 ? 1 : 0} из 1`, choiceId: c.id,
+    list: [...ABILITIES.filter((a) => room(a, 2)).map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === two || undefined })),
+      ...ABILITIES.filter((a) => room(a, 1)).map((a) => ({ name: `${a.short} +1`, value: `asi1:${a.id}`, on: ones.includes(a.id) || undefined }))] };
+}
 function extraBoxes(ix, ev) {
   const out = { race: [], class: [] };
-  for (const c of ev.choices.filter((x) => EXTRA_KINDS[x.kind] || (x.kind === 'skill' && stepOfChoice(x.id) === 'race'))) {
+  // Навыки класса и предыстории — на шаге предыстории; здесь остальные: разносторонность полуэльфа, навыки подкласса.
+  for (const c of ev.choices.filter((x) => EXTRA_KINDS[x.kind] || x.kind === 'asi_or_feat' || (x.kind === 'skill' && !/:skills$/.test(x.id) && !/^srd51:background:/.test(x.id)))) {
     const step = stepOfChoice(c.id) === 'race' ? 'race' : 'class';
+    if (c.kind === 'asi_or_feat') { out.class.push(asiBox(c, ev)); continue; }
     const bad = new Set((c.unavailable || []).map((u) => u.option));
+    // Компетентность, избранный враг и местность дважды не берутся: взятое на другом уровне не предлагаем.
+    if (['expertise', 'favored_enemy', 'terrain'].includes(c.kind)) for (const x of ev.choices) if (x.kind === c.kind && x.id !== c.id) for (const o of [].concat(x.selected || [])) bad.add(o);
     out[step].push({
       title: `${EXTRA_KINDS[c.kind] || 'Навыки'}: ${nameOf(ix, c.origin?.definitionId)}`, note: `выбрано ${Array.isArray(c.selected) ? c.selected.length : c.selected ? 1 : 0} из ${c.count}`, choiceId: c.id,
       list: (c.options || []).filter((o) => !bad.has(o)).map((o) => ({ name: extraOptionName(ix, c.kind, o), value: o, on: (Array.isArray(c.selected) ? c.selected.includes(o) : c.selected === o) || undefined })),
@@ -159,6 +174,17 @@ function applyChoice(ix, st, { step, id, value } = {}) {
     const [choiceId, opt] = String(value).split('|');
     const c = ev0.choices.find((x) => x.id === choiceId);
     if (!c) return null;
+    if (c.kind === 'asi_or_feat') {
+      const sel = c.selected, ab = opt.replace(/^asi[12]:/, '');
+      let next;
+      if (opt.startsWith('asi1:')) {
+        const inc = sel?.type === 'asi' && Object.values(sel.increases || {}).every((x) => x === 1) ? { ...sel.increases } : {};
+        if (inc[ab]) delete inc[ab]; else { if (Object.keys(inc).length >= 2) delete inc[Object.keys(inc)[0]]; inc[ab] = 1; }
+        next = Object.keys(inc).length ? { type: 'asi', increases: inc } : undefined;
+      } else next = sel?.type === 'asi' && sel.increases?.[ab] === 2 ? undefined : { type: 'asi', increases: { [ab]: 2 } };
+      change(ix, st, { type: 'setSelection', choiceId, value: next });
+      return null;
+    }
     // Одиночный выбор (подкласс, стиль) хранится значением, множественный — списком.
     if (c.count === 1 && !Array.isArray(c.selected) && (c.kind === 'subclass' || c.kind === 'feature_option')) {
       change(ix, st, { type: 'setSelection', choiceId, value: c.selected === opt ? undefined : opt });
@@ -625,16 +651,21 @@ export function quickCreation(ix, { campaign = null, userId = 'me', answers = {}
   const cls = quickClass(answers.role, answers.talk);
   ch({ step: 'race', id: quickRace(cls, answers.talk) }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: m().backgrounds[0]?.id || 'acolyte' }); const quickAuto = () => ch({ step: 'abilities', id: 'auto', value: cls === 'rogue' && answers.talk === 'book' ? ['dex', 'int', 'con'] : undefined });
   quickAuto();
-  for (let i = 0; i < 10; i += 1) {
-    const box = [...m().extra.race, ...m().extra.class].find((b) => !full(b)); if (!box) break;
+  // Компетентности нужны навыки: что не заполнилось сейчас, заполнится вторым проходом, после навыков.
+  const fillExtras = () => { const stuck = new Set(); for (let i = 0; i < 40; i += 1) {
+    const box = [...m().extra.race, ...m().extra.class].find((b) => !full(b) && !stuck.has(b.choiceId)); if (!box) break;
     // Свободные прибавки расы — в главные характеристики класса, а не в первые строки списка.
-    const main = PRIORITY[cls] || [], rank = (x) => { const i = main.indexOf(x.value); return i < 0 ? 99 : i; };
-    const list = box.list.every((x) => ABILITIES.some((a) => a.id === x.value)) ? [...box.list].sort((a, b) => rank(a) - rank(b)) : byTalk(box.list, answers.talk, (x) => x.value);
+    const main = PRIORITY[cls] || [], rank = (x) => { const i = main.indexOf(String(x.value).replace(/^asi[12]:/, '')); return i < 0 ? 99 : i; };
+    const asi = /^Улучшение/.test(box.title);
+    const list = asi ? box.list.filter((x) => x.value.startsWith('asi2:')).sort((a, b) => rank(a) - rank(b)).slice(0, 1)
+      : box.list.every((x) => ABILITIES.some((a) => a.id === x.value)) ? [...box.list].sort((a, b) => rank(a) - rank(b)) : byTalk(box.list, answers.talk, (x) => x.value);
     for (const it of list) { if (full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break; ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${it.value}` }); }
-    if (!full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break;
-  }
+    if (!full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) stuck.add(box.choiceId);
+  } };
+  fillExtras();
   quickAuto(); // прибавки расы уже известны: раскладка с их учётом
   for (const s of byTalk(m().backgroundSkills?.list?.filter((x) => !x.from) || [], answers.talk, (x) => SKILL_ID[x.name])) if (!full(m().backgroundSkills)) ch({ step: 'background', id: 'skill', value: s.name });
+  fillExtras();
   for (const l of m().backgroundLangs?.list?.filter((x) => !x.from) || []) { if (full(m().backgroundLangs)) break; ch({ step: 'background', id: 'lang', value: l.name }); }
   for (const g of m().equipment?.groups || []) ch({ step: 'equipment', id: 'eq', value: `${g.title}|${g.options[0].name}` });
   ch({ step: 'spells', id: 'auto' });

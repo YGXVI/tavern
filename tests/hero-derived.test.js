@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { indexCreation, newCreation, applyCreationChoice, creationModel, creationDoneModel, creationCharacter } from '../dist/js/views/hero/creation.js';
+import { indexCreation, newCreation, applyCreationChoice, creationModel, creationDoneModel, creationCharacter, quickCreation } from '../dist/js/views/hero/creation.js';
 import { toHeroView } from '../dist/js/views/hero/adapter.js';
 import { gearIndex, weaponAttacks } from '../dist/js/views/hero/gear.js';
 import { ARMOR_TABLE, heroAc, heroInit } from '../dist/js/rules/hero-derived.js';
@@ -235,7 +235,13 @@ test('D2: герой кампании 5 уровня собирается пят
     const ch = (x) => applyCreationChoice(ix, st, x);
     ch({ step: 'race', id: 'human' }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: 'acolyte' }); ch({ step: 'abilities', id: 'auto' });
     assert.equal(st.draft.levelHistory.length, 5, cls);
-    assert.equal(creationModel(ix, st).campaign.level ?? 5, 5);
+  }
+  // Быстрый герой доводит сборку до конца на любом уровне: подкласс, улучшения, навыки подкласса, заклинания.
+  for (const level of [3, 5, 12, 20]) for (const role of ['front', 'range', 'magic', 'heal', 'shadow']) for (const talk of ['fist', 'word', 'trick', 'book']) {
+    const st = quickCreation(ix, { campaign: { id: 'c1', level }, answers: { role, talk, name: 'Q' }, newId: uuid() });
+    const m = creationModel(ix, st);
+    assert.equal(m.status, 'valid', `${level} ${role} ${talk}: ${JSON.stringify(m.missing).slice(0, 200)}`);
+    assert.equal(creationCharacter(ix, st, { newId: uuid() }).data.level, level);
   }
 });
 
