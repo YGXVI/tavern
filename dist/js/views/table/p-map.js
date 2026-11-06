@@ -464,7 +464,7 @@ export function templatePopover(ctx, anchor) {
     <div class="panel-section">${ctx.isMaster
       ? `<p class="t-xs tertiary">Спасброски героев попросим у игроков, за существ бросите вы.</p>`
       : `<p class="t-xs tertiary">Мастер бросит за врагов спасброски и применит урон.</p>`}</div>
-    <div class="panel-footer"><button class="btn btn-ghost" data-clear>Убрать</button><span class="spacer"></span>${ctx.isMaster
+    <div class="panel-footer tpl-actions"><button class="btn btn-ghost" data-clear>Убрать</button>${ctx.isMaster
       ? `<button class="btn btn-secondary" data-dmg ${targets.length ? '' : 'disabled'}>${icon('first-aid-kit', 16)}Урон</button><button class="btn btn-primary" data-saves ${targets.length ? '' : 'disabled'}>${icon('dice-faces-06', 16)}Спасброски</button>`
       : `<button class="btn btn-primary" data-send>${icon('arrow-right-02', 16)}Отправить мастеру</button>`}</div></div>`, anchor, { placement: 'right', className: 'tpl-popover' });
   pop.node.addEventListener('click', (e) => {
