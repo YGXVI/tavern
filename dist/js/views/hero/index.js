@@ -17,7 +17,7 @@ import { heroList, heroView, creationView, creationLive, creationDone, lssImport
 import { srcOf } from '../../core/assets.js';
 import { closeTopModal, hasModal } from '../../ui/kit.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
-import { stepBody, stepGave, bindStepExtras } from './steps.js';
+import { createPage, bindCreate, resetCreateRoute } from './create.js';
 
 // Выборы мастера живут в сессии вкладки — переживают обновление страницы, но не попадают в данные кампании.
 const KEY = 'rasputye-hero-draft';
@@ -58,7 +58,8 @@ export function mountHero(root, hash) {
     if (p0 === 'heroes') { page(heroesPage()); cleanup.push(bindHeroes(L)); return; }
     if (p1 === 'new' && !p2) { const qp = new URLSearchParams(query); if (qp.get('c')) startCreation(qp.get('c')); page(pathPage(qp)); bindPath(L, qp); return; }
     if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({})); return; }
-    if (p1 === 'new') { page(stepPage(p2), 'wizard'); bindStep(root, L, p2, rerender); return; }
+    // Пошаговое создание — одним полотном, как правка героя (create.js, #203): шаг из адреса — раздел, к которому ехать.
+    if (p1 === 'new') { page(createPage(p2, draft), 'wizard edit-page create-page', false); bindCreate(root, L, p2, draft, saveDraft, rerender); return; }
     if (p1 === 'quick') { const q = creationView().quick; if (p2 === 'done' && q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
     if (p1 === 'import') { const c = new URLSearchParams(query).get('c') || ''; page(importPage(c)); bindImport(root, L, c); return; }
     if (p2 === 'bring') { page(bringPage(p1, new URLSearchParams(query).get('c') || '')); L('click', '[data-bring-camp]', (e, b) => heroActions.bringToCampaign({ heroId: p1, campaignId: b.dataset.bringCamp })); return; }
@@ -84,7 +85,7 @@ export function mountHero(root, hash) {
   // Окна экранов героя (хиты, портрет, заклинание, предмет) закрываются по Esc и не переживают уход со страницы.
   const onKey = (e) => { if (e.key === 'Escape' && hasModal()) { e.preventDefault(); closeTopModal(); } };
   document.addEventListener('keydown', onKey);
-  return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); document.removeEventListener('keydown', onKey); while (hasModal()) closeTopModal(); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
+  return { unmount: () => { alive = false; resetCreateRoute(); window.removeEventListener('hero:changed', onChanged); document.removeEventListener('keydown', onKey); while (hasModal()) closeTopModal(); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }
 
 const tickSvg = String(ic('tick-02', 14));
@@ -188,34 +189,6 @@ function bindPath(L, qp) {
 }
 
 // ——— 46–52 · Пошагово ———
-function stepPage(stepId) {
-  const cv = creationView();
-  const i = Math.max(0, cv.steps.findIndex((s) => s.id === stepId));
-  const s = cv.steps[i];
-  const href = (k) => `#/hero/new/${cv.steps[k].id}`;
-  const prev = i > 0 ? href(i - 1) : '#/hero/new';
-  const last = i === cv.steps.length - 1;
-  const next = last ? '#/hero/new/done' : href(i + 1);
-  const nextLabel = last ? 'Готово: посмотреть героя' : `Дальше: ${cv.steps[i + 1].name.toLowerCase()}`;
-  const live = creationLive(s.id);
-  return html`<main class="h-wizard">
-    ${pathRow({ back: '#/hero/new', steps: cv.steps, current: i, href })}
-    <div class="h-wiz-grid"><section class="h-wiz-main">${stepBody(s, cv, draft)}</section>
-      ${liveSheet(live, { note: cv.campaignId ? `${cv.campaign.level} уровень — так решил мастер` : `${cv.campaign.level} уровень`, gave: stepGave(s, cv, draft) })}</div>
-    ${bottomBar({ back: prev, hint: 'Шаги можно проходить в любом порядке — непройденные останутся серыми.', next, nextLabel })}
-  </main>`;
-}
-function bindStep(root, L, stepId, rerender) {
-  L('click', '[data-pick]', (e, b) => {
-    const id = b.dataset.pick;
-    draft[stepId] = id; saveDraft(); heroActions.choose({ step: stepId, id });
-    selectIn(root, '[data-pick]', 'data-pick', id);
-    // Выборы расы и класса (прибавки, навыки, подкласс) лежат под карточками — показываем первый незаполненный.
-    root.querySelector('.h-extra.need')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
-  bindStepExtras(root, L, stepId, draft, saveDraft, rerender);
-}
-
 // ——— 53 · Героиня готова ———
 function donePage() {
   const cv = creationView();

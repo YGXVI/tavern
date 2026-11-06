@@ -71,8 +71,8 @@ try {
  assert.equal(await page.locator('[data-roll="mattack"][data-i="1"]').count(),0);
  assert.equal(await page.locator('[data-roll="mattack"][data-i="2"]').count(),0);
  assert.equal(await page.locator('[data-roll="mcheck"][data-ab="str"]').isDisabled(),true);
- assert.equal(await page.locator('[data-roll="mcheck"][data-ab="dex"]').innerText(),'−5');
- assert.equal(await page.locator('.sheet-drawer .vital.hp b').innerText(),'—/20');
+ assert.equal(await page.locator('[data-roll="mcheck"][data-ab="dex"] b').innerText(),'−5');
+ assert.equal(await page.locator('.sheet-drawer .s-hp [data-hp-now]').innerText(),'—');assert.equal(await page.locator('.sheet-drawer .s-hp .max').innerText(),'/ 20');
  count=(await state()).log.length;await page.click('[data-roll="mattack"][data-i="0"]');after=await state();assert.equal(after.log.length,count+1);assert.equal(after.log[0].total-after.log[0].nat,0);
  assert.deepEqual(after.pc,before.pc);assert.deepEqual(after.npc,before.npc);assert.deepEqual(after.scenes,before.scenes);
  assert.deepEqual(errors,[]);
