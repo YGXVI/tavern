@@ -95,15 +95,15 @@ for (const uid of [A, B]) {
   await page.evaluate(async () => (await import('/js/server/sync.js')).whenSynced(__ctx.cid));
   assert.ok(fake.T.log_entries.some((l) => l.author === uid && /колющий/.test(l.data.label || ''))); assert.ok(fake.T.log_entries.some((l) => l.author === uid && /огонь/.test(l.data.label || '')));
   const loadedPortrait = await page.waitForFunction(async () => {
-    const node = document.querySelector('.sheet-portrait'); if (!node) return false;
-    const url = getComputedStyle(node).backgroundImage.match(/url\("([^"]+)"\)/)?.[1];
+    const node = document.querySelector('.sheet-drawer .s-portrait img'); if (!node) return false;
+    const url = node.getAttribute('src');
     if (!url) return false;
     const image = new Image(); image.src = url;
     try { await image.decode(); return image.naturalWidth === 512 ? image.naturalWidth : false; } catch { return false; }
   });
   assert.equal(await loadedPortrait.jsonValue(), 512); await loadedPortrait.dispose();
   await page.getByRole('button', { name: 'Атака: Адское копьё', exact: true }).waitFor();
-  const rects = await page.locator('.monster-rolls button').evaluateAll((buttons) => buttons.map((b) => b.getBoundingClientRect().toJSON()));
+  const rects = await page.locator('.sheet-drawer .s-chips button').evaluateAll((buttons) => buttons.map((b) => b.getBoundingClientRect().toJSON()));
   assert.equal(rects.length, 3); for (const r of rects) assert.ok(r.x >= 0 && r.x + r.width <= (uid === A ? 1440 : 390));
   // Изменения библиотеки влияют на новые постановки, прежняя копия остаётся прежней.
   await page.evaluate(async (id) => { const lib = await import('/js/core/library.js'); const c = (await lib.listCreatures()).find((x) => x.id === id); __ctx.ui.myLib = { list: [structuredClone(c)] }; c.actions[0].attack.bonus = 12; await lib.saveCreature(c); }, template.id);
