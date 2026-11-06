@@ -63,12 +63,14 @@ export function page(it, items, q, o = {}) {
           <div class="it-bigem">${ic(icOf(it), 64)}</div>
         </header>
         ${sec('text', 'Описание', it.text ? 'SRD 5.1 на английском — целиком' : '', it.text ? srdText(paras, `SRD · ${it.en}`) : html`<div class="cls-box sp-nosrd"><h3>${ic('book-open-01', 18)}Текста в открытых правилах нет</h3><p class="t-sm muted">Предмет не входит в SRD 5.1 — открыт только паспорт: тип, редкость, настройка.</p>${it.link ? html`<a class="btn btn-secondary btn-sm" href="${it.link}" target="_blank" rel="noopener noreferrer">${ic('arrow-right-02')}Карточка на dnd.su</a>` : ''}</div>`)}
-        ${near.length ? sec('near', 'Того же вида и редкости', `${near.length}`, html`<div class="rx-group">${near.map(card)}</div>`) : ''}
+        ${!o.modal && near.length ? sec('near', 'Того же вида и редкости', `${near.length}`, html`<div class="rx-group">${near.map(card)}</div>`) : ''}
       </div>
-      <aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Лестница редкости</p>
+      ${o.modal ? '' : html`<aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Лестница редкости</p>
         <ol class="it-ladder">${RARITY.slice(0, 6).map(([r, col], i) => html`<li class="${i === ri ? 'on' : ''}" style="--k:${col}"><i></i><b>${r}</b><span>${items.filter((x) => x.rarity === r).length}</span></li>`)}</ol>
         ${ri > 5 ? html`<p class="t-sm muted">${it.rarity} — у предметов, чья сила зависит от варианта (например, +1, +2 или +3).</p>` : ''}
-        <p class="t-xs tertiary">Настройка: короткий отдых рядом с предметом; одновременно — не больше трёх.</p></div></aside>
+        <p class="t-xs tertiary">Настройка: короткий отдых рядом с предметом; одновременно — не больше трёх.</p></div></aside>`}
     </div>
   </div>`;
 }
+
+export { icOf as itemIcon };

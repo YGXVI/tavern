@@ -2,7 +2,7 @@
 import { html, raw, esc } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { SECTIONS, loadAll, loadSection, sectionNow, search, norm } from './data.js';
-import { preview } from './cards.js';
+import { preview, artwork } from './cards.js';
 
 let open = null;
 const ic = (n, s = 16) => raw(icon(n, s));
@@ -44,7 +44,7 @@ export function openPalette(q0 = '', { onPick } = {}) {
     hint.innerHTML = alt ? String(html`${ic('sparkles', 14)}Похоже на другую раскладку — ищем «${alt}»`) : typo && top ? String(html`${ic('sparkles', 14)}Похоже на опечатку — ищем «${top.name.toLowerCase()}»${top.en ? html` и «${top.en.toLowerCase()}»` : ''}`) : '';
     let i = 0;
     list.innerHTML = norm(q)
-      ? (groups.length ? groups.map(([s, items]) => html`<div class="ref-pal-group">${s.name}</div>${items.map((it) => html`<button class="ref-pal-row" data-i="${i++}" role="option">${ic(s.icon)}<span><b>${it.name}</b><small>${[it.en, it.sub].filter(Boolean).join(' · ')}</small></span>${i === 1 ? html`<kbd>Enter</kbd>` : ''}</button>`)}`).map(String).join('') : '<p class="ref-pal-empty">Ничего не нашлось. Попробуйте по-английски или короче.</p>')
+      ? (groups.length ? groups.map(([s, items]) => html`<div class="ref-pal-group">${s.name}</div>${items.map((it) => html`<button class="ref-pal-row" data-i="${i++}" role="option">${artwork(it, 'ref-pal-thumb') || ic(s.icon)}<span><b>${it.name}</b><small>${[it.en, it.sub].filter(Boolean).join(' · ')}</small></span>${i === 1 ? html`<kbd>Enter</kbd>` : ''}</button>`)}`).map(String).join('') : '<p class="ref-pal-empty">Ничего не нашлось. Попробуйте по-английски или короче.</p>')
       : String(html`<div class="ref-pal-group">Разделы</div>${SECTIONS.map((s) => html`<a class="ref-pal-row" href="#/ref/${s.id}">${ic(s.icon)}<span><b>${s.name}</b><small>${s.hint}</small></span></a>`)}`);
     draw();
   };

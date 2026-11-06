@@ -110,10 +110,10 @@ export function page(it, items, q, o = {}) {
           </div>`)}
         ${lists.map(([k, t, hint]) => ((m[k] || []).length ? sec(k, t, hint, html`<div class="cr-list">${m[k].map(block)}</div>`) : ''))}
       </div>
-      <aside class="cls-side">
+      ${o.modal ? '' : html`<aside class="cls-side">
         ${toolBox('creatures', it, { party: 4, level: lv, count: 1 }, { title: 'Насколько опасно для вашего отряда' })}
         ${near.length ? html`<div class="cls-now rx-near"><p class="cls-now-hint">Рядом по силе</p>${near.map((x) => html`<a class="rx-near-row" href="${href(x)}"><img src="${srcOf(x.m.img) || x.m.img}" alt="" loading="lazy"><span><b>${x.name}</b><small>Опасность ${crText(x.m.cr)}</small></span></a>`)}</div>` : ''}
-      </aside>
+      </aside>`}
     </div>
   </div>`;
 }

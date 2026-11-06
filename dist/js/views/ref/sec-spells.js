@@ -118,14 +118,14 @@ export function page(it, items, q, o = {}) {
         </header>
         ${sec('text', 'Текст заклинания', t ? 'SRD 5.1 на английском — целиком' : '', t ? html`${srdText(t.text, `SRD · ${t.name}`)}${t.higher ? html`<div class="sp-higher"><b>${ic('layers-01', 16)}На больших уровнях</b><p lang="en">${t.higher}</p></div>` : ''}`
           : html`<div class="cls-box sp-nosrd"><h3>${ic('book-open-01', 18)}Текста в открытых правилах нет</h3><p class="t-sm muted">Заклинание не входит в SRD 5.1 — его описание защищено авторским правом. Все параметры выше — точные; полный текст откройте в источнике.</p>${it.link ? html`<a class="btn btn-secondary btn-sm" href="${it.link}" target="_blank" rel="noopener noreferrer">${ic('arrow-right-02')}Карточка на dnd.su</a>` : ''}</div>`)}
-        ${sec('who', 'Кто знает', 'Основные списки классов', html`<div class="sp-classes">${it.classes.length ? it.classes.map((c) => (classId(c) && !o.modal ? html`<a class="sp-class" href="#/ref/classes/${classId(c)}"><img src="${new URL(`../../../assets/hero/class-${classId(c)}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${c}</b></a>` : html`<span class="sp-class"><b>${c}</b></span>`)) : html`<p class="t-sm tertiary">Нет в основных списках — только у подклассов или в отдельных книгах.</p>`}</div>`)}
+        ${o.modal ? '' : sec('who', 'Кто знает', 'Основные списки классов', html`<div class="sp-classes">${it.classes.length ? it.classes.map((c) => (classId(c) && !o.modal ? html`<a class="sp-class" href="#/ref/classes/${classId(c)}"><img src="${new URL(`../../../assets/hero/class-${classId(c)}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${c}</b></a>` : html`<span class="sp-class"><b>${c}</b></span>`)) : html`<p class="t-sm tertiary">Нет в основных списках — только у подклассов или в отдельных книгах.</p>`}</div>`)}
       </div>
-      <aside class="cls-side">
+      ${o.modal ? '' : html`<aside class="cls-side">
         ${p ? toolBox('spells', it, { v: it.level || 1, cantrip: !it.level }, { title: p.heal ? 'Сколько лечит' : 'Сколько бьёт', hint: it.level ? 'Двигайте ячейку — урон пересчитается' : 'Двигайте уровень героя — заговор растёт' })
           : html`<div class="cls-now"><p class="cls-now-hint">Коротко</p><div class="cls-tiles"><div class="cls-tile"><small>Круг</small><b>${it.level || '0'}</b><span>${it.level ? 'тратит ячейку' : 'без ячейки'}</span></div><div class="cls-tile"><small>Школа</small><b class="sp-tile-sch">${s.name}</b></div></div>
             ${it.conc ? html`<p class="t-sm muted">${ic('brain-02', 14)} Концентрация: второе такое заклинание сбрасывает первое, урон — спасбросок Телосложения.</p>` : ''}${it.ritual ? html`<p class="t-sm muted">${ic('hourglass', 14)} Ритуал: +10 минут — и без ячейки.</p>` : ''}</div>`}
         ${near.length ? html`<div class="cls-now rx-near"><p class="cls-now-hint">Та же школа и круг</p>${near.map((x) => html`<a class="rx-near-row sp-near" href="${href(x)}"><span class="sp-ic">${ic(sch(x).icon, 14)}</span><span><b>${x.name}</b><small>${x.en}</small></span></a>`)}</div>` : ''}
-      </aside>
+      </aside>`}
     </div>
   </div>`;
 }

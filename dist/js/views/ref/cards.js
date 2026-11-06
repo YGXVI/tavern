@@ -145,8 +145,18 @@ const modalPage = (mod, sectionId) => (it) => mod.page(it, sectionNow(sectionId)
 const RENDER = { equipment: modalPage(GEAR, 'equipment'), items: modalPage(ITEMS, 'items'), races: modalPage(RACES_PAGE, 'races'), backgrounds: modalPage(BG_PAGE, 'backgrounds'), rules: (it) => RULES_PAGE.page(it, sectionNow('rules') || [it], new URLSearchParams(), { modal: true }), spells: (it) => SPELLS.page(it, sectionNow('spells') || [it], new URLSearchParams(), { modal: true }), creatures: (it) => CREATURES.page(it, sectionNow('creatures') || [it], new URLSearchParams(), { modal: true }), classes: klass };
 export function card(it, o) { return (RENDER[it.section] || rule)(it, o); }
 
+/** Доступный арт: портрет существа или существующая иконка предмета на монете. */
+export function referenceImage(it) {
+  const ref = it.m?.img || it.img || (it.section === 'items' ? `item:${ITEMS.itemIcon(it)}` : it.section === 'equipment' ? `item:${GEAR.equipmentIcon(it)}` : '');
+  return srcOf(ref) || ref;
+}
+export function artwork(it, className) {
+  const src = referenceImage(it);
+  return src ? html`<img class="ref-art ${className}" src="${src}" alt="" loading="lazy" onerror="this.remove()">` : '';
+}
 /** Короткое превью для поиска Ctrl K. */
-export function preview(it) {
+export function preview(it) { return html`${artwork(it, 'ref-preview-art')}${previewText(it)}`; }
+function previewText(it) {
   if (it.section === 'spells') return html`<div class="ref-chips">${chip(it.level ? `${it.level} уровень` : 'Заговор', 'chip-accent')}${chip(it.schoolName, 'chip-magic')}</div><h3>${it.name}</h3><p class="tertiary">${it.en}</p><div class="ref-stats two">${stat('Время', it.time)}${stat('Дистанция', it.range)}</div><p class="t-sm muted">${it.comp}${it.duration ? ` · ${it.duration}` : ''}</p>`;
   if (it.section === 'creatures') return html`<div class="ref-chips">${chip(`Опасность ${it.m.cr}`, 'chip-accent')}</div><h3>${it.name}</h3><p class="tertiary">${it.en} · ${it.m.type}</p><div class="ref-stats two">${stat('КД', it.m.ac)}${stat('Хиты', it.m.hp, it.m.hpDice)}</div>`;
   if (it.section === 'rules') return html`<div class="ref-chips">${chip(it.group, 'chip-accent')}</div><h3>${it.name}</h3><p class="t-sm muted">${it.text}</p>`;

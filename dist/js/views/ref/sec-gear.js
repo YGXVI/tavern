@@ -76,7 +76,7 @@ export function page(it, items, q, o = {}) {
   const classes = (sectionNow('classes') || []).filter((k) => JSON.stringify(k.equipment || {}).includes(`"${it.ref}"`));
   const w = it.w, a = it.a;
   const st = w?.damage?.dice ? { ab: w.properties?.includes('finesse') || w.range === 'ranged' ? 16 : 16, prof: 2, two: 0 } : { dex: 14 };
-  return html`<div class="cls-page" style="--c:${c}">
+  return html`<div class="cls-page gr-page" style="--c:${c}">
     ${o.modal ? '' : crumbs('equipment', 'Всё снаряжение', it, items, href)}
     <div class="cls-main">
       <div class="cls-left">
@@ -96,9 +96,9 @@ export function page(it, items, q, o = {}) {
         ${w?.properties?.length ? sec('props', 'Свойства', 'Что они значат за столом', html`<div class="rl-grid">${w.properties.map((p) => html`<article class="rl-card"><div class="rl-card-t"><b>${PROP[p]?.[0] || p}</b><p>${PROP[p]?.[1] || ''}</p></div></article>`)}</div>`) : ''}
         ${a ? sec('armor', 'Как носить', '', html`<div class="rl-grid"><article class="rl-card"><div class="rl-card-t"><b>${ARMOR_CAT[a.category]?.[0]} доспех</b><p>${ARMOR_CAT[a.category]?.[1]}. Надеть и снять — ${a.category === 'light' ? '1 минута' : a.category === 'medium' ? '5 минут и 1 минута' : '10 минут и 5 минут'}.</p></div></article>${a.stealthDisadvantage ? html`<article class="rl-card"><div class="rl-card-t"><b>Шумный</b><p>Помеха на проверки Скрытности.</p></div></article>` : ''}${a.strength ? html`<article class="rl-card"><div class="rl-card-t"><b>Тяжело носить</b><p>При Силе ниже ${a.strength} скорость падает на 10 футов.</p></div></article>` : ''}</div>`) : ''}
         ${it.contents.length ? sec('contents', 'Внутри', '', html`<div class="gr-small">${it.contents.map((cc) => { const x = byRef.get(cc.ref); return x ? html`<a class="gr-item" href="${href(x)}" style="--c:${colorOf(x)}"><span class="sp-ic">${ic(iconOf(x), 15)}</span><span><b>${cc.quantity > 1 ? `${cc.quantity} × ` : ''}${x.name}</b></span><em>${cost(x)}</em></a>` : ''; })}</div>`) : ''}
-        ${inPacks.length || classes.length ? sec('where', 'Где встречается', 'Наборы и стартовое снаряжение классов', html`<div class="sp-classes">${inPacks.map((x) => html`<a class="sp-class" href="${href(x)}"><b>${ic('backpack-01', 14)} ${x.name}</b></a>`)}${classes.map((k) => html`<a class="sp-class" href="#/ref/classes/${k.id}"><img src="${new URL(`../../../assets/hero/class-${k.id}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${k.name}</b></a>`)}</div>`) : ''}
+        ${!o.modal && (inPacks.length || classes.length) ? sec('where', 'Где встречается', 'Наборы и стартовое снаряжение классов', html`<div class="sp-classes">${inPacks.map((x) => html`<a class="sp-class" href="${href(x)}"><b>${ic('backpack-01', 14)} ${x.name}</b></a>`)}${classes.map((k) => html`<a class="sp-class" href="#/ref/classes/${k.id}"><img src="${new URL(`../../../assets/hero/class-${k.id}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${k.name}</b></a>`)}</div>`) : ''}
       </div>
-      <aside class="cls-side">${w?.damage?.dice ? toolBox('gear-weapon', it, st, { title: 'Удар этим оружием' }) : a ? toolBox('gear-armor', it, st, { title: 'Ваш КД в этом доспехе' }) : html`<div class="cls-now"><p class="cls-now-hint">В кошельке</p><p class="t-sm muted">1 зм = 10 см = 100 мм. Золотая монета весит 1/50 фунта.</p></div>`}</aside>
+      ${o.modal ? '' : html`<aside class="cls-side">${w?.damage?.dice ? toolBox('gear-weapon', it, st, { title: 'Удар этим оружием' }) : a ? toolBox('gear-armor', it, st, { title: 'Ваш КД в этом доспехе' }) : html`<div class="cls-now"><p class="cls-now-hint">В кошельке</p><p class="t-sm muted">1 зм = 10 см = 100 мм. Золотая монета весит 1/50 фунта.</p></div>`}</aside>`}
     </div>
   </div>`;
 }
@@ -132,3 +132,5 @@ TOOLS['gear-armor'] = {
       <div class="gr-best"><small>Лучшее при такой Ловкости</small>${all.map((r) => html`<a href="${href(r.x)}" class="${r.x === it ? 'on' : ''}"><b>${r.ac}</b><span>${r.x.name}</span></a>`)}</div>`;
   },
 };
+
+export { iconOf as equipmentIcon };
