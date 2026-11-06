@@ -205,14 +205,22 @@ export class Panels {
     const html = widgetHTML(this.ctx);
     if (force || host.__html !== html) {
       const scroll = host.querySelector('.scroll')?.scrollTop || 0;
+      // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
+      // Класс снимаем ДО замены разметки: иначе новый .widget снова проигрывает «rise» с нуля,
+      // и очередь боя мигает на каждом «Следующий ход».
+      const opening = this.lastWidget !== this.ctx.ui.widget;
+      if (!opening) host.classList.remove('opening');
       host.innerHTML = html; host.__html = html;
       const sc = host.querySelector('.scroll'); if (sc) sc.scrollTop = scroll;
       // Очередь боя: текущий ход всегда в поле зрения.
       host.querySelector('.init-row.current')?.scrollIntoView({ block: 'nearest' });
-      // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
-      if (this.lastWidget !== this.ctx.ui.widget) {
+      if (opening) {
         this.lastWidget = this.ctx.ui.widget;
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
+        if (!host.__openEnd) {
+          host.__openEnd = true;
+          host.addEventListener('animationend', (e) => { if (e.target.parentElement === host) host.classList.remove('opening'); });
+        }
       }
     }
     // Лоток закрыли вместе с виджетом «Кубы» — преимущество и помеха сбрасываются.
