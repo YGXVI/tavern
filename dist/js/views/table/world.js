@@ -320,7 +320,7 @@ export function renderTokens(L, ctx) {
       L.tokens.append(node);
     }
     if (node.dataset.sig !== sig) { node.innerHTML = tokenMarkup(ctx, t, st, n, d, name); node.dataset.sig = sig; node.dataset.tg = ''; node.dataset.by = ''; }
-    const p = ctx.posOf(t);
+    const p = ctx.viewPosOf ? ctx.viewPosOf(t) : ctx.posOf(t);
     node.style.width = `${d}px`; node.style.height = `${d}px`;
     // Поверх всех — тот, кого тянут сейчас (свой или чужой), затем — кого двигали последним.
     node.style.setProperty('--rot', `${look.rot}deg`);

@@ -22,7 +22,8 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const cleanPts = (a) => (Array.isArray(a) ? a.slice(0, 200).map((p) => ({ x: num(p?.x), y: num(p?.y) })) : null);
 const cleanPath = (p) => (p && typeof p === 'object' ? { pts: cleanPts(p.pts) || [], label: String(p.label ?? '').slice(0, 120), over: !!p.over, blocked: !!p.blocked, quiet: !!p.quiet, waypoints: num(p.waypoints) } : null);
 import { attachInput, remoteTrapCheck } from './input.js';
-import { attachGizmo } from './gizmo.js';
+import { attachGizmo, tokenDiameter } from './gizmo.js';
+import { riderOffset } from './riding.js';
 import { attachDrawBar, fitDrawBar } from './drawings.js';
 import { attachCreatureDrag } from './creature-drag.js';
 import { attachCreatureFileDrop } from './file-drop.js';
@@ -79,6 +80,14 @@ export function mountTable(root, cid) {
 
   // ——— Производные ———
   ctx.posOf = (t) => ctx.dragging?.get(t.id) || ctx.remote.drags.get(t.id) || t;
+  // Где рисовать токен: как posOf, но всадники одного ездового — рядом, а не друг на друге (riderOffset).
+  // Всадника тянут без его ездового — он под курсором, без смещения.
+  ctx.viewPosOf = (t) => {
+    const p = ctx.posOf(t);
+    if (!t.riding || (ctx.dragging?.has(t.id) && !ctx.dragging?.has(t.riding))) return p;
+    const o = riderOffset(ctx.scene, t, (x) => tokenDiameter(ctx, x));
+    return o ? { x: p.x + o.x, y: p.y + o.y } : p;
+  };
   // Режим стола: боевой — пока идёт бой на этой сцене, иначе обычный (исследование). TASK-028.
   ctx.inCombat = () => !!(ctx.c?.combat?.active && (!ctx.c.combat.sceneId || ctx.c.combat.sceneId === ctx.sceneId));
   ctx.isMine = (t) => !!t.characterId && t.characterId === ctx.myCharacterId;

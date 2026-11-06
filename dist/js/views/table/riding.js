@@ -1,5 +1,6 @@
 // Езда верхом и слои токенов (TASK-187, план TASK-097 п. 3.5 и 2.2).
-// Всадник хранит id ездового в `riding` и стоит в той же точке x, y; у ездового флаг `mount`.
+// Всадник хранит id ездового в `riding` и стоит в той же точке x, y; у ездового флаг `mount`. Несколько всадников
+// одного ездового рисуются рядом (riderOffset → ctx.viewPosOf), данные при этом не меняются.
 // Ручной слой `layer` (0–2) переопределяет выведенный: предмет 0, ездовое 1, остальные 2.
 import { footprintAt, footprintGap } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
@@ -29,6 +30,23 @@ export function stackOrder(tokens) {
 }
 
 export const ridersOf = (scene, mountId) => (scene?.tokens || []).filter((t) => t.riding === mountId && t.id !== mountId);
+
+/**
+ * Смещение всадника на рисунке (#203, sol0139: «двое садятся верхом — наслаиваются друг на друга»). В данных все
+ * всадники стоят в точке ездового (так их везёт сервер, guard_token), а рисуются в ряд по ширине ездового: один —
+ * по центру, двое и больше — рядом, порядок — как на сцене (не меняется от поездок). diam(t) — диаметр токена, px.
+ */
+export function riderOffset(scene, t, diam) {
+  if (!t?.riding) return null;
+  const riders = ridersOf(scene, t.riding);
+  const n = riders.length, i = riders.indexOf(t);
+  if (n < 2 || i < 0) return null;
+  const m = (scene?.tokens || []).find((x) => x.id === t.riding);
+  if (!m) return null;
+  const dm = diam(m), dr = Math.max(...riders.map(diam));
+  const step = Math.min(dr * 0.92, Math.max(dr * 0.6, (dm - dr) / (n - 1)));
+  return { x: (i - (n - 1) / 2) * step, y: -dr * 0.08 };
+}
 
 /**
  * Перемещения с учётом езды: тянут ездовое — всадники едут в ту же точку (`carried`); всадника двигают без его

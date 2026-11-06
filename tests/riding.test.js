@@ -1,7 +1,7 @@
 // TASK-187 (план TASK-097, п. 3.5 и 2.2): слои токенов, порядок наложения с ездой, движение ездового со всадниками.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenLayer, stackOrder, expandRideMoves, ridersOf } from '../dist/js/views/table/riding.js';
+import { tokenLayer, stackOrder, expandRideMoves, ridersOf, riderOffset } from '../dist/js/views/table/riding.js';
 
 const top = (order) => [...order.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 
@@ -45,4 +45,16 @@ test('тянут ездовое — всадник едет в ту же точ�
   assert.deepEqual(c.map((m) => [m.id, m.to.x, m.to.y, !!m.dismount]), [['torin', 40, 10, false], ['horse', 40, 10, false]]);
   assert.deepEqual(ridersOf(scene, 'horse').map((t) => t.id), ['torin']);
   assert.equal(scene.tokens[1].riding, 'horse', 'исходная сцена не меняется');
+});
+
+test('двое верхом на одном ездовом рисуются рядом, один — по центру; данные не меняются', () => {
+  const scene = { tokens: [{ id: 'horse', x: 100, y: 100, mount: true, size: 'large' }, { id: 'torin', x: 100, y: 100, riding: 'horse' }, { id: 'lyra', x: 100, y: 100, riding: 'horse' }, { id: 'ogre', x: 300, y: 300 }] };
+  const diam = (t) => (t.size === 'large' ? 126 : 63);
+  const a = riderOffset(scene, scene.tokens[1], diam), b = riderOffset(scene, scene.tokens[2], diam);
+  assert.ok(a.x < 0 && b.x > 0, 'по разные стороны от центра');
+  assert.equal(Math.round(b.x - a.x), Math.round(63 * 0.92), 'почти вплотную, не друг на друге');
+  assert.equal(riderOffset(scene, scene.tokens[3], diam), null, 'не всадник — без смещения');
+  const one = { tokens: [scene.tokens[0], scene.tokens[1]] };
+  assert.equal(riderOffset(one, one.tokens[1], diam), null, 'один всадник — по центру');
+  assert.deepEqual([scene.tokens[1].x, scene.tokens[2].x], [100, 100]);
 });
