@@ -45,12 +45,13 @@ function abilitiesStep(head, ab, d) {
   const card = (a) => html`<div class="h-ab ${a.main ? 'main' : ''}" data-ab="${a.key}">
     <div class="h-ab-head">${caps(a.name)}${a.main ? html`<span class="h-mini-chip accent">главная</span>` : a.tag ? html`<span class="h-mini-chip">${a.tag}</span>` : ''}</div>
     <div class="h-stepper"><button data-ab-dec="${a.key}" aria-label="Меньше">${ic('minus-sign', 16)}</button><b>${a.base}</b><button data-ab-inc="${a.key}" aria-label="Больше">${ic('plus-sign', 16)}</button></div>
-    <dl class="h-ab-rows"><div><dt>Цена</dt><dd>${a.cost} оч.</dd></div><div><dt>Раса</dt><dd>${a.race}</dd></div>${a.asi ? html`<div class="accent"><dt>4 уровень</dt><dd>${a.asi}</dd></div>` : ''}</dl>
+    <dl class="h-ab-rows">${ab.array ? '' : html`<div><dt>Цена</dt><dd>${a.cost} оч.</dd></div>`}<div><dt>Раса</dt><dd>${a.race}</dd></div>${a.asi ? html`<div class="accent"><dt>4 уровень</dt><dd>${a.asi}</dd></div>` : ''}</dl>
     <div class="h-ab-total"><b>${a.final}</b><span class="h-modpill">${a.mod}</span></div>
   </div>`;
   return html`${head}
     <div class="h-ab-top">${segmented(ab.modes.map((m) => ({ ...m, icon: m.id === 'roll' ? 'dice-faces-06' : '' })), mode, 'data-abmode', 'dark')}
-      <div class="h-budget"><span>Потрачено ${b.spent} из ${b.of}</span><span class="h-mini-chip accent">${b.left} свободны</span><span class="h-bar"><i style="width:${Math.round((b.spent / b.of) * 100)}%"></i></span></div></div>
+      ${ab.array ? html`<div class="h-array" aria-label="Стандартный набор">${ab.array.map((x) => html`<span class="${x.used ? 'used' : ''}">${x.value}</span>`)}<small>Шесть чисел на шесть характеристик: «+» и «−» меняют их местами</small></div>`
+    : html`<div class="h-budget"><span>Потрачено ${b.spent} из ${b.of}</span><span class="h-mini-chip accent">${b.left} свободны</span><span class="h-bar"><i style="width:${Math.round((b.spent / b.of) * 100)}%"></i></span></div>`}</div>
     <div class="h-grid3">${ab.list.map(card)}</div>
     <section class="h-box"><div class="h-box-head"><b>${ab.asi.title}</b><small>${ab.asi.note}</small></div>
       <div class="h-radio-row">${ab.asi.options.map((o) => html`<button class="h-radio ${o.on ? 'on' : ''}" ${o.disabled ? raw('disabled') : ''} data-asi="${o.id}"><span class="dot"></span><span><b>${o.name}</b><small>${o.sub}</small></span></button>`)}</div></section>
@@ -71,7 +72,8 @@ function backgroundStep(head, cv, d) {
 // ——— 50 · Снаряжение ———
 function equipmentStep(head, eq, d) {
   const mode = d.eqMode || 'kit';
-  const row = (g, o) => html`<button class="h-opt ${o.on ? 'on' : ''}" data-eq="${g.title}|${o.name}"><span class="dot"></span><span class="h-sq sm">${ic(rowIcon(o.icon), 16)}</span><span><b>${o.name}</b><small>${o.sub}</small></span></button>`;
+  const pick = (g, o, p) => html`<label class="h-eq-pick"><span>${p.label}</span><span class="input"><select data-eqpick="${g.title}|${o.id}|${p.item}|${p.slot}" aria-label="${g.title}: ${p.label}">${p.list.map((x) => html`<option value="${x.id}" ${x.id === p.value ? raw('selected') : ''}>${x.name}</option>`)}</select></span></label>`;
+  const row = (g, o) => html`<button class="h-opt ${o.on ? 'on' : ''}" data-eq="${g.title}|${o.name}"><span class="dot"></span><span class="h-sq sm">${ic(rowIcon(o.icon), 16)}</span><span><b>${o.name}</b><small>${o.sub}</small></span></button>${(o.pick || []).map((p) => pick(g, o, p))}`;
   return html`${head}
     ${segmented(eq.modes, mode, 'data-eqmode', 'dark')}
     ${mode === 'gold' ? html`<section class="h-box"><b>Золото вместо набора</b><p class="h-box-hint">Бросьте 4к4 × 10 — получится от 40 до 160 зм. Всё купите сами в «Сумке» листа; книга заклинаний и вещи мудреца останутся.</p><button class="btn btn-primary" data-roll-gold>${ic('dice-faces-06')}Бросить 4к4</button></section>` : eq.groups.map((g) => html`<div class="h-group">${caps(g.title)}<small>${g.note}</small></div><div class="h-grid2">${g.options.map((o) => row(g, o))}</div>`)}
@@ -118,6 +120,7 @@ function lookStep(head, lk, d) {
 export function bindStepExtras(root, L, stepId, d, save, rerender) {
   const set = (k, v) => { d[k] = v; save(); heroActions.choose({ step: stepId, id: k, value: v }); };
   L('click', '[data-abmode]', (e, b) => { if (!b.disabled) { set('abMode', b.dataset.abmode); rerender(); } });
+  L('change', '[data-eqpick]', (e, t) => heroActions.choose({ step: stepId, id: 'eqPick', value: `${t.dataset.eqpick}|${t.value}` }));
   L('click', '[data-eqmode]', (e, b) => { set('eqMode', b.dataset.eqmode); rerender(); });
   L('click', '[data-sptab]', (e, b) => { set('spTab', +b.dataset.sptab); rerender(); });
   L('click', '[data-sp]', (e, b) => { set('spFocus', b.dataset.sp); rerender(); });

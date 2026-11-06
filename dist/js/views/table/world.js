@@ -225,6 +225,8 @@ export function renderAreas(L, ctx) {
     const { cols, rows } = gridDims(scene.grid, scene.map.width, scene.map.height);
     for (const cell of templateCells(scene.grid, tpl, cols, rows)) out.push(`<rect class="cell template" x="${ox + cell.c * s}" y="${oy + cell.r * s}" width="${s}" height="${s}"/>`);
     out.push(`<polygon class="template-shape" points="${poly.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
+    // Под курсором своя точка подсвечивается кольцом: клик по ней убирает шаблон.
+    if (tpl === ctx.ui.template && ctx.ui.templateHot && ctx.ui.tool === 'measure') out.push(`<circle class="template-origin-ring" cx="${tpl.origin.x}" cy="${tpl.origin.y}" r="${s * 0.24}"/>`);
     out.push(`<circle class="template-origin" cx="${tpl.origin.x}" cy="${tpl.origin.y}" r="${s * 0.12}"/>`);
   }
   // Угроза (атака по возможности)

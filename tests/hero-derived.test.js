@@ -122,3 +122,53 @@ test('R10: дротик — лучшее из Силы и Ловкости', () 
   const list = [{ equipped: true, g: { id: 'd', ru: 'Дротик', en: 'Dart', weapon: { category: 'simple', range: 'ranged', properties: ['finesse', 'thrown'], damage: { dice: '1d4', type: 'piercing' }, normalRange: 20, longRange: 60 } } }];
   assert.equal(weaponAttacks(list, { str: 3, dex: 1 }, 2, 'Оружие: простое')[0].hit, '+5');
 });
+
+test('C1: группы с одним вариантом выбраны сами; C3: оружие на выбор', () => {
+  const st = newCreation(ix, { campaign: { id: 'c' }, newId: uuid() });
+  const ch = (x) => applyCreationChoice(ix, st, x);
+  ch({ step: 'race', id: 'human' }); ch({ step: 'class', id: 'fighter' }); ch({ step: 'background', id: 'acolyte' });
+  const groups = () => creationModel(ix, st).equipment.groups;
+  for (const g of groups().filter((x) => x.options.length === 1)) assert.ok(g.options[0].on, g.title);
+  const weapon = groups().find((g) => g.options.some((o) => /Щит/.test(o.name)));
+  ch({ step: 'equipment', id: 'eq', value: `${weapon.title}|${weapon.options.find((o) => /Щит/.test(o.name)).name}` });
+  const on = groups().find((g) => g.title === weapon.title).options.find((o) => o.on);
+  assert.equal(on.pick.length, 1);
+  assert.ok(on.pick[0].list.every((x) => x.name !== 'Алебарда'), 'со щитом двуручное не предлагается');
+  assert.equal(on.pick[0].list.find((x) => x.id === on.pick[0].value).name, 'Длинный меч');
+  ch({ step: 'equipment', id: 'eqPick', value: `${weapon.title}|${on.id}|${on.pick[0].item}|${on.pick[0].slot}|srd51:equipment:warhammer` });
+  assert.equal(groups().find((g) => g.title === weapon.title).options.find((o) => o.on).pick[0].value, 'srd51:equipment:warhammer');
+  assert.ok(!groups().some((g) => /· \d+$/.test(g.title)), 'подписи групп без порядковых номеров');
+});
+
+test('C3: сервер принимает выбранное оружие: сборка валидна на всех сочетаниях', () => {
+  for (const race of ['dwarf', 'elf', 'halfling', 'human', 'dragonborn', 'gnome', 'half-elf', 'half-orc', 'tiefling']) {
+    for (const cls of ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard']) {
+      const m = creationModel(ix, build(race, cls));
+      assert.equal(m.status, 'valid', `${race} ${cls}: ${JSON.stringify(m.missing)}`);
+    }
+  }
+});
+
+test('A1: обмен значениями объявляется; A6: раскладка учитывает расу', () => {
+  const st = newCreation(ix, { campaign: { id: 'c' }, newId: uuid() });
+  const ch = (x) => applyCreationChoice(ix, st, x);
+  ch({ step: 'race', id: 'gnome' }); ch({ step: 'class', id: 'wizard' });
+  ch({ step: 'abilities', id: 'auto' });
+  const list = creationModel(ix, st).abilities.list, by = (n) => list.find((a) => a.key === n);
+  assert.equal(by('int').final, 16, 'Интеллект 14 + 2: то же +3, а 15 уходит туда, где не пропадёт');
+  assert.equal(by('con').final, 16);
+  assert.ok(creationModel(ix, st).abilities.array.every((x) => x.used));
+  const note = ch({ step: 'abilities', id: 'abInc', value: 'con' });
+  assert.equal(note, null, 'выше 15 некуда');
+  assert.match(ch({ step: 'abilities', id: 'abDec', value: 'con' }).title, /местами/);
+});
+
+test('A4, A5: быстрый герой', async () => {
+  const { quickCreation } = await import('../dist/js/views/hero/creation.js');
+  const build2 = (answers) => creationCharacter(ix, quickCreation(ix, { campaign: { id: 'c' }, answers: { name: 'Q', ...answers }, newId: uuid() }), { newId: uuid() }).data.stats;
+  const sorc = build2({ role: 'magic', talk: 'word' });
+  assert.ok(sorc.con >= 15, 'прибавка полуэльфа в Телосложение');
+  const rogue = build2({ role: 'shadow', talk: 'word' });
+  assert.ok(rogue.cha >= 14, 'плут со словом — с Харизмой');
+  assert.ok(build2({ role: 'shadow', talk: 'book' }).int >= 14, 'плут со знанием — с Интеллектом');
+});

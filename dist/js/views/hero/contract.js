@@ -415,7 +415,8 @@ function choose(payload = {}) {
   if (payload.step === 'quick') {
     const answers = { ...(st.quick || {}), [payload.id]: payload.value };
     saveBuild(quickBuild(st, answers));
-    window.dispatchEvent(new CustomEvent('hero:changed'));
+    // Имя сохраняется при выходе из поля: перерисовка в этот момент съела бы клик по кнопке «Собрать героя».
+    if (payload.id !== 'name') window.dispatchEvent(new CustomEvent('hero:changed'));
     return;
   }
   if (payload.step === 'look' && payload.id === 'portrait') { st.look.portrait = String(payload.value || ''); saveBuild(st); window.dispatchEvent(new CustomEvent('hero:changed')); return; }
