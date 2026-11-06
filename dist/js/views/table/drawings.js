@@ -8,14 +8,14 @@ import { safeColor, stylePopover, fillSwatch, strokeSwatch } from './draw-style.
 /** Инструменты рисования (TASK-182). */
 export const DRAW_TOOLS = [
   { id: 'select', name: 'Выделение · тянуть рисунок, ручки — размер и поворот', icon: 'cursor-01' },
-  { id: 'poly', name: 'Многоугольник · щелчок — точка, по первой точке — замкнуть, двойной щелчок или Enter — закончить', icon: 'pen-tool-01' },
+  { id: 'poly', name: 'Многоугольник · щелчок — точка, по первой точке — замкнуть, двойной щелчок или Enter — закончить, Alt — к сетке', icon: 'pen-tool-01' },
   { id: 'pen', name: 'Карандаш', icon: 'pencil-edit-02' },
   { id: 'brush', name: 'Кисть · фигура от руки, замыкается сама', icon: 'paint-roller' },
   { id: 'seg', name: 'Линия · Shift — по 5 фт', icon: 'slash' },
-  { id: 'rect', name: 'Прямоугольник · углы к сетке, Alt — свободно, Shift — квадрат', icon: 'square' },
-  { id: 'ellipse', name: 'Круг · Alt — свободно, Shift — ровный круг', icon: 'circle' },
-  { id: 'tri', name: 'Треугольник · Alt — свободно, Shift — равносторонний', icon: 'triangle' },
-  { id: 'hex', name: 'Шестиугольник · Alt — свободно, Shift — правильный', icon: 'hexagon' },
+  { id: 'rect', name: 'Прямоугольник · Shift — квадрат, Alt — углы к сетке', icon: 'square' },
+  { id: 'ellipse', name: 'Круг · Shift — ровный круг, Alt — к сетке', icon: 'circle' },
+  { id: 'tri', name: 'Треугольник · Shift — равносторонний, Alt — к сетке', icon: 'triangle' },
+  { id: 'hex', name: 'Шестиугольник · Shift — правильный, Alt — к сетке', icon: 'hexagon' },
 ];
 /** Фигуры по рамке: центр c, ширина w, высота h, поворот rot (°). */
 export const BOX_SHAPES = ['rect', 'ellipse', 'tri', 'hex'];
