@@ -366,7 +366,7 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
       { name: 'Заклинания', ok: !missing.some((m) => stepOfMissing(m) === 'spells'), step: 'spells' },
       { name: 'Имя', ok: !!d.identity.name, step: 'look' },
     ],
-    note: campaignName ? `Герой появится в кампании «${campaignName}».` : 'Чтобы создать героя, войдите в кампанию по приглашению мастера.',
+    note: campaignName ? `Герой сохранится в «Моих героях», а потом предложим привести его в «${campaignName}».` : 'Герой сохранится в «Моих героях» — в кампанию приведёте его потом, в любую, где играете.',
   };
 
   const rules = [`Старт: ${levels(st)} уровень`, `Характеристики: ${st.context.allowedAbilityMethods.map((m) => ({ point_buy: 'покупка очков', standard_array: 'стандартный набор', rolled: 'броски' }[m])).join(' или ')}`,

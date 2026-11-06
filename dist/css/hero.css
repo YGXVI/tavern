@@ -924,3 +924,37 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .h-gone-row span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .h-gone-row b { font: 600 14px/18px var(--font-text); }
 .h-gone-row small { color: var(--text-tertiary); font-size: 12px; }
+/* «Мои герои» вне кампаний и «Куда привести героя» (#203) */
+.h-sec.first { margin-top: 8px; }
+.h-device-note { display: flex; align-items: center; gap: 8px; margin: -4px 0 16px; color: var(--text-tertiary); font-size: 12px; }
+.h-bring { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.h-bring-hero { display: flex; align-items: center; gap: 16px; }
+.h-bring-hero img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px var(--gold); flex: none; }
+.h-bring-hero h1 { font: 500 28px/32px var(--font-display); }
+.h-bring-lead { color: var(--text-secondary); font-size: 13px; line-height: 18px; }
+.h-bring-list { display: flex; flex-direction: column; gap: 8px; }
+.h-bring-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--r-16); background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--stroke-subtle); }
+.h-bring-row.pref { box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
+.h-bring-row .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.h-bring-row b { font: 600 15px/20px var(--font-text); }
+.h-bring-row small { color: var(--text-tertiary); font-size: 12px; line-height: 16px; }
+.h-bring-row em { font-style: normal; color: var(--text-accent); }
+.h-bring-ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--bg-control); color: var(--icon-tertiary, var(--text-tertiary)); flex: none; }
+.h-bring-ic.free { background: var(--bg-accent-subtle); color: var(--icon-accent); }
+.h-bring-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.h-ready { display: flex; flex-direction: column; gap: 10px; max-width: 920px; width: 100%; margin: 0 auto; }
+.h-ready-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.h-ready-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-16); background: var(--bg-hover); box-shadow: inset 0 0 0 1px var(--stroke-subtle); color: var(--text-primary); text-align: left; }
+.h-ready-card:hover { box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
+.h-ready-card img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; }
+.h-ready-card span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.h-ready-card b { font: 600 14px/18px var(--font-text); }
+.h-ready-card small { color: var(--text-tertiary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h-ready-card > .ic { color: var(--icon-accent); }
+.h-or { display: flex; align-items: center; gap: 12px; max-width: 920px; width: 100%; margin: 4px auto; color: var(--text-tertiary); font-size: 12px; }
+.h-or::before, .h-or::after { content: ''; flex: 1; height: 1px; background: var(--stroke-divider); }
+@media (max-width: 720px) {
+  .h-bring-row { flex-wrap: wrap; }
+  .h-bring-row .btn { width: 100%; justify-content: center; }
+  .h-bring-hero h1 { font-size: 22px; line-height: 26px; }
+}
