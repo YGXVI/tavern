@@ -6,14 +6,14 @@ import { isServerMode } from '../../core/store.js';
 import { modal, panelHeader, confirmDialog } from '../../ui/kit.js';
 import { mutateBook } from './book-store.js';
 import { local, updateLocal } from './local.js';
-import { ic, openHandout, handoutIcon } from './parts.js';
+import { ic, paint, openHandout, handoutIcon } from './parts.js';
 
 /** Вкладка игрока «Раздатки». */
 export function mountTab(ctx, body) {
   const off = on(body, 'click', '[data-handout]', (e, b) => { const h = ctx.book().handouts.find((x) => x.id === b.dataset.handout); if (h) openHandout(h); });
   const render = () => {
     const list = ctx.book().handouts;
-    body.innerHTML = String(list.length ? html`<div class="cp-hgrid">${list.map((h) => html`<button class="cp-hcard" data-handout="${h.id}">${h.img ? html`<span class="cp-hcard-img" style="background-image:url(${srcOf(h.img)})"></span>` : html`<span class="cp-hcard-paper">${String(h.text || '').slice(0, 220)}</span>`}<span class="cp-hcard-t">${ic(handoutIcon(h), 16)}<b>${h.title}</b></span></button>`)}</div>`
+    paint(body, list.length ? html`<div class="cp-hgrid">${list.map((h) => html`<button class="cp-hcard" data-handout="${h.id}">${h.img ? html`<span class="cp-hcard-img" style="background-image:url(${srcOf(h.img)})"></span>` : html`<span class="cp-hcard-paper">${String(h.text || '').slice(0, 220)}</span>`}<span class="cp-hcard-t">${ic(handoutIcon(h), 16)}<b>${h.title}</b></span></button>`)}</div>`
       : html`<div class="cp-empty">${ic('note-edit', 28)}<h3>Раздаток пока нет</h3><p>Письма, карты и записки появятся здесь, когда мастер их покажет.</p></div>`);
   };
   render();

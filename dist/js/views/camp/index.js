@@ -100,10 +100,14 @@ export function mountCamp(root, hash) {
     if (!m || m.status !== 'active') { go(`#/c/${c.id}`); return; }
     const tabs = (ctx.master ? MASTER_TABS : PLAYER_TABS).map((t) => t[0]);
     if (!tabs.includes(st.tab)) { st = { ...st, tab: 'overview', rest: [] }; }
-    const scroll = root.querySelector('.cp-screen') ? scrollY : 0;
+    // Прокручивается .screen, а не окно: позицию берём у него (раньше scrollY всегда был 0 — страница прыгала вверх).
+    const scroll = root.querySelector('.cp-screen')?.scrollTop || 0;
     root.innerHTML = String(html`<div class="screen cp-screen">${appHeader(user, 'campaigns')}
       <main class="page cp-page cp-tab-${st.tab}">${cover(c)}<div class="cp-bar">${tabsRow(c)}<div class="cp-bar-tools" data-tools></div></div><div class="cp-body" data-body></div></main></div>`);
     bindHeader(root, user);
+    const cv = root.querySelector('.cv-big'), tb = root.querySelector('.cp-tabs');
+    if (cv) cv.__painted = String(cover(c));
+    if (tb) tb.__painted = String(tabsRow(c));
     hydrateCover();
     mountBody(scroll);
   }
@@ -119,7 +123,7 @@ export function mountCamp(root, hash) {
       bodyEl.innerHTML = ''; tools.innerHTML = '';
       root.querySelector('.cp-page').className = `page cp-page cp-tab-${st.tab}`;
       tabApi = mod.mountTab(ctx, bodyEl, tools, st.tab) || null;
-      if (scroll) scrollTo(0, scroll);
+      const sc = root.querySelector('.cp-screen'); if (scroll && sc) sc.scrollTop = scroll;
     }).catch((err) => { console.error(err); root.querySelector('[data-body]').textContent = `Не удалось открыть вкладку: ${err.message}`; });
   }
   /** Переключить вкладку без перерисовки обложки. */
@@ -127,8 +131,8 @@ export function mountCamp(root, hash) {
     const c = ctx.c;
     const tabs = (ctx.master ? MASTER_TABS : PLAYER_TABS).map((t) => t[0]);
     if (!c || !tabs.includes(st.tab) || !root.querySelector('[data-body]')) { render(); return; }
-    const nav = root.querySelector('.cp-tabs'); if (nav) { const n = document.createElement('div'); n.innerHTML = String(tabsRow(c)); nav.replaceWith(n.firstElementChild); }
-    mountBody(scrollY);
+    swapNav(c);
+    mountBody(root.querySelector('.cp-screen')?.scrollTop || 0);
   }
 
   // ——— Действия обложки ———
@@ -148,7 +152,7 @@ export function mountCamp(root, hash) {
     if (!c || membership(c, user.id)?.status !== 'active') { render(); return; }
     if (ctx.master) foldInbox(st.cid, user.id);
     refreshCoverOnly();
-    const nav = root.querySelector('.cp-tabs'); if (nav) { const n = document.createElement('div'); n.innerHTML = String(tabsRow(c)); nav.replaceWith(n.firstElementChild); }
+    swapNav(c);
     // Пока человек печатает во вкладке, не перерисовываем её поверх ввода.
     const a = document.activeElement;
     if (a && root.querySelector('[data-body]')?.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
@@ -162,11 +166,21 @@ export function mountCamp(root, hash) {
     const n = root.querySelector('[data-bgcover]'); if (!n) return;
     resolveSrc(n.dataset.bgcover).then((u) => { if (u) n.style.setProperty('--cover', `url("${new URL(u, location.href).href}")`); });
   }
+  // Обложку и вкладки меняем, только если их разметка изменилась: присутствие за столом приходит каждые 4 секунды
+  // от каждой открытой вкладки, и пересоздание обложки мигало картинкой и сбивало прокрутку (#203).
   function refreshCoverOnly() {
     const c = ctx.c; if (!c) return;
     const box = root.querySelector('.cv-big'); if (!box) return;
-    const n = document.createElement('div'); n.innerHTML = String(cover(c)); box.replaceWith(n.firstElementChild);
+    const s = String(cover(c));
+    if (box.__painted === s) return;
+    const n = document.createElement('div'); n.innerHTML = s; n.firstElementChild.__painted = s; box.replaceWith(n.firstElementChild);
     hydrateCover();
+  }
+  function swapNav(c) {
+    const nav = root.querySelector('.cp-tabs'); if (!nav) return;
+    const s = String(tabsRow(c));
+    if (nav.__painted === s) return;
+    const n = document.createElement('div'); n.innerHTML = s; n.firstElementChild.__painted = s; nav.replaceWith(n.firstElementChild);
   }
   offs.push(bindPaletteKeys());
   if (isMasterOf(getCampaign(st.cid), user.id)) foldInbox(st.cid, user.id);

@@ -118,6 +118,9 @@ select pg_temp.err('закреплённый токен не двигается'
 select pg_temp.rows('скрытый огр недоступен для изменения', $q$update public.tokens set data = data || '{"x":1}' where id = 't-ogre'$q$, 0);
 select pg_temp.err('удалить чужой токен игрок не может', $q$delete from public.tokens where id = 't-gob'$q$);
 select pg_temp.rows('свой герой: размер и свет', $q$update public.tokens set data = data || '{"scale":1.4,"light":{"bright":20}}' where id = 't-p'$q$, 1);
+select pg_temp.rows('свой герой: имя на карте (mapName)', $q$update public.tokens set data = data || '{"mapName":"Рим"}' where id = 't-p'$q$, 1);
+select pg_temp.err('имя токена своего героя (name) игрок не меняет', $q$update public.tokens set data = data || '{"name":"Другое имя"}' where id = 't-p'$q$);
+select pg_temp.err('имя на карте чужого токена игрок не меняет', $q$update public.tokens set data = data || '{"mapName":"Гоб"}' where id = 't-gob'$q$);
 select pg_temp.rows('лист своего героя игрок меняет', $q$update public.characters set data = data || '{"hp":7}' where id = 'ch-p'$q$, 1);
 select pg_temp.rows('лист чужого героя недоступен', $q$update public.characters set data = data || '{"hp":1}' where id = 'ch-q'$q$, 0);
 select pg_temp.rows('незапертую дверь игрок открывает', $q$update public.scenes set data = jsonb_set(data, '{walls,0,open}', 'true') where id = 's-1'$q$, 1);

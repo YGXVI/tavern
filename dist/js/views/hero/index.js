@@ -154,16 +154,14 @@ function bindHeroes(L) {
   document.addEventListener('click', onBring);
   return () => document.removeEventListener('click', onBring);
 }
-/** Меню «…» карточки героя: лист, классический лист, повышение, дом кампании. */
+/** Меню «…» карточки героя (#203, проще): править, новый уровень, куда привести, удалить. Лист — нажатием на карточку. */
 function heroMenu(anchor) {
   const id = anchor.dataset.more, v = heroView(id);
   if (!v) return;
-  const [cid] = id.split('~');
   const item = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
-  import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${item(`#/hero/${id}`, 'book-open-01', 'Удобный лист')}${v.canEdit ? item(`#/hero/${id}/edit`, 'pencil-edit-02', 'Править героя') : ''}${item(`#/hero/${id}/classic/1`, 'pen-tool-01', 'Классический лист')}
-    ${v.canLevelUp ? item(`#/hero/${id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${v.lib ? '' : item(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`)}
+  import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${v.canEdit ? item(`#/hero/${id}/edit`, 'pencil-edit-02', 'Править героя') : ''}${v.canLevelUp ? item(`#/hero/${id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}
     ${v.isMine ? bringTargets(id).map((c) => html`<button class="menu-item" data-bring-to="${c.id}" data-hero="${id}">${ic('arrow-right-02', 16)}Привести в «${c.name}»${c.free ? '' : ' (копией)'}</button>`) : ''}
-    ${v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-card-portrait="${id}">${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-card-delete="${id}">${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' }));
+    ${v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item danger" data-card-delete="${id}">${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' }));
 }
 export const previewNote = () => html`<p class="h-preview-note">${ic('information-circle', 16)}Экран на образце данных: числа ненастоящие, кнопки отвечают подсказкой. Все экраны героя — <a href="#/hero/lira">лист</a> · <a href="#/hero/lira/classic/1">классический</a> · <a href="#/hero/lira/table">на карте</a> · <a href="#/hero/lira/levelup/hp">повышение</a> · <a href="#/hero/import">импорт LSS</a> · корнеры: <a href="#/hero/lira/table?down">0 хитов</a>, <a href="#/hero/lira/table?concentration">концентрация</a>, <a href="#/hero/lira/table?noSlots">нет ячеек</a>, <a href="#/hero/lira?multiclass">мультикласс</a>, <a href="#/hero/lira?unfinished">не закончен</a>.</p>`;
 
