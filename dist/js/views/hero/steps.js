@@ -6,8 +6,9 @@ import { heroActions } from './contract.js';
 import { srcOf } from '../../core/assets.js';
 
 /** Разметка шага s. d — черновик (выборы игрока поверх витрины). */
-export function stepBody(s, cv, d) {
-  const head = stepTitle(s.title, s.hint, s.tip, s.tipIcon);
+export function stepBody(s, cv, d, { head: withHead = true } = {}) {
+  // На полотне создания (create.js) заголовок раздела рисует само полотно.
+  const head = withHead ? stepTitle(s.title, s.hint, s.tip, s.tipIcon) : '';
   switch (s.id) {
     case 'race': return html`${head}<div class="h-grid4">${cv.races.map((o) => artCard(o, { selected: o.id === (cv.live ? cv.selected.race : d.race || 'human') }))}</div>${extraBoxes(cv.extra?.race)}`;
     case 'class': return html`${head}<div class="h-grid4">${cv.classes.map((o) => artCard(o, { selected: o.id === (cv.live ? cv.selected.class : d.class || 'wizard') }))}</div>${extraBoxes(cv.extra?.class)}`;
@@ -83,7 +84,7 @@ function spellsStep(head, sp, d) {
   const tab = sp.live ? sp.tab : d.spTab ?? sp.tab;
   const focus = d.spFocus || sp.list.find((x) => x.focus)?.name;
   return html`${head}
-    <div class="h-grid3 progress">${sp.progress.map((p) => html`<div class="h-prog">${caps(p.label)}<span class="ok">${ic('tick-02', 14)}</span><b>${p.now} из ${p.max}</b><span class="h-bar magic"><i style="width:${Math.round((p.now / p.max) * 100)}%"></i></span></div>`)}</div>
+    <div class="h-grid3 progress">${sp.progress.map((p) => html`<div class="h-prog">${caps(p.label)}${p.now >= p.max ? html`<span class="ok">${ic('tick-02', 14)}</span>` : html`<span></span>`}<b>${p.now} из ${p.max}</b><span class="h-bar magic"><i style="width:${Math.round((p.now / p.max) * 100)}%"></i></span></div>`)}</div>
     <div class="h-spell-tools">${segmented(sp.tabs.map((t, i) => ({ id: String(i), name: t })), String(tab), 'data-sptab', 'dark')}<button class="btn btn-secondary" data-auto>${ic('magic-wand-01')}Собрать за меня</button></div>
     <div class="h-spell-split">
       <div class="h-spell-list">${sp.list.map((x) => html`<button class="h-sp ${x.name === focus ? 'focus' : ''}" data-sp="${x.name}">${check(x.on, 'magic')}<span><b>${x.name}</b><small>${x.meta}</small></span>${x.conc ? html`<span class="h-kr k">К</span>` : ''}${x.ritual ? html`<span class="h-kr">Р</span>` : ''}</button>`)}</div>
@@ -109,28 +110,30 @@ function lookStep(head, lk, d) {
       <div class="h-look-right">
         <div class="h-group">${caps('Мировоззрение')}<small>подсказка для мастера, не правило</small></div>
         <div class="h-align">${lk.alignments.map((a) => html`<button class="h-pill sm ${a === al ? 'on' : ''}" data-align="${a}">${a}</button>`)}</div>
-        ${lk.fields.map((f) => html`<label class="h-field"><span class="h-field-head">${f.label}<button class="h-roll" data-trait="${f.id}" type="button">${ic('dice-faces-06', 14)}к8</button></span><span class="input area"><textarea rows="2" data-text="${f.id}">${d[f.id] ?? f.value}</textarea></span></label>`)}
+        ${lk.fields.map((f) => html`<label class="h-field"><span class="h-field-head">${f.label}</span><span class="input area"><textarea rows="2" data-text="${f.id}">${d[f.id] ?? f.value}</textarea></span></label>`)}
       </div>
     </div>`;
 }
 
 /** Обработчики шагов, кроме выбора карточки (он общий в index.js). */
 export function bindStepExtras(root, L, stepId, d, save, rerender) {
-  const set = (k, v) => { d[k] = v; save(); heroActions.choose({ step: stepId, id: k, value: v }); };
-  L('click', '[data-abmode]', (e, b) => { if (!b.disabled) { set('abMode', b.dataset.abmode); rerender(); } });
-  L('click', '[data-eqmode]', (e, b) => { set('eqMode', b.dataset.eqmode); rerender(); });
-  L('click', '[data-sptab]', (e, b) => { set('spTab', +b.dataset.sptab); rerender(); });
-  L('click', '[data-sp]', (e, b) => { set('spFocus', b.dataset.sp); rerender(); });
-  L('click', '[data-pronoun]', (e, b) => { set('pronoun', b.dataset.pronoun); rerender(); });
-  L('click', '[data-align]', (e, b) => { set('alignment', b.dataset.align); rerender(); });
+  // stepId — шаг экрана или функция «шаг по нажатому элементу» (полотно create.js: все шаги на одной странице).
+  const stepOf = (el) => (typeof stepId === 'function' ? stepId(el) : stepId);
+  const set = (k, v, el) => { d[k] = v; save(); heroActions.choose({ step: stepOf(el), id: k, value: v }); };
+  L('click', '[data-abmode]', (e, b) => { if (!b.disabled) { set('abMode', b.dataset.abmode, b); rerender(); } });
+  L('click', '[data-eqmode]', (e, b) => { set('eqMode', b.dataset.eqmode, b); rerender(); });
+  L('click', '[data-sptab]', (e, b) => { set('spTab', +b.dataset.sptab, b); rerender(); });
+  L('click', '[data-sp]', (e, b) => { set('spFocus', b.dataset.sp, b); rerender(); });
+  L('click', '[data-pronoun]', (e, b) => { set('pronoun', b.dataset.pronoun, b); rerender(); });
+  L('click', '[data-align]', (e, b) => { set('alignment', b.dataset.align, b); rerender(); });
   L('input', '[data-name]', (e, t) => { d.name = t.value; save(); });
   L('input', '[data-text]', (e, t) => { d[t.dataset.text] = t.value; save(); });
-  L('click', '[data-extra]', (e, b) => heroActions.choose({ step: stepId, id: 'extra', value: b.dataset.extra }));
+  L('click', '[data-extra]', (e, b) => heroActions.choose({ step: stepOf(b), id: 'extra', value: b.dataset.extra }));
   // Портрет героя (он же токен): из набора или свой файл (#203).
   L('click', '[data-lportrait]', (e, b) => heroActions.choose({ step: 'look', id: 'portrait', value: b.dataset.lportrait }));
   L('click', '[data-lupload]', () => import('./index.js').then(({ pickPortrait }) => pickPortrait((ref) => heroActions.choose({ step: 'look', id: 'portrait', value: ref }))));
   L('click', '[data-ab-inc],[data-ab-dec],[data-asi],[data-auto],[data-skill],[data-lang],[data-eq],[data-roll-gold],[data-replace],[data-trait]', (e, b) => {
     const key = Object.keys(b.dataset)[0];
-    heroActions.choose({ step: stepId, id: key, value: b.dataset[key] });
+    heroActions.choose({ step: stepOf(b), id: key, value: b.dataset[key] });
   });
 }
