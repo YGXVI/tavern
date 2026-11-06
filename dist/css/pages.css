@@ -334,7 +334,7 @@ button.cp-map { cursor: pointer; }
 .ref-pal-group { padding: 12px 12px 6px; font: 700 10px/12px var(--font-text); letter-spacing: .07em; text-transform: uppercase; color: var(--text-tertiary); }
 .ref-pal-row { width: 100%; display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
 .ref-pal-row > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.ref-pal-row b { font: 600 14px/18px var(--font-text); }
+.ref-pal-row b { overflow-wrap: anywhere; font: 600 14px/18px var(--font-text); }
 .ref-pal-row small { font-size: 12px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ref-pal-row .ic { color: var(--text-secondary); flex: none; }
 .ref-pal-row[aria-selected="true"] { background: var(--brand-900); }
@@ -1297,3 +1297,21 @@ a.bg-card:hover { box-shadow: inset 0 0 0 1px var(--c), 0 20px 40px -20px var(--
 @container cls (max-width: 560px) {
   .cls-page .cls-hero h1 { font-size: clamp(20px, 7cqi, 30px); }
 }
+
+/* Арт в поиске со стола: миниатюра в списке, изображение в превью и карточке. */
+.ref-art { display: block; object-fit: cover; border-radius: 50%; background: var(--neutral-200); flex: none; }
+.ref-pal-thumb { width: 40px; height: 40px; }
+.ref-preview-art { width: min(160px, 100%); aspect-ratio: 1; align-self: center; }
+.ref-card-modal .cls-page .cr-hero { grid-template-areas: "art" "text" "pass"; }
+.ref-card-modal .cls-page .cr-art { display: block; width: min(160px, 100%); aspect-ratio: 1 !important; max-height: none; justify-self: center; }
+.ref-card-modal .cls-page .rl-hero:has(> .it-bigem),
+.ref-card-modal .cls-page.gr-page .rl-hero { grid-template-areas: "art" "text" "pass" !important; }
+.ref-card-modal .cls-page .it-bigem,
+.ref-card-modal .cls-page.gr-page .rl-hero-ic { display: grid; width: 112px; height: 112px; }
+
+.ref-card-modal .cls-main { grid-template-columns: minmax(0, 1fr); }
+.ref-modal-details { padding: 16px; border-radius: 16px; background: var(--neutral-200); min-width: 0; }
+.ref-modal-details > summary { cursor: pointer; font-weight: 600; }
+.ref-modal-details[open] > summary { margin-bottom: 16px; }
+
+@media (max-width: 720px) { .ref-pal-row kbd { display: none; } }

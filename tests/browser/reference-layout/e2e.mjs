@@ -47,6 +47,8 @@ try {
  for(const [width,height] of [[1440,1000],[320,640],[844,390]]) {
   await page.setViewportSize({width,height});await page.goto(base+'#/ref/creatures');
   await page.locator('.cr-token').first().click();
+  assert.equal(await page.locator('[data-rx=creatures]').count(),1,'Standalone creature page keeps the calculator');
+  assert.equal(await page.locator('.rx-near').count(),1,'Standalone creature page keeps related creatures');
   const term=page.locator('[data-term]').first();
   await term.evaluate(n=>n.scrollIntoView({block:'end'}));await term.hover();
   assert.equal(await page.locator('.ref-tip').count(),1,'Only one tooltip is open');
@@ -83,7 +85,32 @@ try {
    const row=page.locator('.ref-pal-row').filter({hasText:await page.evaluate(async(section)=>{
     const {loadSection}=await import('/js/views/ref/data.js');return (await loadSection(section.id)).find(x=>x.id===section.long).name;
    },section)}).first();
+   if(['creatures','items','equipment'].includes(section.id)) {
+    const thumbnail=row.locator('img');await thumbnail.waitFor();
+    await thumbnail.evaluate(n=>n.decode());
+    assert.ok(await thumbnail.evaluate(n=>n.naturalWidth>0),'Result thumbnail loads');
+    if(width>720) {
+     const preview=page.locator('.ref-pal-preview .ref-preview-art');
+     await preview.evaluate(n=>n.decode());assert.ok(await preview.isVisible(),'Preview image is visible');
+    }
+   }
    await row.click();await page.locator('.ref-modal').waitFor();
+   assert.equal(await page.locator('.ref-modal .cls-side,.ref-modal .rx-tool').count(),0,'Map cards omit auxiliary sidebars and calculators');
+   if(section.id==='classes') {
+    assert.equal(await page.locator('.ref-modal .ref-modal-details[open]').count(),0,'Class extras start collapsed');
+    await page.locator('.ref-modal .ref-modal-details').last().locator('summary').click();
+    await page.locator('.ref-modal [data-set-lv]').last().click();
+    assert.equal(await page.locator('.ref-modal [data-cls]').getAttribute('data-lvl'),'20');
+    await page.locator('.ref-modal .ref-modal-details').last().locator('summary').click();
+   }
+   if(section.id==='creatures') {
+    const portrait=page.locator('.ref-modal .cr-art img');await portrait.evaluate(n=>n.decode());
+    assert.ok(await portrait.isVisible(),'Creature portrait is visible');
+    assert.equal(await page.locator('.ref-modal [data-rx=creatures],.ref-modal .rx-near').count(),0,'No encounter planner in a map card');
+    assert.ok(await page.locator('.ref-modal .ref-dice').count(),'Statblock rolls remain available');
+   }
+   if(section.id==='items')assert.ok(await page.locator('.ref-modal .it-bigem').isVisible(),'Item artwork is visible');
+   if(section.id==='equipment')assert.ok(await page.locator('.ref-modal .rl-hero-ic').isVisible(),'Equipment artwork is visible');
    await audit(`${width}-${height}-modal-${isMaster?'master':'player'}-${section.id}`);
    const geometry=await page.locator('.ref-modal').evaluate(n=>{
     const r=n.getBoundingClientRect(),f=n.querySelector('.ref-card-foot').getBoundingClientRect();

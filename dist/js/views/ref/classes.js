@@ -340,11 +340,13 @@ export function classPage(it, st0 = {}, o = {}) {
     <div class="cls-main">
       <div class="cls-left">
         ${hero(it, o)}
-        ${sec('start', 'Старт и владения', 'С чем герой выходит на первый уровень', start(it))}
-        ${sec('table', 'Таблица класса', 'Строка — уровень: нажмите, и ползунок встанет на него', table(it, st))}
-        ${sec('road', 'Дорога 1 → 20', 'Каждое умение — суть по-русски и полный текст SRD', road(it, st))}
+        ${o.modal ? html`<details class="ref-modal-details"><summary>Владения и стартовое снаряжение</summary>${start(it)}</details>
+          <details class="ref-modal-details"><summary>Умения по уровням</summary>${road(it, st)}</details>` : html`
+          ${sec('start', 'Старт и владения', 'С чем герой выходит на первый уровень', start(it))}
+          ${sec('table', 'Таблица класса', 'Строка — уровень: нажмите, и ползунок встанет на него', table(it, st))}
+          ${sec('road', 'Дорога 1 → 20', 'Каждое умение — суть по-русски и полный текст SRD', road(it, st))}`}
       </div>
-      <aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Двигайте — покажем героя на любом уровне</p>${scrub(it, st)}${legend()}<div data-cls-panel>${panel(it, st, o)}</div></div></aside>
+      ${o.modal ? '' : html`<aside class="cls-side"><div class="cls-now"><p class="cls-now-hint">Двигайте — покажем героя на любом уровне</p>${scrub(it, st)}${legend()}<div data-cls-panel>${panel(it, st, o)}</div></div></aside>`}
     </div>
   </div>`;
 }
@@ -359,7 +361,8 @@ export function wireClass(host, { onState = () => {}, modal = false } = {}) {
     el.querySelectorAll('.cls-tick').forEach((t) => { const l = Number(t.dataset.l); t.classList.toggle('on', l <= st.lvl); t.classList.toggle('here', l === st.lvl); });
     el.querySelector('[data-scrub]')?.setAttribute('aria-valuenow', st.lvl);
     el.querySelectorAll('[data-lv]').forEach((s) => { const l = Number(s.dataset.lv); s.classList.toggle('walked', l <= st.lvl); s.classList.toggle('here', l === st.lvl); });
-    el.querySelector('[data-cls-panel]').innerHTML = String(panel(it, st, { modal }));
+    const pane = el.querySelector('[data-cls-panel]');
+    if (pane) pane.innerHTML = String(panel(it, st, { modal }));
     if (scroll) el.querySelector(`.cls-road #cls-lv-${st.lvl}`)?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     onState(st, it);
   };
