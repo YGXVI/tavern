@@ -2,6 +2,7 @@
 // (docs/hero-view.md, #202/#203). Только чтение и расчёт подписей: правил здесь нет, числа берутся из readCharacter
 // (лист за столом) и справочников. Чего у героя нет — пустые списки и прочерки, а не выдуманные значения.
 import { readCharacter } from '../table/sheet-model.js';
+import { attackBonus } from '../table/sheet-fields.js';
 import { ABILITIES, SKILLS, CONDITIONS, classById, raceById, mod } from '../../data/rules.js';
 import { srcOf } from '../../core/assets.js';
 import { castKind, diceText, DMG } from '../ref/spell-power.js';
@@ -162,14 +163,19 @@ export function toHeroView(ch, ctx = {}) {
   }).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
   const worn = wornItems(rawItems, gear);
   const profText = [s.proficiencies?.tools, s.proficiencies?.weapons].filter(Boolean).join('\n');
-  if (!(r.attacks || []).length) actions.action.push(...weaponAttacks(worn, mods, prof, profText));
+  // Атаки надетым оружием (#203, правка героя): у героя из конструктора и у того, кто сам надевал оружие, — рядом со
+  // своими атаками (атака с тем же именем заменяет строку оружия). Перенесённый лист с атаками ведёт их сам, как раньше.
+  const ownAttack = new Set((r.attacks || []).map((a) => str(a.name).trim().toLowerCase()).filter(Boolean));
+  if (!ownAttack.size || s.creation || rawItems.some((x) => x.equipped === true)) actions.action.push(...weaponAttacks(worn, mods, prof, profText).filter((w) => !ownAttack.has(w.name.toLowerCase())));
   for (const x of clsRes) if (x.row) actions[x.row].push({ id: x.id, name: x.name, sub: x.sub || '', icon: 'feature', res: x.id, left: x.left });
   // Строка атаки старого листа с именем заклинания (заговор «Священное пламя») — не отдельная строка, а чипы заклинания.
   const spellNames = new Set(spells.map((x) => x.name.toLowerCase()));
   const attackOf = new Map();
   for (const [i, a] of (r.attacks || []).entries()) {
     const save = /спасбросок\s+([А-ЯЁ]{3})?\s*СЛ\s*(\d+)/i.exec(str(a.note));
-    const hit = save ? undefined : Number.isFinite(a.bonus) ? signed(a.bonus) : undefined;
+    // Бонус атаки: записанный итог, иначе — характеристика (+ мастерство при владении), как в листе за столом.
+    const calc = Number.isFinite(a.bonus) ? a.bonus : a.ability ? attackBonus(s, a) : null;
+    const hit = save ? undefined : Number.isFinite(calc) ? signed(calc) : undefined;
     const row = { id: a.id || `attack-${i}`, name: str(a.name) || 'Атака', sub: [a.note, a.type].filter(Boolean).join(' · '), icon: 'weapon', hit, dc: save ? `СЛ ${save[2]}` : undefined, dmg: str(a.damage).replace(/d/g, 'к') || undefined };
     if (spellNames.has(row.name.toLowerCase())) attackOf.set(row.name.toLowerCase(), row); else actions.action.push(row);
   }

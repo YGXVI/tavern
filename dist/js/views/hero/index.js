@@ -8,6 +8,7 @@
 //   #/hero/import                         — перенос из Long Story Short (72)
 //   #/hero/<id>[/<вкладка>|/classic/<1-3>|/table|/levelup/<шаг>][?корнер] — лист, классический лист, лист на карте,
 //                                           повышение уровня (sheet.js, levelup.js)
+//   #/hero/<id>/edit                      — правка героя (edit.js)
 // Данные и действия — только через contract.js.
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
@@ -61,6 +62,8 @@ export function mountHero(root, hash) {
     if (p1 === 'quick') { const q = creationView().quick; if (q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
     if (p1 === 'import') { const c = new URLSearchParams(query).get('c') || ''; page(importPage(c)); bindImport(root, L, c); return; }
     if (p2 === 'bring') { page(bringPage(p1, new URLSearchParams(query).get('c') || '')); L('click', '[data-bring-camp]', (e, b) => heroActions.bringToCampaign({ heroId: p1, campaignId: b.dataset.bringCamp })); return; }
+    // Правка героя — свой экран со своим черновиком (edit.js); его слушатели снимаются вместе с экраном.
+    if (p2 === 'edit') { import('./edit.js').then((m) => { if (!alive) return; const off = m.mount(root, { parts, query, page, L, user }); if (typeof off === 'function') cleanup.push(off); }); return; }
     // Лист, лист на карте и повышение уровня — отдельными модулями, они крупные.
     const mod = p2 === 'levelup' ? import('./levelup.js') : import('./sheet.js');
     mod.then((m) => { if (alive) m.mount(root, { parts, query, page, L, user }); });
@@ -68,7 +71,7 @@ export function mountHero(root, hash) {
   mountInto();
   // Данные поменялись (действие листа, сервер, соседняя вкладка): лист и «Мои герои» перерисовываются, только если
   // изменилось то, что они показывают, — иначе события чужих кампаний сбивали бы прокрутку. Мастер создания не трогаем.
-  const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) && p2 !== 'levelup' ? JSON.stringify(heroView(p1)) : '');
+  const sig = () => (p0 === 'heroes' ? JSON.stringify(heroList()) : p0 === 'hero' && p1 && !['new', 'quick', 'import'].includes(p1) && p2 !== 'levelup' && p2 !== 'edit' ? JSON.stringify(heroView(p1)) : '');
   let last = sig();
   // Выбор в мастере создания меняет черновик конструктора (не базу) — перерисовать шаг и живой лист.
   // «Мои герои» (library.js) живут вне базы кампаний: их правки тоже приходят этим событием.
@@ -134,7 +137,7 @@ function bringPage(key, prefer) {
     <div class="h-bring-hero"><img src="${v.portrait}" alt=""><div><h1>Куда отправится ${v.name}?</h1><p class="muted">${v.summary}</p></div></div>
     <p class="h-bring-lead">${v.lib ? 'Герой остаётся в «Моих героях». В кампанию уходит его копия: у каждой кампании свой лист — хиты, сумка, уровень.' : 'В другую кампанию уходит копия листа.'}</p>
     ${targets.length ? html`<div class="h-bring-list">${targets.map(row)}</div>` : html`<div class="h-empty-note"><b>Кампаний пока нет</b><p class="muted">Войдите в кампанию по ссылке-приглашению мастера — и приведите героя туда.</p></div>`}
-    <div class="h-bring-foot"><a class="btn btn-ghost" href="#/hero/${key}">${ic('book-open-01')}Открыть лист</a><span class="spacer"></span><a class="btn btn-secondary" href="#/heroes">${v.lib ? 'Пока оставить в «Моих героях»' : 'Ко всем героям'}</a></div>
+    <div class="h-bring-foot"><a class="btn btn-ghost" href="#/hero/${key}">${ic('book-open-01')}Открыть лист</a>${v.canEdit ? html`<a class="btn btn-ghost" href="#/hero/${key}/edit">${ic('pencil-edit-02')}Править</a>` : ''}<span class="spacer"></span><a class="btn btn-secondary" href="#/heroes">${v.lib ? 'Пока оставить в «Моих героях»' : 'Ко всем героям'}</a></div>
   </main>`;
 }
 function bindHeroes(L) {
@@ -157,7 +160,7 @@ function heroMenu(anchor) {
   if (!v) return;
   const [cid] = id.split('~');
   const item = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
-  import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${item(`#/hero/${id}`, 'book-open-01', 'Удобный лист')}${item(`#/hero/${id}/classic/1`, 'pen-tool-01', 'Классический лист')}
+  import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${item(`#/hero/${id}`, 'book-open-01', 'Удобный лист')}${v.canEdit ? item(`#/hero/${id}/edit`, 'pencil-edit-02', 'Править героя') : ''}${item(`#/hero/${id}/classic/1`, 'pen-tool-01', 'Классический лист')}
     ${v.canLevelUp ? item(`#/hero/${id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${v.lib ? '' : item(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`)}
     ${v.isMine ? bringTargets(id).map((c) => html`<button class="menu-item" data-bring-to="${c.id}" data-hero="${id}">${ic('arrow-right-02', 16)}Привести в «${c.name}»${c.free ? '' : ' (копией)'}</button>`) : ''}
     ${v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-card-portrait="${id}">${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-card-delete="${id}">${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' }));
