@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "note": "Рецепты эффектов #193, приложение A ревизии 4. Механика без текста источника. example:* — условные ключи.",
+  "recipes": {
+    "dndsu:spell:9": { "label": "Благословение", "concentration": true, "duration": { "minutes": 1 }, "parts": [{ "mode": "auto", "effects": [{ "op": "add", "value": "1d4", "to": ["attack", "save"] }] }] },
+    "dndsu:spell:69": { "label": "Щит веры", "concentration": true, "duration": { "minutes": 10 }, "parts": [{ "mode": "auto", "effects": [{ "op": "add", "stat": "ac", "value": 2 }] }] },
+    "dndsu:spell:355": { "label": "Увеличение/уменьшение", "concentration": true, "duration": { "minutes": 1 }, "choose": { "option": ["enlarge", "reduce"] }, "parts": [
+      { "id": "enlarge-body", "option": "enlarge", "mode": "auto", "effects": [{ "op": "size", "steps": 1 }, { "op": "advantage", "to": ["check:str", "save:str"] }] },
+      { "id": "enlarge-weapon", "option": "enlarge", "mode": "auto", "when": { "all": ["damage:weapon", "weapon:enlarged"] }, "effects": [{ "op": "add", "value": "1d4", "to": ["damage:weapon"] }] },
+      { "id": "reduce-body", "option": "reduce", "mode": "auto", "effects": [{ "op": "size", "steps": -1 }, { "op": "disadvantage", "to": ["check:str", "save:str"] }] },
+      { "id": "reduce-weapon", "option": "reduce", "mode": "note", "label": "Урон уменьшенным оружием −1к4, но итог не меньше 1." },
+      { "id": "geometry", "mode": "note", "label": "Размеры ×2 / ×½, масса ×8 / ×⅛; нет места — растёт насколько может. Проверить вручную." }] },
+    "dndsu:item:203": { "label": "Рукавицы силы огра", "kind": "wondrous", "slot": "hands", "attune": true, "active": ["equipped", "attuned"], "parts": [{ "mode": "auto", "effects": [{ "op": "atLeast", "stat": "ability:str", "value": 19 }] }] },
+    "dndsu:item:160": { "label": "Оружие +N", "kind": "overlay", "fits": { "kind": "weapon" }, "choose": { "bonus": [1, 2, 3] }, "adds": { "magical": true }, "parts": [{ "mode": "auto", "effects": [{ "op": "add", "value": "$bonus", "to": ["attack", "damage"], "scope": "item" }] }] },
+    "dndsu:item:171": { "label": "Плащ защиты", "kind": "wondrous", "attune": true, "active": ["equipped", "attuned"], "parts": [{ "mode": "auto", "effects": [{ "op": "add", "stat": "ac", "value": 1 }, { "op": "add", "value": 1, "to": ["save"] }] }] },
+    "example:feat:great-weapon-master": { "label": "Мастер большого оружия", "kind": "feat", "parts": [
+      { "id": "power", "mode": "ask", "label": "−5 к атаке / +10 к урону", "window": "before-roll", "scope": "strike", "when": { "all": ["attack:melee", "attack:weapon", "weapon:heavy", "proficient"] }, "effects": [{ "op": "add", "value": -5, "to": ["attack"] }, { "op": "add", "value": 10, "to": ["damage"] }] },
+      { "id": "bonus-attack", "mode": "note", "on": ["crit", "reduced-to-0"], "when": { "all": ["attack:melee", "attack:weapon", "my-turn"] }, "grants": { "slot": "bonus", "what": "weapon-attack:melee" }, "label": "Можно потратить бонусное действие на одну рукопашную атаку оружием." }] },
+    "example:feat:grappler": { "label": "Борец", "kind": "feat", "requires": { "min": { "ability:str": 13 } }, "parts": [
+      { "id": "attack-grappled-target", "mode": "auto", "window": "before-roll", "scope": "strike", "when": { "all": ["attack"], "rel": ["target:grappled-by-me"] }, "effects": [{ "op": "advantage", "to": ["attack"] }] },
+      { "id": "pin", "mode": "note", "label": "Действием — новая проверка захвата против схваченной тобой цели; успех — вы оба опутаны, пока длится захват." }] },
+    "example:feature:champion-improved-critical": { "label": "Улучшенный критический удар", "parts": [{ "mode": "auto", "when": { "all": ["attack:weapon"] }, "effects": [{ "op": "critRange", "value": 19 }] }] },
+    "example:feature:life-domain-disciple-of-life": { "label": "Поборник жизни", "parts": [{ "mode": "auto", "when": { "all": ["healing:spell"], "min": { "spellLevel": 1 } }, "effects": [{ "op": "add", "value": { "sum": [2, "$slotLevel"] }, "to": ["healing:spell"] }] }] },
+    "dndsu:item:2289": { "label": "Зелье максимальной мощи", "kind": "potion", "consume": true, "uses": 1, "duration": { "minutes": 1 }, "parts": [{ "id": "max", "mode": "ask", "label": "Взять максимум на кубах?", "when": { "all": ["damage:spell"], "max": { "spellLevel": 4 } }, "effects": [{ "op": "maxDice", "to": ["damage:spell"] }] }] },
+    "dndsu:spell:60": { "label": "Доспехи мага", "duration": { "hours": 8 }, "requires": { "none": ["wearing:armor"] }, "parts": [{ "mode": "auto", "effects": [{ "op": "acFormula", "base": 13, "plus": ["dex"] }] }] },
+    "example:feature:barbarian-unarmored-defense": { "label": "Защита без доспехов", "requires": { "none": ["wearing:armor"] }, "parts": [{ "mode": "auto", "effects": [{ "op": "acFormula", "base": 10, "plus": ["dex", "con"] }] }] }
+  }
+}
