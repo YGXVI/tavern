@@ -14,6 +14,7 @@ import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
 import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, lssError, heroActions, startCreation, uploadPortrait, loadLssFile, dropLss, bringTargets } from './contract.js';
 import { srcOf } from '../../core/assets.js';
+import { closeTopModal, hasModal } from '../../ui/kit.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
 
@@ -71,7 +72,10 @@ export function mountHero(root, hash) {
   // Выбор в мастере создания меняет черновик конструктора (не базу) — перерисовать шаг и живой лист.
   const onChanged = () => { if (alive && (p1 === 'new' || p1 === 'quick' || p1 === 'import' || p2 === 'levelup')) rerender(); };
   window.addEventListener('hero:changed', onChanged);
-  return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
+  // Окна экранов героя (хиты, портрет, заклинание, предмет) закрываются по Esc и не переживают уход со страницы.
+  const onKey = (e) => { if (e.key === 'Escape' && hasModal()) { e.preventDefault(); closeTopModal(); } };
+  document.addEventListener('keydown', onKey);
+  return { unmount: () => { alive = false; window.removeEventListener('hero:changed', onChanged); document.removeEventListener('keydown', onKey); while (hasModal()) closeTopModal(); cleanup.forEach((f) => f?.()); }, update: () => { const now = sig(); if (now !== last) { last = now; rerender(); } } };
 }
 
 const tickSvg = String(ic('tick-02', 14));
@@ -88,29 +92,39 @@ function selectIn(root, sel, attr, id, artSel = '.h-choice-art, .h-icard-top, .a
 // ——— 88 · Герои ———
 // Только настоящие герои (#203): свои — во всех кампаниях, у мастера ещё и герои его кампаний. Пусто — так и говорим.
 function heroesPage() {
-  const { heroes, party, saved } = heroList();
+  const { heroes, party, saved, archived = [] } = heroList();
+  // Карточка: портрет, кампания, класс; хиты — сколько сейчас из максимума, полоской, как в листе.
+  const hpBar = (h) => { const p = h.hp?.max ? Math.round((h.hp.now / h.hp.max) * 100) : 0; return html`<span class="h-card-hp ${p && p <= 30 ? 'low' : ''}"><i style="width:${p}%"></i></span>`; };
   const card = (h) => html`<article class="h-card"><a class="h-card-art" href="#/hero/${h.id}"><img src="${h.portrait}" alt="" loading="lazy">${h.campaign ? chip(h.campaign.name) : chip('Свободен')}</a>
-    <div class="h-card-body"><h3>${h.name}</h3><small class="muted">${h.summary}${h.player ? ` · играет ${h.player}` : ''}</small>
-      <div class="h-mini">${[['Хиты', h.stats.hp], ['КД', h.stats.ac], ['Ур.', h.stats.level]].map(([k, v]) => html`<span>${caps(k)}<b>${v}</b></span>`)}</div>
+    <div class="h-card-body"><h3>${h.name}</h3><small class="muted">${h.line || h.summary}${h.player ? ` · играет ${h.player}` : ''}</small>
+      <div class="h-mini">${[['Хиты', h.hp ? `${h.hp.now}/${h.hp.max}` : h.stats.hp], ['КД', h.stats.ac], ['Ур.', h.stats.level]].map(([k, v]) => html`<span>${caps(k)}<b>${v}</b></span>`)}</div>${hpBar(h)}
       <span class="spacer"></span><div class="h-card-foot"><a class="btn btn-secondary" href="#/hero/${h.id}">Открыть лист</a><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-more="${h.id}" aria-label="Ещё">${ic('more-horizontal')}</button></div></div></article>`;
   const newCard = html`<article class="h-card h-card-new"><span class="h-round">${ic('plus-sign', 24)}</span><h3>Новый герой</h3><p class="muted">Пошагово по правилам кампании, быстро за три ответа или перенести из Long Story Short</p>
     <a class="btn btn-secondary" href="#/hero/new">Пошагово</a><a class="btn btn-ghost" href="#/hero/quick/1">${ic('sparkles')}Быстрый герой</a></article>`;
   const head = html`<div class="title-row"><h2>Герои</h2>${heroes.length ? chip(`Мои · ${heroes.length}`, 'accent') : ''}${party.length ? chip(`В моих кампаниях · ${party.length}`) : ''}<span class="spacer"></span>
     <a class="btn btn-secondary" href="#/hero/import">${ic('upload-01')}Из Long Story Short</a><a class="btn btn-primary" href="#/hero/new">${ic('plus-sign')}Новый герой</a></div>`;
+  const gone = archived.length ? html`<h3 class="h-sec">Удалённые</h3><div class="h-gone">${archived.map((h) => html`<div class="h-gone-row"><img src="${h.portrait}" alt=""><span><b>${h.name}</b><small>в архиве «${h.campaign}»</small></span><button class="btn btn-ghost btn-sm" data-restore="${h.id}">${ic('arrow-turn-backward', 14)}Вернуть</button></div>`)}</div>` : '';
   const savedStrip = saved.length ? html`<div class="h-saved-strip">${ic('book-open-01', 18)}<b>Сохранено в справочнике:</b>${saved.map((s) => chip(s))}<span class="spacer"></span><a class="link" href="#/ref">Открыть справочник →</a></div>` : '';
   if (!heroes.length && !party.length) {
-    return html`<main class="page h-page">${head}<div class="h-cards">${newCard}<div class="h-empty-note"><b>Героев пока нет</b><p class="muted">Герой живёт в кампании: соберите его здесь или войдите в кампанию по приглашению мастера и нажмите «Свой герой».</p></div></div>${savedStrip}</main>`;
+    return html`<main class="page h-page">${head}<div class="h-cards">${newCard}<div class="h-empty-note"><b>Героев пока нет</b><p class="muted">Герой живёт в кампании: соберите его здесь или войдите в кампанию по приглашению мастера и нажмите «Свой герой».</p></div></div>${gone}${savedStrip}</main>`;
   }
   return html`<main class="page h-page">${head}
     ${party.length ? html`<h3 class="h-sec">Мои герои</h3>` : ''}<div class="h-cards">${heroes.map(card)}${newCard}</div>
     ${party.length ? html`<h3 class="h-sec">Герои моих кампаний</h3><div class="h-cards">${party.map(card)}</div>` : ''}
-    ${savedStrip}
+    ${gone}${savedStrip}
   </main>`;
 }
 function bindHeroes(L) {
   L('click', '[data-more]', (e, b) => heroMenu(b));
+  L('click', '[data-restore]', (e, b) => heroActions.restoreHero({ heroId: b.dataset.restore }));
   // Меню живёт в поповере вне корня экрана — слушаем документ, пока открыт экран.
-  const onBring = (e) => { const b = e.target.closest('[data-bring-to]'); if (b) heroActions.bringToCampaign({ heroId: b.dataset.hero, campaignId: b.dataset.bringTo }); };
+  const onBring = (e) => {
+    const b = e.target.closest('[data-bring-to]'); if (b) heroActions.bringToCampaign({ heroId: b.dataset.hero, campaignId: b.dataset.bringTo });
+    const pic = e.target.closest('[data-card-portrait]'), del = e.target.closest('[data-card-delete]');
+    if (pic || del) import('../../ui/kit.js').then(({ closePopover }) => closePopover());
+    if (pic) { const v = heroView(pic.dataset.cardPortrait); if (v) import('./sheet.js').then((m) => m.portraitModal(v)); }
+    if (del) { const v = heroView(del.dataset.cardDelete); if (v) import('./sheet.js').then((m) => m.confirmDeleteHero(v)); }
+  };
   document.addEventListener('click', onBring);
   return () => document.removeEventListener('click', onBring);
 }
@@ -122,7 +136,8 @@ function heroMenu(anchor) {
   const item = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
   import('../../ui/kit.js').then(({ popover }) => popover(html`<div class="menu">${item(`#/hero/${id}`, 'book-open-01', 'Удобный лист')}${item(`#/hero/${id}/classic/1`, 'pen-tool-01', 'Классический лист')}
     ${v.canLevelUp ? item(`#/hero/${id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${item(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`)}
-    ${v.isMine ? bringTargets(id).map((c) => html`<button class="menu-item" data-bring-to="${c.id}" data-hero="${id}">${ic('arrow-right-02', 16)}Привести в «${c.name}»${c.free ? '' : ' (копией)'}</button>`) : ''}</div>`, anchor, { placement: 'auto' }));
+    ${v.isMine ? bringTargets(id).map((c) => html`<button class="menu-item" data-bring-to="${c.id}" data-hero="${id}">${ic('arrow-right-02', 16)}Привести в «${c.name}»${c.free ? '' : ' (копией)'}</button>`) : ''}
+    ${v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-card-portrait="${id}">${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-card-delete="${id}">${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' }));
 }
 export const previewNote = () => html`<p class="h-preview-note">${ic('information-circle', 16)}Экран на образце данных: числа ненастоящие, кнопки отвечают подсказкой. Все экраны героя — <a href="#/hero/lira">лист</a> · <a href="#/hero/lira/classic/1">классический</a> · <a href="#/hero/lira/table">на карте</a> · <a href="#/hero/lira/levelup/hp">повышение</a> · <a href="#/hero/import">импорт LSS</a> · корнеры: <a href="#/hero/lira/table?down">0 хитов</a>, <a href="#/hero/lira/table?concentration">концентрация</a>, <a href="#/hero/lira/table?noSlots">нет ячеек</a>, <a href="#/hero/lira?multiclass">мультикласс</a>, <a href="#/hero/lira?unfinished">не закончен</a>.</p>`;
 

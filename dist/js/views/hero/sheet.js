@@ -2,9 +2,9 @@
 // Адреса: #/hero/<id>[/<combat|magic|skills|bag|person>] · #/hero/<id>/classic/<1-3> · #/hero/<id>/table[/<вкладка>]
 // Корнеры и варианты — после «?»: down, concentration, noSlots, multiclass, unfinished, roll, stub, ask, levelup.
 import { html, raw } from '../../core/dom.js';
-import { modal, popover, closePopover, toast } from '../../ui/kit.js';
+import { modal, popover, closePopover, toast, confirmDialog } from '../../ui/kit.js';
 import { CONDITIONS } from '../../data/rules.js';
-import { heroView, heroActions, gearCatalog } from './contract.js';
+import { heroView, heroActions, gearCatalog, spellCatalog, SPELL_CLASSES, PORTRAITS, uploadPortrait } from './contract.js';
 import { ic, chip, caps, rowIcon, segmented, check, pips } from './parts.js';
 import { previewNote } from './index.js';
 
@@ -48,9 +48,12 @@ const hpOf = (v) => { const h = v.vitals.hp; const now = Math.max(0, Math.min(h.
 
 function sheetHead(v, mode) {
   const back = mode === 'table' || mode === 'drawer' ? '' : html`<a class="icon-btn" href="#/heroes" aria-label="К героям">${ic('arrow-left-02')}</a>`;
-  return html`<header class="s-head">${back}
-    <span class="s-portrait ${v.isMine === false ? 'other' : ''}"><img src="${v.portrait}" alt=""></span>
-    <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}</small></span>
+  // Портрет — он же токен: владелец и мастер меняют его нажатием (набор артов или свой файл с кадрированием).
+  const pic = v.live && v.canEdit
+    ? html`<button class="s-portrait edit ${v.isMine === false ? 'other' : ''}" data-portrait aria-label="Сменить портрет" title="Сменить портрет"><img src="${v.portrait}" alt=""><span class="s-portrait-edit">${ic('image-add-01', 14)}</span></button>`
+    : html`<span class="s-portrait ${v.isMine === false ? 'other' : ''}"><img src="${v.portrait}" alt=""></span>`;
+  return html`<header class="s-head">${back}${pic}
+    <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}${mode !== 'drawer' && v.campaign?.name ? html`<span class="s-camp">${ic('home-01', 12)}${v.campaign.name}</span>` : ''}</small></span>
     <span class="spacer"></span>
     ${mode === 'drawer' ? html`<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${ic('cancel-01', 18)}</button>`
       : mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
@@ -61,15 +64,21 @@ function sheetHead(v, mode) {
 function hpCard(v, { readonly = false } = {}) {
   const h = hpOf(v);
   const pct = h.max ? Math.round((h.now / h.max) * 100) : 0;
-  return html`<div class="s-hp ${h.now === 0 ? 'zero' : ''}">
-    ${readonly ? '' : html`<button class="s-hp-btn" data-hp="-1" aria-label="Урон">${ic('minus-sign', 18)}</button>`}
-    <div class="s-hp-mid"><div class="s-hp-row"><span class="k">хп</span><b data-explain="hp">${h.now}</b><span class="max">/ ${h.max}</span><span class="spacer"></span><small>врем. ${h.temp || 0}</small></div>
-      <span class="s-hp-bar"><i style="width:${pct}%"></i></span></div>
-    ${readonly ? '' : html`<button class="s-hp-btn" data-hp="1" aria-label="Лечение">${ic('plus-sign', 18)}</button>`}
+  const low = h.max && h.now > 0 && h.now / h.max <= 0.3;
+  const mid = html`<span class="s-hp-row"><span class="k">Хиты</span><b data-hp-now>${h.now}</b><span class="max">/ ${h.max}</span><span class="spacer"></span>${h.temp ? html`<span class="s-temp">${ic('shield-user', 12)}+${h.temp}</span>` : ''}</span><span class="s-hp-bar"><i style="width:${pct}%"></i></span>`;
+  return html`<div class="s-hp ${h.now === 0 ? 'zero' : ''} ${low ? 'low' : ''}">
+    ${readonly ? '' : html`<button class="s-hp-btn" data-hp="-1" aria-label="Урон 1" title="−1">${ic('minus-sign', 18)}</button>`}
+    ${readonly ? html`<div class="s-hp-mid">${mid}</div>` : html`<button class="s-hp-mid" data-hp-pad aria-label="Урон, лечение, временные хиты" title="Урон, лечение, временные хиты — числом">${mid}</button>`}
+    ${readonly ? '' : html`<button class="s-hp-btn" data-hp="1" aria-label="Лечение 1" title="+1">${ic('plus-sign', 18)}</button>`}
   </div>`;
 }
 
-const pills = (v) => html`<div class="s-pills">${[['кд', v.vitals.ac.value, 'ac'], ['иниц.', v.vitals.init, 'init'], ['шаг', v.vitals.speed], ['маст.', v.vitals.prof]].map(([k, val, ex]) => html`<span class="s-pill" ${ex ? raw(`data-explain="${ex}"`) : ''}><small>${k}</small><b>${val}</b></span>`)}</div>`;
+// КД, инициатива, скорость, мастерство — плитками: КД объясняет, откуда число, инициатива бросается.
+const pills = (v) => html`<div class="s-vitals">
+  <button class="s-vital ac" data-explain="ac" title="Откуда КД">${ic('shield-01', 16)}<b>${v.vitals.ac.value}</b><small>КД</small></button>
+  <button class="s-vital" data-roll="Инициатива|к20 ${v.vitals.init}" title="Бросить инициативу">${ic('flash', 16)}<b>${v.vitals.init}</b><small>Инициатива</small></button>
+  <span class="s-vital">${ic('running-shoes', 16)}<b>${parseInt(v.vitals.speed, 10) || '—'}</b><small>фт ходьба</small></span>
+  <span class="s-vital">${ic('star', 16)}<b>${v.vitals.prof}</b><small>Мастерство</small></span></div>`;
 
 function concRow(v) {
   const c = v.concentration;
@@ -80,7 +89,8 @@ function concRow(v) {
 
 // Текст заклинания: свой с листа, иначе первый абзац SRD 5.1 (английский) и ссылка в справочник.
 const spellText = (s) => (s.text ? html`<p>${s.text}</p>` : s.srdText?.length ? html`<p lang="en" class="s-srd">${s.srdText[0]}</p>` : '');
-const statBox = (a) => html`<button class="s-stat" data-roll="Проверка: ${a.name}|к20 ${a.mod}"><small>${a.short}</small><b>${a.mod}</b><span>${a.score}</span></button>`;
+// Характеристика: проверка — по карточке, спасбросок — строкой под ней (золотая точка — владеет).
+const statBox = (a) => html`<div class="s-stat"><button class="s-stat-main" data-roll="Проверка: ${a.name}|к20 ${a.mod}" title="Проверка: ${a.name}"><small>${a.short}</small><b>${a.mod}</b><span>${a.score}</span></button><button class="s-stat-save ${a.saveProf ? 'prof' : ''}" data-roll="Спасбросок: ${a.name}|к20 ${a.save}" title="Спасбросок: ${a.name}${a.saveProf ? ' (владеет)' : ''}"><i></i>спас ${a.save}</button></div>`;
 const statsGrid = (v, cls = '') => html`<div class="s-stats ${cls}">${v.abilities.map(statBox)}</div>`;
 
 function resources(v) {
@@ -106,15 +116,27 @@ function concPanel(v) {
 function actionRow(v, a) {
   if (a.empty) return html`<div class="s-act s-act-empty">${ic('sparkles', 18)}<span>${a.name}</span><span class="spacer"></span>${a.action ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/magic">${a.action}</a>` : ''}</div>`;
   // Умение с зарядами (Ярость, Второе дыхание…): сколько осталось и «потратить» вместо броска.
-  if (a.res) return html`<div class="s-act feature ${a.left ? '' : 'noslot'}" data-act-row="${a.id}"><span class="s-act-ic">${ic(rowIcon('feature'), 18)}</span><span class="s-act-t"><b>${a.name}</b><small>${a.sub}</small></span><span class="s-badge">${a.left} ${a.left === 1 ? 'заряд' : a.left > 1 && a.left < 5 ? 'заряда' : 'зарядов'}</span><button class="s-dice" data-res="${a.res}" aria-label="Использовать" title="Использовать">${ic('tick-02', 16)}</button></div>`;
+  if (a.res) return html`<div class="s-act feature ${a.left ? '' : 'noslot'}" data-act-row="${a.id}"><span class="s-act-ic">${ic(rowIcon('feature'), 18)}</span><span class="s-act-t"><b>${a.name}</b><small>${a.sub}</small></span><span class="s-chips"><span class="s-chip dc">${a.left} ${a.left === 1 ? 'заряд' : a.left > 1 && a.left < 5 ? 'заряда' : 'зарядов'}</span><button class="s-chip use" data-res="${a.res}" ${a.left ? '' : raw('disabled')} title="Потратить заряд">${ic('tick-02', 12)}Потратить</button></span></div>`;
   const noSlot = v.noSlot && a.slotLevel === v.noSlot.level;
   const off = v.down;
+  const block = off || noSlot ? raw('data-blocked') : '';
+  // Чипы — сами броски: «+5» — атака, «1к4+2» — урон; «СЛ 15» объясняет, откуда число; «1 ур.» — сотворить с ячейкой.
+  const hit = a.hit ? html`<button class="s-chip hit" data-roll="${a.name}: атака|к20 ${a.hit}" ${block} title="Бросить атаку">${ic('dice-faces-06', 12)}${a.hit}</button>` : '';
+  const dc = a.dc ? html`<span class="s-chip dc" ${a.explain ? raw(`data-explain="${a.explain}"`) : ''}>${a.dc}</span>` : '';
+  const dmg = a.dmg ? html`<button class="s-chip dmg" data-roll="${a.name}: урон|${dmgFormula(a.dmg)}" ${block} title="Бросить урон">${a.dmg}</button>` : '';
+  const cast = a.icon === 'spell' && a.slotLevel && v.live ? html`<button class="s-chip cast" data-cast="${a.id}" ${block} title="Сотворить: потратить ячейку">${ic('sparkles', 12)}${a.slotLevel} ур.</button>` : '';
   return html`<div class="s-act ${a.icon} ${noSlot ? 'noslot' : ''} ${off ? 'off' : ''}" data-act-row="${a.id}">
     <span class="s-act-ic">${ic(rowIcon(a.icon), 18)}</span>
     <span class="s-act-t"><b>${a.name}</b><small>${noSlot ? `${a.slotLevel} ур. · нет ячеек` : a.sub}</small></span>
-    ${a.hit ? html`<span class="s-badge" ${a.explain ? raw(`data-explain="${a.explain}"`) : ''}>${a.hit}</span>` : ''}${a.dc ? html`<span class="s-badge" ${a.explain ? raw(`data-explain="${a.explain}"`) : ''}>${a.dc}</span>` : ''}${a.dmg ? html`<span class="s-badge">${a.dmg}</span>` : ''}
-    <button class="s-dice" data-roll="${a.name}|${a.hit ? `к20 ${a.hit}` : a.dmg || a.dc || ''}" aria-label="Бросить" ${off || noSlot ? raw('data-blocked') : ''}>${ic('dice-faces-06', 16)}</button>
+    <span class="s-chips">${hit}${dc}${dmg}${cast}</span>
   </div>`;
+}
+// «3 × 1к4+1» (Волшебная стрела) — одним броском 3к4+3; остальное — как написано.
+export function dmgFormula(t) {
+  const m = /^(\d+)×(\d*)к(\d+)(?:([+−-])(\d+))?$/.exec(String(t).replace(/\s+/g, ''));
+  if (!m) return t;
+  const n = +m[1], c = +(m[2] || 1), f = m[5] ? +m[5] * n : 0;
+  return `${n * c}к${m[3]}${f ? `${m[4] === '+' ? '+' : '−'}${f}` : ''}`;
 }
 const group = (title, note, rows) => (rows.length ? html`<div class="s-group">${caps(title)}<small>${note}</small></div>${rows}` : '');
 
@@ -128,26 +150,34 @@ function combatTab(v, { narrow = false } = {}) {
 
 function magicTab(v, { narrow = false } = {}) {
   const sc = v.spellcasting;
-  if (!sc || v.status === 'unfinished') return html`<div class="s-empty">${ic('sparkles', 28)}<b>Заклинаний пока нет</b><p class="muted">Волшебнице нужна книга: 4 заговора и 14 заклинаний. Это шаг 6 мастера создания.</p><a class="btn btn-primary" href="#/hero/new/spells">${ic('arrow-right-02')}Выбрать заклинания</a></div>`;
+  const add = v.live && v.canEdit ? html`<button class="btn btn-secondary btn-sm" data-add-spell>${ic('plus-sign', 14)}Заклинание</button>` : '';
+  // Магия — не только у заклинателей (#203): артефакт, дар мастера или хоумбрю дают заклинания любому герою.
+  if (!sc || !sc.spells.length) return html`${sc ? magicHead(v, sc, add, narrow) : ''}<div class="s-empty">${ic('sparkles', 28)}<b>Заклинаний нет</b><p class="muted">${sc ? 'Добавьте заговоры и заклинания — из справочника или свои.' : 'Артефакт, дар мастера или хоумбрю дали герою магию? Добавьте любое заклинание — характеристику колдовства выберете здесь же.'}</p>${add ? html`<button class="btn btn-primary" data-add-spell>${ic('plus-sign')}Добавить заклинание</button>` : ''}</div>`;
   const view = local.magicView;
   const prepared = (s) => local.prepared[s.id] ?? s.prepared;
   let list = sc.spells;
   if (view === 'ready') list = list.filter((s) => s.level === 0 || prepared(s));
   if (view === 'ritual') list = list.filter((s) => s.ritual);
   if (local.search) list = list.filter((s) => s.name.toLowerCase().includes(local.search));
-  const byLevel = [0, 1, 2, 3].map((lv) => ({ lv, items: list.filter((s) => s.level === lv) })).filter((g) => g.items.length);
+  const byLevel = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => ({ lv, items: list.filter((s) => s.level === lv) })).filter((g) => g.items.length);
   const slot = (lv) => slotOf(v, lv);
   const spell = (s) => {
     const open = s.id === local.spellFocus;
-    return html`<div class="s-spell ${open ? 'open' : ''}" data-spell="${s.id}"><button class="s-spell-row" data-spell-open="${s.id}"><span data-prep="${s.id}">${check(prepared(s) || s.level === 0, 'magic')}</span><span class="t"><b>${s.name}</b><small>${s.range.toLowerCase()} · ${s.time.toLowerCase()}</small></span>${s.conc ? html`<span class="h-kr k">К</span>` : ''}${s.ritual ? html`<span class="h-kr">Р</span>` : ''}</button>
-      ${open ? html`<div class="s-spell-more"><small>${s.meta || `${s.time} · ${s.range} · ${s.duration} · ${s.comp}`}</small>${spellText(s)}<div class="s-spell-acts"><button class="btn btn-primary btn-sm" data-cast="${s.id}">${ic('sparkles', 14)}Сотворить</button>${s.level ? html`<button class="btn btn-ghost btn-sm" data-slot-pick="${s.id}">${ic('arrow-down-01', 14)}Ячейка ${s.level} ур.</button>` : ''}</div></div>` : ''}</div>`;
+    return html`<div class="s-spell ${open ? 'open' : ''}" data-spell="${s.id}"><button class="s-spell-row" data-spell-open="${s.id}"><span data-prep="${s.id}">${check(prepared(s) || s.level === 0, 'magic')}</span><span class="t"><b>${s.name}</b><small>${[s.range, s.time].filter(Boolean).map((x) => x.toLowerCase()).join(' · ') || (s.text ? s.text.slice(0, 80) : s.level ? `${s.level} ур.` : 'заговор')}</small></span>${s.conc ? html`<span class="h-kr k">К</span>` : ''}${s.ritual ? html`<span class="h-kr">Р</span>` : ''}</button>
+      ${open ? html`<div class="s-spell-more"><small>${s.meta || [s.time, s.range, s.duration, s.comp].filter(Boolean).join(' · ')}</small>${spellText(s)}<div class="s-spell-acts"><button class="btn btn-primary btn-sm" data-cast="${s.id}">${ic('sparkles', 14)}${s.level ? `Сотворить · ячейка ${s.level} ур.` : 'Сотворить'}</button>${v.live && v.canEdit ? html`<span class="spacer"></span><button class="btn btn-ghost btn-sm" data-drop-spell="${s.id}" data-name="${s.name}">${ic('delete-02', 14)}Убрать из листа</button>` : ''}</div></div>` : ''}</div>`;
   };
-  const groups = byLevel.map((g) => html`<div class="s-group">${caps(g.lv ? `${g.lv} уровень` : 'Заговоры')}<small>${g.lv ? `${slot(g.lv)?.left ?? 0} из ${slot(g.lv)?.total ?? 0} ячеек` : 'без ячеек'}</small></div>${g.items.map(spell)}`);
+  const groups = byLevel.map((g) => html`<div class="s-group">${caps(g.lv ? `${g.lv} уровень` : 'Заговоры')}<small>${g.lv && slot(g.lv)?.total ? `${slot(g.lv).left} из ${slot(g.lv).total} ячеек` : g.lv ? 'ячеек этого уровня нет' : 'без ячеек'}</small></div>${g.items.map(spell)}`);
   const half = Math.ceil(groups.length / 2);
   const slotsBox = narrow ? html`<div class="s-res">${v.resources.filter((r) => r.kind === 'slot').map((r) => html`<div class="s-res-row"><span>${r.name.replace('Ячейки ', '').replace(' ур.', ' уровень')}</span>${pips(r.left, r.total)}<b>${r.left}/${r.total}</b></div>`)}</div>` : '';
-  return html`${slotsBox}<div class="s-magic-top"><span class="s-pill"><small>сл</small><b data-explain="dc">${sc.dc}</b></span><span class="s-pill"><small>атака</small><b>${sc.attack}</b></span><span class="s-pill"><small>готово</small><b>${sc.prepared.now} из ${sc.prepared.max}</b></span><span class="spacer"></span>
-    ${segmented([{ id: 'ready', name: 'Готовые' }, { id: 'book', name: 'Вся книга' }, { id: 'ritual', name: 'Ритуалы' }], view, 'data-mview', narrow ? 'wide' : '')}</div>
+  return html`${slotsBox}${magicHead(v, sc, add, narrow)}
     ${narrow ? html`<div class="s-col">${groups}</div>` : html`<div class="s-cols"><div class="s-col">${groups.slice(0, half)}</div><div class="s-col">${groups.slice(half)}</div></div>`}`;
+}
+
+// Шапка магии: СЛ, атака, сколько готово, характеристика «Предметов и даров», фильтр списка, «+ Заклинание».
+function magicHead(v, sc, add, narrow) {
+  const ab = sc.extra && v.live && v.canEdit ? html`<span class="s-ab-pick" title="Чем колдует: предметы и дары">${[['int', 'ИНТ'], ['wis', 'МДР'], ['cha', 'ХАР']].map(([k, t]) => html`<button data-spell-ab="${k}" aria-pressed="${sc.abilityId === k}">${t}</button>`)}</span>` : '';
+  return html`<div class="s-magic-top"><span class="s-pill"><small>сл</small><b data-explain="dc">${sc.dc}</b></span><span class="s-pill"><small>атака</small><b>${sc.attack}</b></span>${sc.spells.length ? html`<span class="s-pill"><small>готово</small><b>${sc.prepared.now} из ${sc.prepared.max}</b></span>` : ''}${ab}<span class="spacer"></span>
+    ${sc.spells.length ? segmented([{ id: 'ready', name: 'Готовые' }, { id: 'book', name: 'Все' }, { id: 'ritual', name: 'Ритуалы' }], local.magicView, 'data-mview', narrow ? 'wide' : '') : ''}${add}</div>`;
 }
 
 function skillsTab(v, { narrow = false, ask = false } = {}) {
@@ -311,8 +341,13 @@ function sheetMenu(v, anchor, opts) {
   const [cid] = String(v.id).split('~');
   const a = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
   const pop = popover(html`<div class="menu">${opts.edit ? html`<button class="menu-item" data-menu-edit>${ic('pencil-edit-02', 16)}Все поля листа</button>${a(`#/hero/${v.id}`, 'maximize-01', 'Открыть полностью')}` : ''}
-    ${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}</div>`, anchor, { placement: 'auto' });
-  pop.node.addEventListener('click', (e) => { if (e.target.closest('[data-menu-edit]')) { closePopover(); opts.edit?.(); } });
+    ${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}
+    ${v.live && v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-menu-portrait>${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-menu-delete>${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' });
+  pop.node.addEventListener('click', (e) => {
+    if (e.target.closest('[data-menu-edit]')) { closePopover(); opts.edit?.(); }
+    if (e.target.closest('[data-menu-portrait]')) { closePopover(); portraitModal(v); }
+    if (e.target.closest('[data-menu-delete]')) { closePopover(); deleteHero(v); }
+  });
 }
 
 /**
@@ -366,6 +401,11 @@ export function bindSheet(root, L0, src, redraw, opts = {}) {
   L('click', '[data-unpack]', (e, b, v) => heroActions.removeItem({ heroId: v.id, itemId: b.dataset.unpack }));
   L('click', '[data-later]', (e, b) => b.closest('.s-banner')?.remove());
   L('click', '[data-more]', (e, b, v) => sheetMenu(v, b, opts));
+  L('click', '[data-portrait]', (e, b, v) => portraitModal(v));
+  L('click', '[data-hp-pad]', (e, b, v) => hpPad(v));
+  L('click', '[data-add-spell]', (e, b, v) => spellPicker(v));
+  L('click', '[data-drop-spell]', (e, b, v) => heroActions.removeSpell({ heroId: v.id, spellId: b.dataset.dropSpell, name: b.dataset.name }));
+  L('click', '[data-spell-ab]', (e, b, v) => heroActions.spellAbility({ heroId: v.id, ability: b.dataset.spellAb }));
   L('change', '[data-edit]', (e, t, v) => heroActions.editField({ heroId: v.id, field: t.dataset.edit, value: t.value }));
   L('click', '[data-search]', (e, b, v) => { const s = root.querySelector('.s-search'); s?.classList.toggle('hidden'); s?.querySelector('input')?.focus(); });
   L('input', '[data-search-input]', (e, t, v) => { local.search = t.value.trim().toLowerCase(); clearTimeout(bindSheet.t); bindSheet.t = setTimeout(() => { redraw(); const s = root.querySelector('.s-search'); s?.classList.remove('hidden'); const i = s?.querySelector('input'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); });
@@ -373,7 +413,7 @@ export function bindSheet(root, L0, src, redraw, opts = {}) {
 
 function refreshHp(root, v) {
   const h = hpOf(v);
-  root.querySelectorAll('.s-hp b[data-explain="hp"]').forEach((b) => { b.textContent = h.now; });
+  root.querySelectorAll('.s-hp [data-hp-now]').forEach((b) => { b.textContent = h.now; });
   root.querySelectorAll('.s-hp-bar i').forEach((i) => { i.style.width = `${Math.round((h.now / h.max) * 100)}%`; });
   root.querySelectorAll('.t-hp b').forEach((b) => { b.textContent = `${h.now}/${h.max}`; });
   root.querySelectorAll('.t-hp em').forEach((i) => { i.style.width = `${Math.round((h.now / h.max) * 100)}%`; });
@@ -396,6 +436,112 @@ function shortRest(v) {
     if (b.dataset.hd) { dice = Math.max(0, Math.min(hd.left, dice + +b.dataset.hd)); m.set(body()); }
     if (b.dataset.lv) { const lv = +b.dataset.lv; if (pick.has(lv)) pick.delete(lv); else if ([...pick].reduce((a, x) => a + x, 0) + lv <= Math.ceil(v.level / 2)) pick.add(lv); else toast({ title: `Не больше ${Math.ceil(v.level / 2)} уровней ячеек`, icon: 'information-circle', timeout: 1800 }); m.set(body()); }
     if (b.hasAttribute('data-ok')) { heroActions.rest({ heroId: v.id, kind: 'short', hitDice: dice, recover: [...pick] }); m.close(); }
+  });
+}
+
+// ——— Хиты: урон, лечение, временные — числом, а не по одному (#203) ———
+function hpPad(v) {
+  const h = hpOf(v);
+  let val = '';
+  const body = () => html`<div class="s-rest-modal s-hp-pad"><div class="s-rest-head">${ic('heart-check', 18)}<b>Хиты · ${h.now} из ${h.max}${h.temp ? ` · +${h.temp} врем.` : ''}</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
+    <label class="s-hp-input"><input type="number" inputmode="numeric" min="0" max="999" data-hpv placeholder="0" value="${val}" aria-label="Сколько"></label>
+    <div class="s-hp-quick">${[1, 2, 5, 10].map((n) => html`<button data-plus="${n}">+${n}</button>`)}<button data-clear>${ic('cancel-01', 14)}</button></div>
+    <div class="s-hp-acts"><button class="btn btn-danger" data-apply="dmg">${ic('sword-01', 16)}Урон</button><button class="btn btn-primary" data-apply="heal">${ic('heart-check', 16)}Лечение</button><button class="btn btn-secondary" data-apply="temp">${ic('shield-user', 16)}Временные</button></div>
+    <p class="s-hp-note">Урон сначала снимает временные хиты. Временные не складываются — остаётся большее.${v.explain?.hp ? ` ${v.explain.hp}.` : ''}</p></div>`;
+  const m = modal(body(), { className: 'rest' });
+  const input = () => m.box.querySelector('[data-hpv]');
+  setTimeout(() => input()?.focus(), 50);
+  const apply = (kind) => {
+    const n = Math.max(0, Math.round(Number(input()?.value || val) || 0));
+    if (!n) { input()?.focus(); return; }
+    if (kind === 'temp') heroActions.setHp({ heroId: v.id, temp: Math.max(n, h.temp || 0) });
+    else heroActions.setHp({ heroId: v.id, delta: kind === 'dmg' ? -n : n });
+    m.close();
+  };
+  m.box.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.plus) { val = String((Number(input()?.value) || 0) + +b.dataset.plus); input().value = val; }
+    if (b.hasAttribute('data-clear')) { val = ''; input().value = ''; input().focus(); }
+    if (b.dataset.apply) apply(b.dataset.apply);
+  });
+  m.box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(e.shiftKey ? 'heal' : 'dmg'); } });
+}
+
+// ——— Портрет: набор артов или свой файл с кадрированием в круг; токены героя меняются вместе с ним ———
+function portraitModal(v) {
+  const [cid] = String(v.id).split('~');
+  const m = modal(html`<div class="s-rest-modal s-portrait-modal"><div class="s-rest-head">${ic('image-add-01', 18)}<b>Портрет ${v.name}</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
+    <p class="s-hp-note">Портрет — это и токен на карте: поменяется на всех сценах кампании.</p>
+    <button class="s-upload" data-own-pic>${ic('upload-01', 20)}<span><b>Загрузить свой</b><small>PNG, JPEG или WebP до 5 МБ · кадр выберете сами</small></span></button>
+    <div class="s-pic-grid">${PORTRAITS.map((p) => html`<button class="s-pic ${p === v.portrait ? 'on' : ''}" data-pic="${p}" aria-pressed="${p === v.portrait}"><img src="${p}" alt="" loading="lazy">${p === v.portrait ? html`<span class="h-tick">${ic('tick-02', 12)}</span>` : ''}</button>`)}</div></div>`, { className: 'rest' });
+  m.box.addEventListener('click', async (e) => {
+    const pic = e.target.closest('[data-pic]');
+    if (pic) { heroActions.setPortrait({ heroId: v.id, ref: pic.dataset.pic }); m.close(); return; }
+    if (e.target.closest('[data-own-pic]')) {
+      m.close();
+      const { tokenImageEditor } = await import('../table/token-image.js');
+      tokenImageEditor({ title: `Портрет ${v.name}`, ref: v.portrait, defaultRef: '', toast, store: async (file) => { const ref = await uploadPortrait(file, cid); if (!ref) throw new Error('Портрет не загрузился'); return ref; }, done: (ref) => heroActions.setPortrait({ heroId: v.id, ref }) });
+    }
+  });
+}
+
+// ——— Удалить героя: в архив кампании, с возвратом ———
+async function deleteHero(v) {
+  const ok = await confirmDialog({ title: `Удалить ${v.name}?`, body: `Лист уйдёт в архив кампании «${v.campaign?.name || ''}»: токены снимутся со всех сцен, из боя — тоже. Вернуть героя можно со страницы «Герои».`, ok: 'Удалить', danger: true });
+  if (ok) heroActions.deleteHero({ heroId: v.id });
+}
+export { portraitModal, deleteHero as confirmDeleteHero };
+
+// ——— Любое заклинание любому герою (#203): справочник с поиском и фильтрами или своё ———
+function spellPicker(v) {
+  const all = spellCatalog();
+  const have = new Set((v.spellcasting?.spells || []).map((s) => s.name.toLowerCase()));
+  const st = { q: '', level: 'all', cls: '', own: false, name: '', circle: 0, text: '' };
+  const LV = [['all', 'Все'], ['0', 'Заговоры'], ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), `${n}`])];
+  const list = () => {
+    const q = st.q.trim().toLowerCase();
+    // Сначала названия, которые начинаются с запроса, потом — где он внутри.
+    const rank = (s) => (!q ? 0 : s.name.toLowerCase().startsWith(q) || s.en.toLowerCase().startsWith(q) ? 0 : 1);
+    return all.filter((s) => (st.level === 'all' || s.level === +st.level) && (!st.cls || s.classes.includes(st.cls)) && (!q || s.name.toLowerCase().includes(q) || s.en.toLowerCase().includes(q))).sort((a, b) => rank(a) - rank(b)).slice(0, 80);
+  };
+  const row = (s) => { const on = have.has(s.name.toLowerCase()); return html`<button class="s-add-row spell ${on ? 'on' : ''}" data-pick-spell="${s.ref}" ${on ? raw('disabled') : ''}><b>${s.name}${s.conc ? html`<span class="h-kr k">К</span>` : ''}${s.ritual ? html`<span class="h-kr">Р</span>` : ''}</b><small>${s.level ? `${s.level} ур.` : 'заговор'}${s.school ? ` · ${s.school}` : ''}${s.time ? ` · ${s.time}` : ''}${s.classes.length ? ` · ${s.classes.join(', ')}` : ''}</small>${on ? ic('tick-02', 16) : ic('plus-sign', 16)}</button>`; };
+  const body = () => html`<div class="s-rest-modal s-add-modal s-spell-pick"><div class="s-rest-head">${ic('sparkles', 18)}<b>Добавить заклинание</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
+    <p class="s-hp-note">Любое — от класса, артефакта или дара мастера. Ограничений по классу нет.</p>
+    ${st.own ? html`<div class="s-own-spell"><label class="s-field"><span>Название</span><span class="input"><input data-own-name value="${st.name}" placeholder="Например, «Шёпот маски»" maxlength="60"></span></label>
+        <div class="s-field"><span>Уровень</span><span class="s-lv-pick">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => html`<button data-own-lv="${n}" aria-pressed="${st.circle === n}">${n ? n : 'Заговор'}</button>`)}</span></div>
+        <label class="s-field"><span>Что делает</span><textarea rows="4" data-own-text placeholder="Время, дистанция, эффект — как записано у мастера">${st.text}</textarea></label>
+        <div class="s-rest-foot"><button class="btn btn-ghost" data-own-back>${ic('arrow-left-02', 16)}К справочнику</button><button class="btn btn-primary" data-own-save>${ic('plus-sign', 16)}Добавить</button></div></div>`
+    : html`<span class="input">${ic('search-01', 16)}<input data-sq placeholder="Огненный шар, Щит, Fireball…" value="${st.q}"></span>
+      <div class="s-lv-pick">${LV.map(([k, t]) => html`<button data-lv="${k}" aria-pressed="${st.level === k}">${t}</button>`)}</div>
+      <label class="s-cls-pick">${caps('Класс')}<select class="input" data-cls><option value="">Любой — без ограничений</option>${SPELL_CLASSES.map((c) => html`<option value="${c}" ${st.cls === c ? raw('selected') : ''}>${c}</option>`)}</select></label>
+      <div class="s-add-list">${list().map(row)}${list().length ? '' : html`<p class="s-none">Ничего не нашлось.</p>`}</div>
+      <button class="s-add-row own" data-own-open><b>Своё заклинание</b><small>хоумбрю, предмет, умение мастера — название, уровень, текст</small>${ic('pencil-edit-02', 16)}</button>`}</div>`;
+  const m = modal(body(), { className: 'rest' });
+  const redraw = (focus) => { m.set(body()); const i = m.box.querySelector(focus); if (i) { i.focus(); if (i.setSelectionRange && typeof i.value === 'string') i.setSelectionRange(i.value.length, i.value.length); } };
+  setTimeout(() => m.box.querySelector('[data-sq]')?.focus(), 50);
+  m.box.addEventListener('input', (e) => {
+    if (e.target.matches('[data-sq]')) { st.q = e.target.value; redraw('[data-sq]'); }
+    if (e.target.matches('[data-own-name]')) st.name = e.target.value;
+    if (e.target.matches('[data-own-text]')) st.text = e.target.value;
+  });
+  m.box.addEventListener('change', (e) => { if (e.target.matches('[data-cls]')) { st.cls = e.target.value; redraw('[data-sq]'); } });
+  m.box.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.lv) { st.level = b.dataset.lv; redraw('[data-sq]'); }
+    if (b.hasAttribute('data-own-open')) { st.own = true; st.name = st.q; redraw('[data-own-name]'); }
+    if (b.hasAttribute('data-own-back')) { st.own = false; redraw('[data-sq]'); }
+    if (b.dataset.ownLv) { st.circle = +b.dataset.ownLv; redraw('[data-own-text]'); }
+    if (b.hasAttribute('data-own-save')) {
+      if (!st.name.trim()) { m.box.querySelector('[data-own-name]')?.focus(); return; }
+      heroActions.addSpell({ heroId: v.id, name: st.name.trim(), circle: st.circle, description: st.text.trim() });
+      m.close();
+    }
+    if (b.dataset.pickSpell) {
+      const s = all.find((x) => x.ref === b.dataset.pickSpell);
+      if (!s) return;
+      heroActions.addSpell({ heroId: v.id, name: s.name, circle: s.level, ref: s.ref, ritual: s.ritual });
+      have.add(s.name.toLowerCase()); redraw('[data-sq]');
+    }
   });
 }
 

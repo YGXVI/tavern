@@ -6,7 +6,8 @@ import { LIRA, TORIN, CORNERS, LEVEL_UP, CREATION, CREATION_LIVE } from './fixtu
 import { toast } from '../../ui/kit.js';
 import { campaignsFor, membership, updateCampaign, userById } from '../../core/campaign.js';
 import { currentUserId } from '../../core/auth.js';
-import { toHeroView, toHeroCard, spellIndex } from './adapter.js';
+import { toHeroView, toHeroCard, spellIndex, legacySpells } from './adapter.js';
+import { archiveLocalCharacter, restoreLocalCharacter } from '../table/sheet-lifecycle.js';
 import { applyHeroAction } from './actions.js';
 import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter, quickCreation, quickClass } from './creation.js';
 import { isServerMode } from '../../core/store.js';
@@ -58,7 +59,8 @@ export function heroView(id, corner = '') {
   if (real) {
     const v = toHeroView(real.ch, ctxOf(real.c, real.ch, userId));
     // 0 хитов — панель спасбросков от смерти вместо обычного боя (корнер 67 на настоящих данных).
-    return { ...v, id: heroKey(real.c.id, real.ch.id), live: true, canLevelUp: canLevelUp(heroKey(real.c.id, real.ch.id)), down: v.vitals.hp.max > 0 && v.vitals.hp.now === 0 };
+    const key = heroKey(real.c.id, real.ch.id), can = canLevelUp(key);
+    return { ...v, id: key, live: true, canLevelUp: can, canEdit: can, down: v.vitals.hp.max > 0 && v.vitals.hp.now === 0 };
   }
   // Образцы макета (lira, torin, корнеры) — только для превью листа на карте; остальные адреса — «героя нет».
   if (!HEROES[id]) return null;
@@ -89,7 +91,10 @@ export function heroList() {
       }
     }
   }
-  return { heroes: mine, party, saved: savedFromRef(), sample: false };
+  // Удалённые свои герои (архив кампаний) — их можно вернуть.
+  const archived = (userId ? campaignsFor(userId) : []).flatMap((c) => (c.archivedCharacters || []).filter((ch) => ch.ownerId === userId && (ch.profile || 'pc') === 'pc')
+    .map((ch) => ({ id: heroKey(c.id, ch.id), name: ch.name, portrait: toHeroCard(ch, ctxOf(c, ch, userId)).portrait, campaign: c.name })));
+  return { heroes: mine, party, archived, saved: savedFromRef(), sample: false };
 }
 /** Мастер создания для кампании cid (из «Кем сядете за стол?»): черновик другой кампании начинается заново. */
 export function startCreation(cid) {
@@ -207,11 +212,85 @@ export function canLevelUp(key) {
   const real = findHero(key), userId = currentUserId();
   return !!real && (real.ch.ownerId === userId || membership(real.c, userId)?.role === 'master');
 }
-/** Свой портрет из файла: в песочнице — на устройстве (idb:), на сервере загрузка игрокам ещё не включена. */
-export async function uploadPortrait(file) {
-  if (isServerMode()) { say('Свой портрет — чуть позже', 'Пока выберите из набора: загрузку портретов игрокам включим на сервере.'); return null; }
-  try { const { storeImage } = await import('../../core/assets.js'); return (await storeImage(file)).ref; } catch (e) { say('Портрет не загрузился', e.message, 'alert-circle'); return null; }
+/**
+ * Свой портрет из файла: в песочнице — на устройстве (idb:), на сервере — в хранилище картинок токенов кампании (тот же
+ * путь, что у своих токенов игрока, TASK-183). cid — кампания героя (у мастера создания — кампания черновика).
+ */
+export async function uploadPortrait(file, cid = readJSON(BUILD_KEY)?.campaignId) {
+  try {
+    if (isServerMode()) {
+      if (!cid) throw new Error('Сначала выберите кампанию — портрет хранится в ней.');
+      return await (await import('../../server/sync.js')).uploadTokenImage(cid, file);
+    }
+    const { storeImage } = await import('../../core/assets.js'); return (await storeImage(file)).ref;
+  } catch (e) { say('Портрет не загрузился', e.message, 'alert-circle'); return null; }
 }
+/** Можно ли менять героя key целиком (портрет, удаление, заклинания): владелец или мастер кампании. */
+export const canEditHero = (key) => canLevelUp(key);
+/** Портрет героя — он же картинка его токенов на всех сценах кампании. */
+function setPortrait(p = {}) {
+  const real = findHero(p.heroId);
+  if (!real || !p.ref) return;
+  if (!canEditHero(p.heroId)) { say('Портрет меняет владелец героя или мастер'); return; }
+  updateCampaign(real.c.id, (c) => {
+    const ch = c.characters.find((x) => x.id === real.ch.id);
+    if (ch) ch.portrait = p.ref;
+    for (const s of c.scenes || []) for (const t of s.tokens || []) if (t.characterId === real.ch.id) t.img = p.ref;
+  });
+  say('Портрет обновлён', 'Токен на карте — тоже.', 'tick-02');
+}
+/** Удалить героя: лист уходит в архив кампании, токены и участие в бою снимаются; вернуть — restoreHero. */
+async function deleteHero(p = {}) {
+  const real = findHero(p.heroId);
+  if (!real) return;
+  if (!canEditHero(p.heroId)) { say('Удалить героя может владелец или мастер'); return; }
+  const userId = currentUserId(), cid = real.c.id, chid = real.ch.id, name = real.ch.name;
+  const master = membership(real.c, userId)?.role === 'master';
+  try {
+    if (isServerMode()) {
+      const [sync, { makeSheetCommand }] = await Promise.all([import('../../server/sync.js'), import('../../server/character-sheet.js')]);
+      const meta = sync.characterSheetMeta(cid, chid);
+      if (!meta) throw new Error('Лист ещё загружается — попробуйте через секунду.');
+      await sync.submitCharacterCommand(makeSheetCommand({ campaignId: cid, characterId: chid, version: meta.version, kind: 'archive' }));
+    } else updateCampaign(cid, (c) => archiveLocalCharacter(c, chid));
+    // Место за столом освобождается: игрок соберёт или выберет другого героя. На сервере освободить место может мастер.
+    if (!isServerMode() || master) updateCampaign(cid, (c) => { for (const m of c.members || []) if (m.characterId === chid) m.characterId = null; });
+  } catch (e) { say('Героя не удалось удалить', e?.message || 'Сервер не принял команду.', 'alert-circle'); return; }
+  toast({ title: `${name} — в архиве`, body: isServerMode() && !master ? 'Лист в архиве кампании. Чтобы собрать нового героя, попросите мастера освободить место.' : 'Лист в архиве кампании — вернуть можно со страницы «Герои».', icon: 'delete-02', action: { label: 'Вернуть', onClick: () => restoreHero({ heroId: heroKey(cid, chid) }) } });
+  location.hash = '#/heroes';
+}
+async function restoreHero(p = {}) {
+  const [cid, chid] = String(p.heroId || '').split('~');
+  const c = campaignsFor(currentUserId()).find((x) => x.id === cid);
+  const ch = c?.archivedCharacters?.find((x) => x.id === chid);
+  if (!ch) return;
+  try {
+    if (isServerMode()) {
+      const [sync, { makeSheetCommand }] = await Promise.all([import('../../server/sync.js'), import('../../server/character-sheet.js')]);
+      const meta = sync.characterSheetMeta(cid, chid);
+      if (!meta) throw new Error('Лист ещё загружается — попробуйте через секунду.');
+      await sync.submitCharacterCommand(makeSheetCommand({ campaignId: cid, characterId: chid, version: meta.version, kind: 'restore' }));
+    } else updateCampaign(cid, (camp) => restoreLocalCharacter(camp, chid));
+  } catch (e) { say('Героя не удалось вернуть', e?.message || 'Сервер не принял команду.', 'alert-circle'); return; }
+  // Своё место за столом свободно — герой снова садится на него (токен встаёт на сцену).
+  const userId = currentUserId(), m = membership(c, userId);
+  if (ch.ownerId === userId && m?.role === 'player' && !m.characterId) { const { claim } = await import('../screens.js'); claim(cid, userId, chid); return; }
+  say(`${ch.name} снова в «${c.name}»`, 'Токен на карту ставит мастер или вы — за столом.', 'tick-02');
+}
+// Классы dnd.su в справочнике заклинаний → русские названия (для фильтра «Добавить заклинание»).
+const SPELL_CLASS = { 'dndsu:class:12': 'Бард', 'dndsu:class:13': 'Жрец', 'dndsu:class:22': 'Друид', 'dndsu:class:16': 'Паладин', 'dndsu:class:17': 'Следопыт', 'dndsu:class:19': 'Чародей', 'dndsu:class:20': 'Колдун', 'dndsu:class:21': 'Волшебник' };
+let spellList = null;
+/** Все заклинания справочника для «Добавить заклинание»: любому герою, без ограничения по классу (#203). */
+export function spellCatalog() {
+  if (spellList) return spellList;
+  spellList = [...spells.byId.values()].map((e) => ({
+    ref: e.id, name: e.name?.ru || e.name?.en || e.id, en: e.name?.en || '', level: e.level ?? 0, school: spells.schools[e.school] || '',
+    classes: [...new Set([...(e.classes?.base || []), ...(e.classes?.tceOptional || [])].map((k) => SPELL_CLASS[k]).filter(Boolean))],
+    time: spells.ref[e.id]?.[0] || '', range: spells.ref[e.id]?.[1] || '', conc: !!e.concentration, ritual: !!e.ritual,
+  })).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, 'ru'));
+  return spellList;
+}
+export const SPELL_CLASSES = Object.values(SPELL_CLASS);
 /** Снаряжение SRD для «Добавить предмет»: [{ ref, name, kind, weight }] (пусто — справочник не загрузился). */
 export const gearCatalog = () => (gear ? [...gear.byId.values()].map((g) => ({ ref: g.id, name: g.ru, kind: g.kind, weight: g.weight })) : []);
 // ——— Перенос из Long Story Short (72, #203): разбор файла — lss.js, разобранный лист живёт в вкладке до переноса ———
@@ -311,6 +390,9 @@ const live = (name) => (payload = {}) => {
   const real = findHero(payload.heroId);
   const chid = real?.ch.id;
   if (!real) return stub(name)(payload);
+  // Заклинания старого листа (строкой) — списком со ссылками на справочник: первая правка переносит их в knownSpells.
+  if (['addSpell', 'removeSpell'].includes(name) && !(real.ch.knownSpells || []).length) payload = { ...payload, legacy: legacySpells(real.ch.spells, spells).map((s) => ({ name: s.name, circle: s.circle, ref: s.ref })) };
+  if (name === 'editField') payload = { ...payload, server: isServerMode() };
   let note = null;
   updateCampaign(real.c.id, (c) => {
     const ch = c.characters.find((x) => x.id === chid);
@@ -454,5 +536,11 @@ export const heroActions = {
   coins: live('coins'),                        // { heroId, pp, ep, gp, sp, cp }
   levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
   importLss,                                   // { campaignId? } — разобранный файл из loadLssFile
+  addSpell: live('addSpell'),                  // { heroId, name, circle, ref?, ritual?, description? } — любому герою
+  removeSpell: live('removeSpell'),            // { heroId, spellId, name }
+  spellAbility: live('spellAbility'),          // { heroId, ability: 'int'|'wis'|'cha', sourceId? }
+  setPortrait,                                 // { heroId, ref } — портрет и картинка токенов
+  deleteHero,                                  // { heroId } — в архив кампании (вернуть — restoreHero)
+  restoreHero,                                 // { heroId }
   lssCampaign,                                 // { campaignId } — куда переносить
 };
