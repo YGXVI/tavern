@@ -23,7 +23,7 @@ const LANG_RU = {
 const PRIORITY = {
   barbarian: ['str', 'con', 'dex'], bard: ['cha', 'dex', 'con'], cleric: ['wis', 'con', 'str'], druid: ['wis', 'con', 'dex'],
   fighter: ['str', 'con', 'dex'], monk: ['dex', 'wis', 'con'], paladin: ['str', 'cha', 'con'], ranger: ['dex', 'wis', 'con'],
-  rogue: ['dex', 'int', 'con'], sorcerer: ['cha', 'con', 'dex'], warlock: ['cha', 'con', 'dex'], wizard: ['int', 'con', 'dex'],
+  rogue: ['dex', 'cha', 'con'], sorcerer: ['cha', 'con', 'dex'], warlock: ['cha', 'con', 'dex'], wizard: ['int', 'con', 'dex'],
 };
 const METHOD_UI = { point_buy: 'buy', standard_array: 'array', rolled: 'roll' };
 const UI_METHOD = { buy: 'point_buy', array: 'standard_array', roll: 'rolled' };
@@ -85,7 +85,19 @@ const raceChoices = (ix, raceId) => [...ix.defs.values()].filter((d) => d.kind =
 const levels = (st) => Math.max(1, st.context.startLevel || 1);
 
 /** Выбор окна → изменение черновика. Возвращает подсказку для экрана или null. */
-export function applyCreationChoice(ix, st, { step, id, value } = {}) {
+export function applyCreationChoice(ix, st, choice = {}) {
+  const note = applyChoice(ix, st, choice);
+  fillSingleEquipment(ix, st);
+  return note;
+}
+/** Группа снаряжения, где выбирать не из чего, выбрана сразу: игрок не должен нажимать единственный вариант. */
+function fillSingleEquipment(ix, st) {
+  for (const g of equipmentGroups(ix, evaluate(ix, st))) {
+    const open = g.alts.filter((a) => !a.unavailable);
+    if (open.length === 1 && g.selected === undefined) change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: open[0].id, picks: open[0].picks } });
+  }
+}
+function applyChoice(ix, st, { step, id, value } = {}) {
   const ev0 = evaluate(ix, st);
   const toggle = (choice, opt) => {
     if (!choice) return null;
@@ -120,7 +132,7 @@ export function applyCreationChoice(ix, st, { step, id, value } = {}) {
       change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, null])) });
       return null;
     }
-    if (id === 'auto') return autoAbilities(ix, st);
+    if (id === 'auto') return autoAbilities(ix, st, Array.isArray(value) ? value : null);
     if (id === 'abInc' || id === 'abDec') return stepAbility(ix, st, value, id === 'abInc' ? 1 : -1);
     return null;
   }
@@ -155,6 +167,17 @@ export function applyCreationChoice(ix, st, { step, id, value } = {}) {
     change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: alt.id, picks: alt.picks } });
     return null;
   }
+  // Конкретный предмет из «любое воинское оружие»: «группа|вариант|предмет в варианте|место|ID».
+  if (step === 'equipment' && id === 'eqPick') {
+    const [title, altId, item, slot, ref] = String(value).split('|');
+    const g = equipmentGroups(ix, ev0).find((x) => x.title === title);
+    const alt = g?.alts.find((a) => a.id === altId);
+    if (!alt?.choose?.[item]?.list.some((x) => x.id === ref)) return null;
+    const picks = (g.selected === alt.id ? g.choice.selected.picks : alt.picks).map((p) => (Array.isArray(p) ? [...p] : p));
+    picks[item][slot] = ref;
+    change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: alt.id, picks } });
+    return null;
+  }
   if (step === 'spells') {
     if (id === 'spTab') { st.tab = Number(value) || 0; return null; }
     if (id === 'auto') return autoSpells(ix, st);
@@ -177,15 +200,18 @@ export function applyCreationChoice(ix, st, { step, id, value } = {}) {
 // ——— Характеристики ———
 function stepAbility(ix, st, key, dir) {
   const m = st.draft.abilityMethod, scores = { ...st.draft.baseScores };
+  let swapped = null;
   if (m === 'standard_array') {
     const arr = [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
     const cur = scores[key];
     let next;
-    if (cur == null) next = arr.find((v) => !Object.values(scores).includes(v)) ?? arr[arr.length - 1];
+    if (cur == null) next = (dir > 0 ? arr : [...arr].reverse()).find((v) => !Object.values(scores).includes(v)) ?? arr[arr.length - 1];
     else { const i = arr.indexOf(cur) - dir; if (i < 0 || i >= arr.length) return null; next = arr[i]; }
     const holder = Object.keys(scores).find((k) => k !== key && scores[k] === next);
     if (holder) scores[holder] = cur ?? null;
     scores[key] = next;
+    // Стандартный набор — шесть чисел на шесть мест: «+» меняет значения местами, об этом надо сказать.
+    if (holder && cur != null) swapped = { title: 'Поменялись местами', body: `${ABILITIES.find((a) => a.id === key)?.name} ${next}, ${ABILITIES.find((a) => a.id === holder)?.name} ${cur}.` };
   } else if (m === 'point_buy') {
     const pb = ix.cats.options.abilityMethods.pointBuy;
     const cur = scores[key] ?? pb.min, next = cur + dir;
@@ -196,37 +222,70 @@ function stepAbility(ix, st, key, dir) {
     scores[key] = next;
   } else return { title: 'Броски характеристик — у мастера', body: 'Этот способ пока не подключён.' };
   change(ix, st, { type: 'setBaseScores', scores });
-  return null;
+  return swapped;
 }
-function autoAbilities(ix, st) {
+// Лучшая раскладка набора: сумма модификаторов с весом важности характеристики, прибавки расы учтены.
+const WEIGHTS = [8, 5, 3, 1, 1, 1];
+function bestLayout(arr, order, bonus) {
+  let best = null, bestScore = -Infinity;
+  const walk = (rest, taken) => {
+    if (!rest.length) {
+      const score = taken.reduce((s, v, i) => s + WEIGHTS[i] * (mod(v + (bonus[order[i]] || 0)) * 100 + v), 0);
+      if (score > bestScore) { bestScore = score; best = taken; }
+      return;
+    }
+    rest.forEach((v, i) => walk(rest.filter((_, j) => j !== i), [...taken, v]));
+  };
+  walk(arr, []);
+  return Object.fromEntries(order.map((k, i) => [k, best[i]]));
+}
+function autoAbilities(ix, st, prefer = null) {
   const cls = tail(st.draft.levelHistory[0]?.classId);
   if (!cls) return { title: 'Сначала выберите класс' };
   if (st.draft.abilityMethod !== 'standard_array' && st.context.allowedAbilityMethods.includes('standard_array')) change(ix, st, { type: 'setAbilityMethod', method: 'standard_array' });
-  const order = [...(PRIORITY[cls] || []), ...ABILITIES.map((a) => a.id)].filter((v, i, a) => a.indexOf(v) === i);
+  const order = [...(prefer || PRIORITY[cls] || []), ...ABILITIES.map((a) => a.id)].filter((v, i, a) => a.indexOf(v) === i);
   const arr = [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
-  change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(order.map((k, i) => [k, arr[i]])) });
+  const bonus = {};
+  const ev = evaluate(ix, st);
+  for (const g of ev.grants.filter((x) => x.kind === 'ability_increase')) bonus[g.ability] = (bonus[g.ability] || 0) + g.value;
+  for (const c of ev.choices.filter((x) => x.kind === 'ability_increase')) for (const a of [].concat(c.selected || [])) bonus[a] = (bonus[a] || 0) + 1;
+  change(ix, st, { type: 'setBaseScores', scores: bestLayout(arr, order, bonus) });
   return { title: 'Характеристики расставлены', body: 'Можно поменять стрелками.' };
 }
 
 // ——— Снаряжение ———
 const itemLabel = (ix, item) => (item.ref ? `${nameOf(ix, item.ref)}${item.quantity > 1 ? ` ×${item.quantity}` : ''}` : null);
-function firstMatch(ix, filter) {
-  return [...ix.equipment.values()].filter((e) => Object.entries(filter).every(([k, v]) => (k === 'exclude' ? !v.includes(e.id) : k === 'kind' ? e.kind === v : k === 'group' ? e.group === v : e.weapon?.[k] === v)))
-    .sort((a, b) => nameOf(ix, a.id).localeCompare(nameOf(ix, b.id)))[0];
+const matchAll = (ix, filter) => [...ix.equipment.values()].filter((e) => Object.entries(filter).every(([k, v]) => (k === 'exclude' ? !v.includes(e.id) : k === 'kind' ? e.kind === v : k === 'group' ? e.group === v : e.weapon?.[k] === v)))
+  .sort((a, b) => nameOf(ix, a.id).localeCompare(nameOf(ix, b.id), 'ru'));
+// Что подставить, пока игрок не выбрал сам: привычный вариант, а не первый по алфавиту. Со щитом — только одноручное.
+const USUAL = ['longsword', 'mace', 'lute', 'flute'];
+function firstMatch(ix, filter, { oneHand = false } = {}) {
+  const fit = matchAll(ix, filter).filter((e) => !oneHand || !(e.weapon?.properties || []).includes('two-handed'));
+  return USUAL.map((k) => fit.find((e) => e.id.endsWith(`:${k}`))).find(Boolean) || fit[0];
 }
-/** Группы выбора снаряжения: у каждой — варианты с готовыми picks (предмет «любой из группы» — первый подходящий). */
+const FILTER_NAME = (f) => (f.kind === 'weapon' ? `${f.category === 'martial' ? 'воинское' : 'простое'}${f.range === 'melee' ? ' рукопашное' : ''} оружие` : f.group === 'musical-instrument' ? 'инструмент' : 'предмет');
+const capital = (t) => t[0].toUpperCase() + t.slice(1);
+// О чём группа: подпись вместо порядкового номера.
+function groupKind(ix, c) {
+  const items = (c.alternatives || []).flatMap((a) => a.items);
+  const kinds = new Set(items.map((it) => (it.ref ? ix.equipment.get(it.ref)?.kind : it.filter?.kind)));
+  return kinds.has('armor') ? 'доспех' : kinds.has('weapon') ? 'оружие' : kinds.has('pack') ? 'набор' : kinds.has('focus') ? 'фокус' : kinds.has('tool') ? 'инструмент' : 'снаряжение';
+}
+/** Группы выбора снаряжения: у каждой — варианты с готовыми picks; «любой из группы» игрок выбирает сам (choose). */
 export function equipmentGroups(ix, ev) {
-  const out = [];
-  let n = 0;
+  const out = [], seen = new Map();
   for (const c of ev.choices.filter((x) => x.kind === 'equipment')) {
-    n += 1;
     const owner = nameOf(ix, c.origin?.definitionId);
     const alts = (c.alternatives || []).map((a) => {
-      const picks = a.items.map((it) => (it.ref ? null : Array.from({ length: it.quantity }, () => firstMatch(ix, it.filter)?.id).filter(Boolean)));
-      const name = a.items.map((it, i) => itemLabel(ix, it) || `${(picks[i] || []).map((id) => nameOf(ix, id)).join(', ') || 'на выбор'}`).join(' + ');
-      return { id: a.id, name, picks, unavailable: (c.unavailable || []).some((u) => u.option === a.id) };
+      const oneHand = a.items.some((it) => it.ref === 'srd51:equipment:shield');
+      const picks = a.items.map((it) => (it.ref ? null : Array.from({ length: it.quantity }, () => firstMatch(ix, it.filter, { oneHand })?.id).filter(Boolean)));
+      const name = a.items.map((it) => itemLabel(ix, it) || `${capital(FILTER_NAME(it.filter))}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(' + ');
+      const choose = a.items.map((it) => (it.ref ? null : { label: FILTER_NAME(it.filter), slots: it.quantity, list: matchAll(ix, it.filter).filter((e) => !oneHand || !(e.weapon?.properties || []).includes('two-handed')).map((e) => ({ id: e.id, name: nameOf(ix, e.id) })) }));
+      return { id: a.id, name, picks, choose, unavailable: (c.unavailable || []).some((u) => u.option === a.id) };
     });
-    out.push({ title: `${owner} · ${n}`, choice: c, alts, selected: c.selected?.alternative });
+    const base = `${owner} · ${groupKind(ix, c)}`, n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    out.push({ title: n > 1 ? `${base} ${n}` : base, choice: c, alts, selected: c.selected?.alternative });
   }
   return out;
 }
@@ -298,6 +357,7 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
     modes: [['buy', 'Покупка очков', 'point_buy'], ['array', 'Стандартный набор', 'standard_array'], ['roll', 'Бросить 4к6', 'rolled']]
       .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m) || m === 'rolled' })),
     budget: { spent, of, left: Math.max(0, of - spent) },
+    array: method === 'standard_array' ? [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a).map((v) => ({ value: v, used: Object.values(d.baseScores).includes(v) })) : null,
     list: ABILITIES.map((a) => {
       const base = d.baseScores[a.id], fin = di?.abilityScores?.[a.id];
       const race = (di?.abilityIncreases || []).filter((x) => x.ability === a.id).reduce((s, x) => s + x.value, 0);
@@ -305,7 +365,7 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
         final: fin ?? '—', mod: Number.isInteger(fin) ? signed(mod(fin)) : '—', main: a.id === main || undefined };
     }),
     asi: { title: 'Улучшение характеристик — с 4 уровня', note: `Герой начинает с ${levels(st)} уровня`, options: [] },
-    auto: cls ? `Расставить как обычно: ${cls.name.ru}` : 'Расставить как обычно', autoNote: 'Стандартный набор по главным характеристикам класса. Стрелки меняют значения местами.',
+    auto: cls ? `Расставить как обычно: ${cls.name.ru}` : 'Расставить как обычно', autoNote: 'Стандартный набор по главным характеристикам класса с учётом расы.',
     gave: Number.isInteger(di?.abilityScores?.con) ? [`Телосложение ${di.abilityScores.con}: ${signed(mod(di.abilityScores.con))} к хитам за уровень`] : ['Задайте все шесть характеристик'],
   };
 
@@ -335,7 +395,12 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
   const groups = equipmentGroups(ix, ev);
   const equipment = {
     modes: [{ id: 'kit', name: 'Набор класса и предыстории' }],
-    groups: groups.map((g) => ({ title: g.title, note: g.alts.length > 1 ? `одно из ${g.alts.length}` : 'без выбора', options: g.alts.filter((a) => !a.unavailable).map((a) => ({ name: a.name, sub: '', icon: 'bag', on: a.id === g.selected || undefined })) })),
+    groups: groups.map((g) => ({ title: g.title, note: g.alts.filter((a) => !a.unavailable).length > 1 ? `одно из ${g.alts.filter((a) => !a.unavailable).length}` : 'без выбора', options: g.alts.filter((a) => !a.unavailable).map((a) => {
+      const on = a.id === g.selected, cur = on ? g.choice.selected?.picks : a.picks;
+      // Выпадающие списки — только у выбранного варианта и только если есть из чего выбрать.
+      const pick = on ? a.choose.flatMap((c, item) => (c && c.list.length > 1 ? Array.from({ length: c.slots }, (_, slot) => ({ item, slot, label: c.label, list: c.list, value: cur?.[item]?.[slot] || '' })) : [])) : [];
+      return { id: a.id, name: a.name, sub: on && !pick.length ? '' : '', icon: 'bag', on: on || undefined, pick };
+    }) })),
     always: [],
     gave: [di?.equipment?.currency?.gp ? `${di.equipment.currency.gp} зм` : 'Стартовое снаряжение класса и предыстории'],
   };
@@ -384,7 +449,7 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
     background: ['Предыстория даёт навыки и языки. Здесь же — навыки класса и языки на выбор.', 'Навыки «от: …» уже есть', 'information-circle'],
     equipment: ['Стартовые наборы класса и предыстории: в каждой группе один вариант.', 'Купленное позже появится в «Сумке» листа', 'information-circle'],
     spells: ['Заговоры и заклинания на старте. Нажмите, чтобы взять или убрать; «Собрать за меня» возьмёт подходящие по алфавиту.', 'Ячейки появятся в листе сами', 'information-circle'],
-    look: ['Имя и мировоззрение попадут в лист. Черты характера пока остаются только в этом окне.', 'Портрет можно поменять за столом', 'information-circle'],
+    look: ['Имя, мировоззрение и черты характера попадут в лист.', 'Портрет можно поменять за столом', 'information-circle'],
   };
   // ok — шаг без пропущенных выборов (у пройденного шага с пропуском вместо ✓ будет «!»).
   const steps = CREATION.steps.map((x) => ({ ...(HINTS[x.id] ? { ...x, hint: HINTS[x.id][0], tip: HINTS[x.id][1], tipIcon: HINTS[x.id][2] } : x), ok: done.checks.find((c) => c.step === x.id)?.ok ?? true }));
@@ -502,12 +567,17 @@ export function quickCreation(ix, { campaign = null, userId = 'me', answers = {}
   const ch = (x) => applyCreationChoice(ix, next, x);
   const m = () => creationModel(ix, next);
   const cls = quickClass(answers.role, answers.talk);
-  ch({ step: 'race', id: quickRace(cls, answers.talk) }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: m().backgrounds[0]?.id || 'acolyte' }); ch({ step: 'abilities', id: 'auto' });
+  ch({ step: 'race', id: quickRace(cls, answers.talk) }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: m().backgrounds[0]?.id || 'acolyte' }); const quickAuto = () => ch({ step: 'abilities', id: 'auto', value: cls === 'rogue' && answers.talk === 'book' ? ['dex', 'int', 'con'] : undefined });
+  quickAuto();
   for (let i = 0; i < 10; i += 1) {
     const box = [...m().extra.race, ...m().extra.class].find((b) => !full(b)); if (!box) break;
-    for (const it of byTalk(box.list, answers.talk, (x) => x.value)) { if (full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break; ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${it.value}` }); }
+    // Свободные прибавки расы — в главные характеристики класса, а не в первые строки списка.
+    const main = PRIORITY[cls] || [], rank = (x) => { const i = main.indexOf(x.value); return i < 0 ? 99 : i; };
+    const list = box.list.every((x) => ABILITIES.some((a) => a.id === x.value)) ? [...box.list].sort((a, b) => rank(a) - rank(b)) : byTalk(box.list, answers.talk, (x) => x.value);
+    for (const it of list) { if (full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break; ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${it.value}` }); }
     if (!full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break;
   }
+  quickAuto(); // прибавки расы уже известны: раскладка с их учётом
   for (const s of byTalk(m().backgroundSkills?.list?.filter((x) => !x.from) || [], answers.talk, (x) => SKILL_ID[x.name])) if (!full(m().backgroundSkills)) ch({ step: 'background', id: 'skill', value: s.name });
   for (const l of m().backgroundLangs?.list?.filter((x) => !x.from) || []) { if (full(m().backgroundLangs)) break; ch({ step: 'background', id: 'lang', value: l.name }); }
   for (const g of m().equipment?.groups || []) ch({ step: 'equipment', id: 'eq', value: `${g.title}|${g.options[0].name}` });

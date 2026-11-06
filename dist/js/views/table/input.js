@@ -322,6 +322,7 @@ export function attachInput(ctx) {
     if (ctx.ui.ruler) ctx.sendRuler(null);
     if (ctx.ui.template) ctx.sendTemplate(null);
     ctx.ui.ruler = null; ctx.ui.template = null;
+    ctx.ui.templateHot = false; vp.classList.remove('on-template-origin');
     closePopover();
     if (render) ctx.invalidate('overlay', 'areas');
   };
@@ -797,9 +798,33 @@ function checkPortal(ctx, t, to) {
   }
 }
 
+// Точка начала своего шаблона (жёлтая точка). Клик по ней убирает шаблон вместе с окном целей,
+// протягивание от неё поворачивает и растягивает этот же шаблон. Раньше клик по точке ставил на её месте
+// новый шаблон и снова открывал окно — закрыть всё кликом было нельзя (#203).
+function onTemplateOrigin(ctx, w, touch = false) {
+  const t = ctx.ui.template;
+  if (!t || !ctx.scene) return false;
+  const z = ctx.camera.z, dot = gridSize(sceneGrid(ctx)) * 0.12 * z;
+  return Math.hypot(w.x - t.origin.x, w.y - t.origin.y) * z <= Math.max(dot + 6, touch ? 22 : 12);
+}
+
+function setTemplateHot(ctx, hot) {
+  if (hot === !!ctx.ui.templateHot) return;
+  ctx.ui.templateHot = hot;
+  ctx.viewport.classList.toggle('on-template-origin', hot);
+  ctx.invalidate('areas');
+}
+
 const measureTool = {
   down(ctx, g, w) {
     const sub = ctx.ui.sub.measure || 'ruler';
+    // Shift + клик линейкой добавляет точку пути — его не перехватываем.
+    if (!(sub === 'ruler' && g.shift) && onTemplateOrigin(ctx, w, g.pointerType === 'touch')) {
+      closePopover();
+      g.mode = 'template'; g.fromOrigin = true;
+      ctx.invalidate('overlay', 'areas');
+      return;
+    }
     if (sub === 'ruler') {
       const p = g.alt ? w : snapToCellCenter(ctx, w);
       if (g.shift && ctx.ui.ruler) ctx.ui.ruler.pts.push(p);
@@ -846,6 +871,7 @@ const measureTool = {
       if (ctx.ui.shareRuler) ctx.sendRuler(r);
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
+      if (g.fromOrigin && !g.moved) { ctx.clearMeasure(); return; }
       const t = ctx.ui.template;
       ctx.ui.templateLabel = null;
       (ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {}))[t.type] = t.size;
@@ -855,6 +881,7 @@ const measureTool = {
       ctx.panels.templatePopover({ x: e.clientX, y: e.clientY }, sc);
     }
   },
+  hover(ctx, w, e) { setTemplateHot(ctx, onTemplateOrigin(ctx, w, e?.pointerType === 'touch')); },
   cancel(ctx) { if (ctx.ui.templateLabel) { ctx.ui.templateLabel = null; ctx.invalidate('overlay'); } },
 };
 

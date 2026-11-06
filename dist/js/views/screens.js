@@ -485,7 +485,7 @@ export function mountHeroPick(root, c0) {
     const chosen = c.characters.find((x) => x.id === pick);
     root.innerHTML = String(html`<div class="screen">${appHeader(user)}<main class="page">
       <h2>Кем вы сядете за стол?</h2>
-      <p class="muted t-para" style="margin-top:8px">Мастер подготовил героев для «${c.name}». Выберите свободного или создайте своего — подробный лист можно заполнить позже.</p>
+      <p class="muted t-para" style="margin-top:8px">${c.characters?.some((x) => !x.archivedAt) ? `Мастер подготовил героев для «${c.name}». Выберите свободного или создайте своего — подробный лист можно заполнить позже.` : `Готовых героев в «${c.name}» пока нет: создайте своего — подробный лист можно заполнить позже.`}</p>
       <div class="heroes">
         ${c.characters.map((ch) => {
           const owner = takenBy(ch);
