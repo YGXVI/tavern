@@ -7,9 +7,11 @@ import { srcOf } from '../../core/assets.js';
 import { characterOf, ownerOfCharacter, myCharacter, sceneOf, membership } from '../../core/campaign.js';
 import { TEMPLATES, LIGHTS } from '../../data/rules.js';
 import { currentEntry, combatRound } from './combat.js';
-import { DRAW_SHAPES } from './drawings.js';
+import { DRAW_TOOLS, DRAW_TEMPLATES } from './drawings.js';
+import { drawStyle, fillSwatch, strokeSwatch } from './draw-style.js';
 import { movementLeft, FOCUS_TOOLS } from './input.js';
 import { pauseElapsed } from './panels.js';
+import { sightBanner } from './sight-ui.js';
 
 const ib = (act, name, tip, { active = false, kbd = '', extra = '', disabled = false, count = 0 } = {}) =>
   `<button class="icon-btn ${active ? 'active' : ''}" data-act="${act}" ${extra} ${disabled ? 'disabled' : ''} data-tip="${esc(tip)}" ${kbd ? `data-kbd="${esc(kbd)}"` : ''} aria-label="${esc(tip)}" aria-pressed="${active}">${icon(name, 22)}${count ? `<span class="count">${count}</span>` : ''}</button>`;
@@ -127,6 +129,14 @@ function topCenter(ctx) {
     const left = movementLeft(ctx, mine);
     return banner('sword-03', `Ваш ход, ${cur.name}`, `Раунд ${combatRound(c, sc)} · ${left} фт движения, действие и бонусное действие`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
   }
+  // Ход своей группы призывов или своего токена (#198 §4): закончить его игрок может сам.
+  const own = cur && !mine && ctx.owns(cur.token) ? cur : null;
+  if (own) {
+    const left = movementLeft(ctx, own.token);
+    return banner('sword-03', `Ход: ${ctx.nameOf(own.token)}${(own.slotSize || 1) > 1 ? ` и ещё ${own.slotSize - 1}` : ''}`, `Раунд ${combatRound(c, sc)}${left != null ? ` · ${left} фт движения у каждого` : ''}`, `<button class="btn btn-sm" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`, 'turn');
+  }
+  const eyes = sightBanner(ctx, banner);
+  if (eyes) return eyes;
   const m = membership(c, ctx.userId);
   if (m?.characterId && !sc.tokens.some((t) => ctx.isMine(t))) return banner('chess-pawn', 'Вашего героя нет на этой сцене', 'Мастер поставит его, когда отряд доберётся сюда. Карту уже можно смотреть');
   if (m?.sceneId && m.sceneId !== c.activeSceneId) {
@@ -151,7 +161,7 @@ function topRight(ctx) {
     const pending = c.members.filter((m) => m.status === 'pending').length;
     return `<div class="tr-row"><button class="toolbar scene-pill ${ctx.ui.panel === 'scenes' ? 'active' : ''}" data-act="scenes" data-tip="Сцены"><span class="icon-btn icon-btn-sm ${ctx.ui.panel === 'scenes' ? 'active' : ''}">${icon('maps', 20)}</span><span class="scene-pill-text"><small>Сцена</small><b>${esc(sc?.name || 'нет сцен')}</b></span></button></div>
       ${party.length ? `<div class="toolbar toolbar-v party-col">${party.map((ch) => avatarBtn(ch)).join('')}</div>` : ''}
-      <div class="toolbar">${ib('invite', 'user-add-01', pending ? `Заявки: ${pending}` : 'Пригласить игроков', { count: pending })}</div>`;
+      <div class="toolbar toolbar-v">${ib('invite', 'user-add-01', pending ? `Заявки: ${pending}` : 'Пригласить игроков', { count: pending })}${ib('token-requests', 'hourglass', 'Запросы токенов', { count: c.scenes.reduce((n, s) => n + s.tokens.filter((t) => t.pending).length, 0) })}</div>`;
   }
   const me = myCharacter(c, ctx.userId);
   const others = party.filter((ch) => ch.id !== me?.id);
@@ -175,8 +185,12 @@ function bottomCenter(ctx) {
     return `<div class="toolbar">${ib('sub:measure:ruler', 'ruler', 'Линейка', { active: s === 'ruler', kbd: 'R' })}${TEMPLATES.map((t) => ib(`sub:measure:${t.id}`, t.icon, `${t.name} · тяните от точки: направление и размер, Shift — по 5 фт`, { active: s === t.id })).join('')}${div}${ib('share-ruler', 'view', ctx.ui.shareRuler ? 'Видно всем за столом' : 'Видно только вам', { active: ctx.ui.shareRuler })}${ib('measure-clear', 'delete-02', 'Убрать')}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   if (tool === 'draw') {
+    // TASK-182 (как в Owlbear): инструменты, шаблон заклинания, заливка и обводка новых рисунков, ластик.
     const s = sub.draw || 'pen';
-    return `<div class="toolbar">${ib('sub:draw:pen', 'pencil-edit-02', 'Рисовать', { active: s === 'pen' })}${DRAW_SHAPES.map((x) => ib(`sub:draw:${x.id}`, x.icon, `${x.name} · тяните от точки, Shift — без шага 5 фт`, { active: s === x.id })).join('')}${ib('sub:draw:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки' : 'Стереть мои рисунки')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
+    const st = drawStyle(ctx);
+    const tplOn = DRAW_TEMPLATES.find((x) => x.id === s);
+    const tpl = tplOn || DRAW_TEMPLATES.find((x) => x.id === ctx.ui.lastDrawTpl) || DRAW_TEMPLATES[0];
+    return `<div class="toolbar">${DRAW_TOOLS.map((x) => ib(`sub:draw:${x.id}`, x.icon, x.name, { active: s === x.id })).join('')}${ib('draw-tpl', tpl.icon, `Шаблон заклинания: ${tpl.name} · тяните от точки`, { active: !!tplOn })}${div}<button class="icon-btn ds-tb" data-act="draw-fill" data-tip="Заливка новых фигур" aria-label="Заливка новых фигур">${fillSwatch(st.fill, st.fillOpacity)}</button><button class="icon-btn ds-tb" data-act="draw-stroke" data-tip="Обводка: цвет, толщина, пунктир" aria-label="Обводка новых рисунков">${strokeSwatch(st.color, st.width, st.dash)}</button>${div}${ib('sub:draw:erase', 'eraser', 'Стереть', { active: s === 'erase' })}${ib('draw-clear', 'delete-02', ctx.isMaster ? 'Стереть все рисунки, кроме закреплённых' : 'Стереть мои рисунки, кроме закреплённых')}${undoRedo(ctx)}${div}${ib('tool:move', 'cancel-01', 'Закрыть')}</div>`;
   }
   // Выделение → токен-бар
   if (ctx.ui.selection.size && (tool === 'move' || tool === 'select' || tool === 'ping')) {
@@ -188,7 +202,9 @@ function bottomCenter(ctx) {
       <div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V' })}${ib('tool:select', 'cursor-rectangle-selection-01', 'Выделение рамкой', { active: tool === 'select', kbd: 'S' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('layer', 'layers-01', 'Слой мастера: стены, двери, свет, туман, ловушки, сетка', { kbd: 'G' })}${ib('tool:text', 'text-font', 'Текст', { active: tool === 'text' })}${div}${undoRedo(ctx, false)}</div>`;
   }
   const lock = ctx.c.paused;
-  return `<div class="toolbar tools-bar">${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
+  // «Добавить» у игрока (TASK-183): свой токен или призыв своего героя.
+  const add = ctx.member?.status === 'active' ? `${ib('add:own', 'plus-sign', 'Добавить: свой токен или призыв', { disabled: lock })}${div}` : '';
+  return `<div class="toolbar tools-bar">${add}${ib('tool:move', 'cursor-hold-01', 'Перемещение · Shift — по клеткам, Ctrl — точка маршрута', { active: tool === 'move', kbd: 'V', disabled: lock })}${ib('tool:measure', 'ruler', 'Линейка и шаблоны', { active: tool === 'measure', kbd: 'R' })}${ib('tool:ping', 'location-01', 'Пинг: показать точку', { active: tool === 'ping', kbd: 'P' })}${ib('tool:draw', 'pencil-edit-02', 'Рисование', { active: tool === 'draw', kbd: 'D' })}${div}${undoRedo(ctx, false)}</div>`;
 }
 
 // ——— Слой мастера (TASK-088) ———

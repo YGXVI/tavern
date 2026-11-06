@@ -24,10 +24,11 @@ test('SRD-существа: уникальные id srd:*, русские име
     assert.match(m.hpDice, DICE, `${m.id}: кость хитов ${m.hpDice}`);
     for (const a of ABS) assert.ok(Number.isInteger(m.stats[a]), `${m.id}: ${a}`);
     assert.equal(m.init, Math.floor((m.stats.dex - 10) / 2));
-    assert.equal(m.img, `ini:${m.name}`);
+    assert.equal(m.img, `assets/portraits/srd/${m.id.slice(4)}.webp`);
     assert.equal(m.srd, true);
   }
 });
+
 
 test('SRD-существа: названия действий и особенностей по-русски, описания SRD — по-английски, урон бросается', () => {
   for (const m of SRD) {
@@ -89,4 +90,23 @@ test('Генератор: в каталог стола идут только с�
   execFileSync(process.execPath, [fileURLToPath(new URL('tools/bestiary-srd.mjs', root)), inFile, outFile], { stdio: 'pipe' });
   const { default: list } = await import(pathToFileURL(outFile).href);
   assert.deepEqual(list.map((m) => m.id), [`srd:${srd.identity.srd_index || srd.identity.slug}`]);
+});
+
+// Портреты бестиария: у каждого существа своя картинка, файл лежит на сайте, лишних файлов нет.
+test('Портреты: у каждого существа свой файл WebP, без общих и лишних', async () => {
+  const { existsSync, readdirSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const dist = new URL('../dist/', import.meta.url);
+  await loadSrdBestiary(); // идёт последним: тест выше проверяет BESTIARY до догрузки
+  const dir = 'assets/portraits/srd/';
+  const used = new Map();
+  for (const m of BESTIARY) {
+    if (m.id === 'faceless-spawn') { assert.equal(m.img, 'spawn'); continue; } // домашнее существо демо, картинка из макета
+    assert.ok(m.img.startsWith(dir) && m.img.endsWith('.webp'), `${m.id}: портрет ${m.img}`);
+    assert.ok(existsSync(fileURLToPath(new URL(m.img, dist))), `${m.id}: нет файла ${m.img}`);
+    assert.ok(!used.has(m.img), `${m.id}: портрет общий с ${used.get(m.img)}`);
+    used.set(m.img, m.id);
+  }
+  const files = readdirSync(fileURLToPath(new URL(dir, dist))).filter((f) => f.endsWith('.webp'));
+  assert.deepEqual(files.map((f) => dir + f).filter((f) => !used.has(f)), [], 'файлы без существа');
 });

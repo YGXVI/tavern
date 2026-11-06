@@ -3,6 +3,7 @@
 //   #/campaigns        — мои кампании
 //   #/join/RSP-XXXX    — приглашение по ссылке
 //   #/c/<id>           — стол кампании (или ожидание одобрения / выбор героя)
+//   #/heroes, #/hero/… — экраны героя на витринных данных (views/hero, #203)
 import { initStore, subscribe, bus, onlineUsers, useServerBackend, setDB, deliver, emitLocal, commit, getDB, isServerMode } from './core/store.js';
 import { seedDB } from './data/demo.js';
 import { currentUser, restoreFromLast } from './core/auth.js';
@@ -32,7 +33,8 @@ function show(key, mount) {
 
 function route() {
   const parts = (location.hash || '#/').replace(/^#\/?/, '').split('/');
-  const [page, arg] = parts;
+  const [page0, arg] = parts;
+  const page = page0.split('?')[0];
   let user = currentUser();
   // Новая вкладка: подставляем последний вход. По ссылке-приглашению — нет: там часто входят другим аккаунтом.
   if (!user && page !== 'join' && restoreFromLast()) user = currentUser();
@@ -42,9 +44,32 @@ function route() {
     show(`join:${code}:${user?.id || ''}`, () => mountJoin(root, code, { onSignedIn: () => route() }));
     return;
   }
+  // Справочник (#203) открыт и без входа: ссылкой на заклинание можно поделиться.
+  if (page === 'ref') {
+    show(`ref:${user?.id || ''}`, () => lazyView(() => import('./views/ref/index.js'), (m) => m.mountRef(root, location.hash)));
+    return;
+  }
   if (!user) { show('login', () => mountLogin(root, { onSignedIn: () => go('#/campaigns'), message: loginMessage })); loginMessage = null; return; }
   if (page === 'login' || !page) { go('#/campaigns'); return; }
 
+  if (page === 'heroes' || page === 'hero') {
+    // Модуль грузится по требованию: остальным экранам он не нужен.
+    show(`hero:${location.hash}`, () => {
+      let api = null, gone = false;
+      import('./views/hero/index.js').then((m) => { if (!gone) api = m.mountHero(root, location.hash); });
+      return { unmount: () => { gone = true; api?.unmount?.(); }, update: () => api?.update?.() };
+    });
+    return;
+  }
+  // Дом кампании и книга (#203): #/camp/<кампания>[/вкладка/…]; «Мои карты» мастера — #/maps.
+  if (page === 'camp' && arg) {
+    show(`camp:${arg}:${user.id}`, () => lazyView(() => import('./views/camp/index.js'), (m) => m.mountCamp(root, location.hash)));
+    return;
+  }
+  if (page === 'maps') {
+    show(`maps:${user.id}`, () => lazyView(() => import('./views/camp/scenes.js'), (m) => m.mountMaps(root)));
+    return;
+  }
   if (page === 'c' && arg) {
     const c = getCampaign(arg);
     if (!c) {
@@ -63,6 +88,13 @@ function route() {
     return;
   }
   show(`campaigns:${user.id}`, () => mountCampaigns(root));
+}
+
+/** Экран из модуля, который грузится по требованию: пока грузится — пусто; ушли раньше — не монтируем. */
+function lazyView(load, mount) {
+  let api = null, gone = false;
+  load().then((m) => { if (!gone) api = mount(m); }).catch((err) => { console.error(err); if (!gone) root.textContent = `Не удалось открыть экран: ${err.message}`; });
+  return { unmount: () => { gone = true; api?.unmount?.(); }, update: () => api?.update?.(location.hash) };
 }
 
 async function boot() {

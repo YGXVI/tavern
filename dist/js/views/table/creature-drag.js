@@ -1,8 +1,9 @@
+import { placeEncounter } from './encounters.js';
+import { encounterById } from '../camp/encounters.js';
 // Перетаскивание на карту: существо из панели «Существа» (TASK-033) и предмет из окна «Предмет на карте» (TASK-095).
 import { esc } from '../../core/dom.js';
 import { srcOf } from '../../core/assets.js';
-import { monsterById } from '../../data/bestiary.js';
-import { placeCreatures, placeItem } from './p-side.js';
+import { placeCreatures, placeItem, pickMonster } from './p-side.js';
 
 const THRESHOLD = 6;
 
@@ -60,6 +61,7 @@ export function attachCreatureDrag(ctx) {
       placeItem(ctx, item.ic, item.name, !!hid?.checked, { x: Math.max(0, Math.min(m.width, w.x)), y: Math.max(0, Math.min(m.height, w.y)) });
       return;
     }
+    if (kind === 'encounter') { placeEncounter(ctx, id, { at: { x: Math.max(0, Math.min(m.width, w.x)), y: Math.max(0, Math.min(m.height, w.y)) } }); return; }
     const st = ctx.ui.bestiary || (ctx.ui.bestiary = { q: '', type: 'all', pick: null, count: 1, hidden: false, rollHp: false });
     if (st.pick !== id) { st.pick = id; st.count = 1; }
     ctx.ui.placeAt = { x: Math.max(0, Math.min(m.width, w.x)), y: Math.max(0, Math.min(m.height, w.y)) };
@@ -71,14 +73,18 @@ export function attachCreatureDrag(ctx) {
   function down(e) {
     if (e.button !== 0 || d || !ctx.isMasterView) return;
     const base = { x0: e.clientX, y0: e.clientY, pointerId: e.pointerId, ghost: null, touch: e.pointerType === 'touch' };
+    const encounter = e.target.closest?.('.side-panel [data-act="enc-pick"]');
     const opt = e.target.closest?.('.pick-pop [data-item]');
-    if (opt) {
+    if (encounter) {
+      const enc = encounterById(ctx.cid, ctx.userId, encounter.dataset.id); if (!enc?.monsters.length) return;
+      d = { ...base, kind: 'encounter', id: enc.id, m: { name: enc.name, img: `ini:${enc.name}` } };
+    } else if (opt) {
       d = { ...base, kind: 'item', id: opt.dataset.item, m: { ic: opt.dataset.item, name: opt.dataset.name, img: `item:${opt.dataset.item}` } };
     } else {
       const row = e.target.closest?.('.side-panel [data-act="b-pick"]');
       if (!row) return;
-      const m = monsterById(row.dataset.id); if (!m) return;
-      d = { ...base, kind: 'creature', id: m.id, m };
+      const m = pickMonster(ctx, row.dataset.id); if (!m) return;
+      d = { ...base, kind: 'creature', id: row.dataset.id, m }; // id из строки: «libsrc:…» для своих (TASK-179)
     }
     addEventListener('pointermove', move, { capture: true, passive: false });
     addEventListener('pointerup', up, true);

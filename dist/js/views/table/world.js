@@ -3,12 +3,15 @@
 import { el, esc, initials, hueOf } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, resolveSrc } from '../../core/assets.js';
+import { stackOrder } from './riding.js';
 import { gridDims, gridSize, key, unkey, templatePolygon, templateCells } from '../../rules/geometry.js';
-import { tokenStats, userById, isMasterOf } from '../../core/campaign.js';
+import { tokenStats, userById, isMasterOf, canFight } from '../../core/campaign.js';
 import { sizeById, conditionById, LIGHT_COLORS, woundLabel, auraHex, auraAlpha } from '../../data/rules.js';
+import { sightRings } from './sight-ui.js';
 import { drawFog, drawLightGlow, ftToPx } from './fog.js';
 import { tokenLook, renderGizmo } from './gizmo.js';
-import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing } from './drawings.js';
+import { canEditDrawing, renderDrawBar, shapeMarkup, liveDrawing, drawingMarkup, drawingFrame, shapePoints, zOf, validDrawing, svgNum } from './drawings.js';
+import { safeColor } from './draw-style.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svg = (cls) => { const s = document.createElementNS(SVGNS, 'svg'); s.setAttribute('class', `layer ${cls}`); return s; };
@@ -84,35 +87,53 @@ export function renderTerrain(L, scene, { showBlocked = false } = {}) {
 }
 
 export function renderDrawings(L, scene, ctx = null) {
-  // Рисунки — объекты (TASK-031): свои (мастеру — все) можно выделить и тянуть в «Перемещении» и «Выделении».
-  const mv = ctx?.ui.drawMove;
-  const live = ctx && ['move', 'select', 'text'].includes(ctx.ui.tool) && !ctx.viewport.dataset.focus;
+  // Рисунки — объекты (TASK-031): свои (мастеру — все) можно выделить и тянуть в «Перемещении», «Выделении»
+  // и в «Выделении» рисования (TASK-182: там рисунок берётся и за середину замкнутой фигуры).
+  const drawSel = ctx?.ui.tool === 'draw' && (ctx.ui.sub.draw || 'pen') === 'select';
+  const live = ctx && (['move', 'select', 'text'].includes(ctx.ui.tool) || drawSel) && !ctx.viewport.dataset.focus;
   const selId = ctx?.ui.selDrawing;
   const group = ctx?.ui.selDrawings; // выделенные рамкой вместе с токенами (TASK-169)
-  L.drawings.innerHTML = (scene.drawings || []).map((d0) => {
+  // Порядок наложения: поле z (TASK-182), при равных — порядок списка.
+  // Рисунок с сервера может прийти от любого участника (блокер P1 в #185): непроверенный не рисуется вовсе,
+  // а в разметку идут только проверенные числа, безопасный цвет и экранированные ID/текст.
+  const list = (scene.drawings || []).filter(validDrawing).map((d, i) => [d, i]).sort((a, b) => zOf(a[0]) - zOf(b[0]) || a[1] - b[1]).map((x) => x[0]);
+  L.drawings.innerHTML = list.map((d0) => {
     const d = ctx ? liveDrawing(ctx, d0) : d0;
+    if (d !== d0 && !validDrawing(d)) return '';
     const ed = live && canEditDrawing(ctx, d);
-    const attr = ed ? ` data-drawing="${d.id}"` : '';
+    const id = esc(d.id);
+    const attr = ed ? ` data-drawing="${id}"` : '';
     const cls = `${ed ? ' ed' : ''}${selId === d.id || group?.has(d.id) ? ' sel' : ''}`;
-    if (d.type === 'text') return `<text x="${d.x}" y="${d.y}" class="draw-text${cls}" fill="${esc(d.color)}" style="font-size:${d.size || 28}px" data-did="${d.id}"${attr}>${esc(d.text)}</text>`;
-    if (d.type === 'shape') return shapeMarkup(scene.grid, d, cls, ` data-did="${d.id}"`) + (ed ? shapeMarkup(scene.grid, d, ' draw-hit', attr) : '');
-    const pts = (d.pts || []).map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-    return `<polyline points="${pts}" class="draw-line${cls}" stroke="${esc(d.color)}" data-did="${d.id}"/>${ed ? `<polyline points="${pts}" class="draw-hit"${attr}/>` : ''}`;
+    if (d.type === 'text') return `<text x="${svgNum(d.x)}" y="${svgNum(d.y)}" class="draw-text${cls}" fill="${esc(safeColor(d.color))}" style="font-size:${svgNum(d.size) || 28}px" data-did="${id}"${attr}>${esc(d.text)}</text>`;
+    return drawingMarkup(scene.grid, d, cls, ` data-did="${id}"`) + (ed ? drawingMarkup(scene.grid, d, drawSel ? ' fillhit' : '', attr, true) : '');
   }).join('');
+  const z = ctx?.camera?.z || 1, pad = 8 / z;
+  // Границы рисунка по его точкам (у повёрнутого круга getBBox не учитывает поворот), у надписи — по узлу.
+  const boundsOf = (id) => {
+    const d0 = scene.drawings?.find((x) => x.id === id); if (!d0 || !validDrawing(d0)) return null;
+    const d = ctx ? liveDrawing(ctx, d0) : d0;
+    if (d.type === 'text') { const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); return n ? n.getBBox() : null; }
+    const pts = d.type === 'shape' ? shapePoints(scene.grid, d) : d.pts || [];
+    if (!pts.length) return null;
+    const w = (d.width ?? 4) / 2;
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    return { x: Math.min(...xs) - w, y: Math.min(...ys) - w, width: Math.max(...xs) - Math.min(...xs) + 2 * w, height: Math.max(...ys) - Math.min(...ys) + 2 * w, d };
+  };
   let bbox = null;
-  const selNode = selId && L.drawings.querySelector(`[data-did="${CSS.escape(selId)}"]`);
-  if (selNode) {
-    const b = selNode.getBBox(), pad = 8 * (1 / (ctx.camera?.z || 1));
-    bbox = { x: b.x - pad, y: b.y - pad, width: b.width + pad * 2, height: b.height + pad * 2 };
-    L.drawings.insertAdjacentHTML('beforeend', `<rect class="draw-sel" x="${bbox.x}" y="${bbox.y}" width="${bbox.width}" height="${bbox.height}" rx="${pad}"/>`);
+  const sb = selId && boundsOf(selId);
+  if (sb) {
+    bbox = { x: sb.x - pad, y: sb.y - pad, width: sb.width + pad * 2, height: sb.height + pad * 2 };
+    // У фигуры по рамке — повёрнутая рамка, как ручки; у остальных — прямоугольник.
+    const f = sb.d ? drawingFrame(scene.grid, sb.d) : null;
+    L.drawings.insertAdjacentHTML('beforeend', f?.box
+      ? `<polygon class="draw-sel" points="${f.corners.map((p) => `${svgNum(p.x)},${svgNum(p.y)}`).join(' ')}"/>`
+      : `<rect class="draw-sel" x="${svgNum(bbox.x)}" y="${svgNum(bbox.y)}" width="${svgNum(bbox.width)}" height="${svgNum(bbox.height)}" rx="${pad}"/>`);
   }
   if (group?.size) {
-    const pad = 8 * (1 / (ctx.camera?.z || 1));
     let out = '';
     for (const id of group) {
-      const n = L.drawings.querySelector(`[data-did="${CSS.escape(id)}"]`); if (!n) continue;
-      const b = n.getBBox();
-      out += `<rect class="draw-sel" x="${b.x - pad}" y="${b.y - pad}" width="${b.width + pad * 2}" height="${b.height + pad * 2}" rx="${pad}"/>`;
+      const b = boundsOf(id); if (!b) continue;
+      out += `<rect class="draw-sel" x="${svgNum(b.x - pad)}" y="${svgNum(b.y - pad)}" width="${svgNum(b.width + pad * 2)}" height="${svgNum(b.height + pad * 2)}" rx="${pad}"/>`;
     }
     L.drawings.insertAdjacentHTML('beforeend', out);
   }
@@ -220,7 +241,7 @@ export function renderAuras(L, ctx) {
   const s = gridSize(scene.grid);
   const out = [], labels = [];
   for (const t of scene.tokens) {
-    if (!t.aura || !ctx.tokenShown(t)) continue;
+    if (t.pending || !t.aura || !ctx.tokenShown(t)) continue;
     const p = ctx.posOf(t);
     const n = sizeById(t.size).cells;
     const rad = ftToPx(scene, t.aura.radius) + (n * s) / 2;
@@ -228,11 +249,31 @@ export function renderAuras(L, ctx) {
     out.push(`<circle class="aura" cx="${p.x}" cy="${p.y}" r="${rad}" style="--ac:${hex};--aa:${a};--as:${Math.min(1, a + 0.45)}"/>`);
     labels.push(`<button class="aura-label" data-aura="${esc(t.id)}" style="left:${p.x}px;top:${p.y - rad}px;--ac:${hex}">${esc(t.aura.name)} · ${t.aura.radius} фт</button>`);
   }
+  // Глаза существ (#190 C): у мастера — пунктирное кольцо с подписью «глаза · кому · дальность» и круг превью,
+  // у игрока — край своих выданных глаз.
+  for (const g of sightRings(ctx)) {
+    const p = ctx.posOf(g.t);
+    out.push(`<circle class="sight-ring ${g.cls}" cx="${p.x}" cy="${p.y}" r="${g.r}"/>`);
+    if (g.label) labels.push(`<span class="sight-label ${g.cls}" style="left:${p.x - g.r}px;top:${p.y}px">${icon('view', 12)}${esc(g.label)}</span>`);
+  }
   L.auras.innerHTML = out.join('');
   L.auraLabels.innerHTML = labels.join('');
 }
 
 // ——— Токены ———
+const localPortraitLoads = new WeakMap();
+function loadLocalPortrait(ctx, ref) {
+  if (!ref?.startsWith('idb:') || srcOf(ref)) return;
+  let requested = localPortraitLoads.get(ctx);
+  if (!requested) localPortraitLoads.set(ctx, (requested = new Set()));
+  // Один запрос на файл в этом столе, включая отсутствующие файлы: не читать IndexedDB на каждом кадре.
+  if (requested.has(ref)) return;
+  requested.add(ref);
+  resolveSrc(ref).then((src) => {
+    if (src && ctx.root.isConnected) ctx.invalidate('tokens');
+  }).catch(() => {});
+}
+
 function tokenMarkup(ctx, t, st, n, d, name = st.name) {
   const conds = (st.conditions || []).slice(0, 3).map((id) => { const c = conditionById(id); return c ? `<span class="tok-cond" title="${esc(c.name)}">${icon(c.icon, 12)}</span>` : ''; }).join('');
   const more = (st.conditions || []).length > 3 ? `<span class="tok-cond more">+${st.conditions.length - 3}</span>` : '';
@@ -249,14 +290,8 @@ function tokenMarkup(ctx, t, st, n, d, name = st.name) {
     <span class="tok-name">${esc(name)}</span>`;
 }
 
-/**
- * Порядок наложения токенов: кого двигали последним — выше; кого не двигали — по порядку на сцене.
- * Возвращает Map<id, z> (1…N).
- */
-export function stackOrder(tokens) {
-  const order = tokens.map((t, i) => ({ id: t.id, at: Number(t.movedAt) || 0, i })).sort((a, b) => a.at - b.at || a.i - b.i);
-  return new Map(order.map((o, k) => [o.id, k + 1]));
-}
+// Порядок наложения токенов — со слоями и ездой (TASK-187): riding.js.
+export { stackOrder };
 
 export function renderTokens(L, ctx) {
   const { scene, c } = ctx;
@@ -264,9 +299,11 @@ export function renderTokens(L, ctx) {
   const seen = new Set();
   const layer = stackOrder(scene.tokens);
   const top = scene.tokens.length + 10;
-  const currentId = ctx.currentTurnTokenId();
+  const turnIds = ctx.turnIds();
+  const marks = ctx.packMarks(); // пачки в инициативе (#198): цветная метка с номером
   for (const t of scene.tokens) {
     if (!ctx.tokenShown(t)) continue;
+    loadLocalPortrait(ctx, t.img);
     seen.add(t.id);
     const st = tokenStats(c, t);
     const size = sizeById(t.size);
@@ -275,7 +312,9 @@ export function renderTokens(L, ctx) {
     const d = n * s * 0.9 * (size.scale || 1) * look.scale;
     let node = L.tokens.querySelector(`[data-token="${CSS.escape(t.id)}"]`);
     const name = ctx.nameOf(t, st);
-    const sig = `${t.img}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
+    // После загрузки подписанного/локального URL сама ссылка t.img не меняется.
+    // Учитываем готовый адрес, чтобы инициалы сменились картинкой без правки токена.
+    const sig = `${t.img}|${srcOf(t.img)}|${name}|${(st.conditions || []).join(',')}|${t.elevation || 0}`;
     if (!node) {
       node = el(`<div class="tok" data-token="${esc(t.id)}"></div>`);
       L.tokens.append(node);
@@ -287,11 +326,27 @@ export function renderTokens(L, ctx) {
     node.style.setProperty('--rot', `${look.rot}deg`);
     node.style.zIndex = ctx.dragging?.has(t.id) || ctx.remote.drags.has(t.id) ? top : layer.get(t.id);
     node.style.transform = `translate(${p.x - d / 2}px, ${p.y - d / 2}px)`;
-    node.style.setProperty('--fs', `${Math.max(7, s * 0.15)}px`);
-    node.style.setProperty('--bw', `${Math.max(2, s * 0.045)}px`);
+    // Значки, кольцо и подпись — доли клетки, без нижних порогов в пикселях: при мелкой сетке они уменьшаются
+    // вместе с артом и не закрывают его (sol0139, 05.11). У маленьких и уменьшенных токенов — от их размера.
+    const base = Math.min(s, d / 0.9);
+    node.style.setProperty('--cell', base);
+    node.style.setProperty('--fs', `${base * 0.15}px`);
+    node.style.setProperty('--bw', `${base * 0.045}px`);
     const down = st.hpMax > 0 && st.hp <= 0;
     const mine = ctx.isMine(t);
-    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${currentId === t.id ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''}`;
+    node.className = `tok ${t.kind} disp-${ctx.dispositionOf(t)} ${ctx.ui.selection.has(t.id) ? 'selected' : ''} ${turnIds.has(t.id) ? 'turn' : ''} ${t.hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${mine ? 'mine' : ''} ${ctx.dragging?.has(t.id) ? 'dragging' : ''} ${ctx.canControl(t) && !t.locked ? 'can' : ''} ${t.locked ? 'locked' : ''} ${ctx.isDim?.(t) ? 'dim' : ''} ${t.pending ? 'pending' : ''}`;
+    // Своё существо игрока ждёт мастера (#190 E): полупрозрачное, с пометкой.
+    if (!!node.querySelector('.tok-pending') !== !!t.pending) {
+      node.querySelector('.tok-pending')?.remove();
+      if (t.pending) node.insertAdjacentHTML('beforeend', '<span class="tok-pending">ждёт мастера</span>');
+    }
+    const pk = marks.get(t.id);
+    const pkSig = pk ? `${pk.n}|${pk.color}` : '';
+    if (node.dataset.pk !== pkSig) {
+      node.querySelector('.tok-pack')?.remove();
+      if (pk) node.insertAdjacentHTML('beforeend', `<span class="tok-badge tok-pack" style="--pc:${pk.color}" title="Пачка ${pk.n}">${pk.n}</span>`);
+      node.dataset.pk = pkSig;
+    }
     // Прицелы: кто отметил этот токен целью.
     const tg = ctx.targetersOf?.(t.id) || [];
     const tgSig = tg.map((u) => u.id).join(',');
@@ -322,14 +377,15 @@ export function renderTokens(L, ctx) {
     }
     if (byId) node.classList.add('remote-drag'); else if (sels.length) node.classList.add('remote-sel');
     // Кольцо хитов: всем — у героев; у врагов — только мастеру (игроку — по настройке).
-    const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact');
+    const showHp = st.hpMax > 0 && (ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || ctx.c.settings.playersSeeHp === 'exact');
     // Бейджи (TASK-029): слева красным — хиты и временные хиты, справа синим — КД. Порядок инициативы на токене не показываем.
     const hb = node.querySelector('.tok-badge.hp-b'), ab = node.querySelector('.tok-badge.ac-b');
     const tmp = st.tempHp > 0 ? `<i>+${st.tempHp}</i>` : '';
     const hpHtml = showHp ? `${Math.max(0, st.hp)}${tmp}` : '';
     if (hb.dataset.v !== hpHtml) { hb.innerHTML = hpHtml; hb.dataset.v = hpHtml; hb.title = st.tempHp > 0 ? `Хиты ${st.hp} из ${st.hpMax}, временные ${st.tempHp}` : `Хиты ${st.hp} из ${st.hpMax}`; }
     hb.style.display = showHp ? '' : 'none';
-    const showAc = st.ac != null && (ctx.isMasterView || t.kind === 'hero');
+    // Свой токен без хитов — картинка без плашек (TASK-183); у своих токенов и призывов КД видят все, как хиты.
+    const showAc = st.ac != null && canFight(t) && (ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy);
     const acTxt = showAc ? String(st.ac) : '';
     if (ab.textContent !== acTxt) { ab.textContent = acTxt; ab.title = `Класс доспеха ${st.ac}`; }
     ab.style.display = showAc ? '' : 'none';
@@ -385,7 +441,16 @@ export function renderOverlay(L, ctx) {
   // Размер и угол шаблона линейки, пока его тянут (TASK-178).
   const tl = ctx.ui.templateLabel;
   if (tl) lbl(tl.at.x, tl.at.y - s * 0.45, tl.text, 'accent');
-  if (ctx.ui.liveStroke) out.push(`<polyline class="draw-line live" stroke="${esc(ctx.ui.liveStroke.color)}" points="${ctx.ui.liveStroke.pts.map((p) => `${p.x},${p.y}`).join(' ')}"/>`);
+  // Живой штрих карандаша или кисти и недорисованный многоугольник (TASK-182) — в стиле нового рисунка.
+  if (ctx.ui.liveStroke) out.push(drawingMarkup(scene.grid, { type: 'line', ...ctx.ui.liveStroke }, ' live'));
+  const lp = ctx.ui.livePoly;
+  if (lp) {
+    const st = ctx.ui.drawStyle || {};
+    out.push(drawingMarkup(scene.grid, { type: 'shape', shape: 'poly', ...st, pts: [...lp.pts, lp.hover || lp.pts.at(-1)], closed: false }, ' live'));
+    for (const [i, p] of lp.pts.entries()) out.push(`<circle class="poly-dot ${i === 0 && lp.closing ? 'closing' : ''}" cx="${p.x}" cy="${p.y}" r="${s * 0.08}"/>`);
+  }
+  const dl = ctx.ui.drawLabel;
+  if (dl) lbl(dl.at.x, dl.at.y - s * 0.45, dl.text, 'accent');
   if (ctx.ui.calib) {
     const k = ctx.ui.calib;
     out.push(`<rect class="calib" x="${k.x}" y="${k.y}" width="${k.size}" height="${k.size}"/>`);
