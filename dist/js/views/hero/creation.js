@@ -144,6 +144,13 @@ function applyChoice(ix, st, { step, id, value } = {}) {
       return null;
     }
     if (id === 'auto') return autoAbilities(ix, st, Array.isArray(value) ? value : null);
+    if (id === 'setRolls') {
+      // Бросок один на героя: повторно результат не меняется, сменить можно только способ.
+      if (st.draft.rollReceipts?.length || !Array.isArray(value)) return null;
+      change(ix, st, { type: 'setRollReceipts', receipts: value });
+      change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, null])) });
+      return null;
+    }
     if (id === 'abSet') { const [key, v] = String(value).split('|'); return setAbility(ix, st, key, v); }
     if (id === 'abInc' || id === 'abDec') return stepAbility(ix, st, value, id === 'abInc' ? 1 : -1);
     return null;
@@ -210,11 +217,23 @@ function applyChoice(ix, st, { step, id, value } = {}) {
 }
 
 // ——— Характеристики ———
+/** Шесть чисел, которые раскладывают по характеристикам: стандартный набор или результат бросков 4к6 (каждый — без меньшей кости). */
+function abilityPool(ix, st) {
+  if (st.draft.abilityMethod === 'standard_array') return [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
+  const r = st.draft.rollReceipts || [];
+  if (st.draft.abilityMethod !== 'rolled' || r.length !== 6) return null;
+  return r.map((x) => x.dice.reduce((a, b) => a + b, 0) - Math.min(...x.dice)).sort((a, b) => b - a);
+}
+// Числа могут повторяться (две 14): занято столько, сколько раз число уже стоит у характеристик.
+function markUsed(pool, scores) {
+  const left = Object.values(scores).filter(Number.isInteger);
+  return pool.map((value) => { const i = left.indexOf(value); if (i >= 0) left.splice(i, 1); return { value, used: i >= 0 }; });
+}
 function stepAbility(ix, st, key, dir) {
   const m = st.draft.abilityMethod, scores = { ...st.draft.baseScores };
   let swapped = null;
-  if (m === 'standard_array') {
-    const arr = [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
+  if (abilityPool(ix, st)) {
+    const arr = abilityPool(ix, st);
     const cur = scores[key];
     let next;
     if (cur == null) next = (dir > 0 ? arr : [...arr].reverse()).find((v) => !Object.values(scores).includes(v)) ?? arr[arr.length - 1];
@@ -232,19 +251,21 @@ function stepAbility(ix, st, key, dir) {
     if (spent > pb.budget) return { title: 'Очки закончились', body: `Бюджет ${pb.budget}.` };
     for (const a of ABILITIES) scores[a.id] ??= pb.min;
     scores[key] = next;
-  } else return { title: 'Броски характеристик — у мастера', body: 'Этот способ пока не подключён.' };
+  } else return { title: 'Сначала бросьте кубы', body: 'Шесть бросков 4к6: меньшая кость каждого не считается.' };
   change(ix, st, { type: 'setBaseScores', scores });
   return swapped;
 }
 /** Стандартный набор: число из списка прямо в характеристику; если оно было у другой — они меняются местами. */
 function setAbility(ix, st, key, raw) {
-  if (st.draft.abilityMethod !== 'standard_array' || !ABILITIES.some((a) => a.id === key)) return null;
-  const arr = ix.cats.options.abilityMethods.standardArray;
+  const arr = abilityPool(ix, st);
+  if (!arr || !ABILITIES.some((a) => a.id === key)) return null;
   const v = raw === '' || raw == null ? null : Number(raw);
   if (v !== null && !arr.includes(v)) return null;
   const scores = { ...st.draft.baseScores }, cur = scores[key] ?? null;
   if (cur === v) return null;
-  const holder = v === null ? null : Object.keys(scores).find((k) => k !== key && scores[k] === v);
+  // Занято, только если таких чисел в наборе больше нет: у двух 14 второй можно поставить без обмена.
+  const free = v !== null && arr.filter((x) => x === v).length > Object.keys(scores).filter((k) => k !== key && scores[k] === v).length;
+  const holder = v === null || free ? null : Object.keys(scores).find((k) => k !== key && scores[k] === v);
   if (holder) scores[holder] = cur;
   scores[key] = v;
   change(ix, st, { type: 'setBaseScores', scores });
@@ -272,9 +293,10 @@ function bestLayout(arr, order, bonus) {
 function autoAbilities(ix, st, prefer = null) {
   const cls = tail(st.draft.levelHistory[0]?.classId);
   if (!cls) return { title: 'Сначала выберите класс' };
-  if (st.draft.abilityMethod !== 'standard_array' && st.context.allowedAbilityMethods.includes('standard_array')) change(ix, st, { type: 'setAbilityMethod', method: 'standard_array' });
+  const rolled = st.draft.abilityMethod === 'rolled' && abilityPool(ix, st);
+  if (!rolled && st.draft.abilityMethod !== 'standard_array' && st.context.allowedAbilityMethods.includes('standard_array')) change(ix, st, { type: 'setAbilityMethod', method: 'standard_array' });
   const order = [...(prefer || PRIORITY[cls] || []), ...ABILITIES.map((a) => a.id)].filter((v, i, a) => a.indexOf(v) === i);
-  const arr = [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
+  const arr = rolled || [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
   const bonus = {};
   const ev = evaluate(ix, st);
   for (const g of ev.grants.filter((x) => x.kind === 'ability_increase')) bonus[g.ability] = (bonus[g.ability] || 0) + g.value;
@@ -385,10 +407,11 @@ export function creationModel(ix, st, { campaignName = '', userName = '' } = {})
   const abilities = {
     mode: METHOD_UI[method],
     modes: [['buy', 'Покупка очков', 'point_buy'], ['array', 'Стандартный набор', 'standard_array'], ['roll', 'Бросить 4к6', 'rolled']]
-      .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m) || m === 'rolled',
-        title: m === 'rolled' ? 'Броски характеристик пока не подключены' : !st.context.allowedAbilityMethods.includes(m) ? 'Мастер кампании этот способ не включил' : '' })),
+      .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m),
+        title: !st.context.allowedAbilityMethods.includes(m) ? 'Мастер кампании этот способ не включил' : '' })),
     budget: { spent, of, left: Math.max(0, of - spent), min: pb.min, max: pb.max },
-    array: method === 'standard_array' ? [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a).map((v) => ({ value: v, used: Object.values(d.baseScores).includes(v) })) : null,
+    array: abilityPool(ix, st) ? markUsed(abilityPool(ix, st), d.baseScores) : null,
+    rolled: method === 'rolled' ? { done: (d.rollReceipts || []).length === 6, server: (d.rollReceipts || []).every((r) => r.source === 'server') } : null,
     list: ABILITIES.map((a) => {
       const base = d.baseScores[a.id], fin = di?.abilityScores?.[a.id];
       const race = (di?.abilityIncreases || []).filter((x) => x.ability === a.id).reduce((s, x) => s + x.value, 0);

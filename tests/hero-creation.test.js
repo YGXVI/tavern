@@ -111,10 +111,10 @@ test('черты с шага «Образ» попадают в личность
 });
 
 test('характеристики: герою без кампании открыта покупка очков, набор выбирается числом из списка (#203)', () => {
-  // Кампания по умолчанию — только стандартный набор (D3); герой «Моих героев» — оба способа.
+  // DEC-019: все способы открыты и в кампании, и у героя «Моих героев».
   const camp = newCreation(ix, { campaign: { id: 'c1' }, newId: uuid() });
-  assert.deepEqual(camp.context.allowedAbilityMethods, ['standard_array']);
-  assert.ok(applyCreationChoice(ix, camp, { step: 'abilities', id: 'abMode', value: 'buy' }), 'в кампании покупка закрыта');
+  assert.deepEqual(camp.context.allowedAbilityMethods, ['standard_array', 'point_buy', 'rolled']);
+  assert.equal(applyCreationChoice(ix, camp, { step: 'abilities', id: 'abMode', value: 'buy' }), null, 'в кампании покупка открыта');
   const st = newCreation(ix, { campaign: null, newId: uuid() });
   assert.equal(st.draft.abilityMethod, 'standard_array', 'по умолчанию — набор');
   assert.ok(creationModel(ix, st).abilities.modes.find((m) => m.id === 'buy').disabled === false);

@@ -7,6 +7,15 @@ const json = (status, body) => new Response(JSON.stringify(body), { status, head
 const RPC = { create: 'create_character_sheet', level_up: 'level_up_character' };
 const ARGS = { create: ['p_campaign', 'p_character', 'p_operation', 'p_payload', 'p_claim'], level_up: ['p_campaign', 'p_character', 'p_expected_version', 'p_operation', 'p_payload'] };
 
+// Подпись набора бросков: кубы сервера нельзя подменить, а строки разных бросков — смешать.
+async function rollSignature(receipts, key) {
+  const raw = new TextEncoder();
+  const k = await crypto.subtle.importKey('raw', raw.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', k, raw.encode(JSON.stringify(receipts.map((r) => r.dice))));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+const d6 = () => { const a = new Uint32Array(1); do crypto.getRandomValues(a); while (a[0] >= 4294967292); return (a[0] % 6) + 1; };
+
 export async function handle(req, { check, catalogues, env, fetch: f }) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') return json(405, { message: 'Нужен POST' });
@@ -15,6 +24,11 @@ export async function handle(req, { check, catalogues, env, fetch: f }) {
   let body;
   try { body = await req.json(); } catch { return json(400, { message: 'Нужен JSON' }); }
   const { kind, args } = body || {};
+  if (kind === 'roll') {
+    const receipts = Array.from({ length: 6 }, () => ({ dice: [d6(), d6(), d6(), d6()], source: 'server' }));
+    const sig = await rollSignature(receipts, env.key);
+    return json(200, { receipts: receipts.map((r) => ({ ...r, sig })) });
+  }
   if (!RPC[kind] || !args || typeof args !== 'object') return json(400, { message: 'Нужны kind и args' });
   const clean = Object.fromEntries(ARGS[kind].filter((k) => k in args).map((k) => [k, args[k]]));
   const headers = { apikey: env.anonKey, Authorization: auth, 'Content-Type': 'application/json' };
@@ -27,6 +41,11 @@ export async function handle(req, { check, catalogues, env, fetch: f }) {
 
   const r = kind === 'create' ? check.checkCreate(clean.p_payload, catalogues, { policy }) : check.checkLevelUp(clean.p_payload, catalogues, { policy });
   if (!r.ok) return json(422, { ok: false, errors: r.errors });
+  const creation = clean.p_payload?.creation;
+  if (creation?.abilityInput?.method === 'rolled') {
+    const receipts = creation.rollReceipts || [], sig = await rollSignature(receipts, env.key);
+    if (!receipts.length || receipts.some((x) => x.sig !== sig || x.source !== 'server')) return json(422, { ok: false, errors: [{ code: 'roll_signature', field: 'rollReceipts', message: 'Броски не подтверждены сервером.' }] });
+  }
 
   const res = await f(`${env.url}/rest/v1/rpc/${RPC[kind]}`, { method: 'POST', headers: { ...headers, 'x-build-check': env.key }, body: JSON.stringify(clean) });
   return new Response(await res.text(), { status: res.status, headers: { ...CORS, 'Content-Type': 'application/json' } });

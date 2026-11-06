@@ -14,7 +14,7 @@ import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 import { gearIndex } from './gear.js';
 import { startEdit, finishEdit, applyEdit } from './edit-model.js';
-import { LIB, isLibKey, libraryHeroes, archivedLibraryHeroes, libraryHero, saveLibraryHero, updateLibraryHero, archiveLibraryHero, restoreLibraryHero } from './library.js';
+import { setLibrarySink, mergeLibrary, LIB, isLibKey, libraryHeroes, archivedLibraryHeroes, libraryHero, saveLibraryHero, updateLibraryHero, archiveLibraryHero, restoreLibraryHero } from './library.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
 
@@ -32,6 +32,18 @@ await Promise.all(['spells-2014', 'spells-ref-2014', 'character-options-2014', '
     creationIx = indexCreation({ options, spells: list, equipment, features }, ref);
   })
   .catch(() => { /* без справочника — подписи с листа и витрина мастера */ });
+
+// «Мои герои» на сервере (DEC-019 D1): правки уходят в таблицу heroes, при входе устройство сводится с базой.
+async function linkLibrary() {
+  const userId = currentUserId();
+  if (!isServerMode() || !userId) return;
+  const sync = await import('../../server/sync.js');
+  setLibrarySink((hero, archived) => { sync.pushHeroRow(hero, archived); });
+  const rows = await sync.loadHeroRows();
+  if (!rows) return; // нет связи: работаем с копией устройства
+  for (const { hero, archived } of mergeLibrary(userId, rows)) await sync.pushHeroRow(hero, archived);
+}
+linkLibrary().catch(() => { /* сведение повторится при следующем входе */ });
 
 // Адрес настоящего героя — «кампания~персонаж»: один и тот же персонаж бывает в нескольких кампаниях (копии).
 // Свой герой вне кампаний («Мои герои», library.js) — «lib~персонаж».
@@ -102,7 +114,7 @@ export function heroList() {
     .map((ch) => ({ id: heroKey(c.id, ch.id), name: ch.name, portrait: toHeroCard(ch, ctxOf(c, ch, userId)).portrait, campaign: c.name })));
   archived.unshift(...archivedLibraryHeroes(userId).map((h) => ({ id: heroKey(LIB, h.id), name: h.name, portrait: toHeroCard(h, ctxOf(null, h, userId)).portrait, campaign: 'Мои герои' })));
   // На сервере «Мои герои» пока хранятся на этом устройстве — до таблицы личных героев (#202).
-  return { heroes: mine, party, archived, saved: savedFromRef(), sample: false, deviceOnly: isServerMode() };
+  return { heroes: mine, party, archived, saved: savedFromRef(), sample: false, deviceOnly: false };
 }
 /** Мастер создания для кампании cid (из «Кем сядете за стол?»): черновик другой кампании начинается заново. */
 export function startCreation(cid) {
@@ -426,6 +438,13 @@ function choose(payload = {}) {
   if (note) say(note.title, note.body || '', note.icon);
   window.dispatchEvent(new CustomEvent('hero:changed'));
 }
+/** Броски 4к6: на сервере — кубы и подпись функции проверки, без связи или в песочнице — кубы браузера (сборка останется непроверенной). */
+async function rollAbilities() {
+  const local = () => Array.from({ length: 6 }, () => ({ dice: Array.from({ length: 4 }, () => 1 + Math.floor(Math.random() * 6)), source: 'client' }));
+  let receipts = null;
+  if (isServerMode()) { try { receipts = await (await import('../../server/sync.js')).rollAbilityDice(); } catch { receipts = null; } }
+  choose({ step: 'abilities', id: 'setRolls', value: receipts || local() });
+}
 let finishing = false;
 /**
  * «Создать героя» (мастер и быстрый герой): герой ложится в «Мои герои», дальше — экран «Куда привести»
@@ -531,6 +550,7 @@ export const heroActions = {
   createFrom: (p = {}) => (p.path === 'steps' && creationIx ? undefined : stub('Новый герой')(p)), // { path: 'steps' | 'quick' | 'lss' }
   choose,                                      // { step, id, value }
   finish,                                      // { draftId }
+  rollAbilities,                               // броски 4к6 (шаг характеристик)
   bringToCampaign,                             // { heroId, campaignId }
   setHp: live('setHp'),                        // { heroId, delta, temp }
   roll: live('roll'),                          // { heroId, what, formula }

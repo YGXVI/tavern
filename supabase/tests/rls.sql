@@ -209,11 +209,11 @@ select pg_temp.err('инициатива строкой — отказ (ауди
 select pg_temp.err('инициатива объектом — отказ', $q$select public.combat_player('c-rls', '{"t-p":{"v":12}}', '{}')$q$);
 select pg_temp.ok('игрок бросает свою инициативу', $q$select public.combat_player('c-rls', '{"t-p":12}', '{}')$q$);
 select pg_temp.ok('повтор броска не переписывает инициативу', $q$select public.combat_player('c-rls', '{"t-p":20}', '{}')$q$);
-select pg_temp.cnt('инициатива осталась первой', $q$select 1 from public.combats where campaign_id = 'c-rls' and data #> '{entries,1,init}' = '12'$q$, 1);
+select pg_temp.cnt('инициатива осталась первой', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data #> '{entries,1,init}' = '12'$q$, 1);
 select pg_temp.ok('инициатива за другого героя (сидит с телефона)', $q$select public.combat_player('c-rls', '{"t-q2":9}', '{}')$q$);
 select pg_temp.err('инициативу скрытого огра — мастер', $q$select public.combat_player('c-rls', '{"t-ogre":3}', '{}')$q$);
 select pg_temp.ok('инициативу гоблина функция пропускает', $q$select public.combat_player('c-rls', '{"t-gob":1}', '{}')$q$);
-select pg_temp.cnt('инициатива гоблина прежняя', $q$select 1 from public.combats where campaign_id = 'c-rls' and data #> '{entries,0,init}' = '15'$q$, 1);
+select pg_temp.cnt('инициатива гоблина прежняя', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data #> '{entries,0,init}' = '15'$q$, 1);
 select pg_temp.err('ход монстра не закончить', $q$select public.combat_player('c-rls', '{}', '{}', 't-gob')$q$);
 select pg_temp.err('пройденное строкой — отказ (аудит 04.11)', $q$select public.combat_player('c-rls', '{}', '{"t-p":"15"}')$q$);
 select pg_temp.err('пройденное отрицательное — отказ', $q$select public.combat_player('c-rls', '{}', '{"t-p":-5}')$q$);
@@ -237,7 +237,7 @@ select pg_temp.ok('мастер передаёт ход Торину (его и�
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.ok('игрок заканчивает ход за другого героя', $q$select public.combat_player('c-rls', '{}', '{}', 't-q2')$q$);
-select pg_temp.cnt('ход отмечен законченным', $q$select 1 from public.combats where campaign_id = 'c-rls' and data ->> 'ended' = 't-q2'$q$, 1);
+select pg_temp.cnt('ход отмечен законченным', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data ->> 'ended' = 't-q2'$q$, 1);
 reset role;
 
 -- ——— Посторонний и ожидающий ———
@@ -255,6 +255,41 @@ select pg_temp.err('посторонний не кладёт файл в чуж�
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000c');
 select pg_temp.err('ожидающий не просит переход', $q$insert into public.portal_requests (id, campaign_id, author, data) values ('q-c', 'c-rls', '00000000-0000-0000-0000-00000000000c', '{}')$q$);
+reset role;
+
+-- ——— DEC-019 D4: скрытые участники боя ———
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+insert into public.tokens (id, campaign_id, scene_id, hidden, data) select 't-sneak', 'c-rls', id, true, '{"name":"Засада","kind":"foe"}' from public.scenes where campaign_id = 'c-rls' limit 1;
+select pg_temp.ok('бой со скрытым участником', $q$update public.combats set data = '{"active":true,"round":2,"turn":1,"current":"t-sneak","entries":[{"tokenId":"t-sneak","init":19},{"tokenId":"t-q2","init":7}],"moved":{"t-sneak":10},"reacted":{"t-sneak":true}}' where campaign_id = 'c-rls'$q$);
+select pg_temp.cnt('мастер видит скрытого в полной строке', $q$select 1 from public.combats where campaign_id = 'c-rls' and data -> 'entries' @> '[{"tokenId":"t-sneak"}]'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('игрок не читает полную строку боя', $q$select 1 from public.combats where campaign_id = 'c-rls'$q$, 0);
+select pg_temp.cnt('в копии нет скрытого нигде', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data::text not like '%t-sneak%' and data ->> 'current' = '?' and (data ->> 'turn')::int = 0$q$, 1);
+select pg_temp.cnt('видимый участник в копии есть', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data -> 'entries' @> '[{"tokenId":"t-q2"}]'$q$, 1);
+select pg_temp.err('игрок не пишет в копию', $q$update public.combat_public set data = '{}'$q$);
+select pg_temp.cnt('ответ функции не выдаёт скрытого', $q$select 1 where public.combat_player('c-rls', '{}', '{}', null)::text not like '%t-sneak%'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.rows('мастер открывает скрытого', $q$update public.tokens set hidden = false where id = 't-sneak'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('открытый появляется в копии сразу', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data -> 'entries' @> '[{"tokenId":"t-sneak"}]' and data ->> 'current' = 't-sneak'$q$, 1);
+reset role;
+
+-- ——— DEC-019 D1: «Мои герои» ———
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('heroes: свой герой', $q$insert into public.heroes(id,owner_id,data) values('h-a','00000000-0000-0000-0000-00000000000a','{"name":"А"}')$q$);
+select pg_temp.err('heroes: чужим именем нельзя', $q$insert into public.heroes(id,owner_id,data) values('h-x','00000000-0000-0000-0000-00000000000b','{"name":"Х"}')$q$);
+select pg_temp.rows('heroes: правка своего', $q$update public.heroes set data='{"name":"Б"}' where id='h-a'$q$, 1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('heroes: чужого не видно', $q$select 1 from public.heroes where id='h-a'$q$, 0);
+select pg_temp.rows('heroes: чужого не правит', $q$update public.heroes set data='{}' where id='h-a'$q$, 0);
+select pg_temp.err('heroes: удалять запрещено', $q$delete from public.heroes where id='h-a'$q$);
+reset role;
+set local role anon;
+select pg_temp.err('heroes: аноним не читает', $q$select * from public.heroes$q$);
 reset role;
 
 -- ——— TASK-125: личная библиотека (только этот блок принадлежит Codex библиотеки) ———
@@ -556,7 +591,7 @@ reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.rows('свой призыв в бой игрок не добавляет', $q$update public.combats set data = jsonb_set(data, '{entries}', (data -> 'entries') || '[{"tokenId":"t-wolf","init":null}]') where campaign_id = 'c-rls'$q$, 0);
 select pg_temp.ok('инициатива своего призыва', $q$select public.combat_player('c-rls', '{"t-horse":11}', '{}')$q$);
-select pg_temp.cnt('инициатива призыва записана', $q$select 1 from public.combats where campaign_id = 'c-rls' and data #> '{entries,4,init}' = '11'$q$, 1);
+select pg_temp.cnt('инициатива призыва записана', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data -> 'entries' @> '[{"tokenId":"t-horse","init":11}]'$q$, 1);
 select pg_temp.ok('спасбросок своего призыва', $q$select public.save_result('sv-1', '{"t-horse":{"total":12}}')$q$);
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
@@ -564,7 +599,7 @@ select pg_temp.ok('ход коня', $q$update public.combats set data = data ||
 reset role;
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select pg_temp.ok('владелец заканчивает ход своего призыва', $q$select public.combat_player('c-rls', '{}', '{}', 't-horse')$q$);
-select pg_temp.cnt('ход призыва отмечен законченным', $q$select 1 from public.combats where campaign_id = 'c-rls' and data ->> 'ended' = 't-horse'$q$, 1);
+select pg_temp.cnt('ход призыва отмечен законченным', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data ->> 'ended' = 't-horse'$q$, 1);
 reset role;
 -- Скрытие, удаление и связи
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
@@ -688,12 +723,12 @@ create trigger test_archive_rollback before delete on public.tokens for each row
 select pg_temp.login('00000000-0000-0000-0000-00000000000b');
 select set_config('task004.fail_archive','on',true);
 select pg_temp.code('лист: ошибка удаления откатывает весь архив', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000017','archive') from public.characters where id = 'ch-p'$q$,'22023');
-select pg_temp.cnt('лист: после отказа архива токен, ход и лист прежние', $q$select 1 from public.characters ch join public.combats cb on cb.campaign_id = ch.campaign_id where ch.id = 'ch-p' and ch.archived_at is null and cb.data ->> 'current' = 't-p' and exists(select 1 from public.tokens where id = 't-p')$q$,1);
+select pg_temp.cnt('лист: после отказа архива токен, ход и лист прежние', $q$select 1 from public.characters ch join public.combat_public cb on cb.campaign_id = ch.campaign_id where ch.id = 'ch-p' and ch.archived_at is null and cb.data ->> 'current' = 't-p' and exists(select 1 from public.tokens where id = 't-p')$q$,1);
 select set_config('task004.fail_archive','off',true);
 select pg_temp.ok('лист: владелец архивирует с токеном и боем', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000010','archive') from public.characters where id = 'ch-p'$q$);
 select pg_temp.cnt('лист: токен снят', $q$select 1 from public.tokens where id = 't-p'$q$,0);
 select pg_temp.cnt('лист: архив сохранил HP и историю', $q$select 1 from public.characters where id = 'ch-p' and archived_at is not null and data -> 'hp' = '9'$q$,1);
-select pg_temp.cnt('лист: ход перешёл к следующему без повторения ended', $q$select 1 from public.combats where campaign_id = 'c-rls' and data ->> 'current' = 't-q2' and data -> 'round' = '2' and not (data ? 'ended') and not (data -> 'moved' ? 't-p')$q$,1);
+select pg_temp.cnt('лист: ход перешёл к следующему без повторения ended', $q$select 1 from public.combat_public where campaign_id = 'c-rls' and data ->> 'current' = 't-q2' and data -> 'round' = '2' and not (data ? 'ended') and not (data -> 'moved' ? 't-p')$q$,1);
 select pg_temp.code('лист: архив нельзя тратить', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000011','adjust','{"hp":-1}') from public.characters where id = 'ch-p'$q$,'P0001');
 select pg_temp.code('лист: архив нельзя поставить старым клиентом', $q$insert into public.tokens(id,campaign_id,scene_id,character_id,data) values('t-arch','c-rls','s-1','ch-p','{"kind":"hero"}')$q$,'P0001');
 select pg_temp.ok('лист: владелец восстанавливает', $q$select public.character_command('c-rls','ch-p',sheet_version,'10000000-0000-0000-0000-000000000012','restore') from public.characters where id = 'ch-p'$q$);

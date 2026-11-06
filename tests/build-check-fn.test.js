@@ -42,3 +42,17 @@ test('без входа, чужая кампания, неизвестная к�
   assert.equal((await handle(req({ kind: 'delete', args: {} }), deps().d)).status, 400);
   assert.equal((await handle(new Request('https://f/', { method: 'OPTIONS' }), deps().d)).status, 204);
 });
+
+test('броски: подпись сервера проходит, подмена кубов и смешивание — нет', async () => {
+  const { d } = deps();
+  const res = await handle(req({ kind: 'roll' }), d);
+  const { receipts } = await res.json();
+  assert.equal(receipts.length, 6);
+  for (const r of receipts) { assert.equal(r.dice.length, 4); assert.ok(r.dice.every((x) => x >= 1 && x <= 6)); assert.equal(r.source, 'server'); }
+  const send = (rr) => handle(req({ kind: 'create', args: { ...create.args, p_payload: { creation: { abilityInput: { method: 'rolled' }, rollReceipts: rr } } } }), deps().d);
+  assert.equal((await send(receipts)).status, 200);
+  const forged = structuredClone(receipts); forged[0].dice = [6, 6, 6, 6];
+  assert.equal((await send(forged)).status, 422);
+  assert.equal((await send(receipts.map((r) => ({ dice: r.dice, source: 'client' })))).status, 422);
+  assert.equal((await handle(req({ kind: 'roll' }, null), d)).status, 401, 'без входа не бросаем');
+});

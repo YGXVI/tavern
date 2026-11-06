@@ -228,3 +228,32 @@ test('повышение до 20 уровня: каждый класс прох�
     for (const k of Object.keys(h.stats)) assert.ok(h.stats[k] <= cap(k), `${cls}: ${k} ${h.stats[k]}`);
   }
 });
+
+test('D2: герой кампании 5 уровня собирается пятым уровнем у всех классов', () => {
+  for (const cls of ['barbarian', 'bard', 'cleric', 'druid', 'fighter', 'monk', 'paladin', 'ranger', 'rogue', 'sorcerer', 'warlock', 'wizard']) {
+    const st = newCreation(ix, { campaign: { id: 'c1', level: 5 }, newId: uuid() });
+    const ch = (x) => applyCreationChoice(ix, st, x);
+    ch({ step: 'race', id: 'human' }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: 'acolyte' }); ch({ step: 'abilities', id: 'auto' });
+    assert.equal(st.draft.levelHistory.length, 5, cls);
+    assert.equal(creationModel(ix, st).campaign.level ?? 5, 5);
+  }
+});
+
+test('D3: покупка очков и броски доступны; бросок один и раскладывается как набор', () => {
+  const st = newCreation(ix, { campaign: { id: 'c1' }, newId: uuid() });
+  const ch = (x) => applyCreationChoice(ix, st, x);
+  ch({ step: 'race', id: 'human' }); ch({ step: 'class', id: 'fighter' });
+  for (const m of creationModel(ix, st).abilities.modes) assert.ok(!m.disabled, m.id);
+  ch({ step: 'abilities', id: 'abMode', value: 'roll' });
+  assert.equal(creationModel(ix, st).abilities.rolled.done, false);
+  const roll = (a, b, c, d) => ({ dice: [a, b, c, d], source: 'client' });
+  const r = [roll(6, 6, 6, 1), roll(5, 5, 4, 1), roll(5, 5, 4, 2), roll(4, 4, 3, 1), roll(3, 3, 3, 1), roll(2, 2, 2, 1)];
+  ch({ step: 'abilities', id: 'setRolls', value: r });
+  ch({ step: 'abilities', id: 'setRolls', value: [roll(6, 6, 6, 6)] });
+  assert.equal(st.draft.rollReceipts.length, 6, 'перебросить нельзя');
+  assert.deepEqual(creationModel(ix, st).abilities.array.map((x) => x.value), [18, 14, 14, 11, 9, 6]);
+  ch({ step: 'abilities', id: 'auto' });
+  assert.equal(Object.values(st.draft.baseScores).sort((a, b) => a - b).join(), '6,9,11,14,14,18');
+  assert.ok(creationModel(ix, st).abilities.array.every((x) => x.used), 'две 14 учтены обе');
+  assert.equal(st.draft.abilityMethod, 'rolled');
+});

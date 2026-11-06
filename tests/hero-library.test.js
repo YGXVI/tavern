@@ -56,3 +56,24 @@ test('без пользователя и при сломанном хранил�
   mem.set('rasputye-heroes-v1', '{не json');
   assert.deepEqual(lib.libraryHeroes('u1'), []);
 });
+
+test('сведение с базой (DEC-019 D1): новее — кто правил позже, отсутствующее уходит в базу', async () => {
+  const { saveLibraryHero, mergeLibrary, libraryHeroes, archivedLibraryHeroes, setLibrarySink, updateLibraryHero } = await import('../dist/js/views/hero/library.js');
+  const u = 'merge-user';
+  const local = saveLibraryHero(u, { id: 'only-here', name: 'Здесь' });
+  saveLibraryHero(u, { id: 'both', name: 'Старое' });
+  const up = mergeLibrary(u, [
+    { id: 'both', data: { name: 'Новое', updatedAt: Date.now() + 1000 }, archived_at: null },
+    { id: 'there', data: { name: 'С другого устройства', updatedAt: 5 }, archived_at: null },
+    { id: 'gone', data: { name: 'Удалён', updatedAt: 5 }, archived_at: '2026-11-06T00:00:00Z' },
+  ]);
+  assert.deepEqual(up.map((x) => x.hero.id), ['only-here']);
+  assert.equal(up[0].hero.updatedAt, local.updatedAt);
+  const names = libraryHeroes(u).map((h) => h.name).sort();
+  assert.deepEqual(names, ['Здесь', 'Новое', 'С другого устройства'].sort());
+  assert.deepEqual(archivedLibraryHeroes(u).map((h) => h.name), ['Удалён']);
+  const pushed = []; setLibrarySink((h, a) => pushed.push([h.name, a]));
+  updateLibraryHero(u, 'both', (h) => { h.name = 'Правка'; });
+  setLibrarySink(null);
+  assert.deepEqual(pushed, [['Правка', false]]);
+});

@@ -5,12 +5,11 @@ import { evaluateBuild, defaultCreationContext, creationContextFromCampaign, pro
 import { buildSpellProjection, SRD_ALIASES } from '../data/spells/projection.mjs';
 import { read, json, cats, defs, ARRAY, context, draft, levels, autofill } from './helpers/builder-fixtures.js';
 
-test('defaults: SRD 2014, level 1, standard array, one class, packages; options off; legacy level shown, not applied', () => {
+test('defaults: SRD 2014, level 1, all ability methods (DEC-019), one class, packages; options off; campaign level applied', () => {
   const c = defaultCreationContext({ campaignId: 'c' });
-  assert.deepEqual([c.edition, c.allowedSources, c.startLevel, c.allowedAbilityMethods, c.optionalRules, c.equipmentPolicy], ['5e-2014', ['srd51'], 1, ['standard_array'], { feats: false, multiclass: false, flexibleRacialAsi: false }, 'packages']);
+  assert.deepEqual([c.edition, c.allowedSources, c.startLevel, c.allowedAbilityMethods, c.optionalRules, c.equipmentPolicy], ['5e-2014', ['srd51'], 1, ['standard_array', 'point_buy', 'rolled'], { feats: false, multiclass: false, flexibleRacialAsi: false }, 'packages']);
   const legacy = creationContextFromCampaign({ id: 'c', level: 5 });
-  assert.equal(legacy.context.startLevel, 1);
-  assert.equal(legacy.notices[0].code, 'legacy_level');
+  assert.equal(legacy.context.startLevel, 5);
   for (const bad of [0, NaN, 21]) assert.equal(creationContextFromCampaign({ id: 'c', level: bad }).errors[0].code, 'legacy_level_invalid');
   assert.deepEqual(creationContextFromCampaign({ id: 'c', level: 1 }).notices, []);
   assert.equal(creationContextFromCampaign({ id: 'c', level: 5 }, { ...c, startLevel: 5 }).context.startLevel, 5, 'master-confirmed policy');
@@ -82,7 +81,7 @@ test('feats: only when the master allows them, only in place of an ASI, prerequi
 test('ability methods: standard array, point buy 8–15/27 before racial increases, recorded rolls without re-rolling', () => {
   const ev = (over, ctx = context({ allowedAbilityMethods: ['standard_array', 'point_buy', 'rolled'] })) => evaluateBuild(ctx, cats, draft(ctx, { levelHistory: levels(['fighter', 1]), ...over }));
   assert.ok(ev({ baseScores: { ...ARRAY, cha: 15 } }).errors.some(e => e.code === 'standard_array'));
-  assert.ok(ev({ abilityMethod: 'point_buy' }, context()).errors.some(e => e.code === 'ability_method'), 'point buy is off by default');
+  assert.ok(ev({ abilityMethod: 'point_buy' }, context({ allowedAbilityMethods: ['standard_array'] })).errors.some(e => e.code === 'ability_method'), 'the master can close a method');
   assert.ok(!ev({ abilityMethod: 'point_buy', baseScores: { str: 15, dex: 15, con: 15, int: 8, wis: 8, cha: 8 } }).errors.length);
   assert.ok(ev({ abilityMethod: 'point_buy', baseScores: { str: 16, dex: 8, con: 8, int: 8, wis: 8, cha: 8 } }).errors.some(e => e.code === 'point_buy_range'));
   assert.ok(ev({ abilityMethod: 'point_buy', baseScores: { str: 15, dex: 15, con: 15, int: 9, wis: 8, cha: 8 } }).errors.some(e => e.code === 'point_buy_budget'));

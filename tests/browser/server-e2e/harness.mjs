@@ -22,6 +22,7 @@ const S = {
   save_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', data: 'json' } },
   portal_requests: { pk: ['id'], cols: { id: 'text!', campaign_id: 'text!', author: 'uuid', data: 'json' } },
   combats: { pk: ['campaign_id'], cols: { campaign_id: 'text!', data: 'json' } },
+  heroes: { pk: ['id'], cols: { id: 'text!', owner_id: 'uuid!', data: 'json!', archived_at: 'ts', updated_at: 'ts' } },
   creatures: { pk: ['owner_id', 'id'], cols: { id: 'text!', owner_id: 'uuid!', data: 'json!', updated_at: 'ts' } },
   campaign_creatures: { pk: ['campaign_id', 'id'], cols: { campaign_id: 'text!', id: 'text!', owner_id: 'uuid', source_id: 'text', data: 'json!', updated_at: 'ts' } },
 };
@@ -72,6 +73,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     switch (t) {
       case 'profiles': return true;
       case 'creatures': return r.owner_id === uid;
+      case 'heroes': return r.owner_id === uid;
       case 'campaign_creatures': return isMaster(uid, cid) || (isMember(uid, cid) && r.owner_id === uid);
       case 'campaigns': return isApplicant(uid, cid);
       case 'campaign_members': return r.user_id === uid || isMember(uid, cid);
@@ -174,6 +176,7 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     const rls = `new row violates row-level security policy for table "${t}"`;
     switch (t) {
       case 'creatures': return r.owner_id === uid ? null : rls;
+      case 'heroes': return r.owner_id === uid ? null : rls;
       case 'campaign_creatures': return op === 'insert' ? M || (A && r.owner_id === uid) ? null : rls : M ? null : 'skip';
       case 'campaigns': return op === 'insert' ? (r.owner_id === uid ? null : rls) : M ? null : 'skip';
       case 'campaign_members':
@@ -284,6 +287,8 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
 
   function query(uid, q) {
     ensureProfile(uid);
+    // Очищенная копия боя: здесь у всех участников одна строка боя, полные права проверяет rls.sql.
+    if (q.table === 'combat_public') q = { ...q, table: 'combats' };
     const t = q.table;
     if (!S[t]) return err(`relation "public.${t}" does not exist`);
     if (!uid) return err('permission denied', '42501');

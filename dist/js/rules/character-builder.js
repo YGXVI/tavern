@@ -20,19 +20,19 @@ export const DEFAULT_PORTS = Object.freeze({ abilityModifier: score => (Number.i
 export function defaultCreationContext({ campaignId = null, policyRevision = 'default-v1' } = {}) {
   return {
     campaignId, policyRevision, edition: '5e-2014', allowedSources: [SOURCE_SRD], startLevel: 1,
-    allowedAbilityMethods: ['standard_array'], optionalRules: { feats: false, multiclass: false, flexibleRacialAsi: false },
+    allowedAbilityMethods: ['standard_array', 'point_buy', 'rolled'], optionalRules: { feats: false, multiclass: false, flexibleRacialAsi: false },
     equipmentPolicy: 'packages', hpMethod: 'fixed_average',
   };
 }
 
-/** Read adapter: a legacy campaign.level is shown for the master to confirm, never applied silently. */
+/** Контекст создания героя кампании (DEC-019): стартовый уровень — уровень кампании, способы характеристик открыты все. */
 export function creationContextFromCampaign(campaign, policy = null) {
   const context = policy ? structuredClone(policy) : defaultCreationContext({ campaignId: campaign?.id ?? null });
   const notices = [], errors = validateCreationContext(context);
   const level = campaign?.level;
   if (level !== undefined && level !== null) {
     if (!Number.isInteger(level) || level < 1 || level > 20) errors.push({ code: 'legacy_level_invalid', message: `Уровень кампании ${level} вне 1–20; мастер должен задать стартовый уровень.` });
-    else if (!policy && level !== 1) notices.push({ code: 'legacy_level', level, message: `В кампании указан уровень ${level}. Стартовый уровень героев — 1, пока мастер не подтвердит ${level}.` });
+    else if (!policy) context.startLevel = level;
   }
   return { context, notices, errors };
 }

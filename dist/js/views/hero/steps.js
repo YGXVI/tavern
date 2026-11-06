@@ -56,7 +56,7 @@ function abilitiesStep(head, ab, d) {
   </div>`;
   return html`${head}
     <div class="h-ab-top">${segmented(ab.modes.map((m) => ({ ...m, icon: m.id === 'roll' ? 'dice-faces-06' : '' })), mode, 'data-abmode', 'dark')}
-      ${ab.array ? html`<div class="h-array" aria-label="Стандартный набор">${ab.array.map((x) => html`<span class="${x.used ? 'used' : ''}">${x.value}</span>`)}<small>Шесть чисел на шесть характеристик: выберите число у каждой. Занятое поменяется местами</small></div>`
+      ${ab.rolled && !ab.rolled.done ? html`<div class="h-array"><button class="btn btn-primary" data-ab-roll>${ic('dice-faces-06')}Бросить 4к6 шесть раз</button><small>Меньшая кость каждого броска не считается. Бросок один.</small></div>` : ab.array ? html`<div class="h-array" aria-label="${ab.rolled ? 'Результат бросков' : 'Стандартный набор'}">${ab.array.map((x) => html`<span class="${x.used ? 'used' : ''}">${x.value}</span>`)}<small>Шесть чисел на шесть характеристик: выберите число у каждой. Занятое поменяется местами</small></div>`
     : html`<div class="h-budget"><span>Потрачено ${b.spent} из ${b.of}</span><span class="h-mini-chip accent">${b.left} свободны</span><span class="h-bar"><i style="width:${Math.round((b.spent / b.of) * 100)}%"></i></span></div>`}</div>
     <div class="h-grid3">${ab.list.map(card)}</div>
     <section class="h-box"><div class="h-box-head"><b>${ab.asi.title}</b><small>${ab.asi.note}</small></div>
@@ -130,6 +130,7 @@ export function bindStepExtras(root, L, stepId, d, save, rerender) {
   L('click', '[data-abmode]', (e, b) => { if (!b.disabled) { set('abMode', b.dataset.abmode, b); rerender(); } });
   L('change', '[data-ab-set]', (e, t) => heroActions.choose({ step: stepOf(t), id: 'abSet', value: `${t.dataset.abSet}|${t.value}` }));
   L('change', '[data-eqpick]', (e, t) => heroActions.choose({ step: stepOf(t), id: 'eqPick', value: `${t.dataset.eqpick}|${t.value}` }));
+  L('click', '[data-ab-roll]', () => heroActions.rollAbilities());
   L('click', '[data-eqmode]', (e, b) => { set('eqMode', b.dataset.eqmode, b); rerender(); });
   L('click', '[data-sptab]', (e, b) => { set('spTab', +b.dataset.sptab, b); rerender(); });
   L('click', '[data-sp]', (e, b) => { set('spFocus', b.dataset.sp, b); rerender(); });
