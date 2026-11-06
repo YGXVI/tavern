@@ -156,6 +156,18 @@ try {
   r = await M.sb.from('tokens').update({ hidden: false }).eq('id', `t-sneak-${tag}`);
   r = await P.sb.from('combat_public').select('data').eq('campaign_id', cid).single();
   check('открытый появился в копии', r.data?.data?.current === `t-sneak-${tag}`, JSON.stringify(r.data || r.error).slice(0, 120));
+
+  // #193: наложения эффектов. Тайное мастера игроку не приходит.
+  r = await P.sb.from('effects').insert({ id: `e-open-${tag}`, campaign_id: cid, target: 'x', ref: 'dndsu:spell:9', by: P.id });
+  check('игрок накладывает эффект от своего имени', !r.error, r.error?.message);
+  r = await P.sb.from('effects').insert({ id: `e-fake-${tag}`, campaign_id: cid, target: 'x', ref: 'dndsu:spell:9', by: M.id });
+  check('чужим именем эффект не наложить', !!r.error, r.error ? '' : 'запись прошла');
+  r = await M.sb.from('effects').insert({ id: `e-secret-${tag}`, campaign_id: cid, target: 'x', ref: 'example:curse', visible: false });
+  check('мастер накладывает тайный эффект', !r.error, r.error?.message);
+  r = await P.sb.from('effects').select('id').eq('campaign_id', cid);
+  check('игрок видит только открытый эффект', r.data?.length === 1 && r.data[0].id === `e-open-${tag}`, JSON.stringify(r.data || r.error).slice(0, 120));
+  r = await M.sb.from('effects').select('id').eq('campaign_id', cid);
+  check('мастер видит оба эффекта', r.data?.length === 2, JSON.stringify(r.data || r.error).slice(0, 120));
 } finally {
   const r = await M.sb.from('campaigns').delete().eq('id', cid);
   console.log(r.error ? `кампания ${cid} не удалена: ${r.error.message}` : `кампания ${cid} удалена`);
