@@ -41,7 +41,7 @@ async function until(pred, ms = 15000) { const t = Date.now(); while (Date.now()
 const M = await user(`Мастер-${tag}`), P = await user(`Игрок-${tag}`);
 try {
   // Кампания, сцена, приглашение без одобрения.
-  let r = await M.sb.from('campaigns').insert({ id: cid, owner_id: M.id, name: `Приёмка ${tag}`, data: { seats: 4 } });
+  let r = await M.sb.from('campaigns').insert({ id: cid, owner_id: M.id, name: `Приёмка ${tag}`, data: { seats: 4, activeSceneId: sid } });
   check('мастер создаёт кампанию', !r.error, r.error?.message);
   r = await M.sb.from('scenes').insert({ id: sid, campaign_id: cid, data: { name: 'Поляна' } });
   check('мастер создаёт сцену', !r.error, r.error?.message);
@@ -50,6 +50,19 @@ try {
   check('мастер создаёт приглашение', !r.error, r.error?.message);
   r = await P.sb.rpc('join_campaign', { p_code: code });
   check('игрок входит по приглашению', !r.error, r.error?.message);
+
+  // Тайное в сценах (20261106160000): закрытая сцена и потайная дверь не отдаются игроку.
+  r = await M.sb.from('scenes').insert({ id: `${sid}-x`, campaign_id: cid, data: { name: 'Логово', note: 'Засада', walls: [{ id: 'w1', a: { x: 0, y: 0 }, b: { x: 9, y: 0 }, kind: 'secret', lockDc: 18 }] } });
+  check('мастер готовит закрытую сцену', !r.error, r.error?.message);
+  r = await P.sb.from('scenes').select('id').eq('id', `${sid}-x`);
+  check('игрок не видит закрытую сцену', !r.error && r.data.length === 0, r.error?.message || `видно: ${r.data?.length}`);
+  r = await M.sb.from('campaigns').update({ data: { seats: 4, activeSceneId: `${sid}-x` } }).eq('id', cid);
+  check('мастер показывает сцену', !r.error, r.error?.message);
+  const shown = (await P.sb.from('scenes').select('data').eq('id', `${sid}-x`).maybeSingle()).data?.data;
+  check('игрок видит сцену без заметки и с дверью-стеной', shown && !('note' in shown) && shown.walls?.[0]?.kind === 'wall' && !('lockDc' in shown.walls[0]), JSON.stringify(shown?.walls?.[0] || null));
+  const hid = (await M.sb.from('scene_hidden').select('data').eq('scene_id', `${sid}-x`).single()).data?.data;
+  check('мастер читает скрытое', hid?.note === 'Засада' && hid?.walls?.w1?.kind === 'secret', JSON.stringify(hid));
+  r = await M.sb.from('campaigns').update({ data: { seats: 4, activeSceneId: sid } }).eq('id', cid);
 
   // Токены: открытый враг мастера и свой призыв игрока.
   r = await M.sb.from('tokens').insert({ id: `t-gob-${tag}`, campaign_id: cid, scene_id: sid, ord: 1, data: { kind: 'foe', name: 'Гоблин', x: 100, y: 100, hp: 7, hpMax: 7 } });
@@ -85,10 +98,10 @@ try {
   check('игрок видит степень ранения, а не хиты врага', !('hp' in seen2) && !('hpMax' in seen2) && seen2.wound === 'hurt', JSON.stringify({ hp: seen2.hp, wound: seen2.wound }));
   const ps = await P.sb.from('token_secrets').select('token_id').eq('campaign_id', cid);
   check('игрок не читает тайное токенов', !ps.error && ps.data.length === 0, ps.error?.message || `видно: ${ps.data?.length}`);
-  r = await M.sb.from('campaigns').update({ data: { seats: 4, settings: { playersSeeHp: 'exact' } } }).eq('id', cid);
+  r = await M.sb.from('campaigns').update({ data: { seats: 4, activeSceneId: sid, settings: { playersSeeHp: 'exact' } } }).eq('id', cid);
   const ex = (await P.sb.from('tokens').select('data').eq('id', `t-gob-${tag}`).single()).data?.data || {};
   check('«Точные числа» открывают игроку хиты врага', !r.error && ex.hp === 4, r.error?.message || `hp=${ex.hp}`);
-  await M.sb.from('campaigns').update({ data: { seats: 4 } }).eq('id', cid);
+  await M.sb.from('campaigns').update({ data: { seats: 4, activeSceneId: sid } }).eq('id', cid);
 
   // Бой: игрок пишет только своё точечной функцией, прямая правка строки — у мастера (аудит 04.11).
   r = await M.sb.from('combats').insert({ campaign_id: cid, data: { active: true, round: 1, turn: 0, current: `t-own-${tag}`, entries: [{ tokenId: `t-gob-${tag}`, init: 15 }, { tokenId: `t-own-${tag}`, init: null }], moved: {} } });

@@ -46,7 +46,7 @@ def concurrency_checks(psql, run):
       insert into public.campaigns(id,owner_id,name) values('c-race','{master}','Race');
       insert into public.campaign_members(campaign_id,user_id,role,status,character_id) values('c-race','{player}','player','active','ch-race');
       insert into public.characters(id,campaign_id,owner_id,data) values('ch-race','c-race','{player}','{{"hp":10,"hpMax":20,"tempHp":0,"conditions":[]}}');
-      insert into public.scenes(id,campaign_id) values('s-race','c-race');
+      insert into public.scenes(id,campaign_id,revealed) values('s-race','c-race',true);
     """)
     def call(version, operation, kind='adjust'):
         return f"select public.character_command('c-race','ch-race',{version},'{operation}','{kind}','" + ('{"hp":-1}' if kind == 'adjust' else '{}') + "');"

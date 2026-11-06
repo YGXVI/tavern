@@ -445,7 +445,7 @@ export function mountTable(root, cid) {
     const want = ctx.isMaster ? (ctx.sceneId && sceneOf(c, ctx.sceneId) ? ctx.sceneId : c.activeSceneId || c.scenes[0]?.id) : sceneIdFor(c, ctx.userId);
     if (want !== ctx.sceneId) {
       const fromScene = ctx.sceneId;
-      if (fromScene && !ctx.isMaster && want) ctx.panels.sceneTransition(sceneOf(c, want));
+      if (fromScene && !ctx.isMaster && want && sceneOf(c, want)) ctx.panels.sceneTransition(sceneOf(c, want));
       ctx.switchScene(want);
       return;
     }

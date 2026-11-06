@@ -53,6 +53,7 @@ select pg_temp.ok('мастер ставит приглашение', $q$insert 
 select pg_temp.ok('мастер добавляет героев', $q$insert into public.characters (id, campaign_id, data) values ('ch-p', 'c-rls', '{"name":"Лира","hp":10}'), ('ch-s', 'c-rls', '{"name":"Сид","hp":8}')$q$);
 select pg_temp.ok('мастер заводит героя второму игроку', $q$insert into public.characters (id, campaign_id, owner_id, data) values ('ch-q', 'c-rls', '00000000-0000-0000-0000-00000000000c', '{"name":"Торин","hp":12}')$q$);
 select pg_temp.ok('мастер создаёт сцену', $q$insert into public.scenes (id, campaign_id, data) values ('s-1', 'c-rls', '{"name":"Склеп","walls":[{"id":"w1","kind":"door","open":false,"locked":false},{"id":"w2","kind":"door","open":false,"locked":true},{"id":"w3","kind":"wall"}],"lights":[]}')$q$);
+select pg_temp.ok('мастер показывает сцену игрокам', $q$update public.campaigns set data = jsonb_set(data, '{activeSceneId}', '"s-1"') where id = 'c-rls'$q$);
 select pg_temp.ok('мастер пишет тайное сцены', $q$insert into public.scene_secrets (scene_id, campaign_id, data) values ('s-1', 'c-rls', '{"traps":[{"id":"tr1","dc":15}]}')$q$);
 select pg_temp.ok('мастер ставит токены', $q$insert into public.tokens (id, campaign_id, scene_id, character_id, hidden, ord, data) values
   ('t-gob', 'c-rls', 's-1', null, false, 1, '{"kind":"foe","name":"Гоблин","x":100,"y":100,"hp":7}'),
@@ -135,6 +136,40 @@ select pg_temp.ok('игрок рисует', $q$insert into public.drawings (id,
 select pg_temp.ok('игрок просит переход', $q$insert into public.portal_requests (id, campaign_id, author, data) values ('q-p', 'c-rls', '00000000-0000-0000-0000-00000000000b', '{"tokenId":"t-p"}')$q$);
 select pg_temp.cnt('игрок видит файл карты кампании', $q$select 1 from storage.objects where bucket_id = 'maps' and name like 'c-rls/%'$q$, 1);
 select pg_temp.err('игрок не загружает карты', $q$insert into storage.objects (bucket_id, name) values ('maps', 'c-rls/p.webp')$q$);
+reset role;
+
+-- ——— Тайное мастера в сценах (20261106160000) ———
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('сцены: мастер готовит закрытую сцену', $q$insert into public.scenes(id,campaign_id,data) values('s-closed','c-rls','{"name":"Логово","note":"Здесь засада","walls":[{"id":"w9","a":{"x":0,"y":0},"b":{"x":9,"y":0},"kind":"secret","locked":true,"lockDc":18,"name":"За гобеленом"},{"id":"w8","a":{"x":1,"y":1},"b":{"x":2,"y":2},"kind":"door","lockDc":12}]}')$q$);
+select pg_temp.ok('сцены: враг на закрытой сцене', $q$insert into public.tokens(id,campaign_id,scene_id,ord,data) values('t-closed','c-rls','s-closed',70,'{"kind":"foe","name":"Страж","x":1,"y":1}')$q$);
+select pg_temp.ok('сцены: рисунок на закрытой сцене', $q$insert into public.drawings(id,campaign_id,scene_id,ord,data) values('d-closed','c-rls','s-closed',1,'{}')$q$);
+select pg_temp.cnt('сцены: заметки и СЛ нет в строке', $q$select 1 from public.scenes where id='s-closed' and not data ? 'note' and data#>>'{walls,0,kind}'='wall' and not data->'walls'->0 ? 'lockDc' and not data->'walls'->0 ? 'name' and not data->'walls'->1 ? 'lockDc'$q$,1);
+select pg_temp.cnt('сцены: скрытое у мастера', $q$select 1 from public.scene_hidden where scene_id='s-closed' and data->>'note'='Здесь засада' and data#>>'{walls,w9,kind}'='secret' and data#>>'{walls,w9,lockDc}'='18' and data#>>'{walls,w8,lockDc}'='12'$q$,1);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('сцены: игрок не видит закрытую сцену', $q$select 1 from public.scenes where id='s-closed'$q$,0);
+select pg_temp.cnt('сцены: игрок видит открытую', $q$select 1 from public.scenes where id='s-1'$q$,1);
+select pg_temp.cnt('сцены: токены закрытой сцены скрыты', $q$select 1 from public.tokens where id='t-closed'$q$,0);
+select pg_temp.cnt('сцены: рисунки закрытой сцены скрыты', $q$select 1 from public.drawings where id='d-closed'$q$,0);
+select pg_temp.cnt('сцены: игрок не читает scene_hidden', $q$select 1 from public.scene_hidden$q$,0);
+select pg_temp.err('сцены: игрок не ставит токен на закрытую сцену', $q$insert into public.tokens(id,campaign_id,scene_id,owner_id,ord,data) values('t-sneak','c-rls','s-closed','00000000-0000-0000-0000-00000000000b',71,'{"kind":"custom","name":"Лазутчик"}')$q$);
+select pg_temp.rows('сцены: игрок не открывает сцену сам', $q$update public.scenes set revealed=true where id='s-closed'$q$,0);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.ok('сцены: мастер открывает, сделав текущей', $q$update public.campaigns set data=jsonb_set(data,'{activeSceneId}','"s-closed"') where id='c-rls'$q$);
+select pg_temp.ok('сцены: мастер возвращает прежнюю', $q$update public.campaigns set data=jsonb_set(data,'{activeSceneId}','"s-1"') where id='c-rls'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000b');
+select pg_temp.cnt('сцены: открытая сцена остаётся видна', $q$select 1 from public.scenes where id='s-closed' and data#>>'{walls,0,kind}'='wall'$q$,1);
+select pg_temp.cnt('сцены: и её токены видны', $q$select 1 from public.tokens where id='t-closed'$q$,1);
+select pg_temp.ok('сцены: игрок открывает обычную дверь — скрытое на месте', $q$update public.scenes set data=jsonb_set(data,'{walls,1,open}','true') where id='s-closed'$q$);
+reset role;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.cnt('сцены: после двери игрока скрытое цело', $q$select 1 from public.scene_hidden where scene_id='s-closed' and data#>>'{walls,w9,lockDc}'='18' and data->>'note'='Здесь засада'$q$,1);
+select pg_temp.ok('сцены: мастер отмечает дверь найденной', $q$update public.scenes set data=jsonb_set(data,'{walls,0}','{"id":"w9","a":{"x":0,"y":0},"b":{"x":9,"y":0},"kind":"secret","discovered":true,"locked":true,"lockDc":18,"name":"За гобеленом"}') where id='s-closed'$q$);
+select pg_temp.cnt('сцены: найденная дверь видна, СЛ по-прежнему скрыта', $q$select 1 from public.scenes where id='s-closed' and data#>>'{walls,0,kind}'='secret' and not data->'walls'->0 ? 'lockDc'$q$,1);
+select pg_temp.ok('сцены: мастер убирает сцену', $q$delete from public.scenes where id='s-closed'$q$);
+select pg_temp.cnt('сцены: скрытое удалено вместе со сценой', $q$select 1 from public.scene_hidden where scene_id='s-closed'$q$,0);
 reset role;
 
 -- ——— Бой и спасброски ———

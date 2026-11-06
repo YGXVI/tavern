@@ -200,6 +200,7 @@ async function loadAll() {
 const must = (r) => { if (r.error) throw r.error; return r.data; };
 
 const loading = new Map(); // cid → {events, n}: изменения, пришедшие, пока кампания грузится
+let hasSceneHidden = false; // таблица scene_hidden есть на сервере (миграция 20261106160000)
 let hasTokenSecrets = false; // таблица token_secrets есть на сервере (миграция 20261105170000)
 let hasCreatures = false; // таблица campaign_creatures есть на сервере (видно по первой загрузке)
 
@@ -215,13 +216,13 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
   let rows;
   try {
     const q = (t) => sb.from(t).select('*').eq('campaign_id', cid);
-    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures, tokenSecrets] = await Promise.all([
+    const [campaign, members, invite, characters, scenes, secrets, explored, tokens, drawings, log, saves, portals, combat, creatures, tokenSecrets, sceneHidden] = await Promise.all([
       sb.from('campaigns').select('*').eq('id', cid).maybeSingle(),
       q('campaign_members'), sb.from('campaign_invites').select('*').eq('campaign_id', cid).maybeSingle(),
       q('characters'), q('scenes'), q('scene_secrets'), q('scene_explored'), q('tokens'), q('drawings'),
       sb.from('log_entries').select('*').eq('campaign_id', cid).order('at', { ascending: false }).limit(120),
       q('save_requests'), q('portal_requests'), sb.from('combats').select('*').eq('campaign_id', cid).maybeSingle(),
-      q('campaign_creatures'), q('token_secrets'),
+      q('campaign_creatures'), q('token_secrets'), q('scene_hidden'),
     ]);
     const logRows = must(log);
     const ids = logRows.filter((e) => HIDDEN_VIS.has(e.vis)).map((e) => e.id);
@@ -234,6 +235,7 @@ export async function loadCampaign(cid, { silent = false, afterFailure = false }
       creatures: noTable(creatures.error) ? null : (hasCreatures = true, must(creatures)),
       // Тайное мастера в токенах: игроку RLS отдаёт пустой список; до миграции таблицы нет — токены как раньше.
       tokenSecrets: noTable(tokenSecrets.error) ? [] : (hasTokenSecrets = true, must(tokenSecrets)),
+      sceneHidden: noTable(sceneHidden.error) ? [] : (hasSceneHidden = true, must(sceneHidden)),
       master: must(members).some((m) => m.user_id === me && m.status === 'active' && m.role === 'master'),
     });
   } finally {
@@ -487,6 +489,10 @@ async function createCampaign(c) {
   if (!hasCreatures) {
     const probe = await sb.from('campaign_creatures').select('id').limit(1);
     if (!noTable(probe.error)) { must(probe); hasCreatures = true; }
+  }
+  if (!hasSceneHidden) {
+    const probe = await sb.from('scene_hidden').select('scene_id').limit(1);
+    if (!noTable(probe.error)) { must(probe); hasSceneHidden = true; }
   }
   if (!hasTokenSecrets) {
     const probe = await sb.from('token_secrets').select('token_id').limit(1);
@@ -756,6 +762,10 @@ function subscribe(cid) {
     ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'campaign_creatures' }, (p) => { if (p.old?.campaign_id === cid) onChange(cid, 'campaign_creatures', p); });
   }
   // Секреты токенов (только мастеру по RLS). Удаление приходит без фильтра — своё узнаём по ключу в кэше.
+  if (hasSceneHidden) {
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'scene_hidden', filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, 'scene_hidden', p));
+    ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'scene_hidden' }, (p) => { if (cache.get(cid)?.sceneHidden?.has(p.old?.scene_id)) onChange(cid, 'scene_hidden', p); });
+  }
   if (hasTokenSecrets) {
     ch.on('postgres_changes', { event: '*', schema: 'public', table: 'token_secrets', filter: `campaign_id=eq.${cid}` }, (p) => onChange(cid, 'token_secrets', p));
     ch.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'token_secrets' }, (p) => { if (cache.get(cid)?.tokenSecrets?.has(p.old?.token_id)) onChange(cid, 'token_secrets', p); });
@@ -793,6 +803,8 @@ function onChange(cid, table, p) {
     if (table === 'campaign_members' && row.user_id === me) { removed(cid); return; }
   }
   loading.get(cid)?.events.push({ table, type: p.eventType, row });
+  // Игроку открылась новая сцена: её токены и рисунки событиями не придут — они не менялись. Перечитываем кампанию.
+  const opened = table === 'scenes' && p.eventType !== 'DELETE' && !rows.master && !rows.scenes.has(row?.id);
   if (table === 'characters' && p.eventType !== 'DELETE') {
     rememberSheet(cid, row);
     if (pendingSheets.get(cid)?.get(row.id)) { scheduleAssemble(cid); return; }
@@ -804,6 +816,7 @@ function onChange(cid, table, p) {
     reapplyInflight(cid, rows, table, row);
   }
   if (table === 'campaign_members' && p.eventType !== 'DELETE' && !store.getDB().users[row.user_id]) loadProfiles().catch(() => {});
+  if (opened) loadCampaign(cid, { silent: true }).catch(() => {});
   scheduleAssemble(cid);
 }
 

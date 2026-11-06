@@ -27,6 +27,8 @@ export function emptyRows(withCreatures = false) {
     creatures: withCreatures ? new Map() : null,
     // Тайное мастера в токенах (20261105170000): секреты по token_id и список тайных полей каждого токена (_s).
     tokenSecrets: new Map(), tokenHeld: new Map(), master: false,
+    // Тайное мастера в сценах (20261106160000): {note, walls: {id: поля}} по scene_id.
+    sceneHidden: new Map(),
   };
 }
 
@@ -57,6 +59,31 @@ function putToken(rows, row, prev) {
   if (held.length) rows.tokenHeld.set(row.id, held); else rows.tokenHeld.delete(row.id);
   rows.tokens.set(row.id, viewToken(row, { master: rows.master, secret: rows.tokenSecrets.get(row.id), prev }));
 }
+// ——— Тайное мастера в сценах (аудит 04.11, #204) ———
+// Публичная строка: неоткрытая потайная дверь — обычная стена, без сложности замка и заметки мастера. Мастер видит
+// сцену целиком: скрытое подставляется поверх. Колонка revealed — серверная, в кэш не попадает: иначе строка, собранная
+// из кампании, не совпала бы с кэшем и каждое действие слало бы все сцены заново.
+const wallHidden = (w) => (w?.kind === 'secret' && !w.discovered ? (({ id, a, b, ...rest }) => rest)(w) : w?.lockDc !== undefined ? { lockDc: w.lockDc } : null);
+export function viewScene(row, { master = false, hidden = null, prev = null } = {}) {
+  if (!row) return row;
+  const { revealed, ...out } = row;
+  if (!master || !out.data) return out;
+  const src = hidden?.data || null, was = prev?.data;
+  const data = { ...out.data };
+  // Скрытое ещё не пришло событием — держим то, что мастер уже видел.
+  if (Array.isArray(data.walls)) data.walls = data.walls.map((w) => { const h = src ? src.walls?.[w.id] : wallHidden((was?.walls || []).find((x) => x.id === w.id)); return h ? { ...w, ...h } : w; });
+  const note = src ? src.note : was?.note;
+  if (note !== undefined) data.note = note;
+  return { ...out, data };
+}
+function putSceneHidden(rows, type, row) {
+  const k = row?.scene_id; if (k == null) return;
+  if (type === 'DELETE') { rows.sceneHidden.delete(k); return; }
+  rows.sceneHidden.set(k, row);
+  const s = rows.scenes.get(k);
+  if (rows.master && s) rows.scenes.set(k, viewScene(s, { master: true, hidden: row }));
+}
+
 /** Секрет токена пришёл или изменился: мастер подставляет тайные поля в уже лежащий токен. */
 function putTokenSecret(rows, type, row) {
   const k = row?.token_id; if (k == null) return;
@@ -369,8 +396,10 @@ export function applyChange(rows, table, type, row) {
   if (table === 'campaign_invites') { rows.invite = type === 'DELETE' ? null : row; return rows; }
   if (table === 'combats') { rows.combat = type === 'DELETE' ? null : row; return rows; }
   if (table === 'token_secrets') { putTokenSecret(rows, type, row); return rows; }
+  if (table === 'scene_hidden') { putSceneHidden(rows, type, row); return rows; }
   const m = rows[map[table]]; if (!m) return rows;
   const k = (keyOf[table] || ((r) => r.id))(row);
+  if (table === 'scenes' && type !== 'DELETE') { m.set(k, viewScene(row, { master: rows.master, hidden: rows.sceneHidden.get(k), prev: m.get(k) })); return rows; }
   if (table === 'tokens') {
     if (type === 'DELETE') { m.delete(k); rows.tokenHeld?.delete(k); rows.tokenSecrets?.delete(k); }
     else putToken(rows, row, m.get(k));
@@ -403,10 +432,11 @@ export function rowsFrom(server) {
   const put = (m, list, key = (r) => r.id) => { for (const r of list || []) m.set(key(r), r); };
   put(rows.members, server.members, (r) => r.user_id);
   put(rows.characters, server.characters);
-  put(rows.scenes, server.scenes);
+  rows.master = !!server.master;
+  put(rows.sceneHidden, server.sceneHidden, (r) => r.scene_id);
+  for (const s of server.scenes || []) rows.scenes.set(s.id, viewScene(s, { master: rows.master, hidden: rows.sceneHidden.get(s.id) }));
   put(rows.secrets, server.secrets, (r) => r.scene_id);
   put(rows.explored, server.explored, (r) => r.scene_id);
-  rows.master = !!server.master;
   put(rows.tokenSecrets, server.tokenSecrets, (r) => r.token_id);
   for (const t of server.tokens || []) putToken(rows, t, null);
   put(rows.drawings, server.drawings);
