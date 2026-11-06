@@ -225,7 +225,7 @@ function monsterRoll(ctx,b){
  if(!t||!(ctx.isMaster||ctx.owns?.(t)))return; // свой призыв бросает и владелец (TASK-183)
  const m=tokenMonster(ctx,t);if(!m)return;
  const kind=b.dataset.roll,vis=poolVis(ctx,!!t.hidden),who=ctx.nameOf?ctx.nameOf(t):t.name;
- if(kind==='minit'){const init=Number.isSafeInteger(t.initBonus)?t.initBonus:m.init;if(Number.isSafeInteger(init))doRoll(ctx,{label:`${who}: инициатива`,dice:{20:1},mod:init,vis});return;}
+ if(kind==='minit'){const init=Number.isSafeInteger(t.initBonus)?t.initBonus:m.init;if(Number.isSafeInteger(init))doRoll(ctx,{label:`${who}: инициатива`,dice:{20:1},mod:init,adv:conditionRoll(t,{kind:'check',ability:'dex'}).adv,vis});return;}
  if(kind==='mcheck'||kind==='msave'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(!ab)return;
   const mod=abilityModifier(m.stats?.[ab.id]),bonus=kind==='msave'&&Number.isSafeInteger(m.saves?.[ab.id])?m.saves[ab.id]:mod;
   if(bonus===null){ctx.toast('Характеристика неизвестна: бросок не выполнен');return;}

@@ -11,6 +11,7 @@ import { copy, fieldValue, setField, parseField, sheetLevel, sheetBonus, sheetIn
 import { abilityModifier, sheetProficiency, spellNumbers } from './sheet-rules.js';
 import { validateSheetStatblock } from './sheet-creature.js';
 import { newSheetDialog } from './sheet-new.js';
+import { conditionRoll } from './effects-roll.js';
 import { storeImage, resolveSrc, srcOf } from '../../core/assets.js';
 import { applyZeroHp, archiveLocalCharacter, restoreLocalCharacter } from './sheet-lifecycle.js';
 import { readCharacter } from './sheet-model.js';
@@ -144,7 +145,10 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
       persist();return false;
     } finally {busy=false;if(!dead)render();}
   }
-  function roll(value,label,kind) { if(value==null)return ctx.toast('Бонус неизвестен: уточните поле'); if(archived||!active()||((draft.profile||'pc')!=='pc'&&!control()))return;doRoll(ctx,{label:`${draft.name}: ${label}`,dice:{20:1},mod:value,...(kind?{kind}:{}),vis:poolVis(ctx)}); }
+  function roll(value,label,kind,ability) { if(value==null)return ctx.toast('Бонус неизвестен: уточните поле'); if(archived||!active()||((draft.profile||'pc')!=='pc'&&!control()))return;
+    const plan=conditionRoll(draft,{kind:kind==='attack'?'attack':kind==='save'||/спасбросок/i.test(label)?'save':'check',what:label,ability});
+    if(plan.autoFail){ctx.toast({title:`${draft.name}: автопровал`,body:plan.why.join(', '),icon:'alert-circle'});return;}
+    doRoll(ctx,{label:`${draft.name}: ${label}`,dice:{20:1},mod:value,adv:plan.adv,...(kind?{kind}:{}),vis:poolVis(ctx)}); }
   function hpDialog(kind) {
     if(!control()||busy||pending)return;
     const m=modal(`<div class="panel-section"><h3>${kind==='damage'?'Урон':'Лечение'}</h3><label>Количество <input data-amount inputmode="numeric" autofocus></label><p data-error role="alert"></p><button class="btn btn-primary" data-ok>Применить к черновику</button><button class="btn" data-close>Отмена</button></div>`);
@@ -270,10 +274,10 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
     if(b.hasAttribute('data-archive')){await archive();return;}
     if(b.dataset.rest){restDialog(b.dataset.rest);return;}
     if(b.dataset.hp){hpDialog(b.dataset.hp);return;}
-    if(b.dataset.ability){const a=ABILITIES.find(a=>a.id===b.dataset.ability);roll(abilityModifier(draft.stats?.[a.id]),a.name);return;}
-    if(b.dataset.check){const kind=b.dataset.check,def=(kind==='saves'?ABILITIES:SKILLS).find(a=>a.id===b.dataset.id);roll(sheetBonus(draft,kind,def.id,def.ab||def.id).value,def.name,kind==='saves'?'save':undefined);return;}
+    if(b.dataset.ability){const a=ABILITIES.find(a=>a.id===b.dataset.ability);roll(abilityModifier(draft.stats?.[a.id]),a.name,undefined,a.id);return;}
+    if(b.dataset.check){const kind=b.dataset.check,def=(kind==='saves'?ABILITIES:SKILLS).find(a=>a.id===b.dataset.id);roll(sheetBonus(draft,kind,def.id,def.ab||def.id).value,def.name,kind==='saves'?'save':undefined,def.ab||def.id);return;}
     if(b.hasAttribute('data-death')){if(dirty()){ctx.toast('Сначала сохраните или отмените черновик');return;}if(control()&&ctx.panels?.deathSave)ctx.panels.deathSave(id);else roll(0,'спасбросок от смерти','save');return;}
-    if(b.hasAttribute('data-init')){roll(sheetInitiative(draft),'инициатива');return;}
+    if(b.hasAttribute('data-init')){roll(sheetInitiative(draft),'инициатива',undefined,'dex');return;}
     if(b.dataset.attack!==undefined){const a=draft.attacks[Number(b.dataset.attack)];roll(attackBonus(draft,a),a.name,'attack');return;}
     if(b.dataset.damage!==undefined){const a=draft.attacks[Number(b.dataset.damage)],f=parseFormula(a.damage);if(f&&!archived&&active()&&((draft.profile||'pc')==='pc'||control()))doRoll(ctx,{label:`${draft.name}: ${a.name} — урон`,...f,vis:poolVis(ctx)});else ctx.toast('Уточните формулу урона или права управления');}
   }

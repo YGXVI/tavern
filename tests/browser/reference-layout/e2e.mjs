@@ -20,7 +20,7 @@ async function audit(label) {
     return {pageWidth:document.documentElement.scrollWidth,vw:innerWidth,over,squeezed};
   }); reports.push({label,...report});
   if(report.over.length||report.squeezed.length||report.pageWidth>report.vw+2)console.log('LAYOUT',label,JSON.stringify(report));
-  if(/^(1440|390)-/.test(label))await page.screenshot({path:`/tmp/ref-layout/${label}.png`});
+  if(/^(1440|390)-/.test(label))await page.screenshot({path:`/tmp/ref-layout/${label}.png`,timeout:10000}).catch(e=>console.log('NO SCREENSHOT',label,e.message.split('\n')[0]));
 }
 try {
  await page.goto(base+'#/ref');await page.locator('.ref-home').waitFor();
@@ -33,7 +33,8 @@ try {
    const colorFilter = page.locator('button.rx-color-chip').first();
    if(await colorFilter.count()) {
     await colorFilter.click();await audit(`${width}-${section.id}-filtered`);
-    assert.equal(await page.locator('button.rx-color-chip[aria-pressed="true"]').count(),1);
+    await page.locator('button.rx-color-chip[aria-pressed="true"]').first().waitFor({timeout:5000});
+    assert.equal(await page.locator('button.rx-color-chip[aria-pressed="true"]').count(),1,`${width}-${section.id}: one color filter`);
    }
    await page.goto(base+'#/ref/'+section.id+'/'+encodeURIComponent(section.long));await audit(`${width}-${section.id}-card`);
    await page.goto(base+'#/ref/'+section.id+'?view=table');await audit(`${width}-${section.id}-table`);
@@ -118,7 +119,8 @@ try {
     return {top:r.top,bottom:r.bottom,height:innerHeight,footerBottom:f.bottom,bodyHeight:body.clientHeight,bodyScroll:body.scrollHeight};
    });
    assert.ok(geometry.top>=0 && geometry.bottom<=height+1 && geometry.footerBottom<=height+1 && geometry.bodyHeight>40,JSON.stringify({section:section.id,width,height,geometry}));
-   if(section.id==='creatures')assert.equal(await page.locator('[data-place]').count(),isMaster?1:0);
+   if(section.id==='creatures'&&isMaster)await page.locator('[data-place]').first().waitFor({timeout:5000});
+   if(section.id==='creatures')assert.equal(await page.locator('[data-place]').count(),isMaster?1:0,`${width}x${height}: place button`);
    await page.locator('.ref-modal [data-close]').click();
   }
  }
