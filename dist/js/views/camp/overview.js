@@ -10,13 +10,13 @@ import { local, updateLocal } from './local.js';
 import { encounters } from './encounters.js';
 import { difficulty } from './encounter-math.js';
 import { monsterById } from '../../data/bestiary.js';
-import { ic, cardHead, party, partyRow, levelsLine, slotsText, openHandout, handoutIcon } from './parts.js';
+import { ic, paint, cardHead, party, partyRow, levelsLine, slotsText, openHandout, handoutIcon } from './parts.js';
 import { handoutsModal } from './handouts.js';
 
 export function mountTab(ctx, body) {
   const offs = [];
   const L = (type, sel, fn) => offs.push(on(body, type, sel, fn));
-  const render = () => { body.innerHTML = String(ctx.master ? master(ctx) : player(ctx)); };
+  const render = () => { paint(body, ctx.master ? master(ctx) : player(ctx)); };
 
   L('click', '[data-next]', () => editNext(ctx));
   L('click', '[data-intro]', () => editIntro(ctx));

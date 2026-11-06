@@ -10,7 +10,7 @@ import { encounters, encounterById, saveEncounter, newEncounter, deleteEncounter
 import { difficulty, LABELS } from './encounter-math.js';
 import { xpFor } from '../ref/data.js';
 import { loadSection, search, norm } from '../ref/data.js';
-import { ic, caps } from './parts.js';
+import { ic, paint, caps } from './parts.js';
 
 const CHIP = ['chip-pos', 'chip-accent', 'chip-warn', 'chip-neg'];
 
@@ -33,7 +33,7 @@ export function mountTab(ctx, body) {
       const c = ctx.c, list = encounters(c.id, ctx.user.id);
       if (!sel || !list.some((e) => e.id === sel)) sel = list[0]?.id || null;
       const enc = sel ? encounterById(c.id, ctx.user.id, sel) : null;
-      body.innerHTML = String(html`<div class="cp-enc">
+      paint(body, html`<div class="cp-enc">
         <aside class="cp-enc-list"><div class="cp-enc-head"><h2>Встречи</h2><span class="spacer"></span><button class="btn btn-secondary btn-sm" data-new>${ic('plus-sign')}Новая</button></div>
           ${list.map((e) => { const d = diffOf(e); const sc = sceneOf(c, e.sceneId); return html`<a class="cp-enc-item ${e.id === sel ? 'current' : ''}" href="${ctx.href('encounters', e.id)}"><span class="row"><b>${e.name}</b><span class="spacer"></span><span class="chip ${CHIP[d.level] || ''}">${d.label}</span></span><small>${d.count} ${d.count === 1 ? 'существо' : d.count < 5 && d.count > 1 ? 'существа' : 'существ'} · ${sc?.name || 'без сцены'}</small></a>`; })}
           ${!list.length ? html`<p class="t-sm muted">Встреч пока нет. Соберите первую — сложность для отряда посчитаем сами.</p>` : ''}

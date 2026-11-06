@@ -4,7 +4,7 @@
 import { html, raw, on, esc, plural } from '../../core/dom.js';
 import { confirmDialog } from '../../ui/kit.js';
 import { readBook, writeNote, deleteNote, canEdit, canDelete, authorName, authorColor, fmtDate } from './book-store.js';
-import { ic } from './parts.js';
+import { ic, paint } from './parts.js';
 
 const TYPES = [['h', 'Заголовок'], ['p', 'Текст'], ['q', 'Цитата']];
 const HINT = { h: 'Заголовок', p: 'Что хотите записать…', q: 'Чьи-то слова, надпись, строка из письма' };
@@ -44,7 +44,7 @@ export function mountTab(ctx, body, tools) {
   function renderFlow() {
     const c = ctx.c, notes = readBook(c).notes;
     const n = notes.length;
-    flow.innerHTML = String(html`<section class="bk-title-page">
+    paint(flow, html`<section class="bk-title-page">
         <small class="bk-caps">книга кампании</small><h1>${c.name}</h1><span class="bk-orn">✦</span>
         <p>${n ? `${n} ${plural(n, 'заметка', 'заметки', 'заметок')} · пишут все за столом` : 'Пустые страницы. Вписывайте что угодно — что случилось, имена, догадки, цитаты. Видят все за столом.'}</p>
       </section>

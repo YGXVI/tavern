@@ -158,7 +158,8 @@ export function mountTable(root, cid) {
     return isVisible(ctx.vision(), ctx.posOf(t), ctx.scene);
   };
   // Имя для игроков: мастер может скрыть имя существа («Неизвестное существо»).
-  ctx.nameOf = (t, st = tokenStats(ctx.c, t)) => (!ctx.isMasterView && t.nameHidden && t.kind !== 'hero' ? 'Неизвестное существо' : st.name);
+  // Герой на карте — под своим коротким именем, если игрок или мастер его задал (mapName, #203); лист не меняется.
+  ctx.nameOf = (t, st = tokenStats(ctx.c, t)) => (t.characterId && t.mapName ? t.mapName : !ctx.isMasterView && t.nameHidden && t.kind !== 'hero' ? 'Неизвестное существо' : st.name);
   // Отношение существа: враг, нейтрал, союзник; «скрытый враг» игрокам виден союзником.
   ctx.dispositionOf = (t) => {
     if (t.kind === 'hero' || t.kind === 'item') return t.kind;

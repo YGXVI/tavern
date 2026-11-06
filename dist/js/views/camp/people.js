@@ -4,12 +4,12 @@ import { commit, isServerMode } from '../../core/store.js';
 import { userById, updateCampaign, addLog, characterOf } from '../../core/campaign.js';
 import { confirmDialog, menu, userAvatar, portrait } from '../../ui/kit.js';
 import { go } from '../screens.js';
-import { ic, caps, party, heroSub } from './parts.js';
+import { ic, paint, caps, party, heroSub } from './parts.js';
 
 export function mountTab(ctx, body, tools, tab) {
   const offs = [];
   const L = (type, sel, fn) => offs.push(on(body, type, sel, fn));
-  const render = () => { body.innerHTML = String(tab === 'settings' ? settings(ctx) : heroes(ctx, tab === 'heroes')); };
+  const render = () => { paint(body, tab === 'settings' ? settings(ctx) : heroes(ctx, tab === 'heroes')); };
 
   L('click', '[data-accept]', (e, b) => {
     const c = ctx.c; const players = c.members.filter((x) => x.role === 'player' && x.status === 'active').length;

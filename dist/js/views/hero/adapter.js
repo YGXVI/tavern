@@ -229,7 +229,7 @@ export function toHeroView(ch, ctx = {}) {
     subtitle: [classText, race, background].filter(Boolean).join(' · '),
     summary: [race, classText].filter(Boolean).join(' · '),
     fullTitle: [race, classText, ...classes.map((c) => c.sub).filter(Boolean), background, str(s.alignment)].filter(Boolean).join(' · '),
-    race, background, alignment: str(s.alignment), pronoun: '',
+    race, background, alignment: str(s.alignment), pronoun: '', profile: str(s.profile) || 'pc',
     classes, level, xp: { now: num(s.xp), next: XP_NEXT[Math.min(19, Math.max(0, level - 1))] },
     player: ctx.ownerName || '', isMine: !!ctx.userId && (s.ownerId === ctx.userId || ctx.isMine === true),
     campaign: ctx.campaign || null,

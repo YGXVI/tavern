@@ -366,7 +366,7 @@ button.cp-map { cursor: pointer; }
   box-shadow: 0 34px 60px -20px rgb(0 0 0 / .7), 0 4px 0 -1px #d7c69f, 0 8px 0 -3px #c9b78f, 0 12px 0 -5px #b9a67c; }
 /* Ленточка-закладка у корешка */
 .bk-book::after { content: ""; position: absolute; top: -4px; left: calc(50% + 28px); width: 14px; height: calc(100% + 34px); background: linear-gradient(90deg, #7c1f17, #a83226); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 9px), 0 100%); box-shadow: 0 2px 4px rgb(0 0 0 / .3); pointer-events: none; z-index: 1; opacity: .92; }
-.bk-pages { position: absolute; inset: var(--bk-top) 0 var(--bk-bottom); overflow: hidden; }
+.bk-pages { position: absolute; inset: var(--bk-top) 0 var(--bk-bottom); overflow: hidden; overflow: clip; }
 .bk-flow { height: 100%; columns: 2; column-gap: calc(var(--bk-pad) * 2); column-fill: auto; padding: 0 var(--bk-pad); transition: transform .45s cubic-bezier(.3, .7, .2, 1); }
 .bk-pnum { position: absolute; bottom: 26px; transform: translateX(-50%); font: 400 13px/1 var(--bk-serif); color: var(--bk-ink2); }
 .bk-pnum.left { left: 25%; } .bk-pnum.right { left: 75%; }

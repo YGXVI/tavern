@@ -7,6 +7,16 @@ import { userById } from '../../core/campaign.js';
 import { portrait, modal, panelHeader } from '../../ui/kit.js';
 
 export const ic = (n, s = 16) => raw(icon(n, s));
+/**
+ * Перерисовать узел, только если разметка изменилась (#203, «на скролле прыгает»): данные кампании и присутствие
+ * за столом меняются каждые несколько секунд, а одинаковая перерисовка пересоздаёт картинки и сбивает страницу.
+ */
+export function paint(el, markup) {
+  const s = String(markup);
+  if (el.__painted === s) return false;
+  el.__painted = s; el.innerHTML = s;
+  return true;
+}
 export const caps = (t) => html`<span class="cp-caps">${t}</span>`;
 export const cardHead = (title, right = '') => html`<div class="cp-card-head">${caps(title)}<span class="cp-rule"></span>${right}</div>`;
 

@@ -345,15 +345,19 @@ function otherDrawer(v) {
 }
 
 // «…» листа: другие виды, повышение, кампания; на столе — ещё «Все поля» (подробный редактор Яры) и «Открыть полностью».
+// Меню «…» листа (#203: было до девяти пунктов). Портрет меняется нажатием на портрет, классический лист и «Новый
+// уровень» — кнопки в шапке страницы. На столе (opts.edit) — открыть лист целиком, править, новый уровень; подробный
+// редактор полей стола — только у листов спутников и существ, у героя его заменяет «Править героя».
 function sheetMenu(v, anchor, opts) {
   const [cid] = String(v.id).split('~');
+  const table = !!opts.edit;
   const a = (href, icon, label) => html`<a class="menu-item" href="${href}">${ic(icon, 16)}${label}</a>`;
-  const pop = popover(html`<div class="menu">${opts.edit ? html`<button class="menu-item" data-menu-edit>${ic('pencil-edit-02', 16)}Все поля листа</button>${a(`#/hero/${v.id}`, 'maximize-01', 'Открыть полностью')}` : ''}
-    ${v.live && v.canEdit ? a(`#/hero/${v.id}/edit`, 'pencil-edit-02', 'Править героя') : ''}${a(`#/hero/${v.id}/classic/1`, 'pen-tool-01', 'Классический лист')}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${cid && v.live && !v.lib ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}${v.live && v.isMine !== false ? a(`#/hero/${v.id}/bring`, 'arrow-right-02', v.lib ? 'Привести в кампанию' : 'Привести в другую кампанию') : ''}
-    ${v.live && v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item" data-menu-portrait>${ic('image-add-01', 16)}Сменить портрет</button><button class="menu-item danger" data-menu-delete>${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' });
+  const items = table
+    ? html`${a(`#/hero/${v.id}`, 'maximize-01', 'Открыть лист целиком')}${v.live && v.canEdit ? a(`#/hero/${v.id}/edit`, 'pencil-edit-02', 'Править героя') : ''}${v.canLevelUp ? a(`#/hero/${v.id}/levelup/hp`, 'arrow-up-01', 'Новый уровень') : ''}${v.profile && v.profile !== 'pc' ? html`<button class="menu-item" data-menu-edit>${ic('note-edit', 16)}Все поля листа</button>` : ''}`
+    : html`${cid && v.live && !v.lib ? a(`#/camp/${cid}`, 'home-01', `Кампания «${v.campaign?.name || ''}»`) : ''}${v.live && v.isMine !== false ? a(`#/hero/${v.id}/bring`, 'arrow-right-02', v.lib ? 'Привести в кампанию' : 'Привести в другую кампанию') : ''}`;
+  const pop = popover(html`<div class="menu">${items}${v.live && v.canEdit ? html`<span class="menu-sep"></span><button class="menu-item danger" data-menu-delete>${ic('delete-02', 16)}Удалить героя</button>` : ''}</div>`, anchor, { placement: 'auto' });
   pop.node.addEventListener('click', (e) => {
     if (e.target.closest('[data-menu-edit]')) { closePopover(); opts.edit?.(); }
-    if (e.target.closest('[data-menu-portrait]')) { closePopover(); portraitModal(v); }
     if (e.target.closest('[data-menu-delete]')) { closePopover(); deleteHero(v); }
   });
 }

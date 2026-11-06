@@ -662,13 +662,46 @@ function ownTokenItems(ctx, t, anchor) {
   const upd = (label, fn) => updOwn(ctx, t.id, label, fn);
   return [
     statless(t) ? { icon: 'first-aid-kit', label: 'Статы…', onClick: () => statsPrompt(ctx, t.id) } : null,
-    { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) },
     { icon: 'flag-02', label: 'Союзность…', onClick: () => menu(DISPOSITIONS.map(([v, l]) => ({ icon: (t.disposition || 'friendly') === v ? 'tick-02' : 'circle', label: l, onClick: () => upd('Союзность', (x) => { x.disposition = v; }) })), anchor, { placement: 'right' }) },
     { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) },
     { icon: 'edit-02', label: 'Имя…', onClick: () => renameOwn(ctx, t.id) },
-    { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, [t.id]) },
-    'divider',
   ].filter(Boolean);
+}
+
+/**
+ * Меню в два уровня (#203): main — частое, more — под «Ещё…» на том же месте (с «Назад»), tail — внизу (удаление).
+ * Если редкого один пункт — он остаётся в основном меню, без лишнего шага.
+ */
+function twoLevelMenu(main, more, tail, anchor, opts) {
+  const rare = more.filter(Boolean), first = main.filter(Boolean);
+  const open = () => {
+    const items = rare.length > 1 ? [...first, { icon: 'more-horizontal', label: 'Ещё…', onClick: () => menu([{ icon: 'arrow-left-01', label: 'Назад', onClick: open }, 'divider', ...rare], anchor, { placement: opts.placement }) }] : [...first, ...rare];
+    if (tail.length) items.push('divider', ...tail);
+    menu(items, anchor, opts);
+  };
+  open();
+}
+
+/**
+ * Имя героя на карте (#203, sol0139): короткое имя у токена — на плашке, в бою и бросках стола; лист не меняется.
+ * Пусто или как в листе — имя из листа. Поле токена mapName (docs/data.md).
+ */
+export function renameHeroOnMap(ctx, id, anchor) {
+  const t = ctx.scene?.tokens.find((x) => x.id === id);
+  if (!t?.characterId) return;
+  const sheetName = characterOf(ctx.c, t.characterId)?.name || '';
+  const box = popover(`<div class="pick-pop rename-pop"><div class="panel-section"><div class="field"><label>Имя на карте</label><div class="input"><input data-name maxlength="24" value="${esc(t.mapName || sheetName)}" placeholder="${esc(sheetName)}"></div></div>
+    <p class="muted rename-note">Лист не меняется: там остаётся «${esc(sheetName)}». Пусто — имя из листа.</p>
+    <div class="row"><span class="spacer"></span><button class="btn btn-sm btn-ghost" data-close>Отмена</button><button class="btn btn-sm btn-primary" data-ok>Сохранить</button></div></div></div>`, anchor, { placement: 'right' });
+  const inp = box.node.querySelector('[data-name]'); inp.focus(); inp.select();
+  const ok = () => {
+    const v = inp.value.trim();
+    editFields(ctx, [id], 'Имя на карте', (x) => { if (v && v !== sheetName) x.mapName = v; else delete x.mapName; });
+    closePopover();
+  };
+  box.node.querySelector('[data-ok]').addEventListener('click', ok);
+  box.node.querySelector('[data-close]')?.addEventListener('click', () => closePopover());
+  inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') closePopover(); });
 }
 
 /** Статы своего токена (план TASK-097, «Статы своего токена через ПКМ»): хиты, КД, скорость, бонус инициативы. */
@@ -762,47 +795,53 @@ export function contextMenu(ctx, target, w, screen) {
     if (t.pending && !ctx.isMasterView) { menu(pendingItems(ctx, t), anchor, { placement: 'right' }); return; }
     if (!ctx.ui.selection.has(t.id)) ctx.select([t.id]);
     const ids = [...ctx.ui.selection];
+    const stats = (ids.length === 1 || !ctx.isMasterView) && canEditStats(ctx, t);
+    const opts = { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null };
+    const hero = !!t.characterId;
+    const sheet = { icon: 'book-open-01', label: hero ? 'Лист героя' : 'Статблок', href: hero ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) };
+    const aim = { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) };
     if (ctx.isMasterView) {
-      const items = [
+      // Частое — сверху; настройки, зрение, езда, копии — под «Ещё…» (#203: меню было на 16 пунктов).
+      const main = [
         ...(ids.length === 1 ? pendingItems(ctx, t) : []),
-        { icon: 'first-aid-kit', label: 'Хиты…', onClick: () => hpEditor(ctx, ids, anchor) },
+        stats ? null : { icon: 'first-aid-kit', label: 'Хиты…', onClick: () => hpEditor(ctx, ids, anchor) },
         { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, ids, anchor) },
-        { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
-        ...(ids.length === 1 ? sightMenuItems(ctx, t, anchor) : []),
+        ids.length === 1 ? sheet : null,
+        aim,
         { icon: 'sword-03', label: ctx.c.combat.active ? (ctx.c.combat.entries.some((e) => e.tokenId === t.id) ? 'Убрать из боя' : 'Добавить в бой') : 'Начать бой с выделенными', onClick: () => ctx.panels.combatToggle(ids) },
         ...(ctx.c.combat.active ? packItems(ctx, t, ids) : []),
-        ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
-        'divider',
+        { icon: t.hidden ? 'view' : 'view-off', label: t.hidden ? 'Показать игрокам' : 'Скрыть от игроков', hint: 'H', onClick: () => toggleHidden(ctx, ids) },
+      ];
+      const more = [
         t.ownerId ? { icon: 'user', label: `${t.summonedBy ? 'Призыв' : 'Токен'} игрока: ${userById(t.ownerId)?.name || 'вышел из кампании'}`, disabled: true } : null,
+        ids.length === 1 && hero ? { icon: 'edit-02', label: 'Имя на карте…', onClick: () => renameHeroOnMap(ctx, t.id, anchor) } : null,
         { icon: 'settings-01', label: 'Настройки токена…', onClick: () => tokenSettings(ctx, t.id, anchor) },
         // Своя картинка существа (#190 E): у героя — портрет из листа, у предмета — значок.
-        ids.length === 1 && !t.characterId && t.kind !== 'item' ? { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) } : null,
-        t.characterId ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
-        { icon: 'book-open-01', label: t.characterId ? 'Лист героя' : 'Статблок', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) },
-        !t.characterId ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
-        !t.characterId ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
-        { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) },
-        'divider',
-        { icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) },
-      ].filter(Boolean);
-      const stats = ids.length === 1 && canEditStats(ctx, t);
-      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
+        ids.length === 1 && !hero && t.kind !== 'item' ? { icon: 'image-01', label: 'Картинка…', onClick: () => setTokenImage(ctx, t.id) } : null,
+        hero ? { icon: 'view', label: 'Смотреть глазами', onClick: () => ctx.setViewAs(t.characterId) } : null,
+        ...(ids.length === 1 ? sightMenuItems(ctx, t, anchor) : []),
+        ...(ids.length === 1 ? ridingItems(ctx, t, anchor, menu) : []),
+        !hero ? { icon: 'copy-01', label: 'Дублировать', onClick: () => duplicateTokens(ctx, ids) } : null,
+        !hero ? { icon: 'copy-link', label: 'Копировать', hint: 'Ctrl C', onClick: () => copyTokens(ctx, ids) } : null,
+      ];
+      twoLevelMenu(main, more, [{ icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, ids) }], anchor, opts);
     } else {
-      const own = ctx.owns(t);
-      const items = [
+      const own = ctx.owns(t) && !hero, mine = ctx.isMine(t);
+      const main = [
         ...pendingItems(ctx, t),
+        mine || (own && t.monsterId) ? sheet : null,
+        mine || own ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
+        mine ? { icon: 'edit-02', label: 'Имя на карте…', onClick: () => renameHeroOnMap(ctx, t.id, anchor) } : null,
+        !mine ? aim : null,
+      ];
+      const more = [
         ...(own ? ownTokenItems(ctx, t, anchor) : []),
-        own && t.monsterId ? { icon: 'book-open-01', label: 'Статблок', onClick: () => ctx.panels.openSheetFor(t) } : null,
         ...ridingItems(ctx, t, anchor, menu),
-        ctx.isMine(t) ? { icon: 'book-open-01', label: 'Лист героя', href: t.characterId ? `#/c/${ctx.cid}/sheet/${encodeURIComponent(t.characterId)}` : undefined, onClick: () => ctx.panels.openSheetFor(t) } : null,
-        ctx.isMine(t) ? { icon: 'sparkles', label: 'Состояния…', onClick: () => conditionPicker(ctx, [t.id], anchor) } : null,
-        !ctx.isMine(t) ? { icon: 'target-02', label: ctx.ui.targets?.has(t.id) ? 'Снять цель' : 'Отметить целью', onClick: () => toggleTarget(ctx, t.id) } : null,
         ctx.ui.targets?.size ? { icon: 'cancel-01', label: 'Снять все мои цели', onClick: () => clearTargets(ctx) } : null,
         { icon: 'location-01', label: 'Пинг', onClick: () => ctx.ping(t.x, t.y) },
         { icon: 'ruler', label: 'Измерить отсюда', onClick: () => { ctx.setTool('measure', 'ruler'); ctx.ui.ruler = { pts: [{ x: t.x, y: t.y }, { x: t.x, y: t.y }], label: '' }; } },
-      ].filter(Boolean);
-      const stats = canEditStats(ctx, t);
-      menu(items, anchor, { placement: 'right', className: stats ? 'menu-stats' : '', header: stats ? statsBlock(ctx, t) : '', onOpen: stats ? (n) => bindStats(ctx, n) : null });
+      ];
+      twoLevelMenu(main, more, own ? [{ icon: 'delete-02', label: 'Удалить', hint: 'Del', danger: true, onClick: () => deleteTokens(ctx, [t.id]) }] : [], anchor, opts);
     }
     return;
   }

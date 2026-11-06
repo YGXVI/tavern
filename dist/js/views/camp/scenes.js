@@ -7,7 +7,7 @@ import { campaignsFor, roleIn, updateCampaign, addLog } from '../../core/campaig
 import { modal, panelHeader, menu, confirmDialog, toast } from '../../ui/kit.js';
 import { gridDims } from '../../rules/geometry.js';
 import { appHeader, bindHeader, workshopSwitch } from '../screens.js';
-import { ic } from './parts.js';
+import { ic, paint } from './parts.js';
 
 /** Подгрузить картинки idb:/sb: в <img data-ref> и фон [data-bgref]. */
 export function hydrate(root) {
@@ -30,7 +30,7 @@ export function mountTab(ctx, body) {
   const L = (type, sel, fn) => offs.push(on(body, type, sel, fn));
   const render = () => {
     const c = ctx.c;
-    body.innerHTML = String(html`<div class="cp-toolbar"><span class="chip chip-accent">Все · ${c.scenes.length}</span><span class="spacer"></span>
+    paint(body, html`<div class="cp-toolbar"><span class="chip chip-accent">Все · ${c.scenes.length}</span><span class="spacer"></span>
         <button class="btn btn-secondary btn-sm" data-from-maps>${ic('maps')}Из Мастерской</button><a class="btn btn-primary btn-sm" href="#/c/${c.id}/do/new-scene">${ic('plus-sign')}Новая сцена</a></div>
       <div class="cp-scenes">${c.scenes.map((s) => {
         const active = s.id === c.activeSceneId;
