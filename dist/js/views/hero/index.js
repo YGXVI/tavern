@@ -12,7 +12,7 @@
 import { html, raw, on } from '../../core/dom.js';
 import { currentUser } from '../../core/auth.js';
 import { appHeader, bindHeader } from '../screens.js';
-import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, heroActions, startCreation, uploadPortrait, loadLssFile, dropLss, bringTargets } from './contract.js';
+import { heroList, heroView, creationView, creationLive, creationDone, lssImportView, lssError, heroActions, startCreation, uploadPortrait, loadLssFile, dropLss, bringTargets } from './contract.js';
 import { srcOf } from '../../core/assets.js';
 import { ic, chip, caps, pathRow, iconCard, artCard, liveSheet, bottomBar, summaryHero, segmented } from './parts.js';
 import { stepBody, stepGave, bindStepExtras } from './steps.js';
@@ -55,10 +55,10 @@ export function mountHero(root, hash) {
   function mountInto() {
     if (p0 === 'heroes') { page(heroesPage()); cleanup.push(bindHeroes(L)); return; }
     if (p1 === 'new' && !p2) { const qp = new URLSearchParams(query); if (qp.get('c')) startCreation(qp.get('c')); page(pathPage(qp)); bindPath(L, qp); return; }
-    if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({ heroId: 'lira' })); return; }
+    if (p1 === 'new' && p2 === 'done') { page(donePage()); L('click', '[data-act]', (e, b) => heroActions[b.dataset.act]?.({})); return; }
     if (p1 === 'new') { page(stepPage(p2), 'wizard'); bindStep(root, L, p2, rerender); return; }
     if (p1 === 'quick') { const q = creationView().quick; if (q && !q.built && creationDone()) heroActions.choose({ step: 'quick', id: 'role', value: q.picked.role }); page(quickPage(p2 || '1'), 'wizard'); bindQuick(root, L, p2 || '1'); return; }
-    if (p1 === 'import') { page(importPage()); bindImport(root, L); return; }
+    if (p1 === 'import') { const c = new URLSearchParams(query).get('c') || ''; page(importPage(c)); bindImport(root, L, c); return; }
     // Лист, лист на карте и повышение уровня — отдельными модулями, они крупные.
     const mod = p2 === 'levelup' ? import('./levelup.js') : import('./sheet.js');
     mod.then((m) => { if (alive) m.mount(root, { parts, query, page, L, user }); });
@@ -130,7 +130,7 @@ export const previewNote = () => html`<p class="h-preview-note">${ic('informatio
 function pathPage(qp) {
   const cv = creationView();
   const sel = ['steps', 'quick', 'lss'].find((k) => qp.has(k)) || draft.path || 'steps';
-  const start = { steps: ['#/hero/new/race', 'Начать пошагово'], quick: ['#/hero/quick/1', 'Начать быстро'], lss: ['#/hero/import', 'Загрузить файл'] }[sel];
+  const start = { steps: ['#/hero/new/race', 'Начать пошагово'], quick: ['#/hero/quick/1', 'Начать быстро'], lss: [`#/hero/import${qp.get('c') ? `?c=${encodeURIComponent(qp.get('c'))}` : ''}`, 'Загрузить файл'] }[sel];
   return html`<main class="page h-path-page">
     <div class="h-center"><h1>Как приведёте героя?</h1><p class="muted">Мастер «${cv.campaign.name}» ждёт героя ${cv.campaign.level} уровня. Выберите, как удобнее его собрать.</p></div>
     <div class="h-grid3 paths">${cv.paths.map((p) => iconCard(p, { selected: p.id === sel, attr: 'data-path', cls: 'path' }))}</div>
@@ -166,6 +166,8 @@ function bindStep(root, L, stepId, rerender) {
     const id = b.dataset.pick;
     draft[stepId] = id; saveDraft(); heroActions.choose({ step: stepId, id });
     selectIn(root, '[data-pick]', 'data-pick', id);
+    // Выборы расы и класса (прибавки, навыки, подкласс) лежат под карточками — показываем первый незаполненный.
+    root.querySelector('.h-extra.need')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   bindStepExtras(root, L, stepId, draft, saveDraft, rerender);
 }
@@ -264,39 +266,46 @@ export function pickPortrait(done) {
 
 // ——— 72 · Перенос из Long Story Short ———
 // Файл выбирают здесь же; разбор — lss.js (contract.loadLssFile), перенос — в кампанию игрока (contract.importLss).
-function importPage() {
-  const v = lssImportView();
-  const camp = creationView().campaign?.name || '';
+function importPage(prefer = '') {
+  const v = lssImportView(prefer);
   if (!v) {
+    const err = lssError();
     return html`<main class="page h-import"><section class="h-import-main"><h1>Перенести героя из Long Story Short</h1>
-      <p class="muted">В LSS откройте лист героя → «Экспорт» → сохраните файл .json и перетащите его сюда. Характеристики, навыки, хиты, атаки, заклинания и сумка перенесутся; что не совпадёт — покажем.</p>
-      <label class="h-drop" data-drop><input type="file" accept=".json,application/json" data-lss-file hidden>${ic('upload-01', 28)}<b>Перетащите файл .json</b><small>или нажмите, чтобы выбрать</small></label>
+      <p class="muted">В LSS откройте лист героя → «Экспорт» → сохраните файл .json и перетащите его сюда. Характеристики, навыки, хиты, атаки, ячейки, умения и сумка перенесутся; что ляжет не так, как в LSS, — покажем.</p>
+      <label class="h-drop ${err ? 'bad' : ''}" data-drop><input type="file" accept=".json,application/json" data-lss-file hidden>${ic(err ? 'alert-circle' : 'upload-01', 28)}<b>${err ? 'Этот файл не подошёл' : 'Перетащите файл .json'}</b>
+        ${err ? html`<small class="h-drop-err" role="alert">${err.file ? `${err.file}: ` : ''}${err.text}</small>` : ''}<small>${err ? 'Перетащите другой или нажмите, чтобы выбрать' : 'или нажмите, чтобы выбрать'}</small></label>
       <div class="h-import-foot"><a class="btn btn-ghost" href="#/heroes">Отменить</a></div></section></main>`;
   }
   const h = v.hero;
   const initials = h.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
-  const issue = (x) => html`<article class="h-issue ${x.kind}"><span class="h-sq ${x.kind}">${ic(x.kind === 'error' ? 'cancel-01' : 'alert-circle', 18)}</span><div><b>${x.title}</b><p>${x.text}</p></div></article>`;
+  const issue = (x) => html`<article class="h-issue ${x.kind}"><span class="h-sq ${x.kind}">${ic(x.kind === 'error' ? 'cancel-01' : x.kind === 'info' ? 'information-circle' : 'alert-circle', 18)}</span><div><b>${x.title}</b><p>${x.text}</p></div></article>`;
+  const t = v.target, look = v.issues.filter((x) => x.kind !== 'info').length;
+  const where = !v.targets.length ? html`<p class="h-import-where muted">${ic('information-circle', 16)}Героя некуда перенести: войдите в кампанию по приглашению мастера.</p>`
+    : html`<label class="h-import-where"><span>${caps('В кампанию')}</span><select class="input" data-lss-camp>${v.targets.map((c) => html`<option value="${c.id}" ${c.id === v.campaignId ? raw('selected') : ''}>${c.name}${c.free ? ' — сядете за стол' : c.master ? ' — вы мастер' : ''}</option>`)}</select></label>`;
+  const dup = t?.dup ? html`<article class="h-issue warn"><span class="h-sq warn">${ic('copy-01', 18)}</span><div><b>${h.name} уже есть в «${t.name}»</b><p>Перенесём ещё одним листом, прежний останется. Если хотели обновить героя — старый лист удалите сами.</p></div></article>` : '';
   return html`<main class="page h-import">
     <section class="h-import-main"><h1>Перенесли лист из Long Story Short</h1>
-      <p class="muted">${v.issues.length ? `Почти всё совпало. Посмотрите ${v.issues.length === 1 ? 'одно место' : `${v.issues.length} места`}, где файл и наши правила расходятся, — поправить можно и потом, в листе.` : 'Всё совпало — можно переносить.'}</p>
+      <p class="muted">${look ? `Посмотрите ${look === 1 ? 'одно место' : `${look} ${look < 5 ? 'места' : 'мест'}`}, где файл и наши правила расходятся, — поправить можно и потом, в листе.` : 'Всё совпало — можно переносить.'}</p>
       <div class="h-ok-bar">${ic('tick-02', 18)}<span><b>Совпало ${v.matched.ok} из ${v.matched.of}</b><small>${v.matched.text}</small></span></div>
       ${v.issues.map(issue)}
-      <div class="h-import-foot"><button class="btn btn-ghost" data-lss-drop>Другой файл</button><span class="spacer"></span><button class="btn btn-primary" data-accept>${ic('arrow-right-02')}${camp ? `Перенести в «${camp}»` : 'Перенести'}</button></div>
+      ${where}${dup}
+      <div class="h-import-foot"><button class="btn btn-ghost" data-lss-drop>Другой файл</button><span class="spacer"></span><button class="btn btn-primary" data-accept ${t ? '' : raw('disabled')}>${ic('arrow-right-02')}${t ? `${t.dup ? 'Перенести ещё раз' : 'Перенести'} в «${t.name}»` : 'Перенести'}</button></div>
     </section>
     <aside class="h-import-card"><img class="h-import-art" src="${h.portrait}" alt=""><h2>${h.name}</h2><small class="muted">${v.summary}</small>
       <div class="h-import-stats">${[['Хп', h.hpMax], ['КД', h.ac ?? '—'], ['Ур.', h.level]].map(([k, n]) => html`<span>${caps(k)}<b>${n}</b></span>`)}</div>
-      <div class="h-import-token"><span class="h-initials sm">${initials}</span><small>Портрет и токен — арт класса; другой выберете в листе</small></div>
+      <div class="h-import-token"><span class="h-initials sm">${initials}</span><small>${v.avatar ? 'Портрет в LSS лежит по ссылке на их сервере — его не берём. Пока арт класса, свой выберете в листе.' : 'Портрет и токен — арт класса; другой выберете в листе'}</small></div>
       <small class="h-file">${ic('note-edit', 14)}${v.file}</small></aside>
   </main>`;
 }
-function bindImport(root, L) {
+function bindImport(root, L, prefer = '') {
   const take = (f) => { if (f) loadLssFile(f); };
   L('change', '[data-lss-file]', (e, t) => take(t.files?.[0]));
   L('dragover', '[data-drop]', (e, b) => { e.preventDefault(); b.classList.add('over'); });
   L('dragleave', '[data-drop]', (e, b) => b.classList.remove('over'));
   L('drop', '[data-drop]', (e) => { e.preventDefault(); take(e.dataTransfer?.files?.[0]); });
   L('click', '[data-lss-drop]', () => dropLss());
-  L('click', '[data-accept]', () => heroActions.importLss({}));
+  L('change', '[data-lss-camp]', (e, t) => heroActions.lssCampaign({ campaignId: t.value }));
+  L('click', '[data-accept]', () => heroActions.importLss({ campaignId: lssImportView(prefer)?.campaignId }));
 }
 
 export { segmented, artCard, raw };

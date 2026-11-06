@@ -52,9 +52,20 @@ export function legacySpells(text, sp = spellIndex()) {
   }
   return out;
 }
-// Языки конструктора — английскими названиями SRD.
-const LANG = { common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великанский', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий', abyssal: 'Бездны', celestial: 'Небесный', draconic: 'Драконий', 'deep speech': 'Глубинная речь', infernal: 'Инфернальный', primordial: 'Первичный', sylvan: 'Сильван', undercommon: 'Подземный' };
+// Языки конструктора — английскими названиями SRD (и секретные языки классов: друидический, воровской жаргон).
+const LANG = { common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великанский', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий', abyssal: 'Бездны', celestial: 'Небесный', draconic: 'Драконий', 'deep speech': 'Глубинная речь', 'deep-speech': 'Глубинная речь', infernal: 'Инфернальный', primordial: 'Первичный', sylvan: 'Сильван', undercommon: 'Подземный', druidic: 'Друидический', "thieves' cant": 'Воровской жаргон', 'thieves’ cant': 'Воровской жаргон', 'thieves-cant': 'Воровской жаргон' };
 const ruLangs = (t) => t.split(/,\s*/).map((x) => LANG[x.trim().toLowerCase()] || x.trim()).filter(Boolean).join(', ');
+// Инструменты и оружие конструктора (строки «Инструменты: Lute, Bagpipes», «Crossbow, light») — русскими названиями
+// снаряжения SRD: сначала длинные имена, чтобы «Crossbow, light» не распалось на два.
+const enNames = new WeakMap();
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/['’]/g, "['’]");
+function ruGear(t, gear) {
+  let out = String(t || '');
+  if (!gear || !/[A-Za-z]/.test(out)) return out;
+  if (!enNames.has(gear)) enNames.set(gear, [...gear.byId.values()].filter((g) => g.en && g.ru && g.en !== g.ru).sort((a, b) => b.en.length - a.en.length));
+  for (const g of enNames.get(gear)) if (out.toLowerCase().includes(g.en.toLowerCase().slice(0, 4))) out = out.replace(new RegExp(`(^|[^A-Za-z])${esc(g.en)}(?![A-Za-z])`, 'gi'), (m, pre) => pre + g.ru);
+  return out;
+}
 const legacyList = (text) => String(text || '').split(/[,\n]+/).map((x) => x.trim().replace(/\.$/, '')).filter(Boolean);
 
 /**
@@ -111,10 +122,14 @@ export function toHeroView(ch, ctx = {}) {
 
   // Заклинания.
   const sources = r.spellSources || [];
-  const src0 = sources[0];
-  const castAb = src0?.ability || classById(s.classId)?.spell || null;
+  const src0 = sources.find((x) => x?.ability) || sources[0];
+  // Без источника магии у героя из конструктора магии нет (паладин и следопыт 1 уровня); у старого листа — по классу,
+  // а половинным заклинателям — со 2 уровня.
+  const cls0 = classById(s.classId);
+  const castAb = src0?.ability || (s.creation || (['paladin', 'ranger'].includes(cls0?.id) && num(r.level, 1) < 2) ? null : cls0?.spell) || null;
   const castMod = castAb ? am(castAb) : 0;
-  const dc = castAb ? 8 + prof + castMod : null, atk = castAb ? prof + castMod : null;
+  const dcSet = Number.isFinite(src0?.dcOverride) ? src0.dcOverride : null, atkSet = Number.isFinite(src0?.attackOverride) ? src0.attackOverride : null;
+  const dc = castAb ? dcSet ?? 8 + prof + castMod : null, atk = castAb ? atkSet ?? prof + castMod : null;
   const known = r.knownSpells?.length ? r.knownSpells : legacySpells(r.spells.legacyText, sp);
   const spells = known.map((k) => {
     const e = sp.byId.get(k.ref), p = sp.ref[k.ref] || [];
@@ -188,7 +203,7 @@ export function toHeroView(ch, ctx = {}) {
   };
   // Подсказки «откуда число» у атак оружием — по ключу строки.
   for (const row of actions.action) if (row.explain && row.explain.includes(' = ')) { explain[`atk.${row.id}`] = row.explain; row.explain = `atk.${row.id}`; }
-  if (spellcasting) explain.dc = `СЛ ${dc} = 8 + ${spellcasting.ability} ${signed(castMod)} + мастерство ${signed(prof)}`;
+  if (spellcasting) explain.dc = dcSet != null ? `СЛ ${dc} — записано на листе` : `СЛ ${dc} = 8 + ${spellcasting.ability} ${signed(castMod)} + мастерство ${signed(prof)}`;
   for (const a of abilities) explain[`save.${a.key}`] = `к20 ${a.save} = ${a.name} ${a.mod}${a.saveProf ? ` + мастерство ${signed(prof)}` : ''}`;
 
   const conditions = (r.conditions || []).map((id) => ({ id, name: CONDITIONS.find((c) => c.id === id)?.name || id }));
@@ -227,7 +242,7 @@ export function toHeroView(ch, ctx = {}) {
     traits: [],
     proficiencies: {
       armor: { light: /лёгк|легк/.test(pt), medium: /средн/.test(pt), heavy: /тяж/.test(pt), shield: /щит/.test(pt) }, weapons: { simple: /просто/.test(pt), martial: /воинск/.test(pt), other: /оружие:[^\n]*(кинжал|рапир|арбалет|лук|меч|посох|дротик|праща|булав)/.test(pt) },
-      languages: ruLangs(str(s.proficiencies?.languages)) || '—', tools: str(s.proficiencies?.tools) || '—', weaponsText: '',
+      languages: ruLangs(str(s.proficiencies?.languages)) || '—', tools: ruGear(str(s.proficiencies?.tools), gear) || '—', weaponsText: ruGear(str(s.proficiencies?.weapons), gear),
     },
     personality: {
       traits: str(pers.traits), ideals: str(pers.ideals), bonds: str(pers.bonds), flaws: str(pers.flaws),

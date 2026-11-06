@@ -153,13 +153,13 @@ function magicTab(v, { narrow = false } = {}) {
 function skillsTab(v, { narrow = false, ask = false } = {}) {
   let skills = v.skills;
   if (local.search) skills = skills.filter((s) => s.name.toLowerCase().includes(local.search));
-  const row = (s) => html`<button class="s-skill ${ask && s.name === 'Внимательность' ? 'asked' : ''}" data-roll="${s.name}|к20 ${s.mod}"><i class="${s.prof}"></i><span>${s.name}</span><small>${s.ab}</small><b>${s.mod}</b>${ic('dice-faces-06', 14)}</button>`;
+  const row = (s) => html`<button class="s-skill ${ask && s.name === 'Восприятие' ? 'asked' : ''}" data-roll="${s.name}|к20 ${s.mod}"><i class="${s.prof}"></i><span>${s.name}</span><small>${s.ab}</small><b>${s.mod}</b>${ic('dice-faces-06', 14)}</button>`;
   const half = Math.ceil(skills.length / 2);
-  const askBox = ask ? html`<section class="s-ask"><div class="s-ask-head">${ic('crown', 16)}<span><b>Мастер просит: Внимательность</b><small>Проверка Мудрости. Результат увидит только мастер.</small></span></div><button class="btn btn-primary btn-block" data-roll="Внимательность · для мастера|к20 + 1">${ic('dice-faces-06', 16)}Бросить: к20 + 1</button></section>` : '';
-  const body = narrow ? html`<div class="s-group">${caps('Навыки')}<small>пассивная Внимательность ${v.vitals.passive.perception}</small></div><div class="s-col tight">${skills.map(row)}</div>`
+  const askBox = ask ? html`<section class="s-ask"><div class="s-ask-head">${ic('crown', 16)}<span><b>Мастер просит: Восприятие</b><small>Проверка Мудрости. Результат увидит только мастер.</small></span></div><button class="btn btn-primary btn-block" data-roll="Восприятие · для мастера|к20 + 1">${ic('dice-faces-06', 16)}Бросить: к20 + 1</button></section>` : '';
+  const body = narrow ? html`<div class="s-group">${caps('Навыки')}<small>пассивное Восприятие ${v.vitals.passive.perception}</small></div><div class="s-col tight">${skills.map(row)}</div>`
     : html`<div class="s-group">${caps('Навыки')}<small>клик — бросок</small></div><div class="s-cols tight"><div class="s-col">${skills.slice(0, half).map(row)}</div><div class="s-col">${skills.slice(half).map(row)}</div></div>`;
   const saves = html`<div class="s-group">${caps('Спасброски')}<small>золотые — владеет</small></div><div class="s-saves">${v.abilities.map((a) => html`<button class="s-save ${a.saveProf ? 'prof' : ''}" data-roll="Спасбросок: ${a.name}|к20 ${a.save}" ${a.saveProf ? raw(`data-explain="save.${a.key}"`) : ''}><small>${a.short}</small>${a.save}</button>`)}</div>
-    <div class="s-group">${caps('Пассивные')}<small>для скрытых проверок мастера</small></div><div class="s-passive">${[['Внимательность', v.vitals.passive.perception], ['Проницательность', v.vitals.passive.insight], ['Анализ', v.vitals.passive.investigation]].map(([k, n]) => html`<span><small>${k}</small><b>${n}</b></span>`)}</div>`;
+    <div class="s-group">${caps('Пассивные')}<small>для скрытых проверок мастера</small></div><div class="s-passive">${[['Восприятие', v.vitals.passive.perception], ['Проницательность', v.vitals.passive.insight], ['Анализ', v.vitals.passive.investigation]].map(([k, n]) => html`<span><small>${k}</small><b>${n}</b></span>`)}</div>`;
   return html`${askBox}${body}${narrow ? '' : saves}`;
 }
 
@@ -169,7 +169,7 @@ function bagTab(v) {
   const item = (it) => html`<div class="s-item"><span class="s-act-ic">${ic(rowIcon(it.icon), 18)}</span><span class="t"><b>${it.name}</b><small>${it.sub}</small></span>${it.tag ? html`<span class="h-mini-chip ${it.tag === 'Новое' ? 'accent' : 'gold'}">${it.tag}</span>` : ''}<small class="qty">×${it.qty}</small>
     ${v.live && it.wearable && it.id ? html`<button class="btn btn-ghost btn-sm" data-equip="${it.id}">${it.equipped ? 'Снять' : 'Надеть'}</button>` : ''}${v.live && it.id && !it.id.startsWith('legacy-') ? html`<button class="icon-btn icon-btn-sm" data-unpack="${it.id}" aria-label="Убрать один">${ic('minus-sign', 14)}</button>` : ''}</div>`;
   return html`<div class="s-bag-top"><span class="s-pill"><small>груз</small><b>${inv.load.now} / ${inv.load.max} фнт</b></span><span class="s-pill"><small>зм</small><b>${inv.coins.gp}</b></span><span class="s-pill"><small>см</small><b>${inv.coins.sp}</b></span><span class="s-pill"><small>мм</small><b>${inv.coins.cp}</b></span>${v.live ? html`<button class="btn btn-ghost btn-sm" data-coins>${ic('edit-02', 14)}Монеты</button>` : ''}<span class="spacer"></span><button class="btn btn-secondary btn-sm" data-add-item>${ic('plus-sign', 14)}Добавить</button></div>
-    <div class="s-group">${caps('Надето и в руках')}<small>влияет на атаки и КД</small></div><div class="s-items on">${inv.equipped.length ? inv.equipped.map(item) : html`<p class="s-none">Ничего не надето — КД без доспехов.</p>`}</div>
+    <div class="s-group">${caps('Надето и в руках')}<small>влияет на атаки и КД</small></div><div class="s-items on">${inv.equipped.length ? inv.equipped.map(item) : html`<p class="s-none">${/записано на листе/.test(v.explain?.ac || '') ? `Ничего не надето — КД ${v.vitals.ac.value} записан на листе вручную.` : 'Ничего не надето — КД без доспехов.'}</p>`}</div>
     <div class="s-group">${caps('В рюкзаке')}<small>${inv.pack.length} ${inv.pack.length === 1 ? 'предмет' : 'предметов'}</small></div><div class="s-items">${inv.pack.length ? inv.pack.map(item) : html`<p class="s-none">Рюкзак пуст.</p>`}</div>`;
 }
 
