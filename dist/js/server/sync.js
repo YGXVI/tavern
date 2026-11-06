@@ -82,9 +82,28 @@ export async function submitCharacterCommand(request) {
 export async function createHeroSheet(cid, { characterId, operationId, data }, claim = false) {
   if (!sb || !me) throw new SheetCommandError('forbidden');
   await whenSynced(cid);
-  const result = await sheets.create({ campaignId: cid, characterId, operationId, data, claim });
+  const checked = await viaBuildCheck('create', { p_campaign: cid, p_character: characterId, p_operation: operationId, p_payload: data, p_claim: claim });
+  const result = checked.ok ? checked.data : await sheets.create({ campaignId: cid, characterId, operationId, data, claim });
   await loadCampaign(cid);
-  return result;
+  return { ...result, verified: !!checked.ok, buildErrors: checked.errors || [] };
+}
+
+/**
+ * Проверка сборки сервером (P4b): Edge Function считает сборку заново и сама вызывает команду листа. Функции нет, нет связи
+ * или сервер отказал — обычная команда: сборка останется «проверена в браузере», а ошибку команды получит вызывающий.
+ * Повтор безопасен: у команды тот же ID операции. Возвращает {ok, data} или {ok: false, errors?}.
+ */
+let buildCheckRpc = true;
+async function viaBuildCheck(kind, args) {
+  if (!buildCheckRpc) return { ok: false };
+  try {
+    const { data, error } = await sb.functions.invoke('validate-build', { body: { kind, args } });
+    if (!error) return { ok: true, data };
+    const status = error.context?.status;
+    if (status === 422) return { ok: false, errors: (await error.context.json().catch(() => ({}))).errors || [] };
+    if (status === 404) buildCheckRpc = false;
+  } catch (e) { console.warn('Проверка сборки недоступна', e); }
+  return { ok: false };
 }
 
 /**
@@ -96,9 +115,10 @@ export async function levelUpHeroSheet(cid, characterId, { operationId, payload 
   await whenSynced(cid);
   const meta = characterSheetMeta(cid, characterId);
   if (!meta) throw new SheetCommandError('unavailable');
-  const result = await sheets.levelUp({ campaignId: cid, characterId, version: meta.version, operationId, payload });
+  const checked = payload.creation ? await viaBuildCheck('level_up', { p_campaign: cid, p_character: characterId, p_expected_version: Number(meta.version), p_operation: operationId, p_payload: payload }) : { ok: false };
+  const result = checked.ok ? checked.data : await sheets.levelUp({ campaignId: cid, characterId, version: meta.version, operationId, payload });
   await loadCampaign(cid);
-  return result;
+  return { ...result, verified: !!checked.ok, buildErrors: checked.errors || [] };
 }
 
 /** Создание отдельного экземпляра; ID сохраняется вызывающим до ответа для безопасного повтора. */

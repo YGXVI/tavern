@@ -234,6 +234,7 @@ export function toHeroView(ch, ctx = {}) {
     player: ctx.ownerName || '', isMine: !!ctx.userId && (s.ownerId === ctx.userId || ctx.isMine === true),
     campaign: ctx.campaign || null,
     status: s.creation ? 'ready' : 'ready',
+    verified: s.creation?.verified || null, // 'server' — сборку пересчитал сервер (P4b), 'client' — только браузер
     vitals: {
       hp, ac: { value: ac, note: acKnown ? '' : acCalc.note }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
       size: 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },

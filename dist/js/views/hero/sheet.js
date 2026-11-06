@@ -55,7 +55,7 @@ function sheetHead(v, mode) {
     ? html`<button class="s-portrait edit ${v.isMine === false ? 'other' : ''}" data-portrait aria-label="Сменить портрет" title="Сменить портрет"><img src="${v.portrait}" alt=""><span class="s-portrait-edit">${ic('image-add-01', 14)}</span></button>`
     : html`<span class="s-portrait ${v.isMine === false ? 'other' : ''}"><img src="${v.portrait}" alt=""></span>`;
   return html`<header class="s-head">${back}${pic}
-    <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}${mode !== 'drawer' && v.campaign?.name ? html`<span class="s-camp">${ic('home-01', 12)}${v.campaign.name}</span>` : ''}</small></span>
+    <span class="s-who"><b class="s-name" title="${v.name}" data-fullname>${v.name}</b><small>${v.subtitle}${v.live && v.verified && mode !== 'drawer' ? ` · ${v.verified === 'server' ? 'сборка проверена сервером' : 'сборка не проверена сервером'}` : ''}${mode !== 'drawer' && v.campaign?.name ? html`<span class="s-camp">${ic('home-01', 12)}${v.campaign.name}</span>` : ''}</small></span>
     <span class="spacer"></span>
     ${mode === 'drawer' ? html`<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${ic('cancel-01', 18)}</button>`
       : mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`

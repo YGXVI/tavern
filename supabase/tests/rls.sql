@@ -138,6 +138,28 @@ select pg_temp.cnt('игрок видит файл карты кампании',
 select pg_temp.err('игрок не загружает карты', $q$insert into storage.objects (bucket_id, name) values ('maps', 'c-rls/p.webp')$q$);
 reset role;
 
+-- ——— Пометка проверки сборки (P4b, 20261106170000) ———
+reset role;
+insert into public.build_check_key(id, key_hash) values (true, encode(sha256('верный-ключ'::bytea), 'hex')) on conflict (id) do update set key_hash = excluded.key_hash;
+select pg_temp.login('00000000-0000-0000-0000-00000000000a');
+select pg_temp.cnt('сборка: ключ не читается', $q$select 1 from pg_catalog.pg_class where relname='build_check_key' and has_table_privilege('authenticated', oid, 'select')$q$,0);
+select pg_temp.err('сборка: функция ключа закрыта', $q$select public.build_check_ok()$q$);
+select pg_temp.ok('сборка: подделка verified прямой вставкой', $q$insert into public.characters(id,campaign_id,data) values('ch-fake','c-rls','{"name":"Лжец","creation":{"verified":"server","levelHistory":[]}}')$q$);
+select pg_temp.cnt('сборка: без ключа пометка client', $q$select 1 from public.characters where id='ch-fake' and data#>>'{creation,verified}'='client'$q$,1);
+select set_config('request.headers','{"x-build-check":"чужой-ключ"}',true);
+select pg_temp.ok('сборка: неверный ключ', $q$insert into public.characters(id,campaign_id,data) values('ch-fake2','c-rls','{"name":"Лжец","creation":{"verified":"server"}}')$q$);
+select pg_temp.cnt('сборка: неверный ключ — client', $q$select 1 from public.characters where id='ch-fake2' and data#>>'{creation,verified}'='client'$q$,1);
+select set_config('request.headers','{"x-build-check":"верный-ключ"}',true);
+select pg_temp.ok('сборка: верный ключ', $q$insert into public.characters(id,campaign_id,data) values('ch-good','c-rls','{"name":"Честный","creation":{"levelHistory":[]}}')$q$);
+select pg_temp.cnt('сборка: верный ключ — server', $q$select 1 from public.characters where id='ch-good' and data#>>'{creation,verified}'='server'$q$,1);
+select set_config('request.headers','',true);
+select pg_temp.ok('сборка: обычная правка листа', $q$update public.characters set data=data||'{"hp":5}' where id='ch-good'$q$);
+select pg_temp.cnt('сборка: правка без смены сборки не снимает пометку', $q$select 1 from public.characters where id='ch-good' and data#>>'{creation,verified}'='server'$q$,1);
+select pg_temp.ok('сборка: смена сборки без ключа', $q$update public.characters set data=jsonb_set(data,'{creation,levelHistory}','[1]') where id='ch-good'$q$);
+select pg_temp.cnt('сборка: новая сборка без ключа — client', $q$select 1 from public.characters where id='ch-good' and data#>>'{creation,verified}'='client'$q$,1);
+select pg_temp.ok('сборка: убрать за собой', $q$delete from public.characters where id in ('ch-fake','ch-fake2','ch-good')$q$);
+reset role;
+
 -- ——— Тайное мастера в сценах (20261106160000) ———
 select pg_temp.login('00000000-0000-0000-0000-00000000000a');
 select pg_temp.ok('сцены: мастер готовит закрытую сцену', $q$insert into public.scenes(id,campaign_id,data) values('s-closed','c-rls','{"name":"Логово","note":"Здесь засада","walls":[{"id":"w9","a":{"x":0,"y":0},"b":{"x":9,"y":0},"kind":"secret","locked":true,"lockDc":18,"name":"За гобеленом"},{"id":"w8","a":{"x":1,"y":1},"b":{"x":2,"y":2},"kind":"door","lockDc":12}]}')$q$);

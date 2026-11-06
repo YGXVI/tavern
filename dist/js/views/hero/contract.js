@@ -331,11 +331,20 @@ async function placeHero(c, data, { title }) {
   const hero = structuredClone(data);
   const m = membership(c, userId);
   const seat = m?.role === 'player' && !m.characterId;
+  let unchecked = false;
   try {
-    if (isServerMode()) { const sync = await import('../../server/sync.js'); await sync.createCharacterSheet(c.id, { ...hero, id, ownerId: userId }); }
-    else updateCampaign(c.id, (camp) => { camp.characters.push({ ...hero, id, ownerId: userId }); });
+    if (isServerMode()) {
+      const sync = await import('../../server/sync.js');
+      // Герой из конструктора — командой создания с проверкой сборки (P4b). Правленый вручную команду может не пройти:
+      // тогда он приходит обычным листом, с пометкой «сборка не проверена сервером».
+      if (hero.creation) {
+        const { id: _id, ownerId: _owner, version: _v, managed: _m, controllers: _c, archivedAt: _a, ...body } = hero;
+        try { unchecked = !(await sync.createHeroSheet(c.id, { characterId: id, operationId: crypto.randomUUID(), data: body })).verified; }
+        catch (e) { if (e?.kind !== 'validation') throw e; unchecked = true; await sync.createCharacterSheet(c.id, { ...hero, id, ownerId: userId }); }
+      } else await sync.createCharacterSheet(c.id, { ...hero, id, ownerId: userId });
+    } else updateCampaign(c.id, (camp) => { camp.characters.push({ ...hero, id, ownerId: userId }); });
   } catch (e) { say(`${title} не удалось`, e?.message || 'Сервер не принял героя.', 'alert-circle'); return null; }
-  say(`${hero.name} — в «${c.name}»`, seat ? 'Садитесь за стол.' : 'Лист открыт.', 'tick-02');
+  say(`${hero.name} — в «${c.name}»`, `${seat ? 'Садитесь за стол.' : 'Лист открыт.'}${unchecked ? ' Сборка не проверена сервером — мастер это увидит.' : ''}`, 'tick-02');
   // Игрок без героя садится им за стол: место в кампании, токен на сцене, стол (claim; на сервере — claim_character).
   if (seat) { const { claim } = await import('../screens.js'); claim(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
   return id;
