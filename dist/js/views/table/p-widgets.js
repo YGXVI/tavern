@@ -186,6 +186,70 @@ function initiative(ctx) {
   </div>`;
 }
 
+/**
+ * Мини-очередь боя (#203): пока идёт бой, а полная «Инициатива» закрыта или открыт другой виджет, очередь
+ * остаётся слева. Есть место (открыты кубы — они правее, или виджетов нет) — строки с именами и хитами;
+ * под «Зрением» и «Отрядом» — колонка портретов под логотипом. Строка — к токену, заголовок — полная очередь.
+ */
+export function initMiniHTML(ctx) {
+  const c = ctx.c, sc = ctx.scene, w = ctx.ui.widget;
+  if (!c?.combat?.active || !sc || w === 'initiative') return '';
+  const shown = ctx.combatOrder().filter((e) => ctx.isMasterView || ctx.tokenShown(e.token));
+  if (!shown.length) return '';
+  // Телефон: виджеты во всю ширину — пока открыт любой, мини-очередь не мешает; без них — колонка портретов.
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 720px)').matches;
+  if (phone && w) return '';
+  const rail = phone || w === 'vision' || w === 'party';
+  const cur = currentEntry(c, sc);
+  const marks = ctx.packMarks();
+  const slots = [];
+  for (const e of shown) { const last = slots.at(-1); if (last && last.key === e.slot) last.ms.push(e); else slots.push({ key: e.slot, ms: [e] }); }
+  const rows = slots.map((s) => (s.ms.length > 1 && s.ms[0].group ? miniRow(ctx, s.ms[0], cur, rail, { pack: s.ms, marks }) : s.ms.map((e) => miniRow(ctx, e, cur, rail)).join(''))).join('');
+  const round = combatRound(c, sc);
+  const myTurn = cur && (ctx.isMine(cur.token) || ctx.owns(cur.token));
+  const foot = ctx.isMaster
+    ? (rail ? `<button class="icon-btn icon-btn-sm" data-act="combat-next" data-tip="Следующий ход" aria-label="Следующий ход">${icon('next', 18)}</button>`
+      : `<button class="icon-btn icon-btn-xs" data-act="combat-prev" data-tip="Предыдущий ход" aria-label="Предыдущий ход">${icon('arrow-left-01', 16)}</button><button class="btn btn-sm btn-primary grow" data-act="combat-next">Следующий ход${icon('arrow-right-01', 14)}</button>`)
+    : myTurn ? (rail ? `<button class="icon-btn icon-btn-sm im-end" data-act="end-turn" data-tip="Закончить ход" aria-label="Закончить ход">${icon('tick-02', 18)}</button>`
+      : `<button class="btn btn-sm btn-primary grow" data-act="end-turn">${icon('tick-02', 14)}Закончить ход</button>`)
+    : '';
+  return `<div class="panel init-mini ${rail ? 'rail' : ''}" role="region" aria-label="Очередь боя">
+    <button class="im-head" data-act="w-initiative" data-tip="${rail ? `Раунд ${round} · ` : ''}Открыть очередь целиком" aria-label="Раунд ${round}, открыть очередь целиком">${rail ? `<b>Р${round}</b>` : `${icon('sword-03', 14)}<b>Раунд ${round}</b><span class="spacer"></span>${icon('expand', 14)}`}</button>
+    <div class="im-list scroll">${rows}</div>
+    ${foot ? `<div class="im-foot">${foot}</div>` : ''}
+  </div>`;
+}
+
+/** Строка мини-очереди: одиночка или пачка одной строкой (pack — её видимые члены). */
+function miniRow(ctx, e, cur, rail, { pack = null, marks = null } = {}) {
+  const t = e.token, st = e.stats;
+  const isCur = !!cur && cur.slot === e.slot;
+  const mine = ctx.isMine(t);
+  const name = pack ? packTitle(ctx, pack, marks) : ctx.nameOf(t, st);
+  let sub = '', down;
+  if (pack) {
+    const alive = pack.filter((x) => !fallen(x)).length;
+    sub = `в строю ${alive}`; down = !alive;
+  } else {
+    const exact = ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || ctx.c.settings.playersSeeHp === 'exact';
+    sub = st.hpMax ? (exact ? `${st.hp}/${st.hpMax}` : woundLabel(st.hp, st.hpMax)) : '';
+    down = st.hpMax > 0 && st.hp <= 0;
+  }
+  const hidden = pack ? pack.every((x) => x.token.hidden) : t.hidden;
+  // Бросить свою инициативу можно и отсюда — как в полной очереди.
+  const roll = e.init == null && (mine || (!ctx.isMaster && ctx.actsFor(t)));
+  const mk = pack && marks?.get(t.id);
+  const ava = `<span class="im-ava">${avatarImg(t.img, `${t.kind} ${mine ? 'mine' : ''}`)}${mk ? `<b class="im-mark" style="--pc:${mk.color}">${mk.n}</b>` : ''}</span>`;
+  const num = `<span class="im-num ${e.init == null ? 'pending' : ''}">${esc(e.init ?? '?')}</span>`;
+  const label = `${name}, инициатива ${e.init ?? 'не брошена'}${sub ? `, ${sub}` : ''}${isCur ? ', сейчас ходит' : ''}`;
+  const cls = `im-row ${isCur ? 'current' : ''} ${hidden ? 'is-hidden' : ''} ${down ? 'downed' : ''} ${pack ? 'pack' : t.kind}`;
+  if (rail) {
+    const act = roll ? `data-act="init-roll" data-tip="${esc(name)} · бросить инициативу"` : `data-act="init-focus" data-tip="${esc(name)}${sub ? ` · ${esc(sub)}` : ''}"`;
+    return `<button class="${cls}" ${act} data-id="${esc(e.tokenId)}" aria-label="${esc(label)}">${ava}${num}</button>`;
+  }
+  return `<div class="${cls}"><button class="im-who" data-act="init-focus" data-id="${esc(e.tokenId)}" aria-label="${esc(label)}">${num}${ava}<span class="im-text"><b>${esc(name)}${hidden ? ` ${icon('view-off', 12)}` : ''}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>${roll ? `<button class="icon-btn icon-btn-xs" data-act="init-roll" data-id="${esc(e.tokenId)}" data-tip="Бросить инициативу" aria-label="Бросить инициативу за ${esc(name)}">${icon('dice-faces-06', 14)}</button>` : ''}</div>`;
+}
+
 /** Строка одиночки в очереди. */
 /** Стрелки мастера для ничьей по инициативе (#197 S1): только у равных соседей. */
 function tieButtons(ctx, order, slot, id) {
