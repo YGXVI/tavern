@@ -432,16 +432,29 @@ export function attachDrawBar(L, ctx) {
     const id = ctx.ui.selDrawing; const d = ctx.scene.drawings.find((x) => x.id === id); if (!d) return;
     const k = b.dataset.db;
     const styled = (patch) => { updateDrawing(ctx, id, patch, 'Стиль рисунка', 'style'); ctx.invalidate('drawings'); };
-    if (k === 'fill' || k === 'stroke') stylePopover(b, k, styleOf(d), styled);
-    if (k === 'color') stylePopover(b, 'color', { color: safeColor(d.color) }, styled);
+    // Окна стиля и текста — под панелью и не поверх самого рисунка: обходят его рамку вместе с панелью.
+    const around = { placement: 'bottom', anchor: aroundDrawing(L, b) };
+    if (k === 'fill' || k === 'stroke') stylePopover(around.anchor, k, styleOf(d), styled, around);
+    if (k === 'color') stylePopover(around.anchor, 'color', { color: safeColor(d.color) }, styled, around);
     if (k === 'front' || k === 'back') bringDrawing(ctx, id, k === 'front');
     if (k === 'dup') duplicateDrawing(ctx, id);
     if (k === 'lock') updateDrawing(ctx, id, { locked: d.locked ? undefined : true }, d.locked ? 'Открепить рисунок' : 'Закрепить рисунок');
     if (k === 'bigger' || k === 'smaller') updateDrawing(ctx, id, { size: Math.max(8, Math.min(400, Math.round((d.size || 28) * (k === 'bigger' ? 1.25 : 0.8)))) }, 'Размер надписи');
-    if (k === 'edit') { const r = b.getBoundingClientRect(); ctx.panels.textPrompt({ x: d.x, y: d.y }, { x: r.left + r.width / 2, y: r.top }, d); }
+    if (k === 'edit') ctx.panels.textPrompt({ x: d.x, y: d.y }, around.anchor, d, 'bottom');
     if (k === 'del') deleteDrawing(ctx, id);
     ctx.invalidate('drawings');
   });
+}
+
+/**
+ * Прямоугольник экрана, который окно не должно закрывать: рамка выделенного рисунка вместе с его панелью.
+ * Окно встаёт под ним, а если снизу места нет — над рисунком или сбоку, но не поверх.
+ */
+function aroundDrawing(L, btn) {
+  const rs = [...L.drawings.querySelectorAll('.draw-sel'), btn.closest('.db-bar') || btn].map((n) => n.getBoundingClientRect()).filter((r) => r.width || r.height);
+  const left = Math.min(...rs.map((r) => r.left)), top = Math.min(...rs.map((r) => r.top));
+  const right = Math.max(...rs.map((r) => r.right)), bottom = Math.max(...rs.map((r) => r.bottom));
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
 }
 
 /** Тянуть ручку или кнопку «переместить» (TASK-042, TASK-182). Слушаем окно: разметка ручек перерисовывается на ходу. */
