@@ -685,7 +685,7 @@ export class Panels {
     if (!t || (t.pending && !ctx.isMasterView)) return;
     if (t.kind === 'item') return;
     ctx.ui.panel = null; this.renderSide();
-    if (t.characterId) openCharacterSheet(ctx, t.characterId);
+    if (t.characterId && !characterOf(ctx.c, t.characterId)?.statblock) openCharacterSheet(ctx, t.characterId);
     else if (t.id) openStatblock(ctx, t.id);
     ctx.invalidate('chrome');
   }

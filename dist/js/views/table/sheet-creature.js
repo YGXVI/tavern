@@ -1,6 +1,7 @@
 // Постоянный общий лист существа: каталог — снимок, текущие числа — прежние поля Character.
 import { fromSrd, normalizeCreature, validateCreature } from '../../rules/creature.js';
 import { abilityModifier } from './sheet-rules.js';
+import { heroAc, heroInit } from '../../rules/hero-derived.js';
 const copy=v=>structuredClone(v);
 export function emptySheet({id,ownerId,name,profile='pc'}){
   return {id,ownerId,name,profile,level:profile==='creature'?null:1,className:'',raceName:'',background:'',alignment:'',stats:Object.fromEntries(['str','dex','con','int','wis','cha'].map(k=>[k,null])),hp:null,hpMax:null,tempHp:0,ac:null,speed:null,initBonus:null,conditions:[],deathSaves:{s:0,f:0},saves:[],skills:[],attacks:[],slots:{},spells:'',inventory:'',features:'',notes:''};
@@ -26,6 +27,13 @@ export function copySheet(source,{id,ownerId,name},newId){
   for(const spell of ch.knownSpells||[])if(ids.has(spell.sourceId))spell.sourceId=ids.get(spell.sourceId);
   if(ch.sidekick){ch.sidekick.baseLevel=ch.level;ch.sidekick.baseSnapshot={stats:copy(ch.stats),hpMax:ch.hpMax,hitDicePools:copy(ch.hitDicePools||[])};ch.sidekick.growthHistory=[];}
   return ch;
+}
+
+/** Постоянный NPC глазами статблока стола: каталожные действия из листа, текущие числа — из экземпляра (TASK-004 5.1). */
+export function npcMonster(ch){
+  const b=ch.statblock||{};
+  return {...copy(b),id:`npc:${ch.id}`,name:ch.name,ac:heroAc(ch),init:heroInit(ch),stats:copy(ch.stats||{}),speed:ch.speed,speedDetails:{walk:ch.speed,...copy(ch.movement||{})},hpDice:b.hpFormula||'',
+    saves:Object.fromEntries(Object.entries(ch.overrides?.saves||{}).map(([k,v])=>[k,v?.value])),legendaryCount:b.legendary?.count??null,legendary:b.legendary?.actions||[]};
 }
 
 export function validateSheetStatblock(ch){

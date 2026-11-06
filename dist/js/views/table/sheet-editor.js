@@ -4,14 +4,14 @@ import { characterOf, updateCampaign, isMasterOf, membership } from '../../core/
 import { isServerMode, bus } from '../../core/store.js';
 import { modal, confirmDialog } from '../../ui/kit.js';
 import { ABILITIES, SKILLS, CONDITIONS } from '../../data/rules.js';
-import { readCharacterSheet, submitCharacterCommand, characterSheetMeta, createCharacterSheet } from '../../server/sync.js';
+import { readCharacterSheet, submitCharacterCommand, characterSheetMeta } from '../../server/sync.js';
 import { makeSheetCommand } from '../../server/character-sheet.js';
 import { characterEditPayload, rebaseCharacterDraft, sameSheetValue, putSheetPath } from '../../server/character-sheet-ops.js';
 import { copy, fieldValue, setField, parseField, sheetLevel, sheetBonus, sheetInitiative, validateDraft, attackBonus, proficiencyValue, prepareSheetDerived } from './sheet-fields.js';
 import { abilityModifier, sheetProficiency, spellNumbers } from './sheet-rules.js';
-import { emptySheet, sheetFromSrd, copySheet, validateSheetStatblock } from './sheet-creature.js';
+import { validateSheetStatblock } from './sheet-creature.js';
+import { newSheetDialog } from './sheet-new.js';
 import { storeImage, resolveSrc, srcOf } from '../../core/assets.js';
-import { BESTIARY, loadSrdBestiary } from '../../data/bestiary.js';
 import { applyZeroHp, archiveLocalCharacter, restoreLocalCharacter } from './sheet-lifecycle.js';
 import { readCharacter } from './sheet-model.js';
 import { previewSidekickGrowth, applySidekickGrowthPreview, sidekickEligibility } from './sheet-growth.js';
@@ -206,26 +206,7 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
   async function creation(copyCurrent=false){
     if(!active()||busy||pending)return;
     if(dirty()){ctx.toast('Сначала сохраните или отмените черновик');return;}
-    try{await loadSrdBestiary();}catch{/* ручное создание остаётся доступно */}
-    const master=isMasterOf(ctx.c,ctx.userId),newActorId=uid('ch-');let created=null;
-    const m=modal(`<div class="panel-section"><h3>${copyCurrent?'Копия листа':'Новый общий лист'}</h3><label class="sheet-field">Имя<input data-create-name value="${esc(copyCurrent?draft.name+' — копия':'')}"></label><label class="sheet-field">Профиль<select data-create-profile ${master&&!copyCurrent?'':'disabled'}>${[['pc','Полноценный герой'],['creature','NPC со статблоком'],['sidekick','Sidekick']].map(([k,n])=>`<option value="${k}" ${k===(copyCurrent?draft.profile||'pc':master?'creature':'pc')?'selected':''}>${n}</option>`).join('')}</select></label><label class="sheet-field">Владелец<select data-create-owner><option value="${ctx.userId}">Я</option>${master?`<option value="">Без владельца</option>${ctx.c.members.filter(m=>m.status==='active'&&m.userId!==ctx.userId).map(m=>`<option value="${esc(m.userId)}">${esc(m.name||m.userId)}</option>`).join('')}`:''}</select></label>${!copyCurrent?`<label class="sheet-field">Основа<select data-create-source><option value="">Ручной лист — неизвестные числа не заполняются</option>${BESTIARY.filter(m=>m.srd===true).map(m=>`<option value="${esc(m.id)}">SRD · ${esc(m.name)}</option>`).join('')}</select></label>`:''}<p class="t-sm muted">Токены, управление, связи и ход не создаются автоматически. Числа экземпляра независимы от каталога.</p><p class="sheet-error" data-create-error role="alert"></p><button class="btn btn-primary" data-create-ok>Создать лист</button><button class="btn" data-close>Отмена</button></div>`);
-    m.box.querySelector('[data-create-ok]').onclick=async()=>{
-      const button=m.box.querySelector('[data-create-ok]');button.disabled=true;
-      try{
-        if(!created){const name=m.box.querySelector('[data-create-name]').value.trim(),profile=m.box.querySelector('[data-create-profile]').value,ownerId=m.box.querySelector('[data-create-owner]').value||null;
-          const identity={id:newActorId,ownerId,name,profile},catalogueId=m.box.querySelector('[data-create-source]')?.value;
-          created=copyCurrent?copySheet({...draft,id,ownerId:ch.ownerId},identity,()=>uid('entry-')):catalogueId?sheetFromSrd(BESTIARY.find(m=>m.id===catalogueId),identity):emptySheet(identity);
-          created.profile=profile;
-          if(created.statblock?.baseSnapshot&&!copyCurrent){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(created.statblock.baseSnapshot)));created.statblock.templateVersion='sha256:'+Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join('');}
-          if(profile==='sidekick'&&!created.sidekick)created.sidekick={class:'warrior',baseLevel:created.level,baseSnapshot:copy(created.statblock?.baseSnapshot||{stats:created.stats,hpMax:created.hpMax}),hitDie:null,growthHistory:[]};
-          if(profile==='sidekick'&&!created.hitDicePools?.length)created.hitDicePools=[{id:uid('hd-'),name:'Базовые кости — уточните',source:'base-statblock',die:null,total:null,spent:null}];
-          created=prepareSheetDerived(created);const issues=validateDraft(created);if(issues.length){created=null;throw new Error(issues.join('; '));}
-        }
-        if(isServerMode())await createCharacterSheet(ctx.cid,created);else updateCampaign(ctx.cid,c=>c.characters.push(copy(created)));
-        m.close();onOpen?.(created.id);
-      }catch(e){m.box.querySelector('[data-create-error]').textContent=e.message||'Не удалось создать лист';if(created){for(const input of m.box.querySelectorAll('input,select'))input.disabled=true;button.textContent='Повторить создание с тем же ID';}}
-      finally{button.disabled=false;}
-    };
+    await newSheetDialog(ctx,{source:copyCurrent?{...draft,id,ownerId:ch.ownerId}:null,onOpen});
   }
   function growthDialog(manual=false){
     if(!isMasterOf(ctx.c,ctx.userId)||draft.profile!=='sidekick'||archived||busy||pending)return;

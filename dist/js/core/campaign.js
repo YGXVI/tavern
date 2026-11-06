@@ -58,7 +58,7 @@ export function tokenStats(c, t) {
       return {
         name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: heroSpeed(ch),
         initBonus: heroInit(ch), darkvision: ch.darkvision || 0, conditions: ch.conditions || [],
-        deathSaves: ch.deathSaves, subtitle: `${ch.className} ${ch.level} ур.`, character: ch,
+        deathSaves: ch.deathSaves, subtitle: ch.statblock ? [ch.statblock.type, ch.statblock.cr != null && ch.statblock.cr !== '' ? `КО ${ch.statblock.cr}` : ''].filter(Boolean).join(' · ') || 'NPC' : `${ch.className} ${ch.level} ур.`, character: ch,
       };
     }
   }

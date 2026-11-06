@@ -528,15 +528,21 @@ async function placeCreaturesInner(ctx, monsterId) {
 export function heroPicker(ctx, anchor) {
   const c = ctx.c;
   const chars = c.characters;
-  const render = () => `<div class="pick-pop">${`<div class="panel-header"><div class="titles"><div class="title">Герой на сцену</div><div class="subtitle">Встанет в центре экрана</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>`}
+  const render = () => `<div class="pick-pop">${`<div class="panel-header"><div class="titles"><div class="title">Герои и NPC</div><div class="subtitle">Встанет в центре экрана</div></div><button class="icon-btn icon-btn-sm" data-close>${icon('cancel-01', 18)}</button></div>`}
     <div class="w-list scroll">${chars.map((ch) => {
       const owner = ownerOfCharacter(c, ch);
       const here = ctx.scene.tokens.some((t) => t.characterId === ch.id);
       const where = c.scenes.find((s) => s.id !== ctx.sceneId && s.tokens.some((t) => t.characterId === ch.id));
       return `<div class="list-row"><span class="avatar sm hero"><img src="${esc(srcOf(ch.portrait))}" alt=""></span><span class="grow col-tight"><span class="primary">${esc(ch.name)}</span><span class="secondary">${owner ? esc(owner.name) : 'без игрока'}${where ? ` · в «${esc(where.name)}»` : here ? ' · уже здесь' : ''}</span></span>${here ? `<span class="chip chip-success">${icon('tick-02', 12)}</span>` : `<button class="btn btn-sm btn-secondary" data-place="${esc(ch.id)}">${where ? 'Перенести' : 'Поставить'}</button>`}</div>`;
-    }).join('') || '<p class="t-sm muted" style="padding:0 16px">В кампании пока нет героев</p>'}</div></div>`;
+    }).join('') || '<p class="t-sm muted" style="padding:0 16px">В кампании пока нет героев</p>'}</div>
+    ${ctx.isMaster ? `<div class="panel-footer"><button class="btn btn-sm btn-secondary grow" data-new-npc>${icon('plus-sign', 16)}Новый NPC</button></div>` : ''}</div>`;
   const pop = popover(render(), anchor, { placement: 'top' });
   pop.node.addEventListener('click', (e) => {
+    // Постоянный NPC (TASK-004 5.1): лист живёт в кампании, на карту его ставит мастер — из этого же списка.
+    if (e.target.closest('[data-new-npc]')) {
+      import('./sheet-new.js').then(({ newSheetDialog }) => newSheetDialog(ctx, { onOpen: (id) => { pop.close?.(); import('./sheet.js').then(({ openCharacterSheet }) => openCharacterSheet(ctx, id, 'creature')); } }));
+      return;
+    }
     const b = e.target.closest('[data-place]'); if (!b) return;
     placeHero(ctx, b.dataset.place);
     pop.node.innerHTML = render();
@@ -551,7 +557,7 @@ export function placeHero(ctx, chId, at = null) {
   updateCampaign(ctx.cid, (cc) => {
     let tok = null;
     for (const sc of cc.scenes) { const t = sc.tokens.find((x) => x.characterId === chId); if (t) { tok = t; sc.tokens = sc.tokens.filter((x) => x !== t); break; } }
-    tok = tok || { id: uid('t-'), kind: 'hero', characterId: chId, name: ch.name, img: ch.portrait, size: 'medium', hidden: false, conditions: [], light: ch.light || null, aura: ch.aura || null };
+    tok = tok || { id: uid('t-'), kind: 'hero', characterId: chId, name: ch.name, img: ch.portrait, size: ch.statblock?.size || 'medium', hidden: false, conditions: [], light: ch.light || null, aura: ch.aura || null };
     tok.x = p.x; tok.y = p.y;
     const to = cc.scenes.find((s) => s.id === sid);
     to.tokens.push(tok);

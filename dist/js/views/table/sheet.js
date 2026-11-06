@@ -2,7 +2,8 @@
 import { esc, fmtMod, el } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats, monsterOf } from '../../core/campaign.js';
+import { tokenStats, monsterOf, characterOf } from '../../core/campaign.js';
+import { npcMonster } from './sheet-creature.js';
 import { ABILITIES, SIZES, conditionById, woundLabel } from '../../data/rules.js';
 import { conditionPicker } from './p-token.js';
 import { doRoll, parseFormula, poolVis } from './dice.js';
@@ -60,6 +61,7 @@ export function openStatblock(ctx,id){closeSheet();state={kind:'monster',id,tab:
   drawer=el('<aside class="sheet-drawer panel hero-drawer monster-drawer" aria-label="Статблок"></aside>');ctx.root.append(drawer);
   drawer.addEventListener('click',e=>{
     if(e.target.closest('[data-close-sheet]')){closeSheet();return;}
+    if(e.target.closest('[data-npc-edit]')){const t=sheetToken(ctx);if(t?.characterId)openCharacterSheet(ctx,t.characterId,'creature');return;}
     const desc=e.target.closest('[data-desc]');if(desc){const k=desc.dataset.desc;if(openDesc.has(k))openDesc.delete(k);else openDesc.add(k);desc.classList.toggle('open',openDesc.has(k));return;}
     const hp=e.target.closest('[data-mhp]');if(hp){monsterHp(ctx,hp);return;}
     const cond=e.target.closest('[data-mcond]');if(cond){const t=sheetToken(ctx);if(t&&canEditFoe(ctx,t))conditionPicker(ctx,[t.id],cond);return;}
@@ -146,9 +148,11 @@ function factsHTML(m) {
   return rows.length ? `<div class="m-facts">${rows.map(([k, v]) => `<div class="m-fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '';
 }
 
+// Постоянный NPC показывается своим листом как статблок; остальные существа — из каталога.
+const tokenMonster = (ctx, t) => { const ch = t.characterId ? characterOf(ctx.c, t.characterId) : null; return ch?.statblock ? npcMonster(ch) : monsterOf(ctx.c, t.monsterId); };
 function monsterHTML(ctx, t) {
   const st = tokenStats(ctx.c, t);
-  const m = monsterOf(ctx.c, t.monsterId);
+  const m = tokenMonster(ctx, t);
   const isM = ctx.isMaster || ctx.owns?.(t); // свой призыв владелец видит целиком (TASK-183)
   const can = canEditFoe(ctx, t);
   const lib = String(t.monsterId || '').startsWith('lib:');
@@ -158,8 +162,9 @@ function monsterHTML(ctx, t) {
   const masked = !isM && t.nameHidden && t.kind !== 'hero';
   const name = isM ? t.name : ctx.nameOf ? ctx.nameOf(t, st) : t.name;
   const side = t.kind === 'foe' ? 'foe' : t.ownerId || t.summonedBy || t.kind === 'hero' ? 'ally' : 'neutral';
+  const edit = t.characterId && can ? `<button class="icon-btn icon-btn-sm" data-npc-edit aria-label="Все поля листа" title="Все поля листа">${icon('pencil-edit-02', 18)}</button>` : '';
   const head = (sub) => `<header class="s-head"><span class="s-portrait ${side}"><img src="${esc(srcOf(t.img))}" alt=""></span>
-    <span class="s-who"><b class="s-name" title="${esc(name)}">${esc(name)}</b>${sub ? `<small><span>${sub}</span></small>` : ''}</span>${close}</header>`;
+    <span class="s-who"><b class="s-name" title="${esc(name)}">${esc(name)}</b>${sub ? `<small><span>${sub}</span></small>` : ''}</span>${edit}${close}</header>`;
   if (!m) return head(t.monsterId?.startsWith('srd:') ? 'Бестиарий загружается…' : '');
   const sizeName = SIZES.find((s) => s.id === m.size)?.name;
   const sub = masked ? 'Неизвестное существо' : [`${esc(m.name)}${m.en && isM ? ` <span lang="en">(${esc(m.en)})</span>` : ''}`, esc(m.type || ''), sizeName ? esc(sizeName.toLowerCase()) : ''].filter(Boolean).join(' · ');
@@ -211,7 +216,7 @@ function monsterHTML(ctx, t) {
 function monsterRoll(ctx,b){
  const t=sheetToken(ctx);
  if(!t||!(ctx.isMaster||ctx.owns?.(t)))return; // свой призыв бросает и владелец (TASK-183)
- const m=monsterOf(ctx.c,t.monsterId);if(!m)return;
+ const m=tokenMonster(ctx,t);if(!m)return;
  const kind=b.dataset.roll,vis=poolVis(ctx,!!t.hidden),who=ctx.nameOf?ctx.nameOf(t):t.name;
  if(kind==='minit'){const init=Number.isSafeInteger(t.initBonus)?t.initBonus:m.init;if(Number.isSafeInteger(init))doRoll(ctx,{label:`${who}: инициатива`,dice:{20:1},mod:init,vis});return;}
  if(kind==='mcheck'||kind==='msave'){const ab=ABILITIES.find(a=>a.id===b.dataset.ab);if(!ab)return;
