@@ -851,6 +851,8 @@ const measureTool = {
       if (ctx.ui.shareRuler) ctx.sendRuler(r);
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
+      // Нажали на точку и не увели курсор с неё — это клик: дрожание руки шаблон не поворачивает.
+      if (g.fromOrigin && !g.leftOrigin) { if (onTemplateOrigin(ctx, w, g.pointerType === 'touch')) return; g.leftOrigin = true; }
       const t = ctx.ui.template;
       // TASK-178: тянешь от точки — направление и размер одним движением, как у фигур рисования (TASK-042):
       // размер по 0,5 фт, угол липнет к 45°; Shift — по 5 фт и 15°; Alt — угол свободно. Размер и угол — у курсора.
@@ -871,7 +873,7 @@ const measureTool = {
       if (ctx.ui.shareRuler) ctx.sendRuler(r);
       ctx.invalidate('overlay');
     } else if (g.mode === 'template') {
-      if (g.fromOrigin && !g.moved) { ctx.clearMeasure(); return; }
+      if (g.fromOrigin && !g.leftOrigin) { ctx.clearMeasure(); return; }
       const t = ctx.ui.template;
       ctx.ui.templateLabel = null;
       (ctx.ui.sub.templateSize || (ctx.ui.sub.templateSize = {}))[t.type] = t.size;
