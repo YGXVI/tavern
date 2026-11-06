@@ -1,11 +1,14 @@
-# Тесты на каждый пуш и пул-реквест. Пуш в main с зелёными тестами
-# сам выкатывается на https://rasputye.vercel.app.
-# Нужен секрет репозитория VERCEL_TOKEN (Settings → Secrets and variables → Actions).
+# Тесты на каждый пуш в main и test и на каждый пул-реквест.
+# Пуш в main с зелёными тестами сам выкатывается на https://rasputye.vercel.app,
+# пуш в test — на тестовый стенд https://rasputye-test.vercel.app (отдельный проект
+# Vercel, только песочница, с плашкой «Тестовый стенд»).
+# Нужны секреты репозитория VERCEL_TOKEN (сайт) и VERCEL_TOKEN_TEST (стенд):
+# Settings → Secrets and variables → Actions.
 name: Тесты и деплой
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
   pull_request:
   workflow_dispatch:
 
@@ -57,4 +60,41 @@ jobs:
         working-directory: dist
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@64.1.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+
+  deploy-test:
+    name: Тестовый стенд
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_PROJECT_ID: prj_zkprAhi4TwEii6GylM8i1ltaP1VN
+    steps:
+      # Отдельный ключ: VERCEL_TOKEN видит только проект rasputye. Пока секрета
+      # VERCEL_TOKEN_TEST нет, стенд пропускается, а тесты test остаются зелёными.
+      - name: Проверить токен стенда
+        id: token
+        env:
+          VERCEL_TOKEN_TEST: ${{ secrets.VERCEL_TOKEN_TEST }}
+        run: |
+          if [ -z "$VERCEL_TOKEN_TEST" ]; then
+            echo "::notice::Нет секрета VERCEL_TOKEN_TEST — тестовый стенд не выкатывается."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.ready == 'true'
+        with:
+          node-version: 22
+      - name: Песочница и плашка стенда
+        if: steps.token.outputs.ready == 'true'
+        run: node tools/mark-test-stand.mjs dist "test ${GITHUB_SHA::7}"
+      - name: Выкатить test на rasputye-test.vercel.app
+        if: steps.token.outputs.ready == 'true'
+        working-directory: dist
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN_TEST }}
         run: npx --yes vercel@64.1.0 deploy --prod --yes --token "$VERCEL_TOKEN"
