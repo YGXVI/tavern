@@ -125,8 +125,8 @@ function heroToken(ch, c, r, grid) {
   };
 }
 
-export function monsterToken(monsterId, name, c, r, grid, extra = {}) {
-  const m = monsterById(monsterId);
+/** m — статблок, если существо не из бестиария (своё из библиотеки, TASK-179); по умолчанию — по monsterId. */
+export function monsterToken(monsterId, name, c, r, grid, extra = {}, m = monsterById(monsterId)) {
   const n = { tiny: 1, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 }[m.size] || 1;
   return {
     id: uid('t-'), kind: 'foe', monsterId, name, img: m.img, size: m.size,
@@ -256,7 +256,8 @@ function campaign(o) {
 
 export function makeInviteCode() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const a = crypto.getRandomValues(new Uint32Array(4));
+  // 8 знаков (~10¹² вариантов): по 4 код подбирался перебором (review C12). Формат сервера допускает 4–8.
+  const a = crypto.getRandomValues(new Uint32Array(8));
   return 'RSP-' + [...a].map((x) => abc[x % abc.length]).join('');
 }
 

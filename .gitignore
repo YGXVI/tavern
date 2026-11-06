@@ -4,3 +4,4 @@ node_modules/
 .env.*
 !.env.example
 *.tar.gz
+supabase/functions/validate-build/vendor/

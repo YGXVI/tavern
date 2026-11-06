@@ -1,0 +1,128 @@
+{
+  "description": "Поправки к снимку SRD API в bestiary-2014.json (#196 A). Применяются генератором tools/bestiary-srd.mjs; исходный снимок не переписывается. 'from' — значение снимка: если снимок обновят и оно изменится, генерация остановится, чтобы поправку пересмотрели.",
+  "source": "SRD 5.1 (data/rules-2014/srd-5.1.md) и таблица ПО → опыт",
+  "entries": [
+    {
+      "srd_index": "cult-fanatic",
+      "path": [
+        "hit_points",
+        "average"
+      ],
+      "from": 22,
+      "to": 33,
+      "why": "SRD 5.1: Hit Points 33 (6d8 + 6); ТЕЛ 12 (+1)"
+    },
+    {
+      "srd_index": "cult-fanatic",
+      "path": [
+        "hit_points",
+        "formula"
+      ],
+      "from": "6d8-5",
+      "to": "6d8+6",
+      "why": "SRD 5.1: 6d8 + 6"
+    },
+    {
+      "srd_index": "blink-dog",
+      "path": [
+        "senses",
+        "passive_perception"
+      ],
+      "from": 10,
+      "to": 13,
+      "why": "SRD 5.1: Perception +3, passive Perception 13"
+    },
+    {
+      "srd_index": "spider",
+      "path": [
+        "senses",
+        "passive_perception"
+      ],
+      "from": 12,
+      "to": 10,
+      "why": "SRD 5.1: МДР 10, без навыка Восприятия — passive 10"
+    },
+    {
+      "srd_index": "black-bear",
+      "path": [
+        "proficiencies"
+      ],
+      "from": [],
+      "to": [
+        {
+          "value": 3,
+          "proficiency": {
+            "index": "skill-perception",
+            "name": "Skill: Perception",
+            "url": "/api/2014/proficiencies/skill-perception"
+          }
+        }
+      ],
+      "why": "SRD 5.1: Skills Perception +3 (passive 13 уже верно)"
+    },
+    {
+      "srd_index": "black-bear",
+      "path": [
+        "skills"
+      ],
+      "from": [],
+      "to": [
+        {
+          "value": 3,
+          "proficiency": {
+            "index": "skill-perception",
+            "name": "Skill: Perception",
+            "url": "/api/2014/proficiencies/skill-perception"
+          }
+        }
+      ],
+      "why": "то же в поле skills снимка"
+    },
+    {
+      "srd_index": "brass-dragon-wyrmling",
+      "path": [
+        "xp"
+      ],
+      "from": 100,
+      "to": 200,
+      "why": "ПО 1 → 200 опыта (SRD 5.1: Challenge 1 (200 XP))"
+    },
+    {
+      "srd_index": "riding-horse",
+      "path": [
+        "xp"
+      ],
+      "from": 25,
+      "to": 50,
+      "why": "ПО 1/4 → 50 опыта"
+    },
+    {
+      "srd_index": "dretch",
+      "path": [
+        "xp"
+      ],
+      "from": 25,
+      "to": 50,
+      "why": "ПО 1/4 → 50 опыта"
+    },
+    {
+      "srd_index": "deep-gnome-svirfneblin",
+      "path": [
+        "xp"
+      ],
+      "from": 50,
+      "to": 100,
+      "why": "ПО 1/2 → 100 опыта"
+    }
+  ],
+  "unverified": [
+    {
+      "srd_index": "half-red-dragon-veteran",
+      "note": "passive 12 при МДР +0 — вероятно потерян навык Восприятия; сверить с источником, не править вслепую (#196)"
+    },
+    {
+      "srd_index": "swarm-of-ravens",
+      "note": "passive 15 при МДР +1 — вероятно потерян навык Восприятия; сверить с источником (#196)"
+    }
+  ]
+}

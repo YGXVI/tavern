@@ -1,14 +1,19 @@
+import { onLocal } from '../camp/local.js';
+import { pendingQueue } from './own-creature.js';
 // Панели стола: принимает действия от кнопок интерфейса и раздаёт их модулям,
 // ведёт виджеты, всплывающие карточки (спасброски, переходы), паузу, бой и события других вкладок.
 import { el, esc, uid, plural, fmtMod } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { bus, emitLocal, isServerMode } from '../../core/store.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter } from '../../core/campaign.js';
+import { tokenStats, characterOf, updateCampaign, addLog, sceneOf, userById, myCharacter, monsterOf, canFight } from '../../core/campaign.js';
 import { ABILITIES, mod, profBonus, LIGHTS } from '../../data/rules.js';
-import { monsterById } from '../../data/bestiary.js';
 import { popover, closePopover, modal, panelHeader, copyText } from '../../ui/kit.js';
-import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder } from './combat.js';
+import { advanceTurn, endCombat, currentEntry, combatRound, rollInitiative, initiativeOrder, turnIndexOf, slotMembers, keepTurnWith, moveTied } from './combat.js';
+import { packKind, summonKind } from './packs.js';
+import { deathSaveStep, isDead, isStable, adjustDamage } from '../../rules/attack.js';
+import { saveRule, saveAdvantage, saveResult } from '../../rules/saves.js';
+import { mobAttack } from './mob-attack.js';
 import { diceAction, doRoll, showRollToast, parseFormula, rollPool, describeRoll, canSeeRoll, setAdv, initiativeDice } from './dice.js';
 import { diceTray, diceFloor } from './dice-tray.js';
 import { openCharacterSheet, openStatblock, closeSheet, refreshSheet } from './sheet.js';
@@ -21,6 +26,9 @@ import * as S from './p-side.js';
 import * as D from './p-dialogs.js';
 import { snapCenter } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
+import { DRAW_TEMPLATES } from './drawings.js';
+import { drawStyle, stylePopover } from './draw-style.js';
+import { mySight, setSightOff } from './sight-ui.js';
 
 const DICE_ACTS = new Set(['die-add', 'die-remove', 'mod-inc', 'mod-dec', 'adv', 'dice-hidden', 'dice-vis', 'dice-clear', 'dice-reroll', 'dice-roll', 'dice-set', 'dice-vis-menu', 'dice-mod-menu', 'dice-adv']);
 
@@ -42,6 +50,7 @@ export class Panels {
     this.ctx = ctx;
     this.prev = null;
     this.shares = new Map();
+    this.saveRelations = new Map(); // Только локальные отметки мастера, не поля результата спасброска.
     this.side = el('<aside class="side-panel panel hidden" aria-label="Боковая панель"></aside>');
     this.floats = el('<div class="float-stack" aria-live="polite"></div>');
     this.pauseEl = el('<div class="pause-screen hidden" role="dialog" aria-label="Пауза"></div>');
@@ -58,6 +67,7 @@ export class Panels {
     });
     const mine = (p) => p?.cid === ctx.cid;
     this.offs = [
+      onLocal(() => { if (ctx.ui.panel === 'bestiary' && ctx.ui.bestiary?.src === 'enc') this.renderSide(true); }),
       bus.on('roll', (p) => {
         if (!mine(p)) return;
         showRollToast(ctx, p.entry);
@@ -195,14 +205,22 @@ export class Panels {
     const html = widgetHTML(this.ctx);
     if (force || host.__html !== html) {
       const scroll = host.querySelector('.scroll')?.scrollTop || 0;
+      // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
+      // Класс снимаем ДО замены разметки: иначе новый .widget снова проигрывает «rise» с нуля,
+      // и очередь боя мигает на каждом «Следующий ход».
+      const opening = this.lastWidget !== this.ctx.ui.widget;
+      if (!opening) host.classList.remove('opening');
       host.innerHTML = html; host.__html = html;
       const sc = host.querySelector('.scroll'); if (sc) sc.scrollTop = scroll;
       // Очередь боя: текущий ход всегда в поле зрения.
       host.querySelector('.init-row.current')?.scrollIntoView({ block: 'nearest' });
-      // Анимация появления — только когда открыли другой виджет, а не на каждое обновление данных.
-      if (this.lastWidget !== this.ctx.ui.widget) {
+      if (opening) {
         this.lastWidget = this.ctx.ui.widget;
         host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening');
+        if (!host.__openEnd) {
+          host.__openEnd = true;
+          host.addEventListener('animationend', (e) => { if (e.target.parentElement === host) host.classList.remove('opening'); });
+        }
       }
     }
     // Лоток закрыли вместе с виджетом «Кубы» — преимущество и помеха сбрасываются.
@@ -261,7 +279,7 @@ export class Panels {
     const ch = myCharacter(c, ctx.userId);
     node.innerHTML = ctx.isMaster
       ? `<div class="no-scene-card panel"><span class="empty-ic">${icon('maps', 32)}</span><h2>Сцен пока нет</h2><p class="t-para muted">Возьмите готовую карту — склеп, лес, таверну или пещеру — или загрузите свою. Игроки увидят сцену, когда вы её покажете.</p><div class="row"><button class="btn btn-primary btn-lg" data-act="add:map">${icon('plus-sign', 18)}Создать сцену</button><button class="btn btn-secondary btn-lg" data-act="invite">${icon('user-add-01', 18)}Пригласить</button></div></div>`
-      : `<div class="no-scene-card panel"><span class="empty-ic hourglass">${icon('hourglass', 32)}</span><h2>Мастер готовит сцену</h2><p class="t-para muted">Как только он покажет карту, она появится здесь. А пока можно заглянуть в лист героя.</p>${ch ? `<button class="btn btn-secondary btn-lg" data-act="sheet" data-id="${esc(ch.id)}">${icon('book-open-01', 18)}Лист: ${esc(ch.name)}</button>` : ''}</div>`;
+      : `<div class="no-scene-pair"><div class="no-scene-card panel"><span class="empty-ic hourglass">${icon('hourglass', 32)}</span><h2>Мастер готовит сцену</h2><p class="t-para muted">Как только он покажет карту, она появится здесь. А пока можно заглянуть в лист героя.</p>${ch ? `<button class="btn btn-secondary btn-lg" data-act="sheet" data-id="${esc(ch.id)}">${icon('book-open-01', 18)}Лист: ${esc(ch.name)}</button>` : ''}</div></div>`;
   }
 
   sceneTransition(scene) {
@@ -318,19 +336,21 @@ export class Panels {
       for (const [uidKey, s] of this.shares) {
         if (s.sceneId !== ctx.sceneId || Date.now() - s.at > 10 * 60000) { this.shares.delete(uidKey); continue; }
         const n = s.targets.length;
-        cards.push(`<div class="float-card panel" data-key="share-${esc(uidKey)}">${icon('cone-01', 20)}<div class="titles"><b>${esc(s.name)}: шаблон ${s.tpl.size} фт</b><small>${n} ${plural(n, 'цель', 'цели', 'целей')} в области</small></div><button class="btn btn-sm btn-ghost" data-act="share-dismiss" data-id="${esc(uidKey)}">Убрать</button><button class="btn btn-sm btn-secondary" data-act="share-show" data-id="${esc(uidKey)}">${icon('location-01', 14)}Показать</button><button class="btn btn-sm btn-primary" data-act="share-saves" data-id="${esc(uidKey)}" ${n ? '' : 'disabled'}>${icon('dice-faces-06', 14)}Спасброски</button></div>`);
+        cards.push(`<div class="float-card panel" data-key="share-${esc(uidKey)}">${icon('cone-01', 20)}<div class="titles"><b>${esc(s.name)}: шаблон ${esc(s.tpl.size)} фт</b><small>${n} ${plural(n, 'цель', 'цели', 'целей')} в области</small></div><button class="btn btn-sm btn-ghost" data-act="share-dismiss" data-id="${esc(uidKey)}">Убрать</button><button class="btn btn-sm btn-secondary" data-act="share-show" data-id="${esc(uidKey)}">${icon('location-01', 14)}Показать</button><button class="btn btn-sm btn-primary" data-act="share-saves" data-id="${esc(uidKey)}" ${n ? '' : 'disabled'}>${icon('dice-faces-06', 14)}Спасброски</button></div>`);
       }
     } else {
       for (const r of reqs) for (const t of this.mySaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const m = this.saveMod(t, r.ability);
-        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${r.dc}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small></div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis">Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv">Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить к20</button></div>`);
+        const rule = saveRule(tokenStats(c, t).conditions, r.ability);
+        cards.push(`<div class="float-card panel save-prompt" data-key="prompt-${esc(r.id)}-${esc(t.id)}"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>Спасбросок: ${esc(ab.name)} · СЛ ${esc(r.dc)}</b><small>«${esc(r.label)}» · ${esc(tokenStats(c, t).name)} ${fmtMod(m)}</small>${rule.why ? `<small>${esc(rule.why)}</small>` : ''}</div><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="dis" ${rule.autoFail ? 'disabled' : ''}>Помеха</button><button class="btn btn-sm btn-ghost" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}" data-adv="adv" ${rule.autoFail ? 'disabled' : ''}>Преим.</button><button class="btn btn-sm btn-primary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}${rule.autoFail ? 'Записать провал' : 'Бросить к20'}</button></div>`);
       }
       // Герой товарища, которого нет за столом: тихая карточка «бросить за него».
       for (const r of reqs) for (const t of this.friendSaveTokens(r)) {
         const ab = ABILITIES.find((a) => a.id === r.ability);
         const name = tokenStats(c, t).name;
-        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${r.dc} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small></div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
+        const rule = saveRule(tokenStats(c, t).conditions, r.ability);
+        cards.push(`<div class="float-card panel save-prompt friend" data-key="friend-${esc(r.id)}-${esc(t.id)}"><span class="avatar sm hero"><img src="${esc(srcOf(t.img))}" alt=""></span><div class="titles"><b>${esc(name)} не за столом</b><small>Спасбросок ${esc(ab.short)} СЛ ${esc(r.dc)} · «${esc(r.label)}» ${fmtMod(this.saveMod(t, r.ability))}</small>${rule.why ? `<small>${esc(rule.why)}</small>` : ''}</div><button class="btn btn-sm btn-secondary" data-act="save-roll" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${icon('dice-faces-06', 14)}Бросить за него</button></div>`);
       }
     }
     const html = cards.join('');
@@ -349,11 +369,14 @@ export class Panels {
     const rows = toks.map((t) => {
       const st = tokenStats(c, t);
       const res = r.results[t.id];
-      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow ellipsis">${esc(st.name)}</span>${res ? `<b class="mono">${res.total}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">Бросить за него</button>`}</div>`;
+      const rule = saveRule(st.conditions, r.ability);
+      const why = res?.detail || rule.why;
+      const relation = this.saveRelations.get(`${r.id}:${t.id}`) || '';
+      return `<div class="sv-row"><span class="avatar xs ${t.kind}"><img src="${esc(srcOf(t.img))}" alt=""></span><span class="grow">${esc(st.name)}${why ? `<small class="t-xs muted sv-reason">${esc(why)}</small>` : ''}</span>${res ? `<b class="mono">${esc(res.total)}</b><span class="chip ${res.ok ? 'chip-success' : 'chip-negative'}">${res.ok ? 'успех' : 'провал'}</span>` : `<span class="t-xs tertiary">ждём игрока</span><button class="btn btn-sm btn-ghost" data-act="save-auto" data-id="${esc(r.id)}" data-token="${esc(t.id)}">${rule.autoFail ? 'Записать провал' : 'Бросить за него'}</button>`}</div>${r.damage ? T.damageRelationHTML(relation, `data-act="save-rel" data-id="${esc(r.id)}" data-token="${esc(t.id)}"`) : ''}`;
     }).join('');
-    return `<div class="float-card panel save-card" data-key="save-${esc(r.id)}"><div class="sv-head"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>${esc(r.label)} · ${esc(ab.short)} СЛ ${r.dc}</b><small>${done} из ${toks.length} бросили${r.damage ? ` · урон ${esc(r.damage)}${r.half ? ', при успехе половина' : ''}` : ''}</small></div><button class="icon-btn icon-btn-xs" data-act="save-close" data-id="${esc(r.id)}" aria-label="Закрыть">${icon('cancel-01', 14)}</button></div>
+    return `<div class="float-card panel save-card" data-key="save-${esc(r.id)}"><div class="sv-head"><span class="status-badge accent">${icon('dice-faces-06', 14)}</span><div class="titles"><b>${esc(r.label)} · ${esc(ab.short)} СЛ ${esc(r.dc)}</b><small>${done} из ${toks.length} бросили${r.damage ? ` · урон ${esc(r.damage)}${r.half ? ', при успехе половина' : ''}` : ''}</small></div><button class="icon-btn icon-btn-xs" data-act="save-close" data-id="${esc(r.id)}" aria-label="Закрыть">${icon('cancel-01', 14)}</button></div>
       <div class="sv-list">${rows}</div>
-      ${r.damage ? `<div class="row"><span class="spacer"></span><button class="btn btn-sm btn-danger" data-act="save-apply" data-id="${esc(r.id)}" ${done ? '' : 'disabled'}>${icon('flash', 14)}Бросить урон и применить</button></div>` : ''}</div>`;
+      ${r.damage ? `<div class="row"><span class="spacer"></span><button class="btn btn-sm btn-danger" data-act="save-apply" data-id="${esc(r.id)}" ${done ? '' : 'disabled'}>${icon('flash', 14)}Нанести урон</button></div>` : ''}</div>`;
   }
 
   // ——— Спасброски ———
@@ -374,7 +397,7 @@ export class Panels {
       const ch = characterOf(c, t.characterId);
       if (ch) return mod(ch.stats[ability]) + (ch.saves.includes(ability) ? profBonus(ch.level) : 0);
     }
-    const m = monsterById(t.monsterId);
+    const m = monsterOf(c, t.monsterId);
     return m ? (m.saves?.[ability] ?? mod(m.stats[ability])) : 0;
   }
 
@@ -387,12 +410,14 @@ export class Panels {
 
   requestSaves({ ability, dc, label, tokenIds, damage = '', half = true }) {
     const ctx = this.ctx;
+    if (!ctx.isMaster) return;
     const req = { id: uid('sv-'), ability, dc, label, tokenIds, damage, half, sceneId: ctx.sceneId, at: Date.now(), by: ctx.userId, results: {}, status: 'open' };
     for (const id of tokenIds) {
       const t = ctx.scene.tokens.find((x) => x.id === id);
       if (!t || this.needsPlayer(t)) continue;
-      const r = rollPool({ dice: { 20: 1 }, mod: this.saveMod(t, ability) });
-      req.results[id] = { total: r.total, nat: r.results[0].value, ok: r.total >= dc, by: 'master', detail: describeRoll(r) };
+      const rule = saveRule(tokenStats(ctx.c, t).conditions, ability);
+      const r = rule.autoFail ? null : rollPool({ dice: { 20: 1 }, mod: this.saveMod(t, ability), adv: rule.adv });
+      req.results[id] = saveResult(rule, r && { total: r.total, nat: r.results[0].value, detail: describeRoll(r) }, dc, 'master');
     }
     updateCampaign(ctx.cid, (c) => {
       c.saveRequests = [...(c.saveRequests || []).filter((x) => x.status === 'open' && Date.now() - x.at < 3600000).slice(-4), req];
@@ -410,24 +435,29 @@ export class Panels {
     if (!r || !t || r.results[tokenId]) return;
     const ab = ABILITIES.find((a) => a.id === r.ability);
     const st = tokenStats(c, t);
-    const rr = doRoll(ctx, { label: `${st.name}: спасбросок ${ab.short} (${r.label})`, dice: { 20: 1 }, mod: this.saveMod(t, r.ability), adv, kind: 'save' });
-    const res = { total: rr.total, nat: rr.entry.nat, ok: rr.total >= r.dc, by: byMaster ? 'master' : 'player', detail: rr.entry.detail };
+    const rule = saveRule(st.conditions, r.ability);
+    const rr = rule.autoFail ? null : doRoll(ctx, { label: `${st.name}: спасбросок ${ab.short} (${r.label})`, dice: { 20: 1 }, mod: this.saveMod(t, r.ability), adv: saveAdvantage(adv, rule), kind: 'save' });
+    const res = saveResult(rule, rr && { total: rr.total, nat: rr.entry.nat, detail: rr.entry.detail }, r.dc, byMaster ? 'master' : 'player');
     updateCampaign(ctx.cid, (cc) => { const x = (cc.saveRequests || []).find((q) => q.id === reqId); if (x && !x.results[tokenId]) x.results[tokenId] = res; });
-    if (!byMaster) ctx.toast({ title: res.ok ? 'Успех!' : 'Провал', body: `${rr.total} против СЛ ${r.dc}`, icon: res.ok ? 'shield-01' : 'flash' });
+    if (!byMaster) ctx.toast({ title: res.ok ? 'Успех!' : 'Провал', body: rule.autoFail ? rule.why : `${res.total} против СЛ ${r.dc}`, icon: res.ok ? 'shield-01' : 'flash' });
   }
 
   applySave(reqId) {
     const ctx = this.ctx, c = ctx.c;
     const r = (c.saveRequests || []).find((x) => x.id === reqId);
-    if (!r) return;
+    if (!ctx.isMaster || !r || r.status !== 'open') return;
     if (r.sceneId !== ctx.sceneId) { ctx.toast({ title: 'Перейдите на сцену запроса', icon: 'maps' }); return; }
     const f = parseFormula(r.damage);
     if (!f) { ctx.toast({ title: 'Не понимаю формулу урона', body: r.damage, icon: 'alert-circle' }); return; }
     const dmg = doRoll(ctx, { label: `${r.label}: урон`, ...f }).total;
-    const fails = [], succ = [], skipped = [];
-    for (const id of r.tokenIds) { const x = r.results[id]; if (!x) skipped.push(id); else (x.ok ? succ : fails).push(id); }
-    if (fails.length) T.applyHp(ctx, fails, -dmg);
-    if (succ.length && r.half && Math.floor(dmg / 2) > 0) T.applyHp(ctx, succ, -Math.floor(dmg / 2));
+    const skipped = [];
+    for (const id of r.tokenIds) {
+      const res = r.results[id];
+      if (!res) { skipped.push(id); continue; }
+      const amount = res.ok && !r.half ? 0 : adjustDamage(dmg, this.saveRelations.get(`${r.id}:${id}`), !!res.ok);
+      if (amount > 0) T.applyHp(ctx, [id], -amount);
+      this.saveRelations.delete(`${r.id}:${id}`);
+    }
     updateCampaign(ctx.cid, (cc) => { const x = (cc.saveRequests || []).find((q) => q.id === reqId); if (x) x.status = 'done'; });
     if (skipped.length) ctx.toast({ title: 'Без броска — урон не применён', body: skipped.map((id) => { const t = ctx.scene.tokens.find((q) => q.id === id); return t ? tokenStats(c, t).name : ''; }).filter(Boolean).join(', '), icon: 'alert-circle' });
   }
@@ -438,25 +468,27 @@ export class Panels {
   copyTokens(ids) { T.copyTokens(this.ctx, ids); }
   auraPopover(id, anchor) { T.auraPopover(this.ctx, id, anchor); }
   pasteTokens(at) { T.pasteTokens(this.ctx, at); }
-  applyHp(ids, delta) { T.applyHp(this.ctx, ids, delta); }
+  applyHp(ids, delta, opts) { T.applyHp(this.ctx, ids, delta, opts); }
 
   deathSave(chId) {
     const ctx = this.ctx;
     const ch = characterOf(ctx.c, chId);
     if (!ch || ch.hp > 0) return;
+    // #197 R4: мёртвый (три провала) и стабильный (три успеха) больше не бросают.
+    if (isDead(ch.deathSaves)) { ctx.toast({ title: `${ch.name} погиб`, body: 'Три провала — спасброски от смерти больше не бросают', icon: 'skull' }); return; }
+    if (isStable(ch.deathSaves)) { ctx.toast({ title: `${ch.name} стабилен`, body: 'Без сознания, но не умирает. Урон снова начнёт спасброски', icon: 'heart-check' }); return; }
     const r = doRoll(ctx, { label: `${ch.name}: спасбросок от смерти`, dice: { 20: 1 }, kind: 'save' });
     const nat = r.results[0].value;
     let out = null;
     updateCampaign(ctx.cid, (c) => {
       const x = c.characters.find((q) => q.id === chId); if (!x) return;
-      const ds = x.deathSaves || (x.deathSaves = { s: 0, f: 0 });
-      if (nat === 20) { x.hp = 1; x.deathSaves = { s: 0, f: 0 }; x.conditions = (x.conditions || []).filter((q) => q !== 'unconscious'); out = 'up'; }
-      else if (nat === 1) ds.f = Math.min(3, ds.f + 2);
-      else if (nat >= 10) ds.s = Math.min(3, ds.s + 1);
-      else ds.f = Math.min(3, ds.f + 1);
-      if (!out) out = ds.s >= 3 ? 'stable' : ds.f >= 3 ? 'dead' : `${ds.s}:${ds.f}`;
+      const step = deathSaveStep(x.deathSaves, nat);
+      x.deathSaves = step.ds;
+      if (step.out === 'up') { x.hp = 1; x.conditions = (x.conditions || []).filter((q) => q !== 'unconscious'); }
+      out = step.out === 'roll' ? `${step.ds.s}:${step.ds.f}` : step.out;
       addLog(c, { kind: 'save', userId: ctx.userId, text: `${x.name}: спасбросок от смерти — ${nat}` });
     });
+    if (out === 'no') return;
     const msg = {
       up: [`${ch.name} приходит в себя!`, 'Натуральная 20 — 1 хит, можно действовать'],
       stable: [`${ch.name} стабилизирован`, 'Три успеха — без сознания, но больше не умирает'],
@@ -474,7 +506,7 @@ export class Panels {
       n.classList.remove('flash-dmg', 'flash-heal'); void n.offsetWidth;
       n.classList.add(delta < 0 ? 'flash-dmg' : 'flash-heal');
       setTimeout(() => n.classList.remove('flash-dmg', 'flash-heal'), 800);
-      const showNum = ctx.isMasterView || t.kind === 'hero' || ctx.c.settings.playersSeeHp === 'exact';
+      const showNum = ctx.isMasterView || t.kind === 'hero' || !!t.ownerId || !!t.summonedBy || ctx.c.settings.playersSeeHp === 'exact';
       if (!showNum) continue;
       const g = ctx.scene.grid.size * sizeById(t.size).cells;
       const f = el(`<span class="hp-float ${delta < 0 ? 'dmg' : 'heal'}" style="left:${t.x}px;top:${t.y - g * 0.45}px">${delta < 0 ? '−' : '+'}${Math.abs(delta)}</span>`);
@@ -490,13 +522,39 @@ export class Panels {
     const inCombat = new Set(c.combat.entries.map((e) => e.tokenId));
     const removeAll = ids.every((id) => inCombat.has(id));
     // Новых участников бросаем до записи — их к20 падают на стол.
-    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id)).map((id) => {
-      const t = ctx.scene?.tokens.find((x) => x.id === id);
-      return t && t.kind !== 'item' ? { tokenId: id, ...rollInitiative(c, t) } : null;
+    // Пачки (#198): существо мастера встаёт в неполную (до 10) пачку своего вида с той же скрытностью — без броска.
+    const joins = new Map(); // tokenId → {group, init}
+    const fill = new Map(); // group → сколько в ней
+    for (const e of c.combat.entries) if (e.group) fill.set(e.group, (fill.get(e.group) || 0) + 1);
+    const tokOf = (id) => ctx.scene?.tokens.find((x) => x.id === id);
+    if (!removeAll) for (const id of ids) {
+      if (inCombat.has(id)) continue;
+      const t = tokOf(id), k = packKind(t);
+      if (!k || !canFight(t)) continue;
+      const e = c.combat.entries.find((x) => x.group && (fill.get(x.group) || 0) < 10 && packKind(tokOf(x.tokenId)) === k && !!tokOf(x.tokenId)?.hidden === !!t.hidden);
+      if (!e) continue;
+      joins.set(id, { group: e.group, init: e.init });
+      fill.set(e.group, fill.get(e.group) + 1);
+    }
+    // Призывы одного владельца и вида, добавленные вместе, — одна группа с одним броском (#198 §2).
+    const sumGroups = new Map(); // id → {group, lead}
+    if (!removeAll) {
+      const byKind = new Map();
+      for (const id of ids) { const t = tokOf(id), k = summonKind(t); if (k && !inCombat.has(id) && canFight(t)) { if (!byKind.has(k)) byKind.set(k, []); byKind.get(k).push(id); } }
+      for (const list of byKind.values()) if (list.length > 1) { const g = uid('g-'); for (const id of list) sumGroups.set(id, { group: g, lead: list[0] }); }
+    }
+    const rolled = removeAll ? [] : ids.filter((id) => !inCombat.has(id) && !joins.has(id) && (!sumGroups.has(id) || sumGroups.get(id).lead === id)).map((id) => {
+      const t = tokOf(id);
+      return canFight(t) ? { tokenId: id, ...rollInitiative(c, t), ...(sumGroups.has(id) ? { name: `${tokenStats(c, t).name.replace(/\s+\d+$/, '')} ×${[...sumGroups.values()].filter((x) => x.group === sumGroups.get(id).group).length}` } : {}) } : null;
     }).filter(Boolean);
+    const initOf = new Map(rolled.map((r) => [r.tokenId, r.init]));
     this.keepTurn((cc) => {
       if (removeAll) cc.combat.entries = cc.combat.entries.filter((e) => !ids.includes(e.tokenId));
-      else for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init });
+      else {
+        for (const r of rolled) if (!cc.combat.entries.some((e) => e.tokenId === r.tokenId)) cc.combat.entries.push({ tokenId: r.tokenId, init: r.init, ...(sumGroups.has(r.tokenId) ? { group: sumGroups.get(r.tokenId).group } : {}) });
+        for (const [id, sg] of sumGroups) if (id !== sg.lead && initOf.has(sg.lead) && !cc.combat.entries.some((e) => e.tokenId === id)) cc.combat.entries.push({ tokenId: id, init: initOf.get(sg.lead), group: sg.group });
+        for (const [id, j] of joins) if (!cc.combat.entries.some((e) => e.tokenId === id)) cc.combat.entries.push({ tokenId: id, init: j.init, group: j.group });
+      }
     });
     initiativeDice(ctx, rolled);
     ctx.toast({ title: removeAll ? 'Убраны из боя' : 'В бою', body: `${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}`, icon: 'sword-03' });
@@ -505,18 +563,48 @@ export class Panels {
   /** Изменить участников боя, сохранив, чей сейчас ход. */
   keepTurn(fn) {
     const ctx = this.ctx, sid = ctx.sceneId;
-    updateCampaign(ctx.cid, (c) => {
-      const sc = c.scenes.find((s) => s.id === sid);
-      const before = currentEntry(c, sc, { raw: true })?.tokenId;
-      fn(c, sc);
-      if (!c.combat.entries.length) { endCombat(c); return; }
-      const order = initiativeOrder(c, sc);
-      const i = order.findIndex((e) => e.tokenId === before);
-      c.combat.turn = i >= 0 ? i : Math.min(c.combat.turn, order.length - 1);
+    updateCampaign(ctx.cid, (c) => keepTurnWith(c, c.scenes.find((s) => s.id === sid), fn));
+  }
+
+  /** Инициатива записи; у пачки (#198) — у всех её членов. */
+  setInitiative(tokenId, v) {
+    this.keepTurn((c) => {
+      const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (!e) return;
+      for (const x of c.combat.entries) if (x === e || (e.group && x.group === e.group)) x.init = v;
     });
   }
 
-  setInitiative(tokenId, v) { this.keepTurn((c) => { const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (e) e.init = v; }); }
+  // ——— Пачки в бою (#198) ———
+  /** Выделить живых членов пачки (их можно тащить одним движением). */
+  packSelect(tokenId) {
+    const ctx = this.ctx;
+    const ids = slotMembers(ctx.combatOrder(), tokenId).filter((e) => !(e.stats.hpMax > 0 && e.stats.hp <= 0)).map((e) => e.tokenId);
+    if (ids.length) ctx.select(ids);
+  }
+  /** Отделить токен от пачки: свой ход с той же инициативой. */
+  packSplit(tokenId) { this.keepTurn((c) => { const e = c.combat.entries.find((x) => x.tokenId === tokenId); if (e) delete e.group; }); }
+  /** Разгруппировать пачку: каждый ходит сам, инициатива прежняя. */
+  packUngroup(tokenId) {
+    this.keepTurn((c) => { const g = c.combat.entries.find((x) => x.tokenId === tokenId)?.group; if (g) for (const e of c.combat.entries) if (e.group === g) delete e.group; });
+  }
+  /**
+   * Сделать пачкой выделенных участников боя: инициатива — первого из них по очереди. Если среди выделенных ровно
+   * одна пачка — остальные вливаются в неё с её инициативой.
+   */
+  packMake(ids) {
+    const ctx = this.ctx;
+    const order = ctx.combatOrder().filter((e) => ids.includes(e.tokenId));
+    if (order.length < 2) return;
+    const had = [...new Set(order.map((e) => e.group).filter(Boolean))];
+    const base = had.length === 1 ? order.find((e) => e.group === had[0]) : order[0];
+    const gid = had.length === 1 ? had[0] : uid('g-'), init = base.init;
+    this.keepTurn((c) => { for (const e of c.combat.entries) if (ids.includes(e.tokenId)) { e.group = gid; e.init = init; } });
+    ctx.toast({ title: `Пачка из ${order.length}`, body: `Ходят вместе, инициатива ${init ?? '—'}`, icon: 'group-items' });
+  }
+  /** Убрать пачку из боя целиком. */
+  packRemove(tokenId) {
+    this.keepTurn((c) => { const g = c.combat.entries.find((x) => x.tokenId === tokenId)?.group; c.combat.entries = c.combat.entries.filter((e) => e.tokenId !== tokenId && !(g && e.group === g)); });
+  }
 
   rollMyInitiative(tokenId) {
     const ctx = this.ctx, c = ctx.c;
@@ -536,7 +624,15 @@ export class Panels {
     const ctx = this.ctx;
     const cur = currentEntry(ctx.c, ctx.scene);
     if (!cur) return;
-    if (!ctx.isMaster && !ctx.playsFor(cur.token)) return;
+    if (!ctx.isMaster && !ctx.actsFor(cur.token)) return;
+    // Сервер: игрок не передаёт ход сам — он отмечает «ход закончен» (ended), и клиент мастера сдвигает очередь.
+    // Номер хода у игрока может не совпадать с мастерским (скрытые участники), поэтому угадывать по нему нельзя.
+    if (!ctx.isMaster && isServerMode() && 'current' in (ctx.c.combat || {})) {
+      const raw = currentEntry(ctx.c, ctx.scene, { raw: true });
+      if (!raw || ctx.c.combat.ended === raw.tokenId) return;
+      updateCampaign(ctx.cid, (c) => { if (c.combat.current === raw.tokenId) c.combat.ended = raw.tokenId; });
+      return;
+    }
     this.nextTurn(1);
   }
 
@@ -581,12 +677,12 @@ export class Panels {
   trapTriggered(tr, t) { M.trapTriggered(this.ctx, tr, t); }
   templatePopover(a) { M.templatePopover(this.ctx, a); }
   opportunityWarning(t, foes, h) { M.opportunityWarning(this.ctx, t, foes, h); }
-  textPrompt(w, a, d) { M.textPrompt(this.ctx, w, a, d); }
+  textPrompt(w, a, d, p) { M.textPrompt(this.ctx, w, a, d, p); }
   help() { D.helpModal(this.ctx); }
 
   openSheetFor(t) {
     const ctx = this.ctx;
-    if (!t) return;
+    if (!t || (t.pending && !ctx.isMasterView)) return;
     if (t.kind === 'item') return;
     ctx.ui.panel = null; this.renderSide();
     if (t.characterId) openCharacterSheet(ctx, t.characterId);
@@ -661,6 +757,7 @@ export class Panels {
       const [, tool, v] = act.split(':');
       if (tool === 'measure') { if ((ctx.ui.sub.measure || 'ruler') !== v) ctx.clearMeasure(false); ctx.setTool('measure', v); return; }
       ctx.ui.sub[tool] = v;
+      if (tool === 'draw') { ctx.ui.livePoly = null; ctx.ui.drawLabel = null; ctx.invalidate('drawings'); }
       ctx.invalidate('chrome', 'overlay', 'terrain');
       return;
     }
@@ -677,6 +774,8 @@ export class Panels {
       case 'w-close': ctx.ui.widget = null; this.refreshWidget(); ctx.invalidate('chrome'); break;
       case 'pause': D.pausePopover(ctx, b); break;
       case 'exit-viewas': ctx.setViewAs(null); break;
+      case 'sight-off': setSightOff(ctx, mySight(ctx).filter((s) => !s.blocked && !s.off).map((s) => s.t.id), true); break;
+      case 'sight-toggle': setSightOff(ctx, [b.dataset.id], !ctx.ui.sightOff?.has(b.dataset.id)); break;
       case 'viewas': ctx.setViewAs(ctx.ui.viewAs === b.dataset.id ? null : b.dataset.id); break;
       case 'vision-edit': ctx.ui.visionEdit = ctx.ui.visionEdit === b.dataset.id ? null : b.dataset.id; this.refreshWidget(true); break;
       case 'v-light': if (this.canSetVision(b.dataset.id)) T.setTokenLight(ctx, b.dataset.id, b.dataset.v); break;
@@ -699,6 +798,7 @@ export class Panels {
         break;
       }
       case 'statblock': if (one) this.openSheetFor(one); break;
+      case 'token-requests': pendingQueue(ctx, b); break;
       case 'invite': D.inviteModal(ctx); break;
       case 'help': this.help(); break;
       case 'reference': D.referenceModal(this.ctx); break;
@@ -755,9 +855,22 @@ export class Panels {
       case 'grid-done': this.gridDone(); break;
       case 'share-ruler': ctx.ui.shareRuler = !ctx.ui.shareRuler; if (!ctx.ui.shareRuler) { ctx.sendRuler(null); ctx.sendTemplate(null); } ctx.invalidate('chrome'); break;
       case 'measure-clear': ctx.clearMeasure(); break;
+      case 'draw-fill': case 'draw-stroke':
+        stylePopover(b, act === 'draw-fill' ? 'fill' : 'stroke', drawStyle(ctx), (patch) => { Object.assign(drawStyle(ctx), patch); ctx.invalidate('chrome'); });
+        break;
+      case 'draw-tpl': {
+        // Шаблоны заклинаний под одной кнопкой: выбрать и сразу тянуть от точки.
+        const pop = popover(`<div class="menu" role="menu">${DRAW_TEMPLATES.map((t) => `<button class="menu-item" role="menuitem" data-tpl="${t.id}">${icon(t.icon, 18)}<span>${esc(t.name)}</span></button>`).join('')}</div>`, b, { placement: 'top' });
+        pop.node.addEventListener('click', (e) => {
+          const it = e.target.closest('[data-tpl]'); if (!it) return;
+          ctx.ui.lastDrawTpl = it.dataset.tpl; ctx.ui.sub.draw = it.dataset.tpl; ctx.ui.livePoly = null;
+          closePopover(); ctx.invalidate('chrome', 'overlay', 'drawings');
+        });
+        break;
+      }
       case 'draw-clear': {
         const mineOnly = !ctx.isMaster;
-        const removed = ctx.scene.drawings.filter((d) => !mineOnly || d.author === ctx.userId);
+        const removed = ctx.scene.drawings.filter((d) => !d.locked && (!mineOnly || d.author === ctx.userId));
         if (!removed.length) { ctx.toast({ title: 'Рисунков нет', icon: 'pencil-edit-02' }); break; }
         const ids = new Set(removed.map((d) => d.id));
         ctx.mutateScene((s) => { s.drawings = s.drawings.filter((d) => !ids.has(d.id)); }, { label: 'Стереть рисунки', undo: (s) => { s.drawings.push(...structuredClone(removed)); }, redo: (s) => { s.drawings = s.drawings.filter((d) => !ids.has(d.id)); } });
@@ -776,13 +889,19 @@ export class Panels {
         break;
       }
       case 'combat-start': D.combatSetup(ctx, sel); break;
-      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': D.setupAction(ctx, act, b); break;
+      case 'setup-toggle': case 'setup-self': case 'setup-cancel': case 'setup-start': case 'setup-kind': case 'setup-mode': case 'setup-kind-open': D.setupAction(ctx, act, b); break;
       case 'combat-next': this.nextTurn(1); break;
       case 'combat-prev': this.nextTurn(-1); break;
       case 'combat-end': updateCampaign(ctx.cid, (cc) => endCombat(cc)); ctx.toast({ title: 'Бой окончен', icon: 'sword-03' }); break;
       case 'combat-add': this.combatToggle(sel); break;
       case 'init-set': D.initEdit(ctx, b.dataset.id, b); break;
       case 'init-remove': this.keepTurn((cc) => { cc.combat.entries = cc.combat.entries.filter((x) => x.tokenId !== b.dataset.id); }); break;
+      case 'init-tie-up': case 'init-tie-down': this.keepTurn((cc, sc) => { moveTied(cc, sc || ctx.scene, b.dataset.id, act === 'init-tie-up' ? -1 : 1); }); break;
+      case 'pack-open': { ctx.ui.packOpen ||= new Set(); const k = b.dataset.slot; ctx.ui.packOpen.has(k) ? ctx.ui.packOpen.delete(k) : ctx.ui.packOpen.add(k); this.refreshWidget(); break; }
+      case 'pack-select': this.packSelect(b.dataset.id); break;
+      case 'pack-attack': mobAttack(ctx, b.dataset.id); break;
+      case 'pack-split': this.packSplit(b.dataset.id); break;
+      case 'pack-remove': this.packRemove(b.dataset.id); break;
       case 'init-roll': this.rollMyInitiative(b.dataset.id); break;
       // Токен-бар
       case 'focus': if (one) ctx.camera.centerOn(one.x, one.y); break;
@@ -803,11 +922,13 @@ export class Panels {
       }
       case 'token-settings': if (one) T.tokenSettings(ctx, one.id, b); break;
       case 'token-delete': T.deleteTokens(ctx, sel); break;
+      case 'own-stats': if (one) T.statsPrompt(ctx, one.id); break;
       case 'deselect': ctx.select([]); break;
       case 'ping-token': if (one) ctx.ping(one.x, one.y); break;
       case 'copy-code': copyText(ctx.c.invite?.code || '').then(() => ctx.toast({ title: 'Код скопирован', body: ctx.c.invite?.code, icon: 'copy-01' })); break;
       case 'target': if (one) T.toggleTarget(ctx, one.id); break;
       // Карточки сверху
+      case 'save-rel': if (ctx.isMaster) { this.saveRelations.set(`${b.dataset.id}:${b.dataset.token}`, b.dataset.rel); this.renderFloats(); } break;
       case 'save-roll': this.rollSave(b.dataset.id, b.dataset.token, b.dataset.adv || null); break;
       case 'save-auto': this.rollSave(b.dataset.id, b.dataset.token, null, true); break;
       case 'save-apply': this.applySave(b.dataset.id); break;
@@ -838,6 +959,7 @@ export class Panels {
       case 'creature': this.toggleSide('bestiary'); break;
       case 'hero': S.heroPicker(ctx, b); break;
       case 'item': S.itemPicker(ctx, b); break;
+      case 'own': S.playerAddMenu(ctx, b); break;
       case 'environment': ctx.setTool('lights'); break;
       case 'note': ctx.setTool('gm', 'note'); break;
       case 'map': S.newSceneModal(ctx); break;

@@ -58,10 +58,21 @@ export const rollVis = (l) => l.vis || (l.hidden ? 'gm' : 'all');
 /** Видно ли этому участнику число броска. */
 export function canSeeRoll(ctx, l) {
   const v = rollVis(l), mine = l.userId === ctx.userId;
+  // Тайная часть скрытого броска ещё не пришла с сервера — числа нет, показываем как скрытый.
+  if (l.redacted && !mine) return false;
   if (v === 'all') return true;
   if (v === 'gm') return mine || ctx.isMaster;
   if (v === 'blind') return ctx.isMaster;
   return mine;
+}
+/**
+ * Кому виден бросок с листа или статблока — как выбрано на панели кубов. «Вслепую» у мастера — просто скрыто;
+ * hidden (скрытый токен мастера) делает открытый бросок скрытым: число и имя не должны выдать засаду.
+ */
+export function poolVis(ctx, hidden = false) {
+  const p = ctx.ui.dicePool || {};
+  const v = ctx.isMaster && p.vis === 'blind' ? 'gm' : p.vis || 'all';
+  return hidden && v === 'all' ? 'gm' : v;
 }
 /** Знает ли участник, что бросок был (бросок «себе» другим не показывается). */
 export const knowsRoll = (ctx, l) => rollVis(l) !== 'self' || l.userId === ctx.userId;
@@ -98,7 +109,8 @@ export function showRollToast(ctx, entry, mine = false) {
     else ctx.toast({ title: `${u?.name || 'Кто-то'} бросил скрыто`, body: vis === 'gm' && !ctx.isMaster ? 'Результат видят он и мастер' : 'Результат видит только мастер', icon: 'view-off' });
     return;
   }
-  const crit = entry.nat === 20 ? ' · критическое попадание!' : entry.nat === 1 ? ' · единица' : '';
+  // #197 R3: крит бывает только у броска атаки; у проверок и спасбросков 20 и 1 — просто натуральные.
+  const crit = entry.nat === 20 ? (entry.kind === 'attack' ? ' · критическое попадание!' : ' · натуральная 20') : entry.nat === 1 ? (entry.kind === 'attack' ? ' · промах' : ' · натуральная 1') : '';
   const tag = vis === 'all' ? '' : ` · ${ROLL_MODES.find((m) => m.id === vis)?.name.toLowerCase()}`;
   ctx.toast({ title: `${mine ? 'Вы' : u?.name || 'Кто-то'} · ${entry.label}${tag}`, body: entry.detail + crit, avatar: userAvatar(u, 'sm'), result: entry.total });
 }
@@ -115,7 +127,7 @@ export function initiativeDice(ctx, rolls) {
   const id = uid('i-');
   const items = list.map((r) => {
     const t = ctx.scene?.tokens.find((x) => x.id === r.tokenId);
-    return t && { tokenId: r.tokenId, name: ctx.nameOf(t), natural: r.natural, total: r.init, hidden: !!t.hidden };
+    return t && { tokenId: r.tokenId, name: r.name || ctx.nameOf(t), natural: r.natural, total: r.init, hidden: !!t.hidden };
   }).filter(Boolean);
   diceFloor(ctx)?.rollGroup({ id, userId: ctx.userId, title: 'Инициатива', items, skin, mine: true });
   const open = items.filter((x) => !x.hidden).map(({ tokenId, natural, total }) => ({ tokenId, natural, total }));
@@ -166,7 +178,7 @@ export function diceWidget(ctx) {
       const n = (pool.dice[s] || 0) + (s === 20 && pool.adv && pool.dice[20] === 1 ? 1 : 0); // при преимуществе к20 два
       return `<button class="rail-btn rail-die ${n ? 'selected' : ''}" data-act="die-add" data-sides="${s}" data-tip="к${s}${n ? ' · правый клик — убрать' : ''}" aria-label="Положить к${s}${n ? `, в лотке ${n}` : ''}">${railDie(s, skin.id)}${n ? `<span class="count">${n}</span>` : ''}</button>`;
     }).join('')}
-    <span class="divider"></span>
+    <span class="divider rail-options-break"></span>
     ${tool('dice-vis-menu', mode.icon, `Кому виден бросок: ${mode.name}`, { active: (pool.vis || 'all') !== 'all' })}
     ${tool('dice-mod-menu', 'plus-minus', pool.mod ? `Модификатор ${fmtMod(pool.mod)}` : 'Модификатор', { active: !!pool.mod, badge: pool.mod ? fmtMod(pool.mod) : '' })}
     ${tool('dice-adv', 'justice-scale-01', ADV_TIP[adv], { cls: pool.adv ? `adv-${pool.adv}` : '', badge: pool.adv === 'adv' ? '↑' : pool.adv === 'dis' ? '↓' : '', menu: false })}

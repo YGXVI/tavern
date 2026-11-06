@@ -12,7 +12,7 @@ const URL0 = 'http://localhost:4173/';
 const OUT = process.env.SHOTS || (await import('node:os')).tmpdir();
 const A = '00000000-0000-0000-0000-0000000000a1', B = '00000000-0000-0000-0000-0000000000b2';
 const fake = fakeServer({ names: { [A]: 'Соль', [B]: 'Ася' } });
-const browser = await chromium.launch();
+const browser = await chromium.launch({ ...(process.env.BROWSER_EXECUTABLE_PATH ? { executablePath: process.env.BROWSER_EXECUTABLE_PATH } : {}) });
 const errors = [];
 const step = async (name, fn) => { try { await fn(); console.log('✓', name); } catch (e) { errors.push(`STEP ${name}: ${e.message.split('\n').slice(0, 3).join(' | ')}`); console.log('✗', name); } };
 async function newCtx() {
@@ -22,7 +22,7 @@ async function newCtx() {
   return ctx;
 }
 const watch = (p, tag) => {
-  p.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !m.text().includes('ERR_FAILED') && !m.text().includes('ERR_ABORTED')) errors.push(`${tag} [${m.type()}] ${m.text()}`); });
+  p.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !m.text().includes('ERR_FAILED') && !m.text().includes('ERR_ABORTED') && !m.text().includes('GL Driver Message')) errors.push(`${tag} [${m.type()}] ${m.text()}`); });
   p.on('pageerror', (e) => errors.push(`${tag} [pageerror] ${e.message} ${e.stack?.split('\n')[1] || ''}`));
 };
 const shot = async (p, n) => { await p.waitForTimeout(250); await p.screenshot({ path: `${OUT}/${n}.png` }); };
@@ -259,9 +259,29 @@ await step('door: master adds door, player opens it', async () => {
   if (!mOpen) errors.push('мастер не увидел открытую дверь');
 });
 
+// #190 E: своя картинка у существа на карте — мастер, ПКМ → «Картинка…», файл в бакет tokens кампании.
+await step('master: own picture for a creature (tokens bucket)', async () => {
+  await M.keyboard.press('Escape'); await M.keyboard.press('Escape'); await wait(M, 200);
+  const t = fake.T.tokens.find((x) => x.id === 't-ogre1');
+  if (!t) throw new Error('огра нет на сервере');
+  const p = await M.evaluate(([x, y]) => { const w = document.querySelector('.world'); const vp = document.querySelector('.viewport').getBoundingClientRect(); const m = new DOMMatrix(getComputedStyle(w).transform); return { x: vp.left + m.e + x * m.a, y: vp.top + m.f + y * m.d }; }, [t.data.x, t.data.y]);
+  await M.mouse.click(p.x, p.y, { button: 'right' }); await wait(M, 250);
+  const { readFileSync } = await import('node:fs');
+  await M.click('.menu >> text=Картинка…');
+  const [fc] = await Promise.all([M.waitForEvent('filechooser'), M.click('.token-image-modal [data-upload]')]);
+  await fc.setFiles({ name: 'ogre.webp', mimeType: 'image/webp', buffer: readFileSync(new URL('../../../dist/assets/maps/cave.webp', import.meta.url)) });
+  await M.locator('.token-image-modal [data-save]:enabled').waitFor();
+  await M.click('.token-image-modal [data-save]');
+  const ok = await until(async () => String(fake.T.tokens.find((x) => x.id === 't-ogre1')?.data.img).startsWith('sb:@tokens/'), 5000);
+  console.log('  ogre img', fake.T.tokens.find((x) => x.id === 't-ogre1')?.data.img);
+  if (!ok) throw new Error('картинка огра не дошла до сервера');
+});
+
 await step('map upload by master (storage)', async () => {
   await M.keyboard.press('Escape'); await M.keyboard.press('Escape'); await wait(M, 200);
-  await M.click('[data-act="add:map"]');
+  // Сцена уже есть: «Создать сцену» (add:map) — только на пустом столе; новая сцена — из панели «Сцены».
+  if (!(await M.locator('[data-act="scene-new"]').count())) await M.click('[data-act="scenes"]');
+  await M.click('[data-act="scene-new"]');
   await M.waitForSelector('.modal [data-upload]', { state: 'attached' });
   const { readFileSync } = await import('node:fs');
   await M.setInputFiles('.modal [data-upload]', { name: 'map.webp', mimeType: 'image/webp', buffer: readFileSync(new URL('../../../dist/assets/maps/cave.webp', import.meta.url)) });
@@ -279,7 +299,7 @@ await step('map upload by master (storage)', async () => {
   await shot(M, 'e2e-08-own-map');
   // Мастер показывает сцену — у игрока карта по подписанной ссылке.
   await M.evaluate(async ([cid, sid]) => { const st = await import('./js/core/store.js'); st.commit((db) => { db.campaigns[cid].activeSceneId = sid; }); }, [cid, sc.id]);
-  const got = await until(async () => (await P.evaluate(() => [...document.querySelectorAll('img')].some((i) => (i.getAttribute('src') || '').startsWith('data:image/svg+xml,%3Csvg')))), 5000);
+  const got = await until(async () => (await P.evaluate(() => [...document.querySelectorAll('.world img')].some((i) => (i.getAttribute('src') || '').startsWith('data:image/') && i.naturalWidth > 0))), 5000);
   console.log('  player map via signed url', got);
   if (!got) errors.push('игрок не получил карту из хранилища');
   await shot(P, 'e2e-09-player-own-map');

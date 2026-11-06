@@ -12,7 +12,7 @@ const ftToPx = (scene, ft) => (ft / (scene.grid.feet || 5)) * gridSize(scene.gri
 export function sceneLights(scene, positions = {}) {
   const out = scene.lights.map((l) => ({ ...l, x: l.x, y: l.y }));
   for (const t of scene.tokens) {
-    if (!t.light || t.hidden && !positions.includeHidden) continue;
+    if (t.pending || !t.light || t.hidden && !positions.includeHidden) continue;
     const p = positions[t.id] || t;
     out.push({ id: `tok-${t.id}`, x: p.x, y: p.y, bright: t.light.bright, dim: t.light.dim, color: t.light.color || 'warm', flicker: t.light.flicker, fromToken: t.id });
   }
@@ -44,8 +44,9 @@ function polyAt(p, walls, wk, bounds, radius = Infinity) {
  * Посчитать, что видно.
  * eyes — токены-наблюдатели; positions — временные координаты (при перетаскивании).
  * moving у обзора и света — источник сейчас тащат: его слой тумана рисуется каждый кадр, остальное — из кэша.
+ * sight — глаза существ [{t, r}] (sight.js): обзор радиуса r от точки существа.
  */
-export function computeVision(c, scene, eyes, positions = {}) {
+export function computeVision(c, scene, eyes, positions = {}, sight = []) {
   const bounds = { x: 0, y: 0, w: scene.map.width, h: scene.map.height };
   const dark = scene.lighting === 'dark';
   const wk = wallsKey(scene.walls);
@@ -54,6 +55,11 @@ export function computeVision(c, scene, eyes, positions = {}) {
     const st = tokenStats(c, t);
     return { x: p.x, y: p.y, poly: polyAt(p, scene.walls, wk, bounds), darkvision: st.darkvision ? ftToPx(scene, st.darkvision) : 0, tokenId: t.id, moving: !!positions[t.id] };
   });
+  // Глаза существ, выданные мастером (#190 C): круг дальности r, стены перекрывают; в темноте r — как тёмное зрение.
+  for (const g of sight) {
+    const p = positions[g.t.id] || g.t;
+    visions.push({ x: p.x, y: p.y, poly: polyAt(p, scene.walls, wk, bounds, g.r), darkvision: g.r, tokenId: g.t.id, moving: !!positions[g.t.id], sight: true });
+  }
   const lights = dark ? sceneLights(scene, positions).map((l) => {
     const radius = ftToPx(scene, (l.bright || 0) + (l.dim || 0));
     return { ...l, radius, brightR: ftToPx(scene, l.bright || 0), poly: polyAt(l, scene.walls, wk, bounds, radius), moving: !!(l.fromToken && positions[l.fromToken]) };
