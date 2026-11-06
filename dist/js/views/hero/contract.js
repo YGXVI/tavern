@@ -397,7 +397,9 @@ const live = (name) => (payload = {}) => {
     const ch = c.characters.find((x) => x.id === chid);
     if (ch) note = applyHeroAction(ch, name, payload, { random: Math.random });
   });
-  if (note) say(note.title, note.body || '', note.icon);
+  // Трату ячейки или заряда можно вернуть из подсказки — на телефоне её легко нажать случайно.
+  if (note?.undo) toast({ title: note.title, body: note.body || '', icon: note.icon, action: { label: 'Вернуть', onClick: () => live('refund')({ heroId: payload.heroId, id: note.undo.id }) } });
+  else if (note) say(note.title, note.body || '', note.icon);
 };
 
 /**
@@ -529,6 +531,7 @@ export const heroActions = {
   setHp: live('setHp'),                        // { heroId, delta, temp }
   roll: live('roll'),                          // { heroId, what, formula }
   useResource: live('useResource'),            // { heroId, id }
+  refund: live('refund'),                      // { heroId, id } — вернуть одну трату (кнопка в подсказке)
   toggleCondition: live('toggleCondition'),    // { heroId, id }
   dropConcentration: live('dropConcentration'),// { heroId }
   rest: live('rest'),                          // { heroId, kind: 'short' | 'long', hitDice, recover: [levels] }

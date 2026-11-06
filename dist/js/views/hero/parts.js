@@ -36,7 +36,7 @@ export function stepTitle(title, hint, tip = '', tipIcon = 'crown') {
 
 /** Карточка выбора с картинкой (раса, класс, быстрый герой). */
 export function artCard(o, { selected = false, attr = 'data-pick' } = {}) {
-  return html`<button class="h-choice ${selected ? 'on' : ''}" ${raw(attr)}="${o.id}" aria-pressed="${selected}">
+  return html`<button class="h-choice ${selected ? 'on' : ''}" ${raw(attr)}="${o.id}" aria-pressed="${String(selected)}">
     <span class="h-choice-art">${o.img ? html`<img src="${o.img}" alt="" loading="lazy">` : ic(o.icon || 'user', 36)}${selected ? html`<span class="h-tick">${ic('tick-02', 14)}</span>` : ''}</span>
     <b>${o.name}</b>${o.sub ? html`<small>${o.sub}</small>` : ''}${o.text ? html`<span class="h-choice-text">${o.text}</span>` : ''}
     ${o.tags?.length ? html`<span class="h-tags">${o.tags.map((t) => chip(t))}</span>` : ''}
@@ -45,7 +45,7 @@ export function artCard(o, { selected = false, attr = 'data-pick' } = {}) {
 
 /** Карточка выбора с иконкой (путь создания, предыстория, хиты при повышении). */
 export function iconCard(o, { selected = false, attr = 'data-pick', cls = '' } = {}) {
-  return html`<button class="h-icard ${cls} ${selected ? 'on' : ''}" ${raw(attr)}="${o.id}" aria-pressed="${selected}">
+  return html`<button class="h-icard ${cls} ${selected ? 'on' : ''}" ${raw(attr)}="${o.id}" aria-pressed="${String(selected)}">
     <span class="h-icard-top"><span class="h-sq">${ic(o.icon || 'star', 20)}</span>${selected ? html`<span class="h-tick">${ic('tick-02', 14)}</span>` : ''}</span>
     <b>${o.name}</b>${o.sub ? html`<small>${o.sub}</small>` : ''}${o.text ? html`<span class="h-icard-text">${o.text}</span>` : ''}
     ${o.tags?.length ? html`<span class="h-tags">${o.tags.map((t) => chip(t))}</span>` : ''}
@@ -82,7 +82,7 @@ export function bottomBar({ back, backLabel = 'Назад', hint = '', next, nex
 
 /** Плашка-переключатель (сегменты): items — [{id, name, disabled}]. */
 export function segmented(items, active, attr = 'data-seg', cls = '') {
-  return html`<div class="h-seg ${cls}" role="tablist">${items.map((it) => html`<button role="tab" ${raw(attr)}="${it.id ?? it.name}" aria-selected="${(it.id ?? it.name) === active}" ${it.disabled ? raw('disabled') : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.name}</button>`)}</div>`;
+  return html`<div class="h-seg ${cls}" role="tablist">${items.map((it) => html`<button role="tab" ${raw(attr)}="${it.id ?? it.name}" aria-selected="${String((it.id ?? it.name) === active)}" ${it.disabled ? raw('disabled') : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.name}</button>`)}</div>`;
 }
 
 /** Галочка-чекбокс в стиле макета (фиолетовая для заклинаний). */

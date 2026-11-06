@@ -140,3 +140,20 @@ test('старая сумка строкой: «23 зм» — монеты, а �
   assert.equal(view(lira).personality.traits, 'Говорит шёпотом');
   assert.match(applyHeroAction(lira, 'editField', { field: 'traits', value: 'x', server: true }).title, /Пока не сохраняется/);
 });
+
+test('трата ячейки и заряда возвращается («Вернуть» в подсказке), но не ниже нуля', () => {
+  const ch = hero('cleric5-hill-dwarf');
+  const pool = ch.slotPools.find((p) => p.circle === 1);
+  const note = applyHeroAction(ch, 'useResource', { id: pool.id });
+  assert.equal(note.undo.id, pool.id);
+  assert.equal(pool.spent, 1);
+  applyHeroAction(ch, 'refund', { id: pool.id });
+  assert.equal(pool.spent, 0);
+  assert.equal(applyHeroAction(ch, 'refund', { id: pool.id }), null, 'ниже нуля не уходит');
+  const cast = applyHeroAction(ch, 'cast', { spellId: ch.knownSpells.find((s) => s.circle === 1).id });
+  assert.ok(cast.undo?.id, 'сотворение тоже можно вернуть');
+  const legacy = { slots: { 1: { max: 2, used: 0 } } };
+  const n = applyHeroAction(legacy, 'useResource', { id: 'legacy-slot-1' });
+  applyHeroAction(legacy, 'refund', { id: n.undo.id });
+  assert.equal(legacy.slots[1].used, 0);
+});

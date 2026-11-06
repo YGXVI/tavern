@@ -263,7 +263,7 @@ function quickPage(step) {
   const picked = q.picked[qq.id];
   let body;
   if (qq.options) {
-    body = html`<div class="h-quick-opts n${qq.options.length}">${qq.options.map((o) => html`<button class="h-qcard ${o.id === picked ? 'on' : ''}" data-q="${o.id}" aria-pressed="${o.id === picked}">
+    body = html`<div class="h-quick-opts n${qq.options.length}">${qq.options.map((o) => html`<button class="h-qcard ${o.id === picked ? 'on' : ''}" data-q="${o.id}" aria-pressed="${String(o.id === picked)}">
       <span class="art"><img src="${o.img}" alt="" loading="lazy">${o.id === picked ? html`<span class="h-tick">${ic('tick-02', 14)}</span>` : ''}</span>
       <span class="body"><b>${o.name}</b><small>${o.text}</small><span class="note">${o.note}</span></span></button>`)}</div>`;
   } else {

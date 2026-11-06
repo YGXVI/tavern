@@ -24,7 +24,7 @@ export function stepBody(s, cv, d) {
 // need — выбор ещё не заполнен: после карточки экран прокручивается к нему (index.js).
 const filled = (b) => /выбрано (\d+) из \1/.test(b.note || '');
 export const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box h-extra ${filled(b) ? '' : 'need'}"><div class="h-box-head">${caps(b.title)}<small>${filled(b) ? '' : ic('alert-circle', 14)}${b.note}</small></div>
-  <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}" aria-pressed="${!!p.on}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
+  <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}" aria-pressed="${String(!!p.on)}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
 
 /** «Этот шаг дал» — для живого листа справа. */
 export function stepGave(s, cv, d) {
@@ -61,7 +61,7 @@ function abilitiesStep(head, ab, d) {
 function backgroundStep(head, cv, d) {
   const sel = cv.live ? cv.selected.background : d.background || 'sage';
   const pills = (box, attr) => html`<section class="h-box"><div class="h-box-head">${caps(box.title)}<small>${box.note}</small></div>
-    <div class="h-pills">${box.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''} ${p.from ? 'fixed' : ''}" ${raw(attr)}="${p.name}" aria-pressed="${!!(p.on || p.from)}" ${p.from ? raw('disabled') : ''}>${p.from ? ic('information-circle', 14) : p.on ? ic('tick-02', 14) : ''}${p.name}${p.from ? html`<small>${p.from}</small>` : ''}</button>`)}</div>
+    <div class="h-pills">${box.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''} ${p.from ? 'fixed' : ''}" ${raw(attr)}="${p.name}" aria-pressed="${String(!!(p.on || p.from))}" ${p.from ? raw('disabled') : ''}>${p.from ? ic('information-circle', 14) : p.on ? ic('tick-02', 14) : ''}${p.name}${p.from ? html`<small>${p.from}</small>` : ''}</button>`)}</div>
     ${box.hint ? html`<p class="h-box-hint">${box.hint}</p>` : ''}${box.tip ? html`<p class="h-box-tip">${ic('crown', 14)}${box.tip}</p>` : ''}</section>`;
   return html`${head}
     <div class="h-grid4 bg">${cv.backgrounds.map((o) => iconCard(o, { selected: o.id === sel }))}</div>

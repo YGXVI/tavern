@@ -83,7 +83,7 @@ export function mount(root, { parts, page, L }) {
   const textIn = (path, value, ph = '', list = '') => html`<span class="input"><input data-f="${path}" value="${value ?? ''}" placeholder="${ph}" autocomplete="off" ${list ? raw(`list="${list}"`) : ''}></span>`;
   const numIn = (attrs, value, { suffix = '', ph = '', label = '' } = {}) => html`<span class="input e-num"><input ${raw(attrs)} inputmode="decimal" value="${value ?? ''}" placeholder="${ph}" aria-label="${label}">${suffix ? html`<span class="suffix">${suffix}</span>` : ''}</span>`;
   const area = (path, value, ph, rows = 3, disabled = false) => html`<span class="input area ${disabled ? 'off' : ''}"><textarea data-f="${path}" rows="${rows}" placeholder="${ph}" ${disabled ? raw('disabled') : ''}>${value ?? ''}</textarea></span>`;
-  const seg = (attr, items, active) => html`<div class="h-seg e-seg" role="group">${items.map(([id, label]) => html`<button ${raw(attr)}="${id}" aria-pressed="${id === active}" aria-selected="${id === active}">${label}</button>`)}</div>`;
+  const seg = (attr, items, active) => html`<div class="h-seg e-seg" role="group">${items.map(([id, label]) => html`<button ${raw(attr)}="${id}" aria-pressed="${String(id === active)}" aria-selected="${String(id === active)}">${label}</button>`)}</div>`;
   const drop = (list, id, label) => html`<button class="icon-btn icon-btn-sm e-drop" data-op="drop" data-list="${list}" data-id="${id}" aria-label="Убрать: ${label || 'строку'}" title="Убрать">${ic('delete-02', 16)}</button>`;
 
   function datalists() {
@@ -127,7 +127,7 @@ export function mount(root, { parts, page, L }) {
           <input class="e-stat-in" data-f="stats.${a.id}" inputmode="numeric" value="${draft.stats?.[a.id] ?? 10}" aria-label="${a.name}">
           <button class="e-step" data-op="step" data-id="${a.id}" data-by="1" aria-label="${a.name}: больше">${ic('plus-sign', 16)}</button></div>
         <b class="e-stat-mod" data-calc="mod.${a.id}">${signed(abMod(draft.stats?.[a.id]))}</b>
-        <button class="e-save ${on ? 'on' : ''}" data-op="prof" data-kind="saves" data-id="${a.id}" aria-pressed="${on}"><i>${on ? ic('tick-02', 12) : ''}</i>Спасбросок<b data-calc="save.${a.id}"></b></button>
+        <button class="e-save ${on ? 'on' : ''}" data-op="prof" data-kind="saves" data-id="${a.id}" aria-pressed="${String(on)}"><i>${on ? ic('tick-02', 12) : ''}</i>Спасбросок<b data-calc="save.${a.id}"></b></button>
       </div>`;
     })}</div>`);
   }
@@ -135,7 +135,7 @@ export function mount(root, { parts, page, L }) {
     const list = [...SKILLS].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
     return sec('skills', 'Навыки', 'Нажатие: владение → компетентность → без владения', html`<div class="e-skills">${list.map((k) => {
       const lv = Math.min(2, Math.floor(profLevel(draft, 'skills', k.id)));
-      return html`<button class="e-skill p${lv}" data-op="prof" data-kind="skills" data-id="${k.id}" aria-pressed="${lv > 0}" title="${PROF_LABEL[lv]}"><span class="e-pip" aria-hidden="true"><i></i><i></i></span><span class="t">${k.name}<small>${ABILITIES.find((a) => a.id === k.ab)?.short}</small></span><em>${PROF_LABEL[lv]}</em><b data-calc="skill.${k.id}"></b></button>`;
+      return html`<button class="e-skill p${lv}" data-op="prof" data-kind="skills" data-id="${k.id}" aria-pressed="${String(lv > 0)}" title="${PROF_LABEL[lv]}"><span class="e-pip" aria-hidden="true"><i></i><i></i></span><span class="t">${k.name}<small>${ABILITIES.find((a) => a.id === k.ab)?.short}</small></span><em>${PROF_LABEL[lv]}</em><b data-calc="skill.${k.id}"></b></button>`;
     })}</div>`);
   }
   function combatSec(v) {
@@ -189,7 +189,7 @@ export function mount(root, { parts, page, L }) {
     const row = (x, i) => {
       const on = !!worn[i]?.equipped;
       return html`<div class="e-row e-item">
-        <button class="e-wear ${on ? 'on' : ''}" data-op="equip" data-id="${x.id}" aria-pressed="${on}" title="${on ? 'Надето — снять' : 'В рюкзаке — надеть'}">${ic(on ? 'shield-01' : 'backpack-01', 16)}<span>${on ? 'Надето' : 'В рюкзаке'}</span></button>
+        <button class="e-wear ${on ? 'on' : ''}" data-op="equip" data-id="${x.id}" aria-pressed="${String(on)}" title="${on ? 'Надето — снять' : 'В рюкзаке — надеть'}">${ic(on ? 'shield-01' : 'backpack-01', 16)}<span>${on ? 'Надето' : 'В рюкзаке'}</span></button>
         <span class="input e-grow"><input data-item="inventoryItems" data-id="${x.id}" data-field="name" value="${itemName(x, gear)}" placeholder="Предмет" aria-label="Предмет"></span>
         ${numIn(`data-item="inventoryItems" data-id="${x.id}" data-field="quantity"`, x.quantity ?? 1, { suffix: 'шт', label: 'Количество' })}
         ${numIn(`data-item="inventoryItems" data-id="${x.id}" data-field="weight"`, x.weight ?? '', { suffix: 'фнт', ph: worn[i]?.g?.weight ?? '', label: 'Вес' })}
