@@ -40,9 +40,9 @@ export function strokeSwatch(color, width = 4, dash = false) {
 
 /**
  * Окно заливки или обводки. cur — текущий стиль {color, width, opacity, dash, fill, fillOpacity};
- * onChange(patch) получает изменённые поля сразу, без кнопки «Готово».
+ * onChange(patch) получает изменённые поля сразу, без кнопки «Готово». placement — куда открыть (у рисунка — 'bottom').
  */
-export function stylePopover(anchor, kind, cur, onChange) {
+export function stylePopover(anchor, kind, cur, onChange, { placement = 'auto' } = {}) {
   const isFill = kind === 'fill', onlyColor = kind === 'color';
   const color = isFill ? cur.fill : cur.color;
   const op = Math.round((isFill ? cur.fillOpacity ?? 1 : cur.opacity ?? 1) * 100);
@@ -54,7 +54,7 @@ export function stylePopover(anchor, kind, cur, onChange) {
     ? `<div class="ds-col ds-narrow"><button class="ds-c ds-none-btn ${color === 'none' ? 'on' : ''}" data-ds-color="none" data-tip="Без заливки" aria-label="Без заливки">${icon('transparency', 18)}</button></div>`
     : `<div class="ds-col"><div class="ds-widths" role="radiogroup" aria-label="Толщина">${WIDTHS.map((w) => `<button class="ds-w ${w === (cur.width ?? 4) ? 'on' : ''}" data-ds-width="${w}" role="radio" aria-checked="${w === (cur.width ?? 4)}" aria-label="${w ? `Толщина ${w}` : 'Без обводки'}" data-tip="${w ? `${w} px` : 'Без обводки'}">${w ? `<i style="width:${Math.min(16, 2 + w * 0.6)}px;height:${Math.min(16, 2 + w * 0.6)}px"></i>` : icon('stop-circle', 18)}</button>`).join('')}</div>
         <div class="ds-dash" role="radiogroup" aria-label="Линия"><button class="${cur.dash ? '' : 'on'}" data-ds-dash="0" aria-label="Сплошная" data-tip="Сплошная"><i class="solid"></i></button><button class="${cur.dash ? 'on' : ''}" data-ds-dash="1" aria-label="Пунктир" data-tip="Пунктир">${icon('dashed-line-01', 18)}</button></div></div>`;
-  const pop = popover(`<div class="ds-pop">${left}<div class="ds-col">${pal}${onlyColor ? '' : slider}</div></div>`, anchor, { placement: 'auto', className: 'ds-popover' });
+  const pop = popover(`<div class="ds-pop">${left}<div class="ds-col">${pal}${onlyColor ? '' : slider}</div></div>`, anchor, { placement, className: 'ds-popover' });
   const n = pop.node;
   const mark = (sel, on) => { for (const b of n.querySelectorAll(sel)) { b.classList.toggle('on', b === on); if (b.hasAttribute('aria-checked')) b.setAttribute('aria-checked', String(b === on)); } };
   n.addEventListener('click', (e) => {

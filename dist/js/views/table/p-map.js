@@ -530,9 +530,9 @@ export function opportunityForMaster(ctx, p) {
 }
 
 // ——— Текст на карте ———
-export function textPrompt(ctx, w, anchor, existing = null) {
-  // existing — правка уже стоящей надписи (TASK-031).
-  const pop = popover(`<div class="pin-pop">${head(existing ? 'Изменить надпись' : 'Надпись на карте')}<div class="panel-section"><div class="input"><input data-t maxlength="60" placeholder="Например, «Обвал»" value="${esc(existing?.text || '')}" autofocus></div><button class="btn btn-primary" data-ok>${existing ? 'Сохранить' : 'Поставить'}</button></div></div>`, anchor, { placement: 'top' });
+export function textPrompt(ctx, w, anchor, existing = null, placement = 'top') {
+  // existing — правка уже стоящей надписи (TASK-031); placement — 'bottom' из панели надписи, чтобы не закрыть её саму.
+  const pop = popover(`<div class="pin-pop">${head(existing ? 'Изменить надпись' : 'Надпись на карте')}<div class="panel-section"><div class="input"><input data-t maxlength="60" placeholder="Например, «Обвал»" value="${esc(existing?.text || '')}" autofocus></div><button class="btn btn-primary" data-ok>${existing ? 'Сохранить' : 'Поставить'}</button></div></div>`, anchor, { placement });
   const inp = pop.node.querySelector('[data-t]');
   setTimeout(() => { inp.focus(); inp.select(); }, 30);
   const ok = () => {
