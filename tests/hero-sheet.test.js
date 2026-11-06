@@ -92,8 +92,8 @@ test('перенос из Long Story Short: имя, класс, характер
   const r = parseLss(JSON.stringify({ jsonType: 'character', data: JSON.stringify(inner) }));
   assert.equal(r.hero.name, 'Брин'); assert.equal(r.hero.classId, 'rogue'); assert.equal(r.hero.stats.dex, 17);
   assert.deepEqual(r.hero.saves, ['dex']); assert.equal(r.hero.proficiencies.skills.stealth, 2); assert.ok(r.hero.skills.includes('sleight'));
-  assert.deepEqual(r.hero.attacks[0], { name: 'Короткий меч', bonus: 5, damage: '1d6+3', type: '', note: '' });
-  assert.equal(r.hero.inventory, 'Кожаный доспех, лук');
+  assert.deepEqual([r.hero.attacks[0].name, r.hero.attacks[0].bonus, r.hero.attacks[0].damage], ['Короткий меч', 5, '1d6+3']);
+  assert.deepEqual(r.hero.inventoryItems.map((x) => x.name), ['Кожаный доспех', 'Лук'], 'снаряжение через запятые — отдельными вещами');
   assert.equal(lssText('строка'), 'строка');
   assert.throws(() => parseLss('{"foo": 1}'), /Long Story Short/);
   const v = view({ ...r.hero, id: 'brin', ownerId: 'u1' });

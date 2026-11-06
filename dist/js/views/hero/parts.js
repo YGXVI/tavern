@@ -14,7 +14,8 @@ export const rowIcon = (kind) => ({ spell: 'sparkles', weapon: 'sword-01', armor
 export function stepper(steps, current, href) {
   return html`<nav class="h-steps" aria-label="Шаги">${steps.map((s, i) => {
     const st = i < current ? 'done' : i === current ? 'current' : 'next';
-    return html`${i ? html`<span class="h-link ${i <= current ? 'on' : ''}"></span>` : ''}<a class="h-step ${st}" href="${href(i)}" ${i === current ? raw('aria-current="step"') : ''}><span class="n">${st === 'done' ? ic('tick-02', 14) : i + 1}</span><span class="l">${s.name}</span></a>`;
+    const warn = st === 'done' && s.ok === false; // пройден, но выборы не заполнены — «!» вместо ✓
+    return html`${i ? html`<span class="h-link ${i <= current ? 'on' : ''}"></span>` : ''}<a class="h-step ${st} ${warn ? 'warn' : ''}" href="${href(i)}" ${i === current ? raw('aria-current="step"') : ''} ${warn ? raw('title="Не все выборы сделаны"') : ''}><span class="n">${st === 'done' ? ic(warn ? 'alert-circle' : 'tick-02', 14) : i + 1}</span><span class="l">${s.name}</span></a>`;
   })}</nav>`;
 }
 

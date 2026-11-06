@@ -8,7 +8,7 @@ import { campaignsFor, membership, updateCampaign, userById } from '../../core/c
 import { currentUserId } from '../../core/auth.js';
 import { toHeroView, toHeroCard, spellIndex } from './adapter.js';
 import { applyHeroAction } from './actions.js';
-import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter } from './creation.js';
+import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter, quickCreation, quickClass } from './creation.js';
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 import { gearIndex } from './gear.js';
@@ -137,33 +137,11 @@ export const PORTRAITS = [...CLASS_IDS.map((k) => `assets/hero/class-${k}.webp`)
 const tailId = (id) => String(id || '').split(':').pop();
 const defaultPortrait = (st) => st.look.portrait || `assets/hero/class-${CLASS_IDS.includes(tailId(st.draft.levelHistory?.[0]?.classId)) ? tailId(st.draft.levelHistory[0].classId) : 'fighter'}.webp`;
 
-// ——— Быстрый герой (89–90, #203): три ответа → класс, раса и предыстория, остальное — как «обычно» в мастере ———
-const QUICK_CLASS = (role, talk) => ({
-  front: talk === 'fist' ? 'barbarian' : talk === 'word' ? 'paladin' : 'fighter', range: 'ranger',
-  magic: talk === 'word' ? 'sorcerer' : talk === 'trick' ? 'warlock' : 'wizard', heal: talk === 'word' ? 'bard' : talk === 'fist' ? 'druid' : 'cleric',
-  shadow: talk === 'fist' ? 'monk' : 'rogue',
-}[role] || 'fighter');
-const QUICK_RACE = { barbarian: 'half-orc', fighter: 'human', paladin: 'dragonborn', ranger: 'elf', wizard: 'gnome', sorcerer: 'tiefling', warlock: 'tiefling', cleric: 'dwarf', bard: 'half-elf', druid: 'elf', rogue: 'halfling', monk: 'elf' };
-const full = (b) => !b || /выбрано (\d+) из \1/.test(b.note);
-/** Собрать героя по ответам быстрого героя: новый черновик той же кампании, все выборы — первые подходящие. */
+// ——— Быстрый герой (89–90, #203): три ответа → класс, раса, навыки (creation.js → quickCreation) ———
 function quickBuild(st, answers) {
   const c = campaignsFor(currentUserId()).find((x) => x.id === st.campaignId) || targetCampaign(currentUserId());
-  const next = { ...newCreation(creationIx, { campaign: c, userId: currentUserId() }), userId: currentUserId(), quick: answers };
-  const ch = (x) => applyCreationChoice(creationIx, next, x);
-  const m = () => creationModel(creationIx, next);
-  const cls = QUICK_CLASS(answers.role, answers.talk);
-  ch({ step: 'race', id: QUICK_RACE[cls] }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: m().backgrounds[0]?.id || 'acolyte' }); ch({ step: 'abilities', id: 'auto' });
-  for (let i = 0; i < 10; i += 1) {
-    const box = [...m().extra.race, ...m().extra.class].find((b) => !full(b)); if (!box) break;
-    for (const it of box.list) { if (full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break; ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${it.value}` }); }
-    if (!full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break;
-  }
-  for (const s of m().backgroundSkills?.list?.filter((x) => !x.from) || []) if (!full(m().backgroundSkills)) ch({ step: 'background', id: 'skill', value: s.name });
-  for (const l of m().backgroundLangs?.list?.filter((x) => !x.from) || []) { if (full(m().backgroundLangs)) break; ch({ step: 'background', id: 'lang', value: l.name }); }
-  for (const g of m().equipment?.groups || []) ch({ step: 'equipment', id: 'eq', value: `${g.title}|${g.options[0].name}` });
-  ch({ step: 'spells', id: 'auto' });
-  if (answers.name) ch({ step: 'look', id: 'name', value: answers.name });
-  next.look.portrait = answers.portrait || `assets/hero/class-${cls}.webp`;
+  const next = { ...quickCreation(creationIx, { campaign: c, userId: currentUserId(), answers }), userId: currentUserId(), quick: answers };
+  next.look.portrait = answers.portrait || `assets/hero/class-${quickClass(answers.role, answers.talk)}.webp`;
   return next;
 }
 const QUICK_LABEL = { role: { front: 'стоять впереди', range: 'бить издалека', magic: 'колдовать', heal: 'лечить и вдохновлять', shadow: 'действовать из тени' }, talk: { fist: 'кулаком', word: 'словом', trick: 'хитростью', book: 'знанием' } };
@@ -175,7 +153,7 @@ function quickResult(st) {
   return {
     portrait: defaultPortrait(st), name: d.name || 'Новый герой', summary: d.line,
     abilities: d.abilities, facts: d.facts.slice(0, 4),
-    chosen: [['Раса', race || '—', 'race'], ['Класс', cls || '—', 'class'], ['Характеристики', 'стандартный набор под класс', 'abilities'], ['Снаряжение', 'первый вариант каждого набора', 'equipment'], ['Заклинания', 'подобраны по классу', 'spells']],
+    chosen: [['Раса', race || '—', 'race'], ['Класс', cls || '—', 'class'], ['Навыки', creationModel(creationIx, st).backgroundSkills?.list?.filter((x) => x.on).map((x) => x.name).join(', ') || 'по классу', 'background'], ['Характеристики', 'стандартный набор под класс', 'abilities'], ['Снаряжение', 'первый вариант каждого набора', 'equipment'], ['Заклинания', 'подобраны по классу', 'spells']],
     why: [QUICK_LABEL.role[a.role], QUICK_LABEL.talk[a.talk], d.name].filter(Boolean),
     ok: d.status === 'valid', missing: d.missing,
   };
@@ -237,18 +215,44 @@ export async function uploadPortrait(file) {
 /** Снаряжение SRD для «Добавить предмет»: [{ ref, name, kind, weight }] (пусто — справочник не загрузился). */
 export const gearCatalog = () => (gear ? [...gear.byId.values()].map((g) => ({ ref: g.id, name: g.ru, kind: g.kind, weight: g.weight })) : []);
 // ——— Перенос из Long Story Short (72, #203): разбор файла — lss.js, разобранный лист живёт в вкладке до переноса ———
-const LSS_KEY = 'rasputye-hero-lss-v1';
-/** Разобранный файл LSS или null — тогда экран просит файл. */
-export const lssImportView = () => readJSON(LSS_KEY);
+const LSS_KEY = 'rasputye-hero-lss-v1', LSS_ERR = 'rasputye-hero-lss-err';
+/**
+ * Разобранный файл LSS или null — тогда экран просит файл (error — почему не подошёл прошлый). targets — кампании,
+ * куда можно перенести: free — игрок там ещё без героя (сядет за стол), dup — там уже есть его герой с таким именем.
+ * campaignId — выбранная (по умолчанию ?c=, иначе кампания, где игрок без героя).
+ */
+export function lssImportView(prefer = '') {
+  const v = readJSON(LSS_KEY);
+  if (!v) return null;
+  const userId = currentUserId();
+  const targets = (userId ? campaignsFor(userId) : []).filter((c) => membership(c, userId)?.status === 'active').map((c) => {
+    const m = membership(c, userId);
+    return { id: c.id, name: c.name, free: m.role === 'player' && !m.characterId, master: m.role === 'master', dup: (c.characters || []).some((x) => x.ownerId === userId && String(x.name).trim().toLowerCase() === v.hero.name.trim().toLowerCase()) };
+  });
+  const pick = targets.find((c) => c.id === v.campaignId) || targets.find((c) => c.id === prefer) || targets.find((c) => c.free) || targets.find((c) => !c.master) || targets[0] || null;
+  return { ...v, targets, campaignId: pick?.id || null, target: pick };
+}
+export const lssError = () => readJSON(LSS_ERR);
 export async function loadLssFile(file) {
   try {
     const { parseLss } = await import('./lss.js');
-    const parsed = parseLss(await file.text(), { fileName: `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} КБ`, spellNames: spells.byName });
+    const parsed = parseLss(await file.text(), { fileName: `${file.name} · ${Math.max(1, Math.round(file.size / 1024))} КБ`, spellNames: spells.byName, gear });
     sessionStorage.setItem(LSS_KEY, JSON.stringify(parsed));
-  } catch (e) { say('Файл не подошёл', e.message, 'alert-circle'); return; }
+    sessionStorage.removeItem(LSS_ERR);
+  } catch (e) {
+    try { sessionStorage.setItem(LSS_ERR, JSON.stringify({ file: file?.name || '', text: e.message })); } catch { /* приватный режим */ }
+    say('Файл не подошёл', e.message, 'alert-circle');
+  }
   window.dispatchEvent(new CustomEvent('hero:changed'));
 }
-export const dropLss = () => { try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ } window.dispatchEvent(new CustomEvent('hero:changed')); };
+export const dropLss = () => { try { sessionStorage.removeItem(LSS_KEY); sessionStorage.removeItem(LSS_ERR); } catch { /* приватный режим */ } window.dispatchEvent(new CustomEvent('hero:changed')); };
+/** Выбрать кампанию переноса. */
+function lssCampaign(p = {}) {
+  const v = readJSON(LSS_KEY);
+  if (!v) return;
+  try { sessionStorage.setItem(LSS_KEY, JSON.stringify({ ...v, campaignId: p.campaignId || null })); } catch { /* приватный режим */ }
+  window.dispatchEvent(new CustomEvent('hero:changed'));
+}
 
 /**
  * Положить готового героя (данные листа) в кампанию: песочница — сразу, сервер — createCharacterSheet. Если у игрока
@@ -260,7 +264,7 @@ async function placeHero(c, data, { title }) {
   const hero = structuredClone(data);
   // Черт характера сервер пока не хранит (#202): переносим их в заметки, чтобы не потерять.
   if (isServerMode() && hero.personality) {
-    const p = hero.personality, lines = [['Черты', p.traits], ['Идеалы', p.ideals], ['Привязанности', p.bonds], ['Слабости', p.flaws], ['Предыстория', p.backstory]].filter(([, x]) => x);
+    const p = hero.personality, lines = [['Черты', p.traits], ['Идеалы', p.ideals], ['Привязанности', p.bonds], ['Слабости', p.flaws], ['Предыстория', p.backstory], ['Внешность', p.appearance]].filter(([, x]) => x);
     if (lines.length) hero.notes = [hero.notes, lines.map(([k, x]) => `${k}: ${x}`).join('\n')].filter(Boolean).join('\n\n');
     delete hero.personality;
   }
@@ -271,16 +275,19 @@ async function placeHero(c, data, { title }) {
     else updateCampaign(c.id, (camp) => { camp.characters.push({ ...hero, id, ownerId: userId }); });
   } catch (e) { say(`${title} не удалось`, e?.message || 'Сервер не принял героя.', 'alert-circle'); return null; }
   say(`${hero.name} — в «${c.name}»`, seat ? 'Садитесь за стол.' : 'Лист открыт.', 'tick-02');
-  if (seat) { const { claim } = await import('../screens.js'); claim(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
+  // Сел за стол этим героем — токен на сцене и сразу стол, как после мастера создания; иначе — лист.
+  if (seat) { const { seatHero } = await import('../screens.js'); seatHero(c.id, userId, id); } else location.hash = `#/hero/${heroKey(c.id, id)}`;
   return id;
 }
+let importing = false;
 async function importLss(p = {}) {
-  const v = lssImportView();
-  if (!v) return;
-  const st = readJSON(BUILD_KEY);
-  const c = targetCampaign(currentUserId(), p.campaignId || st?.campaignId);
+  const v = lssImportView(p.campaignId);
+  if (!v || importing) return;
+  const c = v.campaignId && campaignsFor(currentUserId()).find((x) => x.id === v.campaignId);
   if (!c) { say('Нет кампании', 'Войдите в кампанию по приглашению мастера — герой появится в ней.'); return; }
+  importing = true;
   const id = await placeHero(c, v.hero, { title: 'Перенос' });
+  importing = false;
   if (id) try { sessionStorage.removeItem(LSS_KEY); } catch { /* приватный режим */ }
 }
 /** Привести героя в другую кампанию — копией листа (у каждой кампании свой экземпляр, как при выборе героя). */
@@ -447,4 +454,5 @@ export const heroActions = {
   coins: live('coins'),                        // { heroId, pp, ep, gp, sp, cp }
   levelUp,                                     // { heroId, hp: 'average' | 'roll', spells: [names], extra, tab, auto, done }
   importLss,                                   // { campaignId? } — разобранный файл из loadLssFile
+  lssCampaign,                                 // { campaignId } — куда переносить
 };
