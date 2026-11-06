@@ -872,8 +872,8 @@ const pingTool = {
 };
 
 // Рисование (TASK-182, как в Owlbear Rodeo): выделение, многоугольник, карандаш, кисть, линия, фигуры по рамке, шаблоны.
-// Стиль новых рисунков — drawStyle(ctx) (заливка и обводка на панели). Углы фигур и точки многоугольника — к узлам сетки,
-// Alt — свободно; Shift — равные стороны. Размер виден у курсора.
+// Стиль новых рисунков — drawStyle(ctx) (заливка и обводка на панели). Углы фигур и точки многоугольника ставятся
+// свободно, без привязки к клеткам, как шаблоны (TASK-042); Alt — к узлам сетки; Shift — равные стороны. Размер виден у курсора.
 const ftLabel = (ctx, px) => String(Math.round((px / gridSize(sceneGrid(ctx))) * (sceneGrid(ctx).feet || 5) * 2) / 2).replace('.', ',');
 const styleFields = (ctx) => { const st = drawStyle(ctx); return { color: st.color, width: st.width, opacity: st.opacity, dash: st.dash, fill: st.fill, fillOpacity: st.fillOpacity }; };
 function boxFromDrag(ctx, sub, a, b, mods = {}) {
@@ -897,7 +897,8 @@ function finishPoly(ctx, closed) {
   if (pts.length < (closed ? 3 : 2)) return;
   pushDrawing(ctx, { id: uid('d-'), type: 'shape', shape: 'poly', pts, closed, ...styleFields(ctx), author: ctx.userId }, 'Многоугольник');
 }
-const drawSnap = (ctx, w, free) => (free ? { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 } : snapToVertex(ctx, w));
+/** Точка фигуры рисования: свободно (до 0,1 px), с Alt — к узлу сетки. */
+const drawSnap = (ctx, w, toGrid) => (toGrid ? snapToVertex(ctx, w) : { x: Math.round(w.x * 10) / 10, y: Math.round(w.y * 10) / 10 });
 
 const drawTool = {
   down(ctx, g, w) {
@@ -910,7 +911,7 @@ const drawTool = {
       return;
     }
     if (sub === 'poly') { g.poly = true; return; } // точки ставит щелчок
-    if (BOX_SHAPES.includes(sub)) { g.box = { sub, from: drawSnap(ctx, w, g.alt) }; ctx.ui.liveShape = null; return; }
+    if (BOX_SHAPES.includes(sub)) { g.box = { sub, at: w }; ctx.ui.liveShape = null; return; }
     // Прямая и шаблоны заклинаний (TASK-032): тянем от точки нажатия.
     if (DRAW_SHAPES.some((x) => x.id === sub)) { g.shape = { sub, from: w }; ctx.ui.liveShape = null; return; }
     ctx.ui.liveStroke = { ...styleFields(ctx), pts: [w], closed: sub === 'brush' };
@@ -920,7 +921,8 @@ const drawTool = {
     if (g.erase) { eraseAt(ctx, w); return; }
     if (g.drawDrag) { tokenTool.move(ctx, g, w, e); return; }
     if (g.box) {
-      const sh = boxFromDrag(ctx, g.box.sub, g.box.from, drawSnap(ctx, w, e.altKey), { shift: e.shiftKey });
+      // Alt зажат — оба угла к узлам сетки (и тот, откуда начали), отпущен — оба свободно.
+      const sh = boxFromDrag(ctx, g.box.sub, drawSnap(ctx, g.box.at, e.altKey), drawSnap(ctx, w, e.altKey), { shift: e.shiftKey });
       ctx.ui.liveShape = sh;
       const round = sh.shape === 'ellipse' && sh.w === sh.h;
       ctx.ui.drawLabel = { at: w, text: round ? `⌀ ${ftLabel(ctx, sh.w)} фт` : `${ftLabel(ctx, sh.w)}×${ftLabel(ctx, sh.h)} фт` };
