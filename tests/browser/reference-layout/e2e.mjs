@@ -48,6 +48,7 @@ try {
  for(const [width,height] of [[1440,1000],[320,640],[844,390]]) {
   await page.setViewportSize({width,height});await page.goto(base+'#/ref/creatures');
   await page.locator('.cr-token').first().click();
+  await page.locator('[data-rx=creatures]').first().waitFor({timeout:5000}).catch(()=>{});
   assert.equal(await page.locator('[data-rx=creatures]').count(),1,'Standalone creature page keeps the calculator');
   assert.equal(await page.locator('.rx-near').count(),1,'Standalone creature page keeps related creatures');
   const term=page.locator('[data-term]').first();

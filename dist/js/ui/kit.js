@@ -64,7 +64,8 @@ export function modal(content, { wide = false, onClose, dismissable = true, clas
   if (dismissable) root.addEventListener('pointerdown', (e) => { if (e.target === root) api.close(); });
   box.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) api.close(); });
   // focus() ничего не возвращает — поэтому сначала выбираем элемент, потом фокусируем (раньше фокус уходил на «Закрыть»).
-  setTimeout(() => (box.querySelector('[autofocus]') || box.querySelector('input:not([type=hidden]),textarea,select') || box.querySelector('button'))?.focus(), 30);
+  // Если ввод в окне уже начался, фокус не забираем: иначе текст уйдёт в первое поле.
+  setTimeout(() => { if (!box.contains(document.activeElement)) (box.querySelector('[autofocus]') || box.querySelector('input:not([type=hidden]),textarea,select') || box.querySelector('button'))?.focus(); }, 30);
   return api;
 }
 export function closeTopModal() { const m = openModals.at(-1); if (m) { m.close(); return true; } return false; }
