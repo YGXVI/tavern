@@ -136,6 +136,26 @@ try {
   check('посторонний не видит токены кампании', !xs.error && xs.data.length === 0, `видно: ${xs.data?.length}`);
   const xv = await X.sb.rpc('visible_token_ids', { c: cid });
   check('посторонний не перечисляет токены через функцию', !!xv.error, xv.error?.message);
+  // DEC-019 D1: «Мои герои» — только владелец.
+  r = await P.sb.from('heroes').insert({ id: `h-${tag}`, owner_id: P.id, data: { name: 'Личный' } });
+  check('игрок кладёт героя в базу', !r.error, r.error?.message);
+  r = await P.sb.from('heroes').select('id').eq('id', `h-${tag}`);
+  check('игрок читает своего героя', r.data?.length === 1, r.error?.message);
+  r = await M.sb.from('heroes').select('id').eq('id', `h-${tag}`);
+  check('чужого героя не видно', r.data?.length === 0, r.error?.message);
+
+  // DEC-019 D4: скрытый участник боя — только у мастера.
+  r = await M.sb.from('tokens').insert({ id: `t-sneak-${tag}`, campaign_id: cid, scene_id: sid, hidden: true, data: { name: 'Засада', kind: 'foe', x: 70, y: 70 } });
+  check('мастер ставит скрытого', !r.error, r.error?.message);
+  r = await M.sb.from('combats').update({ data: { active: true, round: 2, turn: 1, current: `t-sneak-${tag}`, entries: [{ tokenId: `t-sneak-${tag}`, init: 20 }] } }).eq('campaign_id', cid).select('data');
+  check('мастер видит полную строку боя', r.data?.[0]?.data?.entries?.length === 1, r.error?.message);
+  r = await P.sb.from('combats').select('data').eq('campaign_id', cid);
+  check('игрок не читает полную строку боя', r.data?.length === 0, r.error?.message);
+  r = await P.sb.from('combat_public').select('data').eq('campaign_id', cid).single();
+  check('в копии игрока скрытого нет', r.data && !JSON.stringify(r.data).includes('t-sneak') && r.data.data.current === '?', JSON.stringify(r.data || r.error).slice(0, 120));
+  r = await M.sb.from('tokens').update({ hidden: false }).eq('id', `t-sneak-${tag}`);
+  r = await P.sb.from('combat_public').select('data').eq('campaign_id', cid).single();
+  check('открытый появился в копии', r.data?.data?.current === `t-sneak-${tag}`, JSON.stringify(r.data || r.error).slice(0, 120));
 } finally {
   const r = await M.sb.from('campaigns').delete().eq('id', cid);
   console.log(r.error ? `кампания ${cid} не удалена: ${r.error.message}` : `кампания ${cid} удалена`);
