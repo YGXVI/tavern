@@ -473,7 +473,7 @@ function portraitModal(v) {
   const m = modal(html`<div class="s-rest-modal s-portrait-modal"><div class="s-rest-head">${ic('image-add-01', 18)}<b>Портрет ${v.name}</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
     <p class="s-hp-note">Портрет — это и токен на карте: поменяется на всех сценах кампании.</p>
     <button class="s-upload" data-own-pic>${ic('upload-01', 20)}<span><b>Загрузить свой</b><small>PNG, JPEG или WebP до 5 МБ · кадр выберете сами</small></span></button>
-    <div class="s-pic-grid">${PORTRAITS.map((p) => html`<button class="s-pic ${p === v.portrait ? 'on' : ''}" data-pic="${p}" aria-pressed="${p === v.portrait}"><img src="${p}" alt="" loading="lazy">${p === v.portrait ? html`<span class="h-tick">${ic('tick-02', 12)}</span>` : ''}</button>`)}</div></div>`, { className: 'rest' });
+    <div class="s-pic-grid">${PORTRAITS.map((p) => html`<button class="s-pic ${p === v.portrait ? 'on' : ''}" data-pic="${p}" aria-pressed="${p === v.portrait}"><img src="${p}" alt="" loading="lazy">${p === v.portrait ? html`<span class="h-tick">${ic('tick-02', 12)}</span>` : ''}</button>`)}</div></div>`, { className: 'rest pick' });
   m.box.addEventListener('click', async (e) => {
     const pic = e.target.closest('[data-pic]');
     if (pic) { heroActions.setPortrait({ heroId: v.id, ref: pic.dataset.pic }); m.close(); return; }
@@ -516,7 +516,7 @@ function spellPicker(v) {
       <label class="s-cls-pick">${caps('Класс')}<select class="input" data-cls><option value="">Любой — без ограничений</option>${SPELL_CLASSES.map((c) => html`<option value="${c}" ${st.cls === c ? raw('selected') : ''}>${c}</option>`)}</select></label>
       <div class="s-add-list">${list().map(row)}${list().length ? '' : html`<p class="s-none">Ничего не нашлось.</p>`}</div>
       <button class="s-add-row own" data-own-open><b>Своё заклинание</b><small>хоумбрю, предмет, умение мастера — название, уровень, текст</small>${ic('pencil-edit-02', 16)}</button>`}</div>`;
-  const m = modal(body(), { className: 'rest' });
+  const m = modal(body(), { className: 'rest pick' });
   const redraw = (focus) => { m.set(body()); const i = m.box.querySelector(focus); if (i) { i.focus(); if (i.setSelectionRange && typeof i.value === 'string') i.setSelectionRange(i.value.length, i.value.length); } };
   setTimeout(() => m.box.querySelector('[data-sq]')?.focus(), 50);
   m.box.addEventListener('input', (e) => {
@@ -555,7 +555,7 @@ function addItemModal(v) {
     <span class="input">${ic('search-01', 16)}<input data-q placeholder="Кинжал, верёвка, зелье лечения…" value="${q}" autofocus></span>
     <div class="s-add-list">${list().map((g) => html`<button class="s-add-row" data-ref="${g.ref}"><b>${g.name}</b><small>${KIND[g.kind] || g.kind}${g.weight ? ` · ${g.weight} фнт` : ''}</small>${ic('plus-sign', 16)}</button>`)}
       ${q.trim() ? html`<button class="s-add-row own" data-own><b>«${q.trim()}»</b><small>свой предмет</small>${ic('plus-sign', 16)}</button>` : ''}</div></div>`;
-  const m = modal(body(), { className: 'rest' });
+  const m = modal(body(), { className: 'rest pick' });
   const redraw = () => { m.set(body()); const i = m.box.querySelector('[data-q]'); i.focus(); i.setSelectionRange(q.length, q.length); };
   m.box.addEventListener('input', (e) => { if (e.target.matches('[data-q]')) { q = e.target.value; redraw(); } });
   m.box.addEventListener('click', (e) => {

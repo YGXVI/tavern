@@ -62,7 +62,7 @@
 .h-step-title p { color: var(--text-secondary); font-size: 14px; line-height: 18px; max-width: 520px; }
 .h-tip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--r-full); background: var(--bg-control); color: var(--text-secondary); font: 500 12px/14px var(--font-text); max-width: 360px; }
 .h-tip .ic { color: var(--icon-accent); flex: none; }
-.h-bottom { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 16px; }
+.h-bottom { display: flex; align-items: center; gap: 12px; margin-top: auto; padding: 16px 0; position: sticky; bottom: 0; z-index: 6; background: linear-gradient(transparent, var(--bg-canvas) 32%); }
 .h-bottom-hint { flex: 1; text-align: center; color: var(--text-tertiary); font: 500 12px/14px var(--font-text); }
 
 /* ——— Карточки выбора ——— */
@@ -531,6 +531,9 @@
 
 /* ——— 59 · Короткий отдых ——— */
 .modal.rest { width: min(400px, calc(100vw - 32px)); }
+/* Окна выбора (портрет, заклинание, предмет) — шире: ширину задаёт рамка, содержимое её не распирает */
+.modal.rest.pick { width: min(560px, calc(100vw - 32px)); }
+.modal.rest .s-rest-modal { min-width: 0; overflow: auto; }
 .s-rest-modal { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .s-rest-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .s-rest-head > .ic { color: var(--icon-accent); }
@@ -712,7 +715,7 @@
   .h-grid4:not(.bg) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .h-grid3.progress { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .h-hp-compare > .ic { transform: rotate(90deg); justify-self: center; }
-  .h-bottom { flex-wrap: wrap; position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--bg-canvas) 30%); }
+  .h-bottom { flex-wrap: wrap; padding: 12px 0; }
   .h-bottom-hint { order: 3; flex-basis: 100%; }
   .h-bottom .btn-primary { margin-left: auto; }
   .h-cards, .h-quick-opts, .h-quick-opts.n4 { grid-template-columns: minmax(0, 1fr); }
@@ -751,7 +754,7 @@
 .h-missing > .ic { color: var(--icon-tertiary, var(--text-tertiary)); }
 /* Сумка: добавить предмет, монеты, надеть/снять (#203) */
 .s-item .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
-.s-add-modal { width: min(460px, 100vw - 32px); }
+.s-add-modal { min-width: 0; }
 .s-add-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow: auto; }
 .s-add-row { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 8px 12px; border-radius: 12px; text-align: left; color: var(--text-primary); }
 .s-add-row:hover { background: var(--bg-hover); }
@@ -864,7 +867,7 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .menu-sep { display: block; height: 1px; margin: 4px 8px; background: var(--stroke-divider); }
 .menu-item.danger { color: var(--red-400); }
 /* Панель хитов */
-.s-hp-pad { width: min(380px, 100vw - 32px); }
+.s-hp-pad { min-width: 0; }
 .s-hp-input input { width: 100%; height: 64px; border-radius: 16px; border: 0; background: var(--bg-control); color: var(--text-primary); text-align: center; font: 500 36px/1 var(--font-display); }
 .s-hp-input input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--stroke-accent); }
 .s-hp-quick { display: grid; grid-template-columns: repeat(4, 1fr) 40px; gap: 6px; }
@@ -874,7 +877,7 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .s-hp-acts .btn { justify-content: center; padding: 0 8px; gap: 6px; min-width: 0; }
 .s-hp-note { color: var(--text-tertiary); font-size: 11px; line-height: 15px; }
 /* Портрет */
-.s-portrait-modal { width: min(520px, 100vw - 32px); }
+.s-portrait-modal { min-width: 0; }
 .s-upload { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; border: 1.5px dashed var(--stroke-divider); color: var(--text-primary); text-align: left; }
 .s-upload:hover { border-color: var(--stroke-accent); background: var(--bg-accent-subtle); }
 .s-upload > .ic { color: var(--icon-accent); }
@@ -887,7 +890,7 @@ button.s-chip.cast:hover:not([disabled]):not([data-blocked]) { background: var(-
 .s-pic.on img { box-shadow: 0 0 0 2.5px var(--gold); }
 .s-pic .h-tick { position: absolute; right: -2px; bottom: -2px; }
 /* Заклинание: справочник и своё */
-.s-spell-pick { width: min(560px, 100vw - 32px); }
+.s-spell-pick { min-width: 0; }
 .s-lv-pick { display: flex; flex-wrap: wrap; gap: 4px; }
 .s-cls-pick { display: flex; align-items: center; gap: 10px; }
 .s-cls-pick select { flex: 1; min-width: 0; height: 34px; }
