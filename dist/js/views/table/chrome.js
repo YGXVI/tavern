@@ -73,11 +73,16 @@ export function renderChrome(ctx) {
   root.dataset.role = ctx.isMaster ? 'master' : 'player';
 }
 
-/** Мини-очередь боя слева (#203): прокрутка не сбрасывается, текущий ход всегда виден; появляется с анимацией. */
+/**
+ * Мини-очередь боя слева (#203): прокрутка не сбрасывается, текущий ход всегда виден. Анимация появления — только
+ * когда очередь появилась или сменила вид (строки ↔ колонка), а не на каждый ход: класс .opening снимаем до замены
+ * разметки и после анимации, иначе новая .init-mini снова проигрывала бы «rise» с нуля и мигала.
+ */
 function renderInitMini(host, ctx) {
   const html = initMiniHTML(ctx);
   if (host.__html === html) return;
   const list = host.querySelector('.im-list'), scroll = list?.scrollTop || 0;
+  host.classList.remove('opening');
   host.innerHTML = html; host.__html = html;
   const fresh = host.querySelector('.im-list');
   const row = fresh?.querySelector('.im-row.current');
@@ -89,7 +94,10 @@ function renderInitMini(host, ctx) {
     else if (bottom > fresh.scrollTop + fresh.clientHeight) fresh.scrollTop = bottom - fresh.clientHeight + 4;
   }
   const mode = !html ? '' : host.querySelector('.init-mini.rail') ? 'rail' : 'wide';
-  if (mode && mode !== host.dataset.mode) { host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening'); }
+  if (mode && mode !== host.dataset.mode) {
+    void host.offsetWidth; host.classList.add('opening');
+    if (!host.__openEnd) { host.__openEnd = true; host.addEventListener('animationend', () => host.classList.remove('opening')); }
+  }
   host.dataset.mode = mode;
 }
 

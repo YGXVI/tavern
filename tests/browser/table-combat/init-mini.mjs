@@ -56,7 +56,9 @@ try {
   const before = await master.evaluate(() => __ctx.c.combat.turn);
   await mini(master).locator('[data-act="combat-next"]').click();
   await master.waitForFunction((b) => __ctx.c.combat.turn !== b, before);
-  console.log('master next turn from mini OK');
+  // Смена хода не проигрывает появление заново (иначе очередь мигает на каждом ходу).
+  await master.waitForFunction(() => !document.querySelector('.ch-init').classList.contains('opening'), {}, { timeout: 2000 });
+  console.log('master next turn from mini, no re-opening blink OK');
 
   // Клик по строке — токен выделен.
   const id = await mini(master).locator('.im-who').nth(2).getAttribute('data-id');
