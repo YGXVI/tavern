@@ -488,6 +488,55 @@ button.init-num:hover { background: var(--bg-control-off); }
 .tok-badge.tok-pack { top: -4%; left: -6%; background: var(--pc, var(--brand-500)); color: #111; font-variant-numeric: tabular-nums; }
 .widget .panel-footer { border-top: 1px solid var(--stroke-subtle); padding-top: 12px; }
 
+/* ——— Мини-очередь боя (#203): слева под логотипом, пока полная «Инициатива» закрыта ———
+   Кубы открываются правее (left: edge + 244) — рядом строки с именами; «Зрение» и «Отряд» — колонка портретов шириной с логотип. */
+.ch-init { top: calc(var(--edge) + 72px); left: var(--edge); flex-direction: column; }
+.ch-init.opening .init-mini { animation: rise .15s ease-out; }
+.init-mini { width: 208px; max-height: calc(100vh - 2 * var(--edge) - 144px); display: flex; flex-direction: column; gap: 2px; padding: 6px; overflow: hidden; }
+.im-head { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px; border-radius: var(--r-12); flex: none;
+  color: var(--text-secondary); font: 600 12px/16px var(--font-text); text-align: left; }
+.im-head b { color: var(--text-primary); font-weight: 600; }
+.im-head:hover { background: var(--bg-hover); color: var(--text-primary); }
+.im-head .ic { flex: none; }
+.im-list { position: relative; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.im-row { display: flex; align-items: center; gap: 2px; border-radius: var(--r-12); flex: none; }
+.im-row.current { background: var(--bg-row-current); box-shadow: inset 0 0 0 1px var(--stroke-accent); }
+.im-row.is-hidden { opacity: .6; }
+.im-row.downed .avatar img { filter: grayscale(1); }
+.im-row.downed .im-text b { color: var(--text-tertiary); }
+.im-who { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 4px 6px 4px 4px; border-radius: var(--r-12); color: inherit; text-align: left; }
+.im-who:hover { background: var(--bg-hover); }
+.im-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--bg-control); font: 600 11px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.im-num.pending { background: none; outline: 1.5px dashed var(--neutral-500); outline-offset: -2px; color: var(--text-tertiary); }
+.im-row.current .im-num { background: var(--brand-500); color: var(--text-on-accent); outline: 0; }
+.im-ava { position: relative; display: inline-flex; flex: none; }
+.im-mark { position: absolute; right: -4px; bottom: -3px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: var(--r-full); display: grid; place-items: center;
+  background: var(--pc, var(--brand-500)); color: #111; font: 700 9px/1 var(--font-text); box-shadow: 0 0 0 2px var(--neutral-100); }
+.im-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.im-text b { font: 600 13px/16px var(--font-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.im-text b .ic { display: inline-block; width: 12px; height: 12px; vertical-align: -1px; color: var(--text-tertiary); }
+.im-text small { font: 400 11px/14px var(--font-text); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.im-row > .icon-btn { flex: none; margin-right: 2px; }
+.im-foot { display: flex; align-items: center; gap: 6px; flex: none; margin-top: 4px; padding: 8px 2px 2px; border-top: 1px solid var(--stroke-subtle); }
+/* Колонка портретов: номер инициативы — значком на портрете, имя — в подсказке. */
+.init-mini.rail { width: 60px; align-items: stretch; padding: 6px 4px; }
+.init-mini.rail .im-head { justify-content: center; padding: 0; }
+.init-mini.rail .im-list { align-items: center; gap: 6px; padding: 4px 0; scrollbar-width: none; }
+.init-mini.rail .im-list::-webkit-scrollbar { display: none; }
+.init-mini.rail .im-row { position: relative; width: 44px; height: 44px; justify-content: center; border-radius: 50%; }
+.init-mini.rail .im-row.current { background: none; box-shadow: none; }
+.init-mini.rail .im-row .avatar { width: 36px; height: 36px; }
+.init-mini.rail .im-row:hover .avatar { filter: brightness(1.12); }
+.init-mini.rail .im-row.current .avatar { --ring: var(--brand-500); box-shadow: 0 0 0 2px var(--ring), 0 0 10px rgb(233 176 82 / .75); }
+.init-mini.rail .im-num { position: absolute; right: -1px; bottom: -1px; width: auto; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--r-full);
+  background: var(--neutral-300); font-size: 10px; box-shadow: 0 0 0 2px var(--neutral-0); }
+.init-mini.rail .im-num.pending { background: var(--neutral-0); outline-offset: -1px; }
+.init-mini.rail .im-row.current .im-num { background: var(--brand-500); color: var(--text-on-accent); }
+.init-mini.rail .im-mark { right: auto; bottom: auto; left: -3px; top: -3px; }
+.init-mini.rail .im-foot { justify-content: center; padding: 6px 0 0; }
+.init-mini.rail .im-end { color: var(--icon-accent); }
+
 /* Кубы: рейка, лоток, кубы на столе — в конце файла (TASK-092/093). */
 
 /* ——— Поповеры стола ——— */
@@ -749,6 +798,9 @@ button.init-num:hover { background: var(--bg-control-off); }
   .ch-tr .toolbar { padding: 4px; }
   .party-col { display: none; }
   .ch-widget, .ch-widget:has(.dice-widget) { top: 72px; left: 8px; right: 8px; }
+  /* Мини-очередь боя на телефоне — колонка портретов ниже баннера хода (он на 128 px), пока не открыт ни один виджет. */
+  .ch-init { top: 216px; left: 8px; }
+  .init-mini.rail { max-height: calc(100vh - 216px - 150px); }
   .widget, .dice-widget { width: calc(100vw - 16px); max-height: calc(100vh - 170px); }
   .ch-bc { bottom: 8px; max-width: calc(100vw - 16px); width: max-content; }
   .ch-bc .toolbar { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; padding: 4px; }

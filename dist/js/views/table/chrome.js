@@ -12,6 +12,7 @@ import { drawStyle, fillSwatch, strokeSwatch } from './draw-style.js';
 import { movementLeft, FOCUS_TOOLS } from './input.js';
 import { pauseElapsed } from './panels.js';
 import { sightBanner } from './sight-ui.js';
+import { initMiniHTML } from './p-widgets.js';
 
 const ib = (act, name, tip, { active = false, kbd = '', extra = '', disabled = false, count = 0 } = {}) =>
   `<button class="icon-btn ${active ? 'active' : ''}" data-act="${act}" ${extra} ${disabled ? 'disabled' : ''} data-tip="${esc(tip)}" ${kbd ? `data-kbd="${esc(kbd)}"` : ''} aria-label="${esc(tip)}" aria-pressed="${active}">${icon(name, 22)}${count ? `<span class="count">${count}</span>` : ''}</button>`;
@@ -28,7 +29,7 @@ function cache(node, html) {
 export function renderChrome(ctx) {
   const root = ctx.root.querySelector('.chrome');
   if (!root.__built) {
-    root.innerHTML = `<div class="ch-tl"></div><div class="ch-tc"></div><div class="ch-tr"></div><div class="ch-widget"></div><div class="ch-bl"></div><div class="ch-bc"></div><div class="ch-br"></div>`;
+    root.innerHTML = `<div class="ch-tl"></div><div class="ch-tc"></div><div class="ch-tr"></div><div class="ch-widget"></div><div class="ch-init"></div><div class="ch-bl"></div><div class="ch-bc"></div><div class="ch-br"></div>`;
     root.__built = true;
     root.addEventListener('click', (e) => {
       const b = e.target.closest('[data-act]');
@@ -65,10 +66,31 @@ export function renderChrome(ctx) {
   cache(root.querySelector('.ch-tl'), topLeft(ctx));
   cache(root.querySelector('.ch-tc'), topCenter(ctx));
   cache(root.querySelector('.ch-tr'), topRight(ctx));
+  renderInitMini(root.querySelector('.ch-init'), ctx);
   cache(root.querySelector('.ch-bl'), `<div class="toolbar">${ib('reference', 'bubble-chat-question', 'Справочник')}</div>`);
   cache(root.querySelector('.ch-bc'), ctx.scene ? bottomCenter(ctx) : '');
   cache(root.querySelector('.ch-br'), ctx.scene ? bottomRight(ctx) : '');
   root.dataset.role = ctx.isMaster ? 'master' : 'player';
+}
+
+/** Мини-очередь боя слева (#203): прокрутка не сбрасывается, текущий ход всегда виден; появляется с анимацией. */
+function renderInitMini(host, ctx) {
+  const html = initMiniHTML(ctx);
+  if (host.__html === html) return;
+  const list = host.querySelector('.im-list'), scroll = list?.scrollTop || 0;
+  host.innerHTML = html; host.__html = html;
+  const fresh = host.querySelector('.im-list');
+  const row = fresh?.querySelector('.im-row.current');
+  if (fresh) fresh.scrollTop = scroll;
+  // Текущий ход — в поле списка (без scrollIntoView: он двигал бы и сам стол).
+  if (row) {
+    const top = row.offsetTop, bottom = top + row.offsetHeight;
+    if (top < fresh.scrollTop) fresh.scrollTop = top - 4;
+    else if (bottom > fresh.scrollTop + fresh.clientHeight) fresh.scrollTop = bottom - fresh.clientHeight + 4;
+  }
+  const mode = !html ? '' : host.querySelector('.init-mini.rail') ? 'rail' : 'wide';
+  if (mode && mode !== host.dataset.mode) { host.classList.remove('opening'); void host.offsetWidth; host.classList.add('opening'); }
+  host.dataset.mode = mode;
 }
 
 function topLeft(ctx) {
