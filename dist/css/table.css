@@ -93,6 +93,8 @@
 @keyframes threat { to { fill: rgb(229 88 79 / .32); } }
 .template-shape { fill: none; stroke: var(--brand-500); stroke-width: calc(2px * var(--iz)); stroke-dasharray: calc(8px * var(--iz)) calc(5px * var(--iz)); }
 .template-origin { fill: var(--brand-500); stroke: var(--neutral-100); stroke-width: calc(2px * var(--iz)); }
+.template-origin-ring { fill: rgb(233 176 82 / .22); stroke: var(--brand-500); stroke-width: calc(2px * var(--iz)); }
+.viewport[data-tool="measure"].on-template-origin { cursor: pointer; }
 .auras-layer { pointer-events: none; overflow: visible; }
 .aura-labels { pointer-events: none; }
 .aura-label { position: absolute; transform: translate(-50%, -50%) scale(var(--iz)); transform-origin: center; pointer-events: auto; white-space: nowrap;
