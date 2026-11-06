@@ -100,3 +100,43 @@ test('перенос из Long Story Short: имя, класс, характер
   assert.equal(v.vitals.ac.value, 14);
   assert.equal(v.skills.find((s) => s.name === 'Скрытность').prof, 'expert');
 });
+
+test('заклинания любому герою: воин получает «Предметы и дары», характеристику и каст без ячеек; старый лист не теряет своих', () => {
+  const h = hero('fighter1');
+  const note = applyHeroAction(h, 'addSpell', { name: 'Щит', circle: 1, ref: spells.byName.get('щит')?.id });
+  assert.match(note.title, /Щит — в листе/);
+  assert.equal(h.spellSources[0].id, 'src-extra');
+  assert.ok(['int', 'wis', 'cha'].includes(h.spellSources[0].ability));
+  applyHeroAction(h, 'spellAbility', { ability: 'cha' });
+  assert.equal(h.spellSources[0].ability, 'cha');
+  applyHeroAction(h, 'addSpell', { name: 'Шёпот маски', circle: 2, description: 'Шёпот в 30 футах.' });
+  assert.match(applyHeroAction(h, 'addSpell', { name: 'щит', circle: 1 }).title, /уже в листе/);
+  const v = view(h);
+  assert.equal(v.spellcasting.abilityId, 'cha');
+  assert.ok(v.spellcasting.extra);
+  assert.deepEqual(v.spellcasting.spells.map((s) => s.name).sort(), ['Шёпот маски', 'Щит']);
+  const shield = h.knownSpells.find((s) => s.name === 'Щит');
+  assert.match(applyHeroAction(h, 'cast', { spellId: shield.id }).title, /сотворено/, 'ячеек у воина нет — без траты');
+  applyHeroAction(h, 'removeSpell', { spellId: shield.id });
+  assert.deepEqual(h.knownSpells.map((s) => s.name), ['Шёпот маски']);
+
+  const mira = structuredClone(seedDB().campaigns['c-shadows'].characters.find((c) => c.id === 'ch-mira'));
+  const before = view(mira).spellcasting.spells.length;
+  const legacy = view(mira).spellcasting.spells.map((s) => ({ name: s.name, circle: s.level }));
+  applyHeroAction(mira, 'addSpell', { name: 'Огненный шар', circle: 3, legacy });
+  const after = view(mira).spellcasting;
+  assert.equal(after.spells.length, before + 1, 'заклинания старого листа переехали в список');
+  assert.equal(after.abilityId, 'wis', 'жрица колдует Мудростью');
+});
+
+test('старая сумка строкой: «23 зм» — монеты, а не предмет; черты характера сохраняются в песочнице', () => {
+  const lira = structuredClone(seedDB().campaigns['c-crypt'].characters.find((c) => c.id === 'ch-lira'));
+  const v = view(lira);
+  if (/\d+\s*зм/.test(String(lira.inventory || ''))) {
+    assert.ok(v.inventory.coins.gp > 0);
+    assert.ok(![...v.inventory.equipped, ...v.inventory.pack].some((x) => /\d+\s*зм/.test(x.name)));
+  }
+  assert.match(applyHeroAction(lira, 'editField', { field: 'traits', value: 'Говорит шёпотом' }).title, /Сохранено/);
+  assert.equal(view(lira).personality.traits, 'Говорит шёпотом');
+  assert.match(applyHeroAction(lira, 'editField', { field: 'traits', value: 'x', server: true }).title, /Пока не сохраняется/);
+});

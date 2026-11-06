@@ -106,5 +106,10 @@
 | `levelUp` | `{ heroId, hp?: 'average' | 'roll', spells?: [names], auto?, done? }` |
 | `importLss` | `{ campaignId? }` — перенести разобранный файл в выбранную кампанию (повторный перенос того же имени — с предупреждением на экране) |
 | `lssCampaign` | `{ campaignId }` — выбрать кампанию переноса |
+| `addSpell` | `{ heroId, name, circle, ref?, ritual?, description? }` — любое заклинание любому герою (справочник или своё); без источника магии появляется «Предметы и дары» (`spellSources[id: 'src-extra']`) |
+| `removeSpell` | `{ heroId, spellId, name }` — убрать заклинание из листа |
+| `spellAbility` | `{ heroId, ability: 'int' \| 'wis' \| 'cha' }` — чем колдует источник «Предметы и дары» |
+| `setPortrait` | `{ heroId, ref }` — портрет героя и картинка всех его токенов (свой файл — `uploadPortrait`, на сервере бакет `tokens`) |
+| `deleteHero` / `restoreHero` | `{ heroId }` — лист в архив кампании и обратно (песочница — `sheet-lifecycle.js`, сервер — команды `archive` / `restore`); владелец или мастер |
 
 Выборы мастера создания и быстрого героя до подключения хранятся только в `sessionStorage` вкладки (ключ `rasputye-hero-draft`) и в данные кампании не попадают.

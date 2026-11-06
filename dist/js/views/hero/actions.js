@@ -237,7 +237,7 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
       // Черты характера и внешность (песочница; на сервере поля personality пока нет — #202).
       if (['traits', 'ideals', 'bonds', 'flaws', 'appearance', 'backstory'].includes(p.field) && !p.server) { ch.personality = { ...(ch.personality || {}), [p.field]: String(p.value ?? '') }; return { title: 'Сохранено', icon: 'tick-02' }; }
       if (p.field === 'menu') return { title: 'Меню листа', body: 'Портрет, архив и передача героя — за столом, в листе героя.' };
-      return { title: 'Пока не сохраняется', body: 'Черты, идеалы и внешность появятся на сервере следующим шагом.' };
+      return { title: 'Пока не сохраняется', body: 'На сервере черты характера и внешность ещё не хранятся — запишите их в заметки, они сохранятся.' };
     }
     default: return null;
   }
