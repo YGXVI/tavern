@@ -13,6 +13,7 @@ import { indexCreation, newCreation, applyCreationChoice, creationModel, creatio
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 import { gearIndex } from './gear.js';
+import { startEdit, finishEdit, applyEdit } from './edit-model.js';
 import { LIB, isLibKey, libraryHeroes, archivedLibraryHeroes, libraryHero, saveLibraryHero, updateLibraryHero, archiveLibraryHero, restoreLibraryHero } from './library.js';
 
 const HEROES = { lira: LIRA, torin: TORIN };
@@ -491,6 +492,35 @@ async function levelUp(p = {}) {
   location.hash = `#/hero/${s.key}`;
 }
 
+// ——— Правка героя (#203, edit.js) ———
+/** Всё для экрана правки: лист, копия данных, можно ли править, где хранится (lib — «Мои герои», server — сервер). */
+export function editState(key) {
+  const real = findHero(key), v = heroView(key);
+  if (!real || !v) return null;
+  return { v, data: startEdit(real.ch).draft, canEdit: !!v.canEdit, lib: !!real.lib, server: !real.lib && isServerMode(), campaign: real.c ? { id: real.c.id, name: real.c.name } : null };
+}
+/** Лист по черновику правки — живой просмотр (те же числа, что покажет лист после «Сохранить»). */
+export function editPreview(key, draft) {
+  const real = findHero(key);
+  if (!real) return null;
+  return toHeroView({ ...draft, id: real.ch.id, ownerId: real.ch.ownerId }, ctxOf(real.c, real.ch, currentUserId()));
+}
+export const heroGear = () => gear;
+/** «Сохранить» правку: только изменённые поля листа; на сервере — командой edit, как правки листа за столом. */
+function saveEdit(p = {}) {
+  const real = findHero(p.heroId);
+  if (!real || !canLevelUp(p.heroId)) { say('Править нельзя', 'Героя нет или он не ваш.', 'alert-circle'); return false; }
+  const server = !real.lib && isServerMode();
+  const res = finishEdit(p.base || {}, p.draft || {}, { server });
+  if (res.error) { say('Не сохранено', res.error, 'alert-circle'); return false; }
+  if (!res.changed.length && !res.dropped.length) { say('Без изменений', 'Лист остался как был.', 'tick-02'); return true; }
+  const chid = real.ch.id;
+  if (real.lib) updateLibraryHero(currentUserId(), chid, (ch) => { applyEdit(ch, res.patch); });
+  else if (res.changed.length) updateCampaign(real.c.id, (c) => { const ch = c.characters.find((x) => x.id === chid); if (ch) applyEdit(ch, res.patch); });
+  say(`${res.patch.name || real.ch.name}: сохранено`, res.dropped.includes('personality') ? 'Черты характера сервер пока не хранит — перенесите их в заметки.' : '', res.dropped.length ? 'information-circle' : 'tick-02');
+  return true;
+}
+
 export const heroActions = {
   createFrom: (p = {}) => (p.path === 'steps' && creationIx ? undefined : stub('Новый герой')(p)), // { path: 'steps' | 'quick' | 'lss' }
   choose,                                      // { step, id, value }
@@ -518,4 +548,5 @@ export const heroActions = {
   setPortrait,                                 // { heroId, ref } — портрет и картинка токенов
   deleteHero,                                  // { heroId } — в архив кампании (вернуть — restoreHero)
   restoreHero,                                 // { heroId }
+  saveEdit,                                    // { heroId, base, draft } — правка героя (edit.js); true — сохранено
 };
