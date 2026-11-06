@@ -82,7 +82,7 @@ export function bottomBar({ back, backLabel = 'Назад', hint = '', next, nex
 
 /** Плашка-переключатель (сегменты): items — [{id, name, disabled}]. */
 export function segmented(items, active, attr = 'data-seg', cls = '') {
-  return html`<div class="h-seg ${cls}" role="tablist">${items.map((it) => html`<button role="tab" ${raw(attr)}="${it.id ?? it.name}" aria-selected="${String((it.id ?? it.name) === active)}" ${it.disabled ? raw('disabled') : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.name}</button>`)}</div>`;
+  return html`<div class="h-seg ${cls}" role="tablist">${items.map((it) => html`<button role="tab" ${raw(attr)}="${it.id ?? it.name}" aria-selected="${String((it.id ?? it.name) === active)}" ${it.disabled ? raw('disabled') : ''}${it.title ? html` title="${it.title}"` : ''}>${it.icon ? ic(it.icon, 16) : ''}${it.name}</button>`)}</div>`;
 }
 
 /** Галочка-чекбокс в стиле макета (фиолетовая для заклинаний). */

@@ -9,7 +9,7 @@ import { currentUserId } from '../../core/auth.js';
 import { toHeroView, toHeroCard, spellIndex, legacySpells } from './adapter.js';
 import { archiveLocalCharacter, restoreLocalCharacter } from '../table/sheet-lifecycle.js';
 import { applyHeroAction } from './actions.js';
-import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter, quickCreation, quickClass } from './creation.js';
+import { indexCreation, newCreation, applyCreationChoice, creationModel, creationLiveModel, creationDoneModel, creationCharacter, quickCreation, quickClass, freeHeroContext } from './creation.js';
 import { isServerMode } from '../../core/store.js';
 import { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } from './levelup-model.js';
 import { gearIndex } from './gear.js';
@@ -124,6 +124,7 @@ function buildState() {
   let st = readJSON(BUILD_KEY);
   // Герой собирается сам по себе (#203): кампания есть, только если мастер создания открыт из неё («Свой герой»).
   if (!st || st.v !== 1 || st.userId !== userId) st = { ...newCreation(creationIx, { campaign: null, userId: userId || 'guest' }), userId };
+  freeHeroContext(st); // черновик, начатый до того, как герою без кампании открыли покупку очков
   // Имя — из окна (шаг «Образ» пишет его только в свой черновик).
   const ui = readJSON(UI_KEY) || {};
   if (typeof ui.name === 'string' && ui.name !== st.draft.identity.name) applyCreationChoice(creationIx, st, { step: 'look', id: 'name', value: ui.name });
