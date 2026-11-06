@@ -13,7 +13,9 @@ const TABS = [
   { id: 'skills', name: 'Навыки', icon: 'hand-grip' }, { id: 'bag', name: 'Сумка', icon: 'backpack-01' }, { id: 'person', name: 'Личность', icon: 'pencil-edit-02' },
 ];
 // Правки на этой странице живут до перезагрузки: витрина неизменна, действия уходят в heroActions.
-const local = { hpDelta: {}, prepared: {}, spellFocus: '', magicView: 'ready', search: '' };
+// econ — отмеченные в этот ход действие, бонусное, реакция (по герою; только на этом экране, до «Новый ход»).
+const local = { hpDelta: {}, prepared: {}, spellFocus: '', magicView: 'ready', search: '', econ: {} };
+const econUsed = (v) => new Set(local.econ[v.id] || []);
 
 export function mount(root, { parts, query, page, L }) {
   const [, id = 'lira', sub, n] = parts;
@@ -57,7 +59,7 @@ function sheetHead(v, mode) {
     <span class="spacer"></span>
     ${mode === 'drawer' ? html`<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><button class="icon-btn icon-btn-sm" data-close-sheet aria-label="Закрыть">${ic('cancel-01', 18)}</button>`
       : mode === 'table' ? html`${v.isMine === false ? '' : html`<a class="icon-btn icon-btn-sm" href="#/hero/${v.id}" aria-label="Открыть полностью">${ic('maximize-01', 18)}</a>`}<button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button><a class="icon-btn icon-btn-sm" href="#/hero/${v.id}/table?stub" aria-label="Свернуть">${ic('cancel-01', 18)}</a>`
-      : html`${v.live && v.canEdit ? html`<a class="btn btn-sm btn-secondary s-edit" href="#/hero/${v.id}/edit" title="Править героя">${ic('pencil-edit-02', 16)}<span>Править</span></a>` : ''}${v.lib ? html`<a class="btn btn-sm btn-primary" href="#/hero/${v.id}/bring">${ic('arrow-right-02', 16)}В кампанию</a>` : ''}${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${mode === 'easy'}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${mode === 'classic'}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
+      : html`${v.live && v.canEdit ? html`<a class="btn btn-sm btn-secondary s-edit" href="#/hero/${v.id}/edit" title="Править героя">${ic('pencil-edit-02', 16)}<span>Править</span></a>` : ''}${v.lib ? html`<a class="btn btn-sm btn-primary" href="#/hero/${v.id}/bring">${ic('arrow-right-02', 16)}В кампанию</a>` : ''}${v.live && v.canLevelUp ? html`<a class="btn btn-sm btn-secondary" href="#/hero/${v.id}/levelup/hp">${ic('sparkles', 16)}Новый уровень</a>` : ''}<nav class="h-seg dark s-mode"><a href="#/hero/${v.id}" aria-selected="${String(mode === 'easy')}">${ic('book-open-01', 16)}Удобный</a><a href="#/hero/${v.id}/classic/1" aria-selected="${String(mode === 'classic')}">${ic('pen-tool-01', 16)}Классический</a></nav><button class="icon-btn icon-btn-sm" data-more aria-label="Ещё">${ic('more-horizontal', 18)}</button>`}
   </header>`;
 }
 
@@ -142,7 +144,13 @@ const group = (title, note, rows) => (rows.length ? html`<div class="s-group">${
 
 function combatTab(v, { narrow = false } = {}) {
   const act = v.actions;
-  const econ = html`<div class="s-econ">${v.economy.map((e) => html`<span class="s-econ-chip ${e.left && !v.down ? '' : 'used'}"><i></i>${e.name}</span>`)}</div>`;
+  // Действия хода — переключатели: нажатие отмечает «потрачено», «Новый ход» снимает отметки. Скорость — просто подпись.
+  const used = econUsed(v);
+  const econ = html`<div class="s-econ">${v.economy.map((e, i) => {
+    if (i > 2) return html`<span class="s-econ-chip info"><i></i>${e.name}</span>`;
+    const off = !e.left || v.down || used.has(e.name);
+    return html`<button class="s-econ-chip ${off ? 'used' : ''}" data-econ="${e.name}" aria-pressed="${String(off)}" title="${off ? 'Потрачено в этот ход — нажмите, чтобы вернуть' : 'Нажмите, когда потратите в этот ход'}"><i></i>${e.name}</button>`;
+  })}${used.size ? html`<button class="s-econ-reset" data-econ-reset>${ic('undo-02', 14)}Новый ход</button>` : ''}</div>`;
   const left = group('Действие', '1 за ход', act.action.map((a) => actionRow(v, a)));
   const right = html`${group('Бонусное действие', '1 за ход', act.bonus.map((a) => actionRow(v, a)))}${group('Реакция', 'до вашего хода', act.reaction.map((a) => actionRow(v, a)))}${group('Особое', 'в свой ход', (act.special || []).map((a) => actionRow(v, a)))}`;
   return html`${econ}${narrow ? html`<div class="s-col">${left}${right}</div>` : html`<div class="s-cols"><div class="s-col">${left}</div><div class="s-col">${right}</div></div>`}`;
@@ -175,7 +183,7 @@ function magicTab(v, { narrow = false } = {}) {
 
 // Шапка магии: СЛ, атака, сколько готово, характеристика «Предметов и даров», фильтр списка, «+ Заклинание».
 function magicHead(v, sc, add, narrow) {
-  const ab = sc.extra && v.live && v.canEdit ? html`<span class="s-ab-pick" title="Чем колдует: предметы и дары">${[['int', 'ИНТ'], ['wis', 'МДР'], ['cha', 'ХАР']].map(([k, t]) => html`<button data-spell-ab="${k}" aria-pressed="${sc.abilityId === k}">${t}</button>`)}</span>` : '';
+  const ab = sc.extra && v.live && v.canEdit ? html`<span class="s-ab-pick" title="Чем колдует: предметы и дары">${[['int', 'ИНТ'], ['wis', 'МДР'], ['cha', 'ХАР']].map(([k, t]) => html`<button data-spell-ab="${k}" aria-pressed="${String(sc.abilityId === k)}">${t}</button>`)}</span>` : '';
   return html`<div class="s-magic-top"><span class="s-pill"><small>сл</small><b data-explain="dc">${sc.dc}</b></span><span class="s-pill"><small>атака</small><b>${sc.attack}</b></span>${sc.spells.length ? html`<span class="s-pill"><small>готово</small><b>${sc.prepared.now} из ${sc.prepared.max}</b></span>` : ''}${ab}<span class="spacer"></span>
     ${sc.spells.length ? segmented([{ id: 'ready', name: 'Готовые' }, { id: 'book', name: 'Все' }, { id: 'ritual', name: 'Ритуалы' }], local.magicView, 'data-mview', narrow ? 'wide' : '') : ''}${add}</div>`;
 }
@@ -219,7 +227,7 @@ const tabBody = (v, tab, opts = {}) => ({ combat: combatTab, magic: magicTab, sk
 
 function tabsNav(v, tab, base, list = TABS) {
   const dots = v.missing?.tabs || [];
-  return html`<nav class="s-tabs">${list.map((t) => html`<a href="${base}${t.id === 'combat' ? '' : `/${t.id}`}" aria-selected="${t.id === tab}">${ic(t.icon, 16)}${t.name}${dots.includes(t.id) ? html`<i class="s-dot"></i>` : ''}</a>`)}</nav>`;
+  return html`<nav class="s-tabs">${list.map((t) => html`<a href="${base}${t.id === 'combat' ? '' : `/${t.id}`}" aria-selected="${String(t.id === tab)}">${ic(t.icon, 16)}${t.name}${dots.includes(t.id) ? html`<i class="s-dot"></i>` : ''}</a>`)}</nav>`;
 }
 
 // ——— 54–59 · Удобный лист ———
@@ -293,7 +301,7 @@ function classicPage(v, n) {
       <div class="c-cards">${cards.map((s) => html`<article class="c-card"><h3><span>${s.level}</span>${s.name}</h3><div class="c-card-tags"><span>${s.time.replace('1 ', '').replace('действие', 'Действие')}</span><span>${s.range}</span><span>${s.duration}</span></div>${s.text ? html`<p>${s.text}</p>` : html`<p lang="en">${s.srdText[0]}</p>`}<small>${s.comp}</small><footer>${s.school}<span>SRD</span></footer></article>`)}</div>`,
   };
   return html`<main class="s-page classic">${sheetHead(v, 'classic')}
-    <nav class="c-pages">${[[1, 'Основное'], [2, 'Личность и заметки'], [3, 'Заклинания']].map(([k, t]) => html`<a href="#/hero/${v.id}/classic/${k}" aria-selected="${k === n}">${k} · ${t}</a>`)}</nav>
+    <nav class="c-pages">${[[1, 'Основное'], [2, 'Личность и заметки'], [3, 'Заклинания']].map(([k, t]) => html`<a href="#/hero/${v.id}/classic/${k}" aria-selected="${String(k === n)}">${k} · ${t}</a>`)}</nav>
     <article class="c-sheet p${n}">${pages[n]}</article>${v.live ? '' : previewNote()}</main>`;
 }
 
@@ -307,7 +315,7 @@ function tablePage(v, tab, q) {
   const lira = heroView('lira', q.has('down') ? 'down' : q.has('concentration') ? 'concentration' : '');
   const h = hpOf(lira);
   const drawer = other ? otherDrawer(v) : html`<aside class="s-drawer">${sheetHead(v, 'table')}${hpCard(v)}${v.down ? deathPanel(v) : ''}${v.concCheck ? concPanel(v) : ''}${pills(v)}${concRow(v)}${statsGrid(v, 'row6')}
-    <nav class="s-tabs small">${TABS.slice(0, 4).map((t) => html`<a href="${keep(`#/hero/${v.id}/table/${t.id}`)}" aria-selected="${t.id === tab}">${ic(t.icon, 16)}${t.name}</a>`)}</nav>
+    <nav class="s-tabs small">${TABS.slice(0, 4).map((t) => html`<a href="${keep(`#/hero/${v.id}/table/${t.id}`)}" aria-selected="${String(t.id === tab)}">${ic(t.icon, 16)}${t.name}</a>`)}</nav>
     <div class="s-tab">${tabBody(v, tab, { narrow: true, ask: q.has('ask') })}</div></aside>`;
   const stubRail = () => html`<aside class="s-stub"><a class="icon-btn icon-btn-sm" href="${keep(`#/hero/${v.id}/table`).replace(/[?&]stub/, '')}" aria-label="Развернуть">${ic('layers-01', 18)}</a><span class="s-portrait"><img src="${v.portrait}" alt=""></span>
     <small>хп</small><b>${hpOf(v).now}</b><small>из ${v.vitals.hp.max}</small><span class="s-vbar"><i style="height:${Math.round((hpOf(v).now / v.vitals.hp.max) * 100)}%"></i></span>
@@ -324,7 +332,7 @@ function tablePage(v, tab, q) {
     ${toasts}${q.has('levelup') ? '' : stub ? stubRail() : drawer}${noSlotPop}
     <div class="t-bottom"><img src="${lira.portrait}" alt=""><span class="t-who"><b>Лира</b><small>Волшебница 5 · ваш герой</small></span><button class="icon-btn icon-btn-sm" data-hp="-1">${ic('minus-sign', 16)}</button><span class="t-hp"><small>хп</small><b>${h.now}/${h.max}</b><i><em style="width:${Math.round((h.now / h.max) * 100)}%"></em></i></span><button class="icon-btn icon-btn-sm" data-hp="1">${ic('plus-sign', 16)}</button><span class="s-pill"><small>кд</small><b>13</b></span><span class="s-pill"><b>30 фт</b></span><span class="t-sep"></span>${ic('sparkles', 20)}<a class="t-book ${stub || q.has('levelup') ? '' : 'on'}" href="${keep(`#/hero/lira/table`).replace(/[?&]stub/, '')}">${ic('book-open-01', 20)}</a>${ic('dice-faces-06', 20)}<span class="t-sep"></span>${ic('cancel-01', 20)}</div>
     <div class="t-chrome br"><span>${ic('minus-sign', 18)}100%${ic('plus-sign', 18)}</span><b>клетка 5 фт</b></div>
-    <nav class="t-variants">${[['Свой', `#/hero/lira/table`], ['Бросок', `#/hero/lira/table?roll`], ['Магия', `#/hero/lira/table/magic`], ['Чужой', `#/hero/torin/table`], ['Корешок', `#/hero/lira/table?stub`], ['Мастер просит', `#/hero/lira/table/skills?ask`], ['0 хитов', `#/hero/lira/table?down`], ['Концентрация', `#/hero/lira/table?concentration`], ['Нет ячеек', `#/hero/lira/table?noSlots`], ['Новый уровень', `#/hero/lira/table?levelup`]].map(([t, href]) => html`<a href="${href}" aria-current="${location.hash === href}">${t}</a>`)}</nav>
+    <nav class="t-variants">${[['Свой', `#/hero/lira/table`], ['Бросок', `#/hero/lira/table?roll`], ['Магия', `#/hero/lira/table/magic`], ['Чужой', `#/hero/torin/table`], ['Корешок', `#/hero/lira/table?stub`], ['Мастер просит', `#/hero/lira/table/skills?ask`], ['0 хитов', `#/hero/lira/table?down`], ['Концентрация', `#/hero/lira/table?concentration`], ['Нет ячеек', `#/hero/lira/table?noSlots`], ['Новый уровень', `#/hero/lira/table?levelup`]].map(([t, href]) => html`<a href="${href}" aria-current="${String(location.hash === href)}">${t}</a>`)}</nav>
   </main>`;
 }
 
@@ -357,7 +365,7 @@ function sheetMenu(v, anchor, opts) {
 export function drawerHTML(v, tab = 'combat') {
   const t = TABS.slice(0, 4).some((x) => x.id === tab) ? tab : 'combat';
   return html`${sheetHead(v, 'drawer')}${hpCard(v)}${v.down ? deathPanel(v) : ''}${pills(v)}${concRow(v)}${statsGrid(v, 'row6')}
-    <nav class="s-tabs small">${TABS.slice(0, 4).map((x) => html`<button data-dtab="${x.id}" aria-selected="${x.id === t}">${ic(x.icon, 16)}${x.name}</button>`)}</nav>
+    <nav class="s-tabs small">${TABS.slice(0, 4).map((x) => html`<button data-dtab="${x.id}" aria-selected="${String(x.id === t)}">${ic(x.icon, 16)}${x.name}</button>`)}</nav>
     <div class="s-tab">${tabBody(v, t, { narrow: true })}</div>${t === 'combat' ? html`<div class="s-res-mini">${resources(v)}${restBtns()}</div>` : ''}`;
 }
 export { shortRest };
@@ -379,6 +387,8 @@ export function bindSheet(root, L0, src, redraw, opts = {}) {
   L('click', '[data-explain]', (e, b, v) => { e.stopPropagation(); const t = v.explain?.[b.dataset.explain]; if (t) popover(html`<div class="s-explain">${t}</div>`, b, { placement: 'top', className: 'explain-pop' }); });
   L('click', '[data-res]', (e, b, v) => { const r = v.resources.find((x) => x.id === b.dataset.res); heroActions.useResource({ heroId: v.id, id: b.dataset.res, name: r?.name, total: r?.total, recovery: r?.recovery }); });
   L('click', '[data-drop-conc]', (e, b, v) => heroActions.dropConcentration({ heroId: v.id }));
+  L('click', '[data-econ]', (e, b, v) => { const u = econUsed(v), n = b.dataset.econ; if (u.has(n)) u.delete(n); else u.add(n); local.econ[v.id] = [...u]; redraw(); });
+  L('click', '[data-econ-reset]', (e, b, v) => { local.econ[v.id] = []; redraw(); });
   // Состояние: список PHB поповером — отмеченные снимаются повторным нажатием.
   L('click', '[data-add-cond]', (e, b, v) => {
     const on = new Set((v.conditions || []).map((c) => c.id));
@@ -430,7 +440,7 @@ function shortRest(v) {
     <div class="s-rest-row"><span class="h-stepper sm"><button data-hd="-1">${ic('minus-sign', 16)}</button><b>${dice}</b><button data-hd="1">${ic('plus-sign', 16)}</button></span><span><b>Кости хитов: ${dice}${hd.die}</b><small>осталось ${hd.left} из ${hd.total}</small></span></div>
     ${arcane ? html`<div class="s-rest-row"><span><b>${arcane.name}</b><small>до ${Math.ceil(v.level / 2)} уровней ячеек</small></span><span class="spacer"></span>${v.resources.filter((r) => r.kind === 'slot' && r.circle && r.circle <= 5).map((r) => html`<button class="s-lvl ${pick.has(r.circle) ? 'on' : ''}" data-lv="${r.circle}">${pick.has(r.circle) ? ic('tick-02', 12) : ''}${r.circle} ур.</button>`)}</div>` : ''}
     <div class="s-rest-foot"><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${ic('dice-faces-06', 16)}Отдохнуть</button></div></div>`;
-  const m = modal(body(), { className: 'rest' });
+  const m = modal(body(), { className: 'rest hero-modal' });
   m.box.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.hd) { dice = Math.max(0, Math.min(hd.left, dice + +b.dataset.hd)); m.set(body()); }
@@ -448,7 +458,7 @@ function hpPad(v) {
     <div class="s-hp-quick">${[1, 2, 5, 10].map((n) => html`<button data-plus="${n}">+${n}</button>`)}<button data-clear>${ic('cancel-01', 14)}</button></div>
     <div class="s-hp-acts"><button class="btn btn-danger" data-apply="dmg">${ic('sword-01', 16)}Урон</button><button class="btn btn-primary" data-apply="heal">${ic('heart-check', 16)}Лечение</button><button class="btn btn-secondary" data-apply="temp">${ic('shield-user', 16)}Временные</button></div>
     <p class="s-hp-note">Урон сначала снимает временные хиты. Временные не складываются — остаётся большее.${v.explain?.hp ? ` ${v.explain.hp}.` : ''}</p></div>`;
-  const m = modal(body(), { className: 'rest' });
+  const m = modal(body(), { className: 'rest hero-modal' });
   const input = () => m.box.querySelector('[data-hpv]');
   setTimeout(() => input()?.focus(), 50);
   const apply = (kind) => {
@@ -473,7 +483,7 @@ function portraitModal(v) {
   const m = modal(html`<div class="s-rest-modal s-portrait-modal"><div class="s-rest-head">${ic('image-add-01', 18)}<b>Портрет ${v.name}</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
     <p class="s-hp-note">Портрет — это и токен на карте: поменяется на всех сценах кампании.</p>
     <button class="s-upload" data-own-pic>${ic('upload-01', 20)}<span><b>Загрузить свой</b><small>PNG, JPEG или WebP до 5 МБ · кадр выберете сами</small></span></button>
-    <div class="s-pic-grid">${PORTRAITS.map((p) => html`<button class="s-pic ${p === v.portrait ? 'on' : ''}" data-pic="${p}" aria-pressed="${p === v.portrait}"><img src="${p}" alt="" loading="lazy">${p === v.portrait ? html`<span class="h-tick">${ic('tick-02', 12)}</span>` : ''}</button>`)}</div></div>`, { className: 'rest pick' });
+    <div class="s-pic-grid">${PORTRAITS.map((p) => html`<button class="s-pic ${p === v.portrait ? 'on' : ''}" data-pic="${p}" aria-pressed="${String(p === v.portrait)}"><img src="${p}" alt="" loading="lazy">${p === v.portrait ? html`<span class="h-tick">${ic('tick-02', 12)}</span>` : ''}</button>`)}</div></div>`, { className: 'rest pick hero-modal' });
   m.box.addEventListener('click', async (e) => {
     const pic = e.target.closest('[data-pic]');
     if (pic) { heroActions.setPortrait({ heroId: v.id, ref: pic.dataset.pic }); m.close(); return; }
@@ -508,15 +518,15 @@ function spellPicker(v) {
   const body = () => html`<div class="s-rest-modal s-add-modal s-spell-pick"><div class="s-rest-head">${ic('sparkles', 18)}<b>Добавить заклинание</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
     <p class="s-hp-note">Любое — от класса, артефакта или дара мастера. Ограничений по классу нет.</p>
     ${st.own ? html`<div class="s-own-spell"><label class="s-field"><span>Название</span><span class="input"><input data-own-name value="${st.name}" placeholder="Например, «Шёпот маски»" maxlength="60"></span></label>
-        <div class="s-field"><span>Уровень</span><span class="s-lv-pick">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => html`<button data-own-lv="${n}" aria-pressed="${st.circle === n}">${n ? n : 'Заговор'}</button>`)}</span></div>
+        <div class="s-field"><span>Уровень</span><span class="s-lv-pick">${[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => html`<button data-own-lv="${n}" aria-pressed="${String(st.circle === n)}">${n ? n : 'Заговор'}</button>`)}</span></div>
         <label class="s-field"><span>Что делает</span><textarea rows="4" data-own-text placeholder="Время, дистанция, эффект — как записано у мастера">${st.text}</textarea></label>
         <div class="s-rest-foot"><button class="btn btn-ghost" data-own-back>${ic('arrow-left-02', 16)}К справочнику</button><button class="btn btn-primary" data-own-save>${ic('plus-sign', 16)}Добавить</button></div></div>`
     : html`<span class="input">${ic('search-01', 16)}<input data-sq placeholder="Огненный шар, Щит, Fireball…" value="${st.q}"></span>
-      <div class="s-lv-pick">${LV.map(([k, t]) => html`<button data-lv="${k}" aria-pressed="${st.level === k}">${t}</button>`)}</div>
+      <div class="s-lv-pick">${LV.map(([k, t]) => html`<button data-lv="${k}" aria-pressed="${String(st.level === k)}">${t}</button>`)}</div>
       <label class="s-cls-pick">${caps('Класс')}<select class="input" data-cls><option value="">Любой — без ограничений</option>${SPELL_CLASSES.map((c) => html`<option value="${c}" ${st.cls === c ? raw('selected') : ''}>${c}</option>`)}</select></label>
       <div class="s-add-list">${list().map(row)}${list().length ? '' : html`<p class="s-none">Ничего не нашлось.</p>`}</div>
       <button class="s-add-row own" data-own-open><b>Своё заклинание</b><small>хоумбрю, предмет, умение мастера — название, уровень, текст</small>${ic('pencil-edit-02', 16)}</button>`}</div>`;
-  const m = modal(body(), { className: 'rest pick' });
+  const m = modal(body(), { className: 'rest pick hero-modal' });
   const redraw = (focus) => { m.set(body()); const i = m.box.querySelector(focus); if (i) { i.focus(); if (i.setSelectionRange && typeof i.value === 'string') i.setSelectionRange(i.value.length, i.value.length); } };
   setTimeout(() => m.box.querySelector('[data-sq]')?.focus(), 50);
   m.box.addEventListener('input', (e) => {
@@ -555,7 +565,7 @@ function addItemModal(v) {
     <span class="input">${ic('search-01', 16)}<input data-q placeholder="Кинжал, верёвка, зелье лечения…" value="${q}" autofocus></span>
     <div class="s-add-list">${list().map((g) => html`<button class="s-add-row" data-ref="${g.ref}"><b>${g.name}</b><small>${KIND[g.kind] || g.kind}${g.weight ? ` · ${g.weight} фнт` : ''}</small>${ic('plus-sign', 16)}</button>`)}
       ${q.trim() ? html`<button class="s-add-row own" data-own><b>«${q.trim()}»</b><small>свой предмет</small>${ic('plus-sign', 16)}</button>` : ''}</div></div>`;
-  const m = modal(body(), { className: 'rest pick' });
+  const m = modal(body(), { className: 'rest pick hero-modal' });
   const redraw = () => { m.set(body()); const i = m.box.querySelector('[data-q]'); i.focus(); i.setSelectionRange(q.length, q.length); };
   m.box.addEventListener('input', (e) => { if (e.target.matches('[data-q]')) { q = e.target.value; redraw(); } });
   m.box.addEventListener('click', (e) => {
@@ -569,7 +579,7 @@ function coinsModal(v) {
   const c = v.inventory.coins;
   const m = modal(html`<div class="s-rest-modal"><div class="s-rest-head">${ic('backpack-01', 18)}<b>Монеты</b><span class="spacer"></span><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${ic('cancel-01', 18)}</button></div>
     <div class="s-coins">${[['pp', 'пм'], ['gp', 'зм'], ['ep', 'эм'], ['sp', 'см'], ['cp', 'мм']].map(([k, t]) => html`<label><small>${t}</small><input type="number" min="0" step="1" data-coin="${k}" value="${c[k] || 0}"></label>`)}</div>
-    <div class="s-rest-foot"><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${ic('tick-02', 16)}Сохранить</button></div></div>`, { className: 'rest' });
+    <div class="s-rest-foot"><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>${ic('tick-02', 16)}Сохранить</button></div></div>`, { className: 'rest hero-modal' });
   m.box.querySelector('[data-ok]').addEventListener('click', () => {
     const p = { heroId: v.id };
     m.box.querySelectorAll('[data-coin]').forEach((i) => { p[i.dataset.coin] = Number(i.value) || 0; });

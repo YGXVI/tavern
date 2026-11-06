@@ -37,7 +37,7 @@ function spendLegacySlot(ch, circle) {
   if (!slot) return { title: 'Не нашёл ячейки' };
   if (n(slot.used) >= n(slot.max)) return { title: 'Не осталось', body: `Ячейки ${circle} ур.: 0 из ${n(slot.max)}` };
   slot.used = n(slot.used) + 1;
-  return { title: `Ячейки ${circle} ур.: осталось ${n(slot.max) - slot.used} из ${n(slot.max)}`, icon: 'tick-02' };
+  return { title: `Ячейки ${circle} ур.: осталось ${n(slot.max) - slot.used} из ${n(slot.max)}`, icon: 'tick-02', undo: { id: `legacy-slot-${circle}` } };
 }
 
 // Источник магии «Предметы и дары» — для заклинаний не от класса (артефакт даёт воину «Щит», хоумбрю мастера).
@@ -94,7 +94,16 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
       const max = n(pool.max ?? pool.total);
       if (n(pool.spent) >= max) return { title: 'Не осталось', body: `${pool.name || 'Ресурс'}: 0 из ${max}` };
       pool.spent = n(pool.spent) + 1;
-      return { title: `${pool.name || 'Ресурс'}: осталось ${max - pool.spent} из ${max}`, icon: 'tick-02' };
+      return { title: `${pool.name || 'Ресурс'}: осталось ${max - pool.spent} из ${max}`, icon: 'tick-02', undo: { id: pool.id } };
+    }
+    case 'refund': {
+      // «Вернуть» из подсказки: нажали ячейку или заряд по ошибке — снять одну трату.
+      const legacy = /^legacy-slot-(\d)$/.exec(p.id || '');
+      if (legacy) { const slot = ch.slots?.[legacy[1]]; if (!slot || !n(slot.used)) return null; slot.used = n(slot.used) - 1; return { title: `Ячейки ${legacy[1]} ур.: вернули`, icon: 'undo-02' }; }
+      const pool = [...(ch.slotPools || []), ...(ch.resources || []), ...(ch.hitDicePools || [])].find((x) => x.id === p.id);
+      if (!pool || !n(pool.spent)) return null;
+      pool.spent = n(pool.spent) - 1;
+      return { title: `${pool.name || 'Ресурс'}: вернули, осталось ${n(pool.max ?? pool.total) - pool.spent}`, icon: 'undo-02' };
     }
     case 'toggleCondition': {
       if (!p.id) return { title: 'Состояния', body: 'Выбор состояния появится в листе позже — отметьте его за столом.' };
@@ -203,7 +212,7 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
       const pool = (ch.slotPools || []).filter((x) => n(x.circle) >= want && n(x.spent) < n(x.max)).sort((a, b) => n(a.circle) - n(b.circle))[0];
       if (!pool) return { title: `Нет ячеек ${want} уровня и выше`, body: 'Отдохните или выберите заговор.' };
       pool.spent = n(pool.spent) + 1;
-      return { title: `${s.name} — ячейка ${pool.circle} ур.`, body: `Осталось ${n(pool.max) - pool.spent} из ${n(pool.max)}.`, icon: 'sparkles' };
+      return { title: `${s.name} — ячейка ${pool.circle} ур.`, body: `Осталось ${n(pool.max) - pool.spent} из ${n(pool.max)}.`, icon: 'sparkles', undo: { id: pool.id } };
     }
     case 'addSpell': {
       // Любое заклинание любому герою (#203): класс, артефакт, дар мастера, хоумбрю. Источника магии нет — появляется
