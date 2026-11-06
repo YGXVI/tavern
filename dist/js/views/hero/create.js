@@ -20,6 +20,8 @@ const noSpells = (cv) => html`<p class="e-note">${ic('information-circle', 16)}<
 function stepState(cv, id) {
   const c = (cv.done?.checks || []).find((x) => x.step === id);
   if (!c) return '';
+  // Снаряжение и заклинания идут от класса: пока класса нет, «готово» у них — обман.
+  if ((id === 'equipment' || id === 'spells') && !cv.selected?.class) return '';
   return c.ok ? 'ok' : 'need';
 }
 const stepMark = (st, i, name) => html`<span class="c-num">${st === 'ok' ? ic('tick-02', 12) : i + 1}</span><span>${name}</span>${st === 'need' ? html`<i class="c-need" aria-label="нужно выбрать"></i>` : ''}`;
