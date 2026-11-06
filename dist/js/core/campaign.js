@@ -5,7 +5,7 @@ import { monsterById } from '../data/bestiary.js';
 import { toMonster } from '../rules/creature.js';
 import { sizeById } from '../data/rules.js';
 import { uid } from './dom.js';
-import { heroAc, heroInit } from '../rules/hero-derived.js';
+import { heroAc, heroInit, heroSpeed } from '../rules/hero-derived.js';
 
 export const getCampaign = (id) => getDB().campaigns[id] || null;
 
@@ -56,7 +56,7 @@ export function tokenStats(c, t) {
     const ch = characterOf(c, t.characterId);
     if (ch) {
       return {
-        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: ch.speed,
+        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: heroSpeed(ch),
         initBonus: heroInit(ch), darkvision: ch.darkvision || 0, conditions: ch.conditions || [],
         deathSaves: ch.deathSaves, subtitle: `${ch.className} ${ch.level} ур.`, character: ch,
       };

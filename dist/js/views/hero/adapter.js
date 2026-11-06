@@ -7,7 +7,7 @@ import { ABILITIES, SKILLS, CONDITIONS, classById, raceById, mod } from '../../d
 import { srcOf } from '../../core/assets.js';
 import { castKind, diceText, DMG } from '../ref/spell-power.js';
 import { wornItems, armorClass, weaponAttacks, unarmedAttack, classResources, featureText, flavorFeature } from './gear.js';
-import { heroPerks } from '../../rules/hero-derived.js';
+import { heroPerks, heroSpeed, heroInit, heroAttacks, jackBonus } from '../../rules/hero-derived.js';
 
 const MINUS = '−';
 // Маленькие расы SRD; подраса записана в raceId как её родитель (gnome, halfling).
@@ -106,7 +106,9 @@ export function toHeroView(ch, ctx = {}) {
     save: signed(r.saves[a.id]?.value), saveProf: Number(s.proficiencies?.saves?.[a.id] ?? (s.saves || []).includes(a.id)) > 0,
   }));
   const skillMult = (id) => Number(s.proficiencies?.skills?.[id] ?? ((s.skills || []).includes(id) ? 1 : 0));
-  const skillVal = (id) => { const v = r.skills[id]; return Number.isFinite(v?.value) ? v.value : Number.isFinite(v) ? v : am(SKILLS.find((x) => x.id === id)?.ab); };
+  // «Мастер на все руки»: без владения — половина мастерства (только у героя из конструктора, остальные ведут числа сами).
+  const jack = s.creation ? jackBonus(s) : 0;
+  const skillVal = (id) => { const v = r.skills[id], plain = v?.multiplier ? 0 : (s.proficiencies?.skills?.[id] ? 0 : jack); return (Number.isFinite(v?.value) ? v.value : Number.isFinite(v) ? v : am(SKILLS.find((x) => x.id === id)?.ab)) + plain; };
   const skills = SKILLS.map((k) => ({
     name: k.name, ab: ABILITIES.find((a) => a.id === k.ab)?.short || '', mod: signed(skillVal(k.id)),
     prof: skillMult(k.id) >= 2 ? 'expert' : skillMult(k.id) >= 1 ? 'prof' : 'none',
@@ -174,11 +176,14 @@ export function toHeroView(ch, ctx = {}) {
   }).map((name, i) => ({ id: `legacy-item-${i}`, name: cap(name), quantity: 1 }));
   const worn = wornItems(rawItems, gear);
   const perks = heroPerks(s);
+  const walk = heroSpeed(s), initiative = s.creation ? heroInit(s) : num(r.initiative);
+  if (worn.some((x) => x.equipped && x.g?.armor?.stealthDisadvantage)) { const st = skills.find((x) => x.name === 'Скрытность'); if (st) st.ab += ' · помеха'; }
   const profText = [s.proficiencies?.tools, s.proficiencies?.weapons].filter(Boolean).join('\n');
   // Атаки надетым оружием (#203, правка героя): у героя из конструктора и у того, кто сам надевал оружие, — рядом со
   // своими атаками (атака с тем же именем заменяет строку оружия). Перенесённый лист с атаками ведёт их сам, как раньше.
   const ownAttack = new Set((r.attacks || []).map((a) => str(a.name).trim().toLowerCase()).filter(Boolean));
   if (!ownAttack.size || s.creation || rawItems.some((x) => x.equipped === true)) actions.action.push(...[...weaponAttacks(worn, mods, prof, profText, perks), unarmedAttack(mods, prof, perks)].filter((w) => !ownAttack.has(w.name.toLowerCase())));
+  if (s.creation && heroAttacks(s) > 1) actions.special.push({ id: 'extra-attack', name: 'Дополнительная атака', sub: `${heroAttacks(s)} атаки за действие «Атака»`, icon: 'feature' });
   if (perks.monkLevel > 0) actions.bonus.push({ ...unarmedAttack(mods, prof, perks), id: 'weapon-unarmed-bonus', sub: 'после атаки действием · боевые искусства' });
   for (const x of clsRes) if (x.row) actions[x.row].push({ id: x.id, name: x.name, sub: x.sub || '', icon: 'feature', res: x.id, left: x.left });
   // Строка атаки старого листа с именем заклинания (заговор «Священное пламя») — не отдельная строка, а чипы заклинания.
@@ -223,7 +228,7 @@ export function toHeroView(ch, ctx = {}) {
   const strMod = am('str');
   const explain = {
     ac: acKnown ? `КД ${ac} — записано на листе` : acCalc.explain,
-    init: `к20 ${signed(num(r.initiative))} = Ловкость ${signed(am('dex'))}`,
+    init: `к20 ${signed(initiative)} = Ловкость ${signed(am('dex'))}${jack ? ` + «Мастер на все руки» ${signed(jack)}` : ''}`,
     hp: `${hp.max} хитов — ${classes.map((c) => `${c.name} ${c.level} (${c.hitDie})`).join(', ') || 'по листу'}, Телосложение ${signed(am('con'))} за уровень`,
   };
   // Подсказки «откуда число» у атак оружием — по ключу строки.
@@ -249,7 +254,7 @@ export function toHeroView(ch, ctx = {}) {
     status: s.creation ? 'ready' : 'ready',
     verified: s.creation?.verified || null, // 'server' — сборку пересчитал сервер (P4b), 'client' — только браузер
     vitals: {
-      hp, ac: { value: ac, note: acKnown ? '' : acCalc.note }, init: signed(num(r.initiative)), speed: `${num(r.movement.walk, 30)} фт`, prof: signed(prof),
+      hp, ac: { value: ac, note: acKnown ? '' : acCalc.note }, init: signed(initiative), speed: `${walk} фт`, prof: signed(prof),
       size: SMALL_RACES.has(s.raceId) ? 'Маленький' : 'Средний', carry: `${carry} фнт`, jump: { long: `${num(score('str'), 10)} фут.`, high: `${Math.max(0, 3 + strMod)} фут.` },
       passive: { perception: perc, insight: ins, investigation: inv },
       deathSaves: { ok: num(r.deathSaves.successes), fail: num(r.deathSaves.failures) },
@@ -257,7 +262,7 @@ export function toHeroView(ch, ctx = {}) {
     },
     concentration: s.concentration ? { spell: str(s.concentration.spell || s.concentration) } : null,
     conditions, abilities, skills, resources,
-    economy: [{ name: 'Действие', left: true }, { name: 'Бонусное', left: true }, { name: 'Реакция', left: true }, { name: `${num(r.movement.walk, 30)} фт`, left: true }],
+    economy: [{ name: 'Действие', left: true }, { name: 'Бонусное', left: true }, { name: 'Реакция', left: true }, { name: `${walk} фт`, left: true }],
     actions, spellcasting,
     inventory: {
       load: { now: Math.round(load), max: carry }, coins,

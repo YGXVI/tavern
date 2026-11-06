@@ -108,14 +108,29 @@ await step('master sees request and accepts', async () => {
 
 await step('player picks own hero', async () => {
   await P.waitForSelector('[data-own]', { timeout: 6000 });
+  // Свой герой — быстрый путь мастера создания, затем «Куда отправится» (#203).
   await P.click('[data-own]');
-  await P.fill('.modal [data-n]', 'Лиса');
-  await P.click('.modal [data-ok]');
+  await P.click('[data-path=quick]', { timeout: 15000 });
+  await P.click('[data-start]');
+  await P.waitForSelector('[data-q]');
+  await P.click('[data-next]');
+  await wait(P);
+  await P.click('[data-next]');
+  await P.fill('[data-qname]', 'Лиса');
+  await P.click('[data-next]');
+  await P.click('[data-bring]');
+  await P.click('[data-bring-camp]');
   await P.waitForSelector('.viewport', { timeout: 8000 });
   await until(async () => fake.T.tokens.some((t) => t.character_id));
   const ch = fake.T.characters.find((x) => x.owner_id === B); const tok = fake.T.tokens.find((t) => t.character_id === ch?.id);
   console.log('  hero', ch?.data?.name, 'token', !!tok, 'member char', fake.T.campaign_members.find((x) => x.user_id === B)?.character_id);
   if (!tok) throw new Error('токен героя не на сервере');
+  // Токен игрока ждёт разрешения мастера (#203).
+  await M.click('[data-act="token-requests"]');
+  await M.click('[data-request]');
+  await M.click('[data-yes]');
+  await until(async () => (await P.locator('.tok.pending').count()) === 0);
+  await M.click('[data-act="side-close"]').catch(() => {});
   await shot(P, 'e2e-05-player-table');
 });
 
@@ -267,6 +282,7 @@ await step('master: own picture for a creature (tokens bucket)', async () => {
   const p = await M.evaluate(([x, y]) => { const w = document.querySelector('.world'); const vp = document.querySelector('.viewport').getBoundingClientRect(); const m = new DOMMatrix(getComputedStyle(w).transform); return { x: vp.left + m.e + x * m.a, y: vp.top + m.f + y * m.d }; }, [t.data.x, t.data.y]);
   await M.mouse.click(p.x, p.y, { button: 'right' }); await wait(M, 250);
   const { readFileSync } = await import('node:fs');
+  await M.click('.menu >> text=Ещё…');
   await M.click('.menu >> text=Картинка…');
   const [fc] = await Promise.all([M.waitForEvent('filechooser'), M.click('.token-image-modal [data-upload]')]);
   await fc.setFiles({ name: 'ogre.webp', mimeType: 'image/webp', buffer: readFileSync(new URL('../../../dist/assets/maps/cave.webp', import.meta.url)) });

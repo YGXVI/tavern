@@ -335,6 +335,12 @@ export function fakeServer({ names = {}, rpcOverride = null } = {}) {
     ensureProfile(uid);
     if (rpcOverride) { const custom = rpcOverride({ uid, name, args: a, tables: T, emit }); if (custom !== undefined) return custom; }
     const ok = (data) => ({ data, error: null });
+    if (name === 'create_character_sheet') {
+      const row = { id: a.p_character, campaign_id: a.p_campaign, owner_id: uid, data: a.p_payload, sheet_version: '0', sheet_managed: true, archived_at: null };
+      const failure = insertRow(uid, 'characters', row);
+      if (failure) return err(failure, /duplicate key/.test(failure) ? '23505' : '42501');
+      return ok({ ok: true, operationId: a.p_operation, replayed: false, sheet: { id: row.id, campaignId: row.campaign_id, ownerId: uid, version: '0', managed: true, archivedAt: null, data: structuredClone(row.data), controllers: [] } });
+    }
     if (name === 'place_creature') {
       const c = a.p_creature, t = a.p_token;
       if (!c || !t || c.campaign_id !== t.campaign_id || t.data?.monsterId !== `lib:${c.id}`) return err('Нужны снимок и токен одной кампании', '22023');

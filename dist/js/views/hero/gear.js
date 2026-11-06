@@ -46,6 +46,7 @@ const monkWeapon = (g) => g.id === 'srd51:equipment:shortsword' || (g.weapon.cat
  * perks — heroPerks: стрельба, дуэлянт, боевые искусства монаха.
  */
 export function weaponAttacks(list, mods, prof, profText, perks = {}) {
+  const shield = list.some((x) => x.equipped && x.g?.kind === 'shield');
   return list.filter((x) => x.equipped && x.g?.weapon).map((x) => {
     const w = x.g.weapon, props = w.properties || [], ranged = w.range === 'ranged';
     const monk = perks.monkLevel > 0 && monkWeapon(x.g);
@@ -59,7 +60,7 @@ export function weaponAttacks(list, mods, prof, profText, perks = {}) {
     const range = w.normalRange ? `${w.normalRange}/${w.longRange} фт` : props.includes('reach') ? '10 фт' : '5 фт';
     return {
       id: `weapon-${x.id || x.g.id}`, name: x.g.ru, icon: 'weapon', hit: signed(hit), dmg: `${die}${dmgMod ? signed(dmgMod) : ''}`,
-      sub: [DMG_RU[w.damage.type] || w.damage.type, range, w.versatileDice ? `двумя руками ${k(w.versatileDice)}` : '', ...props.filter((p) => !['versatile', 'ammunition'].includes(p)).map((p) => PROP_RU[p] || p), duel ? 'дуэлянт +2, если другая рука без оружия' : ''].filter(Boolean).join(' · '),
+      sub: [DMG_RU[w.damage.type] || w.damage.type, range, w.versatileDice ? `двумя руками ${k(w.versatileDice)}` : '', ...props.filter((p) => !['versatile', 'ammunition'].includes(p)).map((p) => PROP_RU[p] || p), duel ? 'дуэлянт +2, если другая рука без оружия' : '', shield && props.includes('two-handed') ? 'нужны две руки: снимите щит' : ''].filter(Boolean).join(' · '),
       explain: `${x.g.ru}: к20 ${signed(hit)} = ${ab === 'dex' ? 'Ловкость' : 'Сила'} ${signed(m)}${own ? ` + мастерство ${signed(prof)}` : ' (не владеет — без мастерства)'}${style ? ' + стрельба +2' : ''}`,
     };
   });

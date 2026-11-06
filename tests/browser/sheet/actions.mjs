@@ -33,8 +33,9 @@ try {
    const {openCharacterSheet}=await import('/js/views/table/sheet.js');
    const {getCampaign}=await import('/js/core/campaign.js');
    openCharacterSheet({cid:'c-crypt',userId:user,get c(){return getCampaign(this.cid)},isMaster:user==='u-sol',
-    root:document.querySelector('.table'),ui:{},panels:{},toast:()=>{}},id,'combat');
+    root:document.querySelector('.table'),ui:{},panels:{},toast:()=>{}},id,'edit');
   },{id,user});
+  await page.click('[data-tab="combat"]');
   await page.waitForSelector('[data-attack="0"]');
  }
  const state=()=>page.evaluate(async()=>{const c=(await import('/js/core/campaign.js')).getCampaign('c-crypt');return{pc:c.characters.find(c=>c.id==='action-pc'),npc:c.characters.find(c=>c.id==='action-npc'),scenes:c.scenes,log:c.log};});

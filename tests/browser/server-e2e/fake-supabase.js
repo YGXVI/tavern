@@ -69,6 +69,8 @@ export function createClient(url, key, opts) {
   return {
     from: (t) => new Query(t),
     rpc: (name, args) => call({ op: 'rpc', uid: uid(), name, args }),
+    // Edge Function проверки сборки на поддельном сервере нет: клиент идёт обычной командой создания.
+    functions: { invoke: async () => ({ data: null, error: { context: { status: 404 } } }) },
     channel: (topic, o) => new Channel(topic, o),
     removeChannel: (ch) => { chans.delete(ch.id); return call({ op: 'leave', chan: ch.id }); },
     realtime: { setAuth: async () => {} },

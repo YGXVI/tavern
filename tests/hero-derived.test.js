@@ -54,7 +54,7 @@ const pickStyle = (st, style) => {
 
 test('таблица доспехов совпадает с каталогом', () => {
   for (const e of read('dist/js/data/equipment-2014.json').entries.filter((x) => x.kind === 'armor')) {
-    assert.deepEqual(ARMOR_TABLE[e.id.split(':').pop()], [e.armor.baseAc, e.armor.addDex, e.armor.dexMax], e.id);
+    assert.deepEqual(ARMOR_TABLE[e.id.split(':').pop()], [e.armor.baseAc, e.armor.addDex, e.armor.dexMax, e.armor.strength, e.armor.stealthDisadvantage], e.id);
   }
 });
 
@@ -171,4 +171,31 @@ test('A4, A5: быстрый герой', async () => {
   const rogue = build2({ role: 'shadow', talk: 'word' });
   assert.ok(rogue.cha >= 14, 'плут со словом — с Харизмой');
   assert.ok(build2({ role: 'shadow', talk: 'book' }).int >= 14, 'плут со знанием — с Интеллектом');
+});
+
+test('R6, R8, R11: умения классов, доспех не по Силе, щит и двуручное', () => {
+  const lvl = (h, n) => ({ ...h, level: n, classes: h.classes.map((c) => ({ ...c, levels: n })) });
+  const monk = hero('human', 'monk');
+  assert.equal(view(lvl(monk, 1)).vitals.speed, '30 фт');
+  assert.equal(view(lvl(monk, 2)).vitals.speed, '40 фт');
+  assert.equal(view(lvl(monk, 18)).vitals.speed, '60 фт');
+  assert.equal(tokenStats({ characters: [lvl(monk, 2)], members: [] }, { characterId: monk.id }).speed, 40, 'стол видит ту же скорость');
+  const barb = hero('human', 'barbarian');
+  assert.equal(view(lvl(barb, 5)).vitals.speed, '40 фт');
+  const bard = lvl(hero('human', 'bard'), 2), bv = view(bard), plain = hero('human', 'bard');
+  const skill = (v, n) => v.skills.find((s) => s.name === n);
+  const known = Object.keys(bard.proficiencies.skills);
+  const free = ['Природа', 'Выживание', 'Медицина'].find((n) => !known.includes({ Природа: 'nature', Выживание: 'survival', Медицина: 'medicine' }[n]));
+  assert.notEqual(skill(bv, free).mod, skill(view(plain), free).mod, 'половина мастерства без владения');
+  assert.equal(bv.vitals.init, '+3', 'инициатива бардa: Ловкость +2 и половина мастерства');
+  const f5 = view(lvl(hero('human', 'fighter'), 5));
+  assert.equal(f5.actions.special.find((a) => a.id === 'extra-attack').sub, '2 атаки за действие «Атака»');
+  assert.equal(view(lvl(hero('human', 'fighter'), 11)).actions.special.find((a) => a.id === 'extra-attack').sub, '3 атаки за действие «Атака»');
+  const weak = { ...hero('human', 'fighter'), stats: { ...hero('human', 'fighter').stats, str: 9 } };
+  const wv = view(weak);
+  assert.equal(wv.vitals.speed, '20 фт', 'кольчуга при Силе ниже 13');
+  assert.match(skill(wv, 'Скрытность').ab, /помеха/);
+  assert.equal(view({ ...weak, raceId: 'dwarf' }).vitals.speed, '20 фт'.replace('20', String(weak.speed)), 'дварфу тяжёлый доспех не мешает');
+  const row = weaponAttacks([{ equipped: true, g: { kind: 'shield' } }, { equipped: true, g: { id: 'g', ru: 'Двуручный меч', en: 'Greatsword', weapon: { category: 'martial', range: 'melee', properties: ['heavy', 'two-handed'], damage: { dice: '2d6', type: 'slashing' } } } }], { str: 3, dex: 0 }, 2, 'Оружие: воинское')[0];
+  assert.match(row.sub, /снимите щит/);
 });

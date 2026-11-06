@@ -12,7 +12,7 @@ async function open(user='u-sol',id='ch-lira'){
  await page.evaluate(async({user,id})=>{
  const {openCharacterSheet}=await import('/js/views/table/sheet.js');const {getCampaign}=await import('/js/core/campaign.js');
  const ctx={cid:'c-crypt',userId:user,get c(){return getCampaign(this.cid)},root:document.querySelector('.table'),toast:()=>{},ui:{},panels:{}};
- openCharacterSheet(ctx,id);},{user,id});
+ openCharacterSheet(ctx,id,'edit');},{user,id});
  await page.waitForSelector('[data-field="name"]');
 }
 await open();

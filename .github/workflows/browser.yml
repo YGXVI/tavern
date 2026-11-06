@@ -1,0 +1,32 @@
+# Браузерные наборы tests/browser/** на каждый пуш в test (#204, аудит 06.11, T1).
+# Отдельный процесс: падение не останавливает выкатку стенда, а видно в списке проверок.
+name: Браузерные проверки
+
+on:
+  push:
+    branches: [test]
+  workflow_dispatch:
+
+concurrency:
+  group: browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Браузер
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Playwright с Chromium
+        run: |
+          npm install --no-save playwright@1.65.0
+          npx playwright install --with-deps chromium
+      - name: Наборы
+        run: |
+          export BROWSER_EXECUTABLE_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          tools/browser-suites.sh

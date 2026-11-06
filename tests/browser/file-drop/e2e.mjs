@@ -28,7 +28,7 @@ async function login(user) {
   await p.addInitScript(() => { if (!sessionStorage.getItem('drop-test-login')) { localStorage.removeItem('rasputye-v2-last-user'); sessionStorage.removeItem('rasputye-v2-session'); sessionStorage.setItem('drop-test-login', '1'); } });
   await p.goto('http://localhost:4173/?server=0#/login');
   await p.getByRole('button', { name: 'Войти через Discord' }).click(); await p.locator(`[data-u="${user}"]`).click(); await p.getByRole('button', { name: 'Авторизовать' }).click();
-  await p.locator('a[href="#/c/c-crypt"]').first().click(); await p.waitForFunction(() => !!window.__ctx?.scene); return p;
+  await p.evaluate(() => { location.hash = '#/c/c-crypt'; }); await p.waitForFunction(() => !!window.__ctx?.scene); return p;
 }
 try {
 for (const user of ['u-sol', 'u-asya']) {
