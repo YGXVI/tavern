@@ -4,6 +4,7 @@ import { html, raw, plural } from '../../core/dom.js';
 import { CLASSES } from '../../data/rules.js';
 import { norm, SPELL_CLASSES } from './data.js';
 import { ic, sec, srdText, toolBox, slider, TOOLS, crumbs, sideFilters, countLine } from './rx.js';
+import { powerOf, diceAt, DMG } from './spell-power.js';
 
 export const SCHOOL = {
   evocation: { name: 'Воплощение', color: '#ef7a52', icon: 'fire', about: 'Энергия, которая бьёт и согревает: огонь, холод, молния, свет.' },
@@ -61,35 +62,7 @@ export function gallery(items, q, text, top) {
 }
 
 // ——— Разбор силы заклинания из текста SRD ———
-const ORD = (n) => Number(String(n).replace(/\D/g, ''));
-export function powerOf(it) {
-  const t = it.srdText; if (!t) return null;
-  const body = t.text.slice(0, 2).join(' '); // урон из побочных эффектов дальше по тексту (как у «Исполнения желаний») не считаем
-  const m = body.match(/(\d+)d(\d+)(?:\s*\+\s*(\d+))?\s+(?:(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\s+)?damage/i)
-    || body.match(/regains? (?:a number of )?hit points equal to (\d+)d(\d+)(?:\s*\+\s*(?:your spellcasting ability modifier|(\d+)))?/i);
-  if (!m) return null;
-  const heal = /hit points/i.test(m[0]);
-  const base = { n: Number(m[1]), d: Number(m[2]), plus: Number(m[3]) || 0, type: heal ? null : (m[4] || '').toLowerCase(), heal, mod: heal && /spellcasting ability modifier/i.test(m[0]) };
-  if (!it.level) {
-    const all = t.text.join(' ');
-    const c = /increases by (\d+)d(\d+) when you reach 5th level/i.test(all) || /two beams at 5th level/i.test(all);
-    return c ? { ...base, cantrip: true } : { ...base, cantrip: true, flat: true };
-  }
-  // Несколько снарядов: «три дротика», «три луча» — и ещё по одному за круг выше.
-  const many = body.match(/\b(two|three|four)\s+(?:glowing\s+)?(darts|rays)\b/i);
-  const more = (t.higher || '').match(/one (?:more|additional) (?:dart|ray) for each slot level above (\d+)/i);
-  if (many && more) return { ...base, darts: { base: { two: 2, three: 3, four: 4 }[many[1].toLowerCase()], from: ORD(more[1]), word: /dart/i.test(many[2]) ? 'дротик' : 'луч' } };
-  const h = (t.higher || '').match(/increases by (\d+)d(\d+) for (?:each|every) (?:(two) )?slot levels? above (\d+)/i);
-  return { ...base, step: h ? { n: Number(h[1]), every: h[3] ? 2 : 1, from: ORD(h[4]) } : null };
-}
-const DMG = { acid: 'кислота', bludgeoning: 'дробящий', cold: 'холод', fire: 'огонь', force: 'силовое поле', lightning: 'электричество', necrotic: 'некротическая энергия', piercing: 'колющий', poison: 'яд', psychic: 'психическая энергия', radiant: 'излучение', slashing: 'рубящий', thunder: 'звук' };
-function diceAt(p, it, v) {
-  if (p.darts) { const k = p.darts.base + Math.max(0, v - p.darts.from); return { n: p.n * k, d: p.d, plus: p.plus * k, avg: k * (p.n * (p.d + 1) / 2 + p.plus), k }; }
-  let n = p.n;
-  if (p.cantrip && !p.flat) n = p.n * (1 + (v >= 5) + (v >= 11) + (v >= 17));
-  else if (p.step && v > p.step.from) n = p.n + p.step.n * Math.floor((v - p.step.from) / p.step.every);
-  return { n, d: p.d, plus: p.plus, avg: n * (p.d + 1) / 2 + p.plus };
-}
+export { powerOf, diceAt, DMG };
 
 TOOLS.spells = {
   fmt: { v: (v, st) => (st.cantrip ? `${v} уровень героя` : `ячейка ${ROMAN[v]} круга`) },
@@ -145,14 +118,14 @@ export function page(it, items, q, o = {}) {
         </header>
         ${sec('text', 'Текст заклинания', t ? 'SRD 5.1 на английском — целиком' : '', t ? html`${srdText(t.text, `SRD · ${t.name}`)}${t.higher ? html`<div class="sp-higher"><b>${ic('layers-01', 16)}На больших уровнях</b><p lang="en">${t.higher}</p></div>` : ''}`
           : html`<div class="cls-box sp-nosrd"><h3>${ic('book-open-01', 18)}Текста в открытых правилах нет</h3><p class="t-sm muted">Заклинание не входит в SRD 5.1 — его описание защищено авторским правом. Все параметры выше — точные; полный текст откройте в источнике.</p>${it.link ? html`<a class="btn btn-secondary btn-sm" href="${it.link}" target="_blank" rel="noopener noreferrer">${ic('arrow-right-02')}Карточка на dnd.su</a>` : ''}</div>`)}
-        ${sec('who', 'Кто знает', 'Основные списки классов', html`<div class="sp-classes">${it.classes.length ? it.classes.map((c) => (classId(c) && !o.modal ? html`<a class="sp-class" href="#/ref/classes/${classId(c)}"><img src="${new URL(`../../../assets/hero/class-${classId(c)}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${c}</b></a>` : html`<span class="sp-class"><b>${c}</b></span>`)) : html`<p class="t-sm tertiary">Нет в основных списках — только у подклассов или в отдельных книгах.</p>`}</div>`)}
+        ${o.modal ? '' : sec('who', 'Кто знает', 'Основные списки классов', html`<div class="sp-classes">${it.classes.length ? it.classes.map((c) => (classId(c) && !o.modal ? html`<a class="sp-class" href="#/ref/classes/${classId(c)}"><img src="${new URL(`../../../assets/hero/class-${classId(c)}.webp`, import.meta.url).href}" alt="" loading="lazy"><b>${c}</b></a>` : html`<span class="sp-class"><b>${c}</b></span>`)) : html`<p class="t-sm tertiary">Нет в основных списках — только у подклассов или в отдельных книгах.</p>`}</div>`)}
       </div>
-      <aside class="cls-side">
+      ${o.modal ? '' : html`<aside class="cls-side">
         ${p ? toolBox('spells', it, { v: it.level || 1, cantrip: !it.level }, { title: p.heal ? 'Сколько лечит' : 'Сколько бьёт', hint: it.level ? 'Двигайте ячейку — урон пересчитается' : 'Двигайте уровень героя — заговор растёт' })
           : html`<div class="cls-now"><p class="cls-now-hint">Коротко</p><div class="cls-tiles"><div class="cls-tile"><small>Круг</small><b>${it.level || '0'}</b><span>${it.level ? 'тратит ячейку' : 'без ячейки'}</span></div><div class="cls-tile"><small>Школа</small><b class="sp-tile-sch">${s.name}</b></div></div>
             ${it.conc ? html`<p class="t-sm muted">${ic('brain-02', 14)} Концентрация: второе такое заклинание сбрасывает первое, урон — спасбросок Телосложения.</p>` : ''}${it.ritual ? html`<p class="t-sm muted">${ic('hourglass', 14)} Ритуал: +10 минут — и без ячейки.</p>` : ''}</div>`}
         ${near.length ? html`<div class="cls-now rx-near"><p class="cls-now-hint">Та же школа и круг</p>${near.map((x) => html`<a class="rx-near-row sp-near" href="${href(x)}"><span class="sp-ic">${ic(sch(x).icon, 14)}</span><span><b>${x.name}</b><small>${x.en}</small></span></a>`)}</div>` : ''}
-      </aside>
+      </aside>`}
     </div>
   </div>`;
 }

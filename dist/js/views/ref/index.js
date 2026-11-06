@@ -182,14 +182,14 @@ export function mountRef(root, hash) {
       <div class="ref-card-body">${card(it, { lang, key, fav: prefs().fav.includes(key) })}</div>
       <footer class="ref-card-foot">${footActions(it)}<span class="spacer"></span>${similar(it, items)}<span class="t-xs tertiary">${it.section === 'creatures' && !it.m.srd ? '' : 'SRD 5.1 · CC BY 4.0'}</span></footer></article>`;
   }
-  function topBar(s, items) {
+  function topBar(s) {
     return html`<div class="ref-top">
-        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}${x.id === s.id ? html` <span class="ref-count">${items.length}</span>` : ''}</a>`)}</nav>
+        <nav class="h-seg dark ref-tabs" aria-label="Разделы справочника">${SECTIONS.map((x) => html`<a href="#/ref/${x.id}" aria-selected="${x.id === s.id}">${x.name}</a>`)}</nav>
         <label class="input ref-search">${ic('search-01', 18)}<input data-text value="${text}" placeholder="Искать в разделе «${s.name.toLowerCase()}»…" aria-label="Поиск в разделе" autocomplete="off"><kbd>/</kbd></label>
       </div>`;
   }
   function rxPage(s, items) {
-    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/${s.id}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/${s.id}" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return PAGES[s.id].gallery(items, st.q, text, top);
     // Снаряжение показывает, какие классы начинают с предмета, — подгружаем классы и перерисовываем.
@@ -201,7 +201,7 @@ export function mountRef(root, hash) {
   function classState(q) { return { lvl: Math.min(20, Math.max(1, Number(q.get('lvl')) || 1)) }; }
   function classesPage(items) {
     const s = sectionById('classes');
-    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/classes" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s, items);
+    const top = phone() && st.id ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref/classes" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>` : topBar(s);
     const it = st.id && items.find((x) => x.id === st.id);
     if (!it) return galleryPage(items, st.q, text, top);
     const key = `classes/${it.id}`;
@@ -215,7 +215,7 @@ export function mountRef(root, hash) {
     const sort = st.q.get('sort') || sorts?.[0][0];
     const nFilters = (FILTERS[st.section] || []).reduce((n, [k]) => n + st.q.getAll(k).length, 0);
     return html`<main class="page ref-page ${FILTERS[st.section] ? 'has-filters' : ''} ${st.id ? 'has-card' : ''}">
-      ${topBar(s, items)}
+      ${topBar(s)}
       ${phone() ? html`<div class="ref-phone-bar"><a class="icon-btn icon-btn-sm" href="#/ref" aria-label="Назад">${ic('arrow-left-02', 18)}</a><h2>${s.name}</h2><button class="icon-btn icon-btn-sm" data-palette aria-label="Поиск">${ic('search-01', 18)}</button></div>
         <div class="ref-phone-chips">${FILTERS[st.section] ? html`<button class="chip chip-md" data-ftoggle>${ic('settings-01', 14)}Фильтр${nFilters ? ` · ${nFilters}` : ''}</button>` : ''}${activeChips(st.section, items)}</div>` : ''}
       ${filtersHTML(st.section, items)}
@@ -240,9 +240,13 @@ export function mountRef(root, hash) {
     loadSection(s.id).then(() => { if (my === token) render(); }, (err) => { if (my === token) paint(html`<main class="page ref-page"><div class="ref-loading">${ic('alert-circle', 24)}<p>Раздел не загрузился: ${err.message}</p><button class="btn btn-secondary" data-retry>Ещё раз</button></div></main>`); });
   }
   function paint(body) {
+    document.querySelectorAll('.ref-tip').forEach((n) => n.remove());
     root.innerHTML = String(html`<div class="screen ref-screen">${header()}${body}</div>`);
     const u = user(); if (u) bindHeader(root, u);
     root.querySelector('.ref-row-item.current')?.scrollIntoView({ block: 'nearest' });
+    // Длинный активный пункт в ленте классов/рас должен целиком оставаться виден.
+    const current = root.querySelector('.cls-switch .on'), strip = current?.parentElement;
+    if (current && strip.scrollWidth > strip.clientWidth) strip.scrollLeft = current.offsetLeft - strip.offsetLeft - (strip.clientWidth - current.offsetWidth) / 2;
     // Телефон: лента разделов прокручена к текущему.
     const tab = root.querySelector('.ref-tabs [aria-selected="true"]'), bar = tab?.parentElement;
     if (tab && bar.scrollWidth > bar.clientWidth) { const t = tab.getBoundingClientRect(), b = bar.getBoundingClientRect(); bar.scrollLeft += t.left - b.left - (b.width - t.width) / 2; }
@@ -314,17 +318,28 @@ export function mountRef(root, hash) {
     catch (err) { toast({ title: 'Не бросить', body: err.message, icon: 'alert-circle' }); }
   });
   L('mouseover', '[data-term]', (e, a) => {
-    if (a.__tip) return;
+    if (a.__tip?.isConnected) return;
     const r = ruleById(a.dataset.term); if (!r) return;
-    a.__tip = true;
+    document.querySelectorAll('.ref-tip').forEach((n) => n.remove());
     const tip = document.createElement('div');
     tip.className = 'ref-tip panel';
+    a.__tip = tip;
     tip.innerHTML = String(html`<b>${r.name}</b><p>${r.text}</p><a href="#/ref/rules/${r.id}">Открыть правило ${ic('arrow-right-02', 14)}</a>`);
     document.body.append(tip);
     const rc = a.getBoundingClientRect();
-    tip.style.left = `${Math.min(innerWidth - 300, Math.max(8, rc.left))}px`;
-    tip.style.top = `${rc.bottom + 6}px`;
-    const off = () => { setTimeout(() => { if (!tip.matches(':hover') && !a.matches(':hover')) { tip.remove(); a.__tip = false; a.removeEventListener('mouseleave', off); } else setTimeout(off, 200); }, 150); };
+    const size = tip.getBoundingClientRect();
+    tip.style.left = `${Math.max(8, Math.min(rc.left, innerWidth - size.width - 8))}px`;
+    const top = rc.bottom + 6 + size.height <= innerHeight - 8 ? rc.bottom + 6 : rc.top - size.height - 6;
+    tip.style.top = `${Math.max(8, Math.min(top, innerHeight - size.height - 8))}px`;
+    const off = () => {
+      setTimeout(() => {
+        if (!tip.isConnected || (!tip.matches(':hover') && !a.matches(':hover'))) {
+          tip.remove();
+          if (a.__tip === tip) a.__tip = null;
+          a.removeEventListener('mouseleave', off);
+        } else setTimeout(off, 200);
+      }, 150);
+    };
     a.addEventListener('mouseleave', off);
   });
   L('click', '[data-feat]', async (e, b) => {

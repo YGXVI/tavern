@@ -77,9 +77,9 @@ export function page(it, items, q, o = {}) {
             ${o.modal ? '' : html`<div class="cls-hero-actions"><button class="icon-btn icon-btn-sm" data-fav="${o.key}" aria-pressed="${!!o.fav}" aria-label="Избранное">${ic(o.fav ? 'star' : 'favourite', 18)}</button><button class="icon-btn icon-btn-sm" data-share="${o.key}" aria-label="Скопировать ссылку">${ic('link-01', 18)}</button></div>`}</div>
           <div class="rl-hero-ic">${ic(iconOf(it), 72)}</div>
         </header>
-        ${near.length ? sec('near', `Ещё в разделе «${it.group}»`, '', html`<div class="rl-glossary">${near.map(term)}</div>`) : ''}
+        ${!o.modal && near.length ? sec('near', `Ещё в разделе «${it.group}»`, '', html`<div class="rl-glossary">${near.map(term)}</div>`) : ''}
       </div>
-      <aside class="cls-side">${tool(it) || html`<div class="cls-now"><p class="cls-now-hint">Где встречается</p><p class="t-sm muted">Термин подсвечивается в текстах справочника — наведите на него в карточке существа или класса, чтобы увидеть правило.</p></div>`}</aside>
+      ${o.modal ? '' : html`<aside class="cls-side">${tool(it) || html`<div class="cls-now"><p class="cls-now-hint">Где встречается</p><p class="t-sm muted">Термин подсвечивается в текстах справочника — наведите на него в карточке существа или класса, чтобы увидеть правило.</p></div>`}</aside>`}
     </div>
   </div>`;
 }

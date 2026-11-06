@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 globalThis.self ??= {};
 globalThis.window ??= { addEventListener() {}, removeEventListener() {} };
 const data = (f) => JSON.parse(readFileSync(new URL(`../dist/js/data/${f}`, import.meta.url), 'utf8'));
-const { powerOf } = await import('../dist/js/views/ref/sec-spells.js');
+const { powerOf } = await import('../dist/js/views/ref/spell-power.js');
 const { GEAR_RU } = await import('../dist/js/views/ref/world-text.js');
 
 const srd = data('spells-srd-2014.json').spells;

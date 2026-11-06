@@ -55,9 +55,9 @@ export const races = {
         ${sec('abil', 'Характеристики', it.id === 'half-elf' ? 'Харизма +2 и ещё +1 к двум на выбор' : 'Прибавка к значениям при создании героя', abilBars(it))}
         ${sec('traits', 'Черты', 'Суть по-русски и полный текст SRD', html`<div class="cr-list">${it.traits.map(trait)}</div>`)}
         ${it.subs.length ? sec('sub', 'Подраса', 'В открытых правилах — одна; в Книге игрока есть и другие', html`${it.subs.map((s) => html`<div class="cls-fork"><span class="cls-fork-ic">${fork(22)}</span><div><small>Распутье · подраса</small><b>${s.name}</b><p>${s.inc.map((x) => `${ab(x.ability).name} +${x.value}`).join(', ')}</p><div class="cr-list">${s.traits.map(trait)}</div></div></div>`)}`) : ''}
-        ${sec('life', 'Жизнь', '', html`<div class="cls-start"><div class="cls-box"><div class="cls-kv"><small>Возраст</small><span>${m.age}</span></div></div><div class="cls-box"><div class="cls-kv"><small>Мировоззрение</small><span>${m.align}</span></div></div></div>`)}
+        ${o.modal ? '' : sec('life', 'Жизнь', '', html`<div class="cls-start"><div class="cls-box"><div class="cls-kv"><small>Возраст</small><span>${m.age}</span></div></div><div class="cls-box"><div class="cls-kv"><small>Мировоззрение</small><span>${m.align}</span></div></div></div>`)}
       </div>
-      <aside class="cls-side">${toolBox('race-fit', it, { cls: bestClass(it) }, { title: 'Примерить к классу', hint: 'Стандартный набор 15·14·13·12·10·8 + бонусы расы' })}</aside></div>
+      ${o.modal ? '' : html`<aside class="cls-side">${toolBox('race-fit', it, { cls: bestClass(it) }, { title: 'Примерить к классу', hint: 'Стандартный набор 15·14·13·12·10·8 + бонусы расы' })}</aside>`}</div>
     </div>`;
   },
 };
@@ -113,9 +113,9 @@ export const backgrounds = {
           ${it.kind !== 'feat' ? html`<dl class="cls-passport"><div><dt>Навыки</dt><dd>${it.skills.join(', ')}</dd></div><div><dt>Языки</dt><dd>${langs ? `${langs.count} на выбор` : '—'}</dd></div><div><dt>Снаряжение</dt><dd class="t-sm">${gear.filter(Boolean).join(', ') || 'набор предыстории'}</dd></div><div><dt>Умение</dt><dd>${f?.name.ru || f?.name.en || '—'}</dd></div></dl>` : ''}
         </header>
         ${f ? sec('feature', it.kind === 'feat' ? 'Что даёт' : 'Умение предыстории', '', html`<article class="cls-feat"><header><b>${f.name.ru || f.name.en}</b><span class="cls-feat-lv">${f.name.en}</span></header>${BG_SUM[f.id.split(':').pop()] ? html`<p>${BG_SUM[f.id.split(':').pop()]}</p>` : it.kind === 'feat' ? html`<p>${m.play}</p>` : ''}${srdText(reflow(f.text.en || ''), `SRD · ${f.name.en}`)}</article>`) : ''}
-        ${it.id === 'acolyte' ? sec('who', 'Характер', 'Бросьте кости или выберите сами', html`<div class="bg-tables">${TABLES.map(([k, t, n]) => html`<div class="bg-table"><h4>${t}<small>к${n}</small></h4><ol>${ACOLYTE[k].map((line, i) => html`<li><em>${i + 1}</em><span>${line}</span></li>`)}</ol></div>`)}</div>`) : ''}
+        ${!o.modal && it.id === 'acolyte' ? sec('who', 'Характер', 'Бросьте кости или выберите сами', html`<div class="bg-tables">${TABLES.map(([k, t, n]) => html`<div class="bg-table"><h4>${t}<small>к${n}</small></h4><ol>${ACOLYTE[k].map((line, i) => html`<li><em>${i + 1}</em><span>${line}</span></li>`)}</ol></div>`)}</div>`) : ''}
       </div>
-      <aside class="cls-side">${it.id === 'acolyte' ? toolBox('bg-roll', it, { trait: 0, ideal: 0, bond: 0, flaw: 0 }, { title: 'Бросить характер', hint: 'Четыре броска — готовый человек' }) : html`<div class="cls-now"><p class="cls-now-hint">Черты</p><p class="t-sm muted">Черта берётся вместо роста характеристик на 4, 8, 12, 16 и 19 уровне — если мастер разрешает черты.</p></div>`}</aside></div>
+      ${o.modal ? '' : html`<aside class="cls-side">${it.id === 'acolyte' ? toolBox('bg-roll', it, { trait: 0, ideal: 0, bond: 0, flaw: 0 }, { title: 'Бросить характер', hint: 'Четыре броска — готовый человек' }) : html`<div class="cls-now"><p class="cls-now-hint">Черты</p><p class="t-sm muted">Черта берётся вместо роста характеристик на 4, 8, 12, 16 и 19 уровне — если мастер разрешает черты.</p></div>`}</aside>`}</div>
     </div>`;
   },
 };

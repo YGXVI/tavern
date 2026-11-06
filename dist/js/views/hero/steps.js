@@ -3,6 +3,7 @@
 import { html, raw } from '../../core/dom.js';
 import { ic, chip, caps, stepTitle, artCard, iconCard, segmented, check, rowIcon } from './parts.js';
 import { heroActions } from './contract.js';
+import { srcOf } from '../../core/assets.js';
 
 /** Разметка шага s. d — черновик (выборы игрока поверх витрины). */
 export function stepBody(s, cv, d) {
@@ -20,8 +21,10 @@ export function stepBody(s, cv, d) {
 }
 
 /** «Ещё выбор» расы и класса на настоящем конструкторе (подкласс, стиль, инструменты…) — в стиле блоков навыков. */
-export const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box"><div class="h-box-head">${caps(b.title)}<small>${b.note}</small></div>
-  <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
+// need — выбор ещё не заполнен: после карточки экран прокручивается к нему (index.js).
+const filled = (b) => /выбрано (\d+) из \1/.test(b.note || '');
+export const extraBoxes = (boxes = []) => boxes.map((b) => html`<section class="h-box h-extra ${filled(b) ? '' : 'need'}"><div class="h-box-head">${caps(b.title)}<small>${filled(b) ? '' : ic('alert-circle', 14)}${b.note}</small></div>
+  <div class="h-pills">${b.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''}" data-extra="${b.choiceId}|${p.value}" aria-pressed="${String(!!p.on)}">${p.on ? ic('tick-02', 14) : ''}${p.name}</button>`)}</div></section>`);
 
 /** «Этот шаг дал» — для живого листа справа. */
 export function stepGave(s, cv, d) {
@@ -58,7 +61,7 @@ function abilitiesStep(head, ab, d) {
 function backgroundStep(head, cv, d) {
   const sel = cv.live ? cv.selected.background : d.background || 'sage';
   const pills = (box, attr) => html`<section class="h-box"><div class="h-box-head">${caps(box.title)}<small>${box.note}</small></div>
-    <div class="h-pills">${box.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''} ${p.from ? 'fixed' : ''}" ${raw(attr)}="${p.name}" ${p.from ? raw('disabled') : ''}>${p.from ? ic('information-circle', 14) : p.on ? ic('tick-02', 14) : ''}${p.name}${p.from ? html`<small>${p.from}</small>` : ''}</button>`)}</div>
+    <div class="h-pills">${box.list.map((p) => html`<button class="h-pill ${p.on ? 'on' : ''} ${p.from ? 'fixed' : ''}" ${raw(attr)}="${p.name}" aria-pressed="${String(!!(p.on || p.from))}" ${p.from ? raw('disabled') : ''}>${p.from ? ic('information-circle', 14) : p.on ? ic('tick-02', 14) : ''}${p.name}${p.from ? html`<small>${p.from}</small>` : ''}</button>`)}</div>
     ${box.hint ? html`<p class="h-box-hint">${box.hint}</p>` : ''}${box.tip ? html`<p class="h-box-tip">${ic('crown', 14)}${box.tip}</p>` : ''}</section>`;
   return html`${head}
     <div class="h-grid4 bg">${cv.backgrounds.map((o) => iconCard(o, { selected: o.id === sel }))}</div>
@@ -98,10 +101,10 @@ function lookStep(head, lk, d) {
       <div class="h-look-left">
         <label class="h-field"><span>Имя</span><span class="input lg"><input data-name value="${d.name ?? lk.name}" maxlength="40"></span></label>
         <div class="h-field"><span>Как о герое писать</span>${segmented(lk.pronouns.map((p) => ({ id: p, name: p })), pr, 'data-pronoun', 'dark wide')}<small class="muted">${lk.pronounNote}</small></div>
-        <div class="h-look-portrait"><img class="big" src="assets/hero/lira-portrait.webp" alt="Портрет">
-          <div class="h-look-side"><button class="btn btn-secondary" data-upload>${ic('image-add-01')}Загрузить другой</button>
-            <div class="h-token-prev"><span class="tok-prev"><img src="assets/portraits/lira.webp" alt=""></span><small>Так ${pr === 'он' ? 'он выглядит' : pr === 'они' ? 'они выглядят' : 'она выглядит'} на карте</small></div>
-            <button class="btn btn-ghost" data-crop>${ic('move', 16)}Подвинуть лицо в круге</button></div></div>
+        <div class="h-look-portrait"><img class="big" src="${srcOf(lk.portrait || 'assets/hero/class-fighter.webp')}" alt="Портрет">
+          <div class="h-look-side"><button class="btn btn-secondary" data-lupload>${ic('image-add-01')}Загрузить свой</button>
+            <div class="h-token-prev"><span class="tok-prev"><img src="${srcOf(lk.portrait || 'assets/hero/class-fighter.webp')}" alt=""></span><small>Так ${pr === 'он' ? 'он выглядит' : pr === 'они' ? 'они выглядят' : 'она выглядит'} на карте</small></div></div></div>
+        ${lk.portraits ? html`<div class="h-field"><span>Или из набора</span><div class="h-quick-portraits sm">${lk.portraits.map((p) => html`<button class="h-portrait-pick ${p === lk.portrait ? 'on' : ''}" data-lportrait="${p}"><img src="${p}" alt="" loading="lazy"></button>`)}</div></div>` : ''}
       </div>
       <div class="h-look-right">
         <div class="h-group">${caps('Мировоззрение')}<small>подсказка для мастера, не правило</small></div>
@@ -123,7 +126,10 @@ export function bindStepExtras(root, L, stepId, d, save, rerender) {
   L('input', '[data-name]', (e, t) => { d.name = t.value; save(); });
   L('input', '[data-text]', (e, t) => { d[t.dataset.text] = t.value; save(); });
   L('click', '[data-extra]', (e, b) => heroActions.choose({ step: stepId, id: 'extra', value: b.dataset.extra }));
-  L('click', '[data-ab-inc],[data-ab-dec],[data-asi],[data-auto],[data-skill],[data-lang],[data-eq],[data-roll-gold],[data-replace],[data-upload],[data-crop],[data-trait]', (e, b) => {
+  // Портрет героя (он же токен): из набора или свой файл (#203).
+  L('click', '[data-lportrait]', (e, b) => heroActions.choose({ step: 'look', id: 'portrait', value: b.dataset.lportrait }));
+  L('click', '[data-lupload]', () => import('./index.js').then(({ pickPortrait }) => pickPortrait((ref) => heroActions.choose({ step: 'look', id: 'portrait', value: ref }))));
+  L('click', '[data-ab-inc],[data-ab-dec],[data-asi],[data-auto],[data-skill],[data-lang],[data-eq],[data-roll-gold],[data-replace],[data-trait]', (e, b) => {
     const key = Object.keys(b.dataset)[0];
     heroActions.choose({ step: stepId, id: key, value: b.dataset[key] });
   });

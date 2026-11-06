@@ -7,6 +7,16 @@ import { userById } from '../../core/campaign.js';
 import { portrait, modal, panelHeader } from '../../ui/kit.js';
 
 export const ic = (n, s = 16) => raw(icon(n, s));
+/**
+ * Перерисовать узел, только если разметка изменилась (#203, «на скролле прыгает»): данные кампании и присутствие
+ * за столом меняются каждые несколько секунд, а одинаковая перерисовка пересоздаёт картинки и сбивает страницу.
+ */
+export function paint(el, markup) {
+  const s = String(markup);
+  if (el.__painted === s) return false;
+  el.__painted = s; el.innerHTML = s;
+  return true;
+}
 export const caps = (t) => html`<span class="cp-caps">${t}</span>`;
 export const cardHead = (title, right = '') => html`<div class="cp-card-head">${caps(title)}<span class="cp-rule"></span>${right}</div>`;
 
@@ -21,7 +31,7 @@ export function party(c) {
 export const heroSub = (ch) => [ch.className, ch.level ? `${ch.level} ур.` : ''].filter(Boolean).join(' · ');
 export function partyRow(c, p, me, { hp = true } = {}) {
   const who = p.user ? `${p.user.name}${p.user.id === me ? ' — вы' : ''}` : 'без игрока';
-  return html`<a class="cp-party" href="#/c/${c.id}/sheet/${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'md hero', p.ch.name, p.member ? p.online : null)}
+  return html`<a class="cp-party" href="#/hero/${c.id}~${encodeURIComponent(p.ch.id)}">${portrait(p.ch.portrait, 'md hero', p.ch.name, p.member ? p.online : null)}
     <span class="cp-party-t"><b>${p.ch.name}</b><small>${heroSub(p.ch)}${hp ? ` · ${p.ch.hp ?? '—'}/${p.ch.hpMax ?? '—'}` : ''}</small></span>
     <span class="cp-party-who ${p.online ? '' : 'off'}">${p.member && !p.online && p.user?.id !== me ? 'не в сети' : who}</span></a>`;
 }
