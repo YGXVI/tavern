@@ -11,6 +11,15 @@ import tempfile
 import json
 
 ROOT = Path(__file__).resolve().parents[2]
+SCENE_BEFORE = r"""
+insert into auth.users(id) values ('50000000-0000-0000-0000-000000000001');
+insert into public.campaigns(id, owner_id, name, data) values ('c-mig', '50000000-0000-0000-0000-000000000001', 'Перенос', '{"activeSceneId":"s-mig"}');
+insert into public.scenes(id, campaign_id, data) values ('s-mig', 'c-mig', '{"note":"Тайна","walls":[{"id":"w1","a":{"x":0,"y":0},"b":{"x":1,"y":0},"kind":"secret","lockDc":18}]}'), ('s-mig2', 'c-mig', '{}');
+"""
+SCENE_AFTER = r"""
+select not s.data ? 'note', s.data#>>'{walls,0,kind}' = 'wall', h.data#>>'{walls,w1,lockDc}' = '18', s.revealed and not (select revealed from public.scenes where id='s-mig2')
+from public.scenes s join public.scene_hidden h on h.scene_id = s.id where s.id = 's-mig';
+"""
 BOOTSTRAP = r"""
 create role anon nologin;
 create role authenticated nologin;
@@ -286,7 +295,15 @@ def main():
             run(psql, input=BOOTSTRAP)
             migrations = sorted((ROOT / 'supabase/migrations').glob('*.sql'))
             for migration in migrations:
+                # Перенос данных проверяем на данных: сцена с тайным, созданная до миграции (на пустой базе ошибка не видна).
+                if migration.name.startswith('20261106160000'):
+                    run(psql + ['-c', SCENE_BEFORE])
                 run(psql + ['-f', str(migration)])
+                if migration.name.startswith('20261106160000'):
+                    out = run(psql + ['-At', '-c', SCENE_AFTER])
+                    assert out.strip().endswith('t|t|t|t'), out
+                    run(psql + ['-c', "delete from public.campaigns where id='c-mig'"])
+                    print('scene migration OK: existing secret door, lock DC, note and active scene')
                 print('migration OK:', migration.name, flush=True)
             output = run(psql + ['-q', '-f', str(ROOT / 'supabase/tests/rls.sql'), '-c',
                 "do $$ declare failures text; begin select string_agg(test || ': ' || coalesce(info,''), E'\\n') into failures from _r where not ok; if failures is not null then raise exception 'RLS tests failed: %',failures; end if; end $$;",

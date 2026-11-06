@@ -59,7 +59,9 @@ begin
 end $$;
 revoke execute on function public.scene_put_hidden(text, text, jsonb) from public, anon, authenticated;
 
--- Перенос уже созданных сцен: триггера ещё нет, раскладываем напрямую.
+-- Перенос уже созданных сцен: триггера раскладки ещё нет, раскладываем напрямую. Охранник сцены здесь выключен:
+-- он пропускает только мастера, а миграция идёт без пользователя.
+alter table public.scenes disable trigger scenes_guard;
 do $$
 declare s public.scenes; p jsonb;
 begin
@@ -73,6 +75,7 @@ update public.scenes s set revealed = true
 where exists (select 1 from public.campaigns c where c.id = s.campaign_id and c.data ->> 'activeSceneId' = s.id)
    or exists (select 1 from public.campaign_members m where m.scene_id = s.id)
    or exists (select 1 from public.tokens t where t.scene_id = s.id and t.character_id is not null);
+alter table public.scenes enable trigger scenes_guard;
 
 create function public.scene_split() returns trigger
 language plpgsql security definer set search_path = '' as $$
