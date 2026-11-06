@@ -15,7 +15,7 @@ const tail = (id) => String(id || '').split(':').pop();
 // Умения сборки, меняющие КД на итоговом экране: те же правила, что на листе.
 const draftPerks = (di) => heroPerks({ featureEntries: di?.features || [] });
 export const PORTS = Object.freeze({ abilityModifier: (s) => (Number.isInteger(s) ? mod(s) : null), creationHitPoints });
-const LANG_RU = {
+export const LANG_RU = {
   common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великаний', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий',
   abyssal: 'Бездны', celestial: 'Небесный', draconic: 'Драконий', 'deep-speech': 'Глубинная речь', infernal: 'Инфернальный', primordial: 'Первичный', sylvan: 'Сильван', undercommon: 'Подземный',
 };

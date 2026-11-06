@@ -86,7 +86,8 @@ export function previewRest(sheet, { kind, eligible = false, hitDieRolls = [], r
     } else if (pools.length || recoverDice !== null) skip({ section: 'hitDice' }, 'Уточните общее число и расход костей');
 
     if (nonnegative(hp.temp) && hp.temp > 0) {
-      if (hp.tempExpiresOnLongRest === true) add({ section: 'hp', field: 'temp' }, hp.temp, 0, 'long-temp-hp');
+      // Временные хиты заканчиваются с продолжительным отдыхом (#197 P1); ручное уточнение — только при явном false.
+      if (hp.tempExpiresOnLongRest !== false) add({ section: 'hp', field: 'temp' }, hp.temp, 0, 'long-temp-hp');
       else skip({ section: 'hp', field: 'temp' }, 'Уточните длительность временных HP');
     }
   }

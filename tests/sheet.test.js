@@ -132,7 +132,7 @@ test('короткий отдых расходует только выбранн
   assert.deepEqual(sheet, original);
 });
 
-test('продолжительный отдых возвращает две из пяти костей и не снимает неизвестные состояния/temp HP', () => {
+test('продолжительный отдых возвращает две из пяти костей, снимает temp HP (#197 P1) и не трогает неизвестные состояния', () => {
   const sheet = restedSheet(), original = structuredClone(sheet);
   const preview = previewRest(sheet, { kind: 'long', eligible: true, recoverDice: { fighter: 1, wizard: 1 } });
   assert.deepEqual(preview.errors, []);
@@ -140,7 +140,7 @@ test('продолжительный отдых возвращает две из
   assert.ok(preview.changes.some((c) => c.target.id === 'fighter' && c.from === 1 && c.to === 0));
   assert.ok(preview.changes.some((c) => c.target.id === 'wizard' && c.from === 2 && c.to === 1));
   assert.ok(preview.changes.some((c) => c.target.id === 'spellcasting-1' && c.to === 0));
-  assert.ok(preview.manual.some((c) => c.target.field === 'temp'));
+  assert.ok(preview.changes.some((c) => c.target.field === 'temp' && c.to === 0));
   assert.ok(!preview.changes.some((c) => c.target.section === 'conditions'));
   assert.deepEqual(sheet, original);
   assert.deepEqual(previewRest(sheet, { kind: 'long', eligible: true, recoverDice: { fighter: 1, wizard: 2 } }).changes, []);

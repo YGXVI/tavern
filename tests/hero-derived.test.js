@@ -199,3 +199,32 @@ test('R6, R8, R11: умения классов, доспех не по Силе,
   const row = weaponAttacks([{ equipped: true, g: { kind: 'shield' } }, { equipped: true, g: { id: 'g', ru: 'Двуручный меч', en: 'Greatsword', weapon: { category: 'martial', range: 'melee', properties: ['heavy', 'two-handed'], damage: { dice: '2d6', type: 'slashing' } } } }], { str: 3, dex: 0 }, 2, 'Оружие: воинское')[0];
   assert.match(row.sub, /снимите щит/);
 });
+
+test('повышение до 20 уровня: каждый класс проходит все уровни, хиты растут по средней кости', async () => {
+  const { newLevelUp, levelUpModel, applyLevelUpChoice, levelUpRequest } = await import('../dist/js/views/hero/levelup-model.js');
+  const AVG = { barbarian: 7, bard: 5, cleric: 5, druid: 5, fighter: 6, monk: 5, paladin: 6, ranger: 6, rogue: 5, sorcerer: 4, warlock: 5, wizard: 4 };
+  for (const cls of Object.keys(AVG)) {
+    let h = hero('human', cls);
+    for (let to = 2; to <= 20; to += 1) {
+      const st = newLevelUp(ix, h, { key: `k${to}`, campaignId: 'c' });
+      const v = { ...toHeroView(h, { userId: 'u1', gear }), id: 'c~x' };
+      let m = levelUpModel(ix, st, h, v);
+      for (let guard = 0; guard < 25 && m.status !== 'valid'; guard += 1) {
+        applyLevelUpChoice(ix, st, h, { auto: true });
+        m = levelUpModel(ix, st, h, v);
+        const box = m.news.extra.find((b) => !/выбрано (\d+) из \1|^выбрано:|^черта/.test(b.note || '') && b.list.some((x) => !x.on));
+        if (box) { applyLevelUpChoice(ix, st, h, { extra: `${box.choiceId}|${box.list.find((x) => !x.on).value ?? box.list.find((x) => !x.on).id}` }); m = levelUpModel(ix, st, h, v); }
+      }
+      assert.equal(m.status, 'valid', `${cls} → ${to}: ${JSON.stringify(m.missing)}`);
+      assert.equal(m.to, to);
+      const req = levelUpRequest(ix, st, h, { newId: uuid() });
+      h = { ...h, ...req.payload.patch, creation: req.payload.creation, hpMax: h.hpMax + req.gain, hp: h.hp + req.gain };
+    }
+    assert.equal(h.level, 20, cls);
+    const die = { barbarian: 12, fighter: 10, paladin: 10, ranger: 10, sorcerer: 6, wizard: 6 }[cls] || 8;
+    const con = Math.floor((h.stats.con - 10) / 2), draconic = cls === 'sorcerer' ? 20 : 0;
+    assert.equal(h.hpMax, die + 19 * AVG[cls] + 20 * con + draconic, `${cls}: итог хитов с учётом роста Телосложения`);
+    const cap = (k) => (cls === 'barbarian' && ['str', 'con'].includes(k) ? 24 : 20);
+    for (const k of Object.keys(h.stats)) assert.ok(h.stats[k] <= cap(k), `${cls}: ${k} ${h.stats[k]}`);
+  }
+});

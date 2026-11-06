@@ -4,7 +4,7 @@
 import { evaluateBuild, proposeBuildChange, confirmBuildChange } from '../../rules/character-builder.js';
 import { levelUpPlan, levelUpPayload } from '../../rules/level-up.js';
 import { ABILITIES, SKILLS, mod } from '../../data/rules.js';
-import { PORTS } from './creation.js';
+import { PORTS, LANG_RU } from './creation.js';
 import { LEVEL_UP } from './fixture.js';
 
 const MINUS = '−';
@@ -12,7 +12,7 @@ const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : 
 const tail = (id) => String(id || '').split(':').pop();
 const nameOf = (ix, id) => ix.defs.get(id)?.name?.ru || ix.features.get(id)?.name?.ru || ix.features.get(id)?.name?.en || ix.spells.get(id)?.name?.ru || ix.spells.get(id)?.name?.en || tail(id);
 const spellName = (ix, id) => ix.spells.get(id)?.name?.ru || ix.spells.get(id)?.name?.en || id;
-const EXTRA_RU = { subclass: 'Подкласс', feature_option: 'Особенность', asi_or_feat: 'Улучшение характеристик', tool: 'Инструменты', expertise: 'Экспертиза', favored_enemy: 'Излюбленный враг', terrain: 'Излюбленная местность', skill: 'Навыки' };
+const EXTRA_RU = { subclass: 'Подкласс', feature_option: 'Особенность', asi_or_feat: 'Улучшение характеристик', tool: 'Инструменты', expertise: 'Экспертиза', favored_enemy: 'Излюбленный враг', terrain: 'Излюбленная местность', skill: 'Навыки', language: 'Язык' };
 
 /** Класс, который поднимаем: первый класс героя (мультикласс — решение мастера, в окне пока не предлагается). */
 export function heroClassRef(hero) {
@@ -29,7 +29,15 @@ export function newLevelUp(ix, hero, { key, campaignId }) {
 /** План с черновиком окна (выборы игрока поверх плана). */
 function planOf(ix, st, hero) {
   const plan = st.classId ? levelUpPlan(hero, st.classId, ix.cats) : { supported: false, reason: 'На листе не указан класс.' };
-  if (plan.supported && plan.mode !== 'simple' && st.nextDraft) plan.nextDraft = st.nextDraft;
+  if (plan.supported && plan.mode !== 'simple' && st.nextDraft) {
+    plan.nextDraft = st.nextDraft;
+    // Улучшение Телосложения на этом уровне меняет хиты за все уровни: прибавку считаем по выбранному, как и сервер.
+    const di = evaluate(ix, plan).derivedInputs, con = di?.abilityScores?.con;
+    if (Number.isFinite(plan.hp?.gain) && Number.isInteger(con)) {
+      const before = plan.hp.maxAfter - plan.hp.gain, after = PORTS.creationHitPoints({ ...di.hitPointInputs, constitution: con });
+      if (Number.isFinite(after)) plan.hp = { ...plan.hp, gain: after - before, maxAfter: after };
+    }
+  }
   return plan;
 }
 const evaluate = (ix, plan) => evaluateBuild(plan.context, ix.cats, plan.nextDraft, PORTS);
@@ -39,7 +47,8 @@ function change(ix, st, plan, ch) {
   st.operationId = null; st.payload = null; // запрос изменился — новый запрос и ID операции
 }
 const spellChoices = (ev, plan) => ev.choices.filter((c) => c.kind === 'spell' && (plan.choices.some((p) => p.id === c.id) || c.origin?.characterLevel === plan.toLevel));
-const extraChoices = (ev, plan) => ev.choices.filter((c) => EXTRA_RU[c.kind] && plan.choices.some((p) => p.id === c.id));
+// Выбор, открытый подклассом только что (навыки Коллегии знаний), в плане ещё нет: он приходит на этом же уровне.
+const extraChoices = (ev, plan) => ev.choices.filter((c) => EXTRA_RU[c.kind] && (plan.choices.some((p) => p.id === c.id) || c.origin?.characterLevel === plan.toLevel));
 function optionsOf(c, ev) {
   if (c.options?.length) return c.options;
   const book = ev.choices.find((x) => x.kind === 'spell' && /spellbook/.test(x.id));
@@ -125,14 +134,17 @@ export function levelUpModel(ix, st, hero, v) {
       const feats = [...ix.defs.values()].filter((d) => d.kind === 'feat');
       const note = s?.type === 'feat' ? `черта: ${nameOf(ix, s.featId)}` : two ? `выбрано: ${asiValue(s)}` : ones.length === 2 ? `выбрано: ${asiValue(s)}` : ones.length === 1 ? 'выберите ещё одну +1' : 'выбрано 0 из 1';
       return { title: 'Улучшение характеристик: +2 к одной, +1 к двум или черта', note, choiceId: c.id,
-        list: [...ABILITIES.map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === two || undefined })),
-          ...ABILITIES.map((a) => ({ name: `${a.short} +1`, value: `asi1:${a.id}`, on: ones.includes(a.id) || undefined })),
+        // Выше 20 улучшением не поднять: такие варианты не предлагаем.
+        list: [...ABILITIES.filter((a) => (hero.stats?.[a.id] ?? 0) + 2 <= 20).map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === two || undefined })),
+          ...ABILITIES.filter((a) => (hero.stats?.[a.id] ?? 0) + 1 <= 20).map((a) => ({ name: `${a.short} +1`, value: `asi1:${a.id}`, on: ones.includes(a.id) || undefined })),
           ...feats.map((f) => ({ name: `Черта: ${nameOf(ix, f.id)}`, value: `feat:${f.id}`, on: (s?.type === 'feat' && s.featId === f.id) || undefined }))] };
     }
     const bad = new Set((c.unavailable || []).map((u) => u.option));
+    // Компетентность, избранный враг и местность дважды не берутся: что уже взято раньше, не предлагаем.
+    if (['expertise', 'favored_enemy', 'terrain'].includes(c.kind)) for (const x of ev.choices) if (x.kind === c.kind && x.id !== c.id) for (const o of [].concat(x.selected || [])) bad.add(o);
     const isSel = (o) => (Array.isArray(c.selected) ? c.selected.includes(o) : c.selected === o);
     return { title: `${EXTRA_RU[c.kind]}: ${nameOf(ix, c.origin?.definitionId)}`, note: `выбрано ${Array.isArray(c.selected) ? c.selected.length : c.selected ? 1 : 0} из ${c.count}`, choiceId: c.id,
-      list: (c.options || []).filter((o) => !bad.has(o)).map((o) => ({ name: SKILLS.find((k) => k.id === o)?.name || nameOf(ix, o), value: o, on: isSel(o) || undefined })) };
+      list: (c.options || []).filter((o) => !bad.has(o)).map((o) => ({ name: SKILLS.find((k) => k.id === o)?.name || (c.kind === 'language' ? LANG_RU[o] : null) || nameOf(ix, o), value: o, on: isSel(o) || undefined })) };
   });
 
   // Ячейки: было → станет (станет — когда сборка полная).

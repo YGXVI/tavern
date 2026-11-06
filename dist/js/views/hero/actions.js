@@ -129,6 +129,8 @@ export function applyHeroAction(ch, name, p = {}, { random = Math.random } = {})
     }
     case 'rest': {
       if (p.kind === 'long') {
+        // Продолжительный отдых идёт на пользу, только если в начале был хотя бы 1 хит (#197 P2).
+        if (n(ch.hp) <= 0) return { title: 'Отдых не поможет', body: 'Продолжительный отдых действует, только если в начале есть хотя бы 1 хит.', icon: 'alert-circle' };
         ch.hp = n(ch.hpMax, n(ch.hp)); ch.tempHp = 0; ch.deathSaves = { s: 0, f: 0 };
         ch.conditions = (ch.conditions || []).filter((c) => c !== 'unconscious');
         for (const s of ch.slotPools || []) s.spent = 0;
