@@ -85,6 +85,7 @@ export function doRoll(ctx, opts) {
   // Вычитаемые кубы эффектов (Порча) в набор не кладём: стол не умеет показывать отрицательный куб, в подписи видно, сколько снято.
   for (const m of opts.minus || []) { const v = rnd(m.sides); opts = { ...opts, mod: (opts.mod || 0) - v, label: `${opts.label} · ${m.label} −${v}` }; }
   const r = rollPool(opts);
+  if (opts.min) r.total = Math.max(opts.min, r.total);
   const vis = opts.vis || (opts.hidden ? 'gm' : 'all');
   const entry = { id: uid('r-'), at: Date.now(), userId: ctx.userId, kind: opts.kind || 'roll', label: opts.label || 'Бросок', total: r.total, detail: describeRoll(r), hidden: vis !== 'all', vis, nat: r.results.length === 1 && r.results[0].sides === 20 ? r.results[0].value : null };
   updateCampaign(ctx.cid, (c) => addLog(c, entry));

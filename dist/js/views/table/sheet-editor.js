@@ -11,7 +11,7 @@ import { copy, fieldValue, setField, parseField, sheetLevel, sheetBonus, sheetIn
 import { abilityModifier, sheetProficiency, spellNumbers } from './sheet-rules.js';
 import { validateSheetStatblock } from './sheet-creature.js';
 import { newSheetDialog } from './sheet-new.js';
-import { conditionRoll } from './effects-roll.js';
+import { conditionRoll, effectDamage, mergeDice } from './effects-roll.js';
 import { effectInstances } from '../../rules/effect-rows.js';
 import { storeImage, resolveSrc, srcOf } from '../../core/assets.js';
 import { applyZeroHp, archiveLocalCharacter, restoreLocalCharacter } from './sheet-lifecycle.js';
@@ -280,7 +280,7 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
     if(b.hasAttribute('data-death')){if(dirty()){ctx.toast('Сначала сохраните или отмените черновик');return;}if(control()&&ctx.panels?.deathSave)ctx.panels.deathSave(id);else roll(0,'спасбросок от смерти','save');return;}
     if(b.hasAttribute('data-init')){roll(sheetInitiative(draft),'инициатива',undefined,'dex');return;}
     if(b.dataset.attack!==undefined){const a=draft.attacks[Number(b.dataset.attack)];roll(attackBonus(draft,a),a.name,'attack');return;}
-    if(b.dataset.damage!==undefined){const a=draft.attacks[Number(b.dataset.damage)],f=parseFormula(a.damage);if(f&&!archived&&active()&&((draft.profile||'pc')==='pc'||control()))doRoll(ctx,{label:`${draft.name}: ${a.name} — урон`,...f,vis:poolVis(ctx)});else ctx.toast('Уточните формулу урона или права управления');}
+    if(b.dataset.damage!==undefined){const a=draft.attacks[Number(b.dataset.damage)],f=parseFormula(a.damage);if(f&&!archived&&active()&&((draft.profile||'pc')==='pc'||control())){const e=effectDamage(draft,['damage:weapon','attack:weapon',...(a.ability?[`ability:${a.ability}`]:[]),...(a.ability==='str'?['attack:melee']:[])],effectInstances(ctx.c,id));doRoll(ctx,{label:`${draft.name}: ${a.name} — урон`,dice:mergeDice(f.dice,e.dice),mod:f.mod+e.mod,minus:e.minus,min:e.min,vis:poolVis(ctx)});}else ctx.toast('Уточните формулу урона или права управления');}
   }
   function input(e) {
     const t=e.target;if(t.dataset.party){if(builder()&&!archived&&!busy&&!pending){const chosen=draft.sidekick?.partyIds||[];setField(draft,'sidekick.partyIds',t.checked?[...new Set([...chosen,t.dataset.party])]:chosen.filter(id=>id!==t.dataset.party));change();const hint=host.querySelector('[data-party-hint]');if(hint)hint.textContent=`Средний уровень: ${partyLevelHint(ctx.c.characters,draft.sidekick?.partyIds||[]).average??'не определён'}. Подсказка не меняет уровень.`;}return;}if(t.hasAttribute('data-statblock-image'))return;if(t.hasAttribute('data-open-actor')){persist();onOpen?.(t.value);return;}const path=t.dataset.field;if(!path||!permitted(path)||busy||pending)return;

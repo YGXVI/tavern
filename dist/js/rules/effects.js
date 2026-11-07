@@ -4,7 +4,7 @@
 // Экземпляр — рецепт на этом существе: { ref, recipe, key?, by?, cast?, since?, level?, option?, bonus?, equipped?, attuned?, off? }.
 
 // set, halve, autoFail, autoCrit добавлены для состояний (этап 2): план называет их «обнулить», «вдвое меньше», автопровал и автокрит.
-export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility', 'set', 'halve', 'autoFail', 'autoCrit']);
+export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility', 'set', 'halve', 'double', 'autoFail', 'autoCrit', 'ignoreCondition']);
 export const MODES = Object.freeze(['auto', 'ask', 'note']);
 export const EVENTS = Object.freeze(['hit', 'miss', 'crit', 'reduced-to-0', 'died', 'turn-start', 'turn-end']);
 export const WINDOWS = Object.freeze(['before-roll', 'after-roll', 'after-result']);
@@ -151,7 +151,7 @@ export function armorClass({ armorBase, mods, wearingArmor = false, shield = 0 }
  * target — экземпляры на цели со стороной side: 'target' (сбитая с ног цель даёт атакующему преимущество).
  */
 export function rollPlan({ tags, base = [] }, instances, ctx = {}, target = []) {
-  const mine = collect(instances, tags, ctx), theirs = collect(target, tags, ctx);
+  const mine = collect(instances, tags, ctx), theirs = collect(target, tags, { ...ctx, state: ctx.targetState });
   const rows = [...mine.auto.filter(({ part }) => part.side !== 'target'), ...theirs.auto.filter(({ part }) => part.side === 'target')];
   const lines = base.map((b) => ({ ...b })), dice = [], why = [];
   let adv = false, dis = false, crit = 20, autoFail = false, autoCrit = false;
@@ -190,27 +190,46 @@ export function damagePlan({ tags, dice, flat = 0, hit = true, crit = false }, i
   if (!hit) return { dice: [], flat: 0, maxDice: false };
   const c = collect(instances, tags, ctx);
   const out = [dice].filter(Boolean);
-  let sum = flat, max = false;
+  let sum = flat, max = false, min = 0;
   for (const { x, part } of c.auto) for (const e of part.effects || []) {
     if (!touches(e, tags)) continue;
     if (e.op === 'maxDice') max = true;
     if (e.op !== 'add' || e.stat) continue;
+    if (e.min) min = Math.max(min, e.min);
     const v = valueOf(e.value, paramsOf(x, ctx));
     if (typeof v === 'number') sum += v; else if (v) out.push(v);
   }
-  return { dice: crit ? out.flatMap((d) => [d, d]) : out, flat: sum, maxDice: max, ask: c.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })) };
+  return { dice: crit ? out.flatMap((d) => [d, d]) : out, flat: sum, maxDice: max, min, ask: c.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })) };
 }
 
 /** Скорость: сначала прибавки, потом «вдвое меньше», в конце «обнулить» — бонусы к скорости тогда не помогают. */
 export function speedOf(base, instances, ctx = {}) {
-  let halve = false, zero = false, plus = 0;
+  let halve = false, zero = false, double = false, plus = 0;
   for (const { part } of collect(instances, [], ctx).auto) for (const e of part.effects || []) {
     if (e.stat !== 'speed') continue;
     if (e.op === 'add' && Number.isFinite(e.value)) plus += e.value;
     if (e.op === 'halve') halve = true;
+    if (e.op === 'double') double = true;
     if (e.op === 'set' && e.value === 0) zero = true;
   }
-  return zero ? 0 : halve ? Math.floor((base + plus) / 2) : base + plus;
+  const speed = (base + plus) * (double ? 2 : 1);
+  return zero ? 0 : halve ? Math.floor(speed / 2) : speed;
+}
+
+/** Максимум хитов с наложениями: Подмога считается от круга ячейки в строке наложения. */
+export function hpMaxOf(base, instances, ctx = {}) {
+  let plus = 0;
+  for (const { x, part } of collect(instances, [], ctx).auto) for (const e of part.effects || []) {
+    if (e.op === 'add' && e.stat === 'hp:max') { const v = valueOf(e.value, paramsOf(x, ctx)); if (Number.isFinite(v)) plus += v; }
+  }
+  return base + plus;
+}
+
+/** Состояния, которые наложения отменяют: Героизм — испуг, Огонь фей — пользу невидимости. */
+export function ignoredConditions(instances, ctx = {}) {
+  const out = new Set();
+  for (const { part } of collect(instances, [], ctx).auto) for (const e of part.effects || []) if (e.op === 'ignoreCondition') out.add(e.condition);
+  return out;
 }
 
 /** Сопротивления не умножаются: иммунитет — 0, уязвимость и сопротивление применяются по разу. */

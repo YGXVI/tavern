@@ -64,6 +64,11 @@ try {
  await page.click('[data-attack="0"]');
  assert.match((await logs())[0].label,/Порча −[1-4]/,'Порча вычитает: '+(await logs())[0].label);
  await closeAll();await setEffects([]);
+ await setEffects([{id:'e3',target:'cond-pc',ref:'dndsu:spell:10',cast:'k3'}]);await open('edit');
+ await page.click('[data-tab="combat"]');await page.waitForSelector('[data-damage="0"]');
+ await page.click('[data-damage="0"]');
+ assert.match((await logs())[0].detail,/1к4/,'Божественное благоволение добавляет к4 к урону: '+(await logs())[0].detail);
+ await closeAll();await setEffects([]);
  console.log('blessed roll:',blessed);
 
  // Лист героя
@@ -87,6 +92,9 @@ try {
  assert.equal(await speed(['grappled'],0),0,'схваченный стоит');
  assert.equal(await speed([],2),15,'истощение 2 — половина');
  assert.equal(await speed([],0),30);
+ await setEffects([{id:'e4',target:'cond-pc',ref:'dndsu:spell:100',cast:'k4'}]);
+ assert.equal(await speed([],0),60,'Ускорение удваивает');
+ await setEffects([]);
  assert.deepEqual(errors,[]);
  console.log('conditions browser OK: помеха и обычный бросок, автопровал, скорость схваченного и истощённого');
 } finally { await browser.close(); }

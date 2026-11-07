@@ -15,7 +15,9 @@
 
 Рецепты приложения A и топ-30 проверены людьми (топ-30 — YGXVI 07.11.2026) и работают. Новый рецепт получает `status: "draft"`: движок показывает его только напоминанием, какие бы режимы ни стояли в частях. Человек проверил — `status` убираем, рецепт начинает менять числа.
 
-Дополнения к языку рецепта: значение `{ "table": "$level", "rows": [[1, "1d6"], [3, "2d6"]] }` для таблиц классов и кругов, куб со знаком `"-1d4"`, `status`, `src` (`srd51` или `non-srd`), `atLeast` для `ac`. Метка `wearing:heavy-armor` и отношения `attacker:sees-target`, `attacker:relies-on-sight`, `attacker:protected-type`, `target:sees-attacker`, `target:marked-by-me`: пока их никто не поставляет, поэтому движок спрашивает.
+Решение YGXVI 07.11: считать автоматически везде, где возможно, от показателей существа. Заметка остаётся только там, где расчёта нет: выбор игрока или часть игры, которой ещё нет.
+
+Дополнения к языку рецепта: операции `set`, `halve`, `double`, `autoFail`, `autoCrit`, `ignoreCondition`, поле `min` у урона, `add` к `hp:max`; значение `{ "table": "$level", "rows": [[1, "1d6"], [3, "2d6"]] }` для таблиц классов и кругов, куб со знаком `"-1d4"`, `status`, `src` (`srd51` или `non-srd`), `atLeast` для `ac`. Метка `wearing:heavy-armor` и отношения `attacker:sees-target`, `attacker:relies-on-sight`, `attacker:protected-type`, `target:sees-attacker`, `target:marked-by-me`: пока их никто не поставляет, поэтому движок спрашивает.
 
 ## Ответы на вопросы §18
 

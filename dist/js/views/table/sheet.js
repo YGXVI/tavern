@@ -2,9 +2,9 @@
 import { esc, fmtMod, el } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf } from '../../core/assets.js';
-import { tokenStats, monsterOf, characterOf } from '../../core/campaign.js';
+import { tokenStats, monsterOf, characterOf, acWith } from '../../core/campaign.js';
 import { npcMonster } from './sheet-creature.js';
-import { conditionRoll } from './effects-roll.js';
+import { conditionRoll, effectDamage, mergeDice, sheetWithEffects } from './effects-roll.js';
 import { effectInstances } from '../../rules/effect-rows.js';
 import { ABILITIES, SIZES, conditionById, woundLabel } from '../../data/rules.js';
 import { conditionPicker } from './p-token.js';
@@ -40,12 +40,13 @@ async function openHeroDrawer(ctx,id,box){
   const [{drawerHTML,bindSheet},{heroView,heroKey},{on}]=await Promise.all([import('../hero/sheet.js'),import('../hero/contract.js'),import('../../core/dom.js')]);
   if(drawer!==box)return; // закрыли, пока грузилось
   const key=heroKey(ctx.cid,id),offs=[];
-  const render=()=>{const v=heroView(key);if(!v){closeSheet();return;}const y=box.querySelector('.s-drawer-scroll')?.scrollTop||0;box.innerHTML=`<div class="s-drawer-scroll">${drawerHTML(v,state.tab)}</div>`;box.querySelector('.s-drawer-scroll').scrollTop=y;};
+  const view=()=>{const v=heroView(key);return v&&sheetWithEffects(v,characterOf(ctx.c,id),(ac)=>acWith(ac,ctx.c,id),effectInstances(ctx.c,id));};
+  const render=()=>{const v=view();if(!v){closeSheet();return;}const y=box.querySelector('.s-drawer-scroll')?.scrollTop||0;box.innerHTML=`<div class="s-drawer-scroll">${drawerHTML(v,state.tab)}</div>`;box.querySelector('.s-drawer-scroll').scrollTop=y;};
   const L=(type,sel,fn)=>offs.push(on(box,type,sel,fn));
   hero={render,off:()=>offs.forEach(f=>f?.())};
   L('click','[data-close-sheet]',()=>closeSheet());
   L('click','[data-dtab]',(e,b)=>{state.tab=b.dataset.dtab;render();});
-  bindSheet(box,L,()=>heroView(key),render,{roll:(what,formula,v)=>heroRoll(ctx,v,what,formula),edit:()=>openCharacterSheet(ctx,id,'edit')});
+  bindSheet(box,L,view,render,{roll:(what,formula,v)=>heroRoll(ctx,v,what,formula),edit:()=>openCharacterSheet(ctx,id,'edit')});
   render();
 }
 /** Бросок из листа героя — кубами стола: «к20 +5» — проверка/атака, «2к8+3» — урон или лечение. */
@@ -60,7 +61,11 @@ function heroRoll(ctx,v,what,formula){
    doRoll(ctx,{label:`${v.name}: ${what}`,dice:{20:1,...plan.dice},mod:Number(d20[1]||0)+plan.mod,minus:plan.minus,adv:plan.adv,kind:kind==='attack'?'attack':'check',vis:poolVis(ctx)});return;
   }
   const p=parseFormula(f.replace(/\+мод\.?/,''));
-  if(p){doRoll(ctx,{label:`${v.name}: ${what}`,dice:p.dice,mod:p.mod,kind:'damage',vis:poolVis(ctx)});return;}
+  if(p){
+   // Урон оружия: метки берём у атаки на листе; лечение и заклинания наложения не трогают.
+   const cid=v.id?.split('~').pop(),name=String(what).split(':')[0],a=[...(v.actions?.action||[]),...(v.actions?.bonus||[])].find(x=>x.name===name&&x.tags);
+   const e=a?effectDamage(characterOf(ctx.c,cid),['damage:weapon','attack:weapon',...a.tags],effectInstances(ctx.c,cid)):{dice:{},mod:0,minus:[],min:0};
+   doRoll(ctx,{label:`${v.name}: ${what}`,dice:mergeDice(p.dice,e.dice),mod:p.mod+e.mod,minus:e.minus,min:e.min,kind:'damage',vis:poolVis(ctx)});return;}
   if(/^СЛ\d+$/i.test(f)){ctx.toast?.(`${what}: ${f.replace(/^СЛ/i,'СЛ ')} — бросает цель`);return;}
   ctx.toast?.(`${what}: не понял формулу «${formula}»`);
 }
@@ -234,7 +239,7 @@ function monsterRoll(ctx,b){
   if(plan.autoFail){ctx.toast({title:`${who}: автопровал`,body:plan.why.join(', '),icon:'alert-circle'});return;}
   doRoll(ctx,{label:`${who}: ${kind==='msave'?'спасбросок':'проверка'} ${AB_NAMES[ab.id]||ab.name}`,dice:{20:1,...plan.dice},mod:bonus+plan.mod,minus:plan.minus,adv:plan.adv,vis});return;}
  const a=(m[b.dataset.list]||m.actions)?.[Number(b.dataset.i)];
- if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1},mod:bonus,adv:conditionRoll(t,{kind:'attack'}).adv,kind:'attack',vis});}
- if(kind==='mdamage'&&a){const part=String(m.id).startsWith('lib:')?a.damageComponents?.[Number(b.dataset.part)]:{dice:a.damage,type:a.type};const f=part&&parseFormula(part.dice);if(f)doRoll(ctx,{label:`${who}: ${a.name} — урон${part.type?` (${part.type})`:''}`,...f,vis});}
+ if(kind==='mattack'&&a){const bonus=catalogueAttackBonus(a);if(bonus===null){ctx.toast('Бонус атаки неизвестен: бросок не выполнен');return;}const plan=conditionRoll(t,{kind:'attack'},effectInstances(ctx.c,t.id));doRoll(ctx,{label:`${who}: ${a.name}`,dice:{20:1,...plan.dice},mod:bonus+plan.mod,minus:plan.minus,adv:plan.adv,kind:'attack',vis});}
+ if(kind==='mdamage'&&a){const part=String(m.id).startsWith('lib:')?a.damageComponents?.[Number(b.dataset.part)]:{dice:a.damage,type:a.type};const f=part&&parseFormula(part.dice);if(f){const e=Number(b.dataset.part||0)===0?effectDamage(t,['damage:weapon','attack:weapon'],effectInstances(ctx.c,t.id)):{dice:{},mod:0,minus:[],min:0};doRoll(ctx,{label:`${who}: ${a.name} — урон${part.type?` (${part.type})`:''}`,dice:mergeDice(f.dice,e.dice),mod:f.mod+e.mod,minus:e.minus,min:e.min,vis});}}
 }
 export {conditionById};

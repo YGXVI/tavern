@@ -337,3 +337,45 @@ test('наложения: концентрация, нить, длительно
   assert.deepEqual(conditionRoll({}, { kind: 'attack' }, effectInstances(c, 'b')).minus, []);
   setRecipes({});
 });
+
+test('заметки заменены расчётом', async () => {
+  const { setRecipes, effectInstances } = await import('../dist/js/rules/effect-rows.js');
+  const { conditionRoll, effectDamage, sheetWithEffects } = await import('../dist/js/views/table/effects-roll.js');
+  const { hpMaxOf } = await import('../dist/js/rules/effects.js');
+  setRecipes(R);
+  const on = (ref, more = {}) => effectInstances({ effects: [{ target: 'a', ref, ...more }] }, 'a');
+  assert.equal(speedOf(30, [checked(spellRef(100))]), 60, 'Ускорение');
+  assert.equal(speedOf(30, [checked(spellRef(100)), checked(spellRef(83))]), 30, 'Ускорение и Замедление');
+  assert.deepEqual([2, 3, 9].map((slotLevel) => hpMaxOf(20, on(spellRef(236), { slotLevel }))), [25, 30, 60], 'Подмога по кругу');
+  // Сглаз: цель с помехой на выбранной характеристике, заклинатель с +1к6
+  assert.equal(conditionRoll({}, { kind: 'check', ability: 'dex' }, on(spellRef(312), { option: 'dex' })).adv, 'dis');
+  assert.equal(conditionRoll({}, { kind: 'check', ability: 'str' }, on(spellRef(312), { option: 'dex' })).adv, null);
+  assert.equal(rollPlan({ tags: ['check', 'check:wis'] }, [checked(spellRef(164))]).ask.length, 1, 'Метка: поиск цели');
+  // Безрассудство открывается только после выбора
+  const reckless = 'srd51:feature:barbarian:reckless-attack';
+  assert.equal(rollPlan({ tags: ['attack'] }, [], {}, [checked(reckless, { option: 'used' })]).mode, 'advantage');
+  assert.equal(rollPlan({ tags: ['attack'] }, [], {}, [checked(reckless)]).mode, 'normal');
+  // Уклонение пропадает у недееспособного и при скорости 0
+  const dex = { kind: 'save', what: 'Спасбросок: Ловкость' }, dodge = on('srd51:action:dodge');
+  assert.equal(conditionRoll({}, dex, dodge).adv, 'adv');
+  assert.equal(conditionRoll({ conditions: ['stunned'] }, dex, dodge).autoFail, true);
+  assert.equal(conditionRoll({ conditions: ['grappled'] }, dex, dodge).adv, null, 'скорость 0');
+  // Отмена состояний
+  assert.equal(conditionRoll({ conditions: ['frightened'] }, { kind: 'attack' }, on(spellRef(42))).adv, null, 'Героизм отменяет испуг');
+  assert.equal(conditionRoll({ conditions: ['invisible'] }, { kind: 'attack' }, on(spellRef(207))).adv, null, 'Огонь фей отменяет невидимость');
+  assert.equal(conditionRoll({ conditions: ['invisible'] }, { kind: 'attack' }).adv, 'adv');
+  // Урон на листе
+  const melee = ['damage:weapon', 'attack:weapon', 'attack:melee', 'ability:str'];
+  assert.deepEqual(effectDamage({}, melee, on(spellRef(10))).dice, { 4: 1 }, 'Божественное благоволение');
+  assert.equal(effectDamage({}, melee, on('srd51:feature:barbarian:rage', { level: 9 })).mod, 3, 'Ярость');
+  assert.deepEqual(effectDamage({}, ['damage:weapon'], on(spellRef(355), { option: 'enlarge' })).dice, { 4: 1 }, 'Увеличение');
+  const small = effectDamage({}, ['damage:weapon'], on(spellRef(355), { option: 'reduce' }));
+  assert.deepEqual([small.minus, small.min], [[{ sides: 4, label: 'Эффект' }], 1], 'Уменьшение: не меньше 1');
+  assert.deepEqual(effectDamage({}, [], on(spellRef(10))).dice, {}, 'не оружием — не считается');
+  // Числа листа
+  const v = { vitals: { ac: { value: 14 }, speed: '30 фт', hp: { now: 10, max: 20 } } };
+  const shown = sheetWithEffects(v, {}, (ac) => ac + 2, on(spellRef(100)));
+  assert.deepEqual([shown.vitals.ac.value, shown.vitals.speed], [16, '60 фт']);
+  assert.equal(sheetWithEffects(v, {}, (ac) => ac, []), v, 'без эффектов лист не меняется');
+  setRecipes({});
+});
