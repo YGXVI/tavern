@@ -279,7 +279,7 @@ function classicPage(v, n) {
         ${box('Хиты', html`<div class="c-hp"><span>${hpOf(v).now}<small>текущие</small></span><span>${v.vitals.hp.temp}<small>временные</small>${v.vitals.hp.max}<small>максимум</small></span></div>`, 'c-hpbox')}
         ${box('Кости хитов', html`<div class="c-hd">${v.vitals.hitDice.left} / ${v.vitals.hitDice.total}<small>текущие</small>${v.vitals.hitDice.die}<small>кость</small></div>`, 'c-small')}
         ${box('Спасброски от смерти', html`<small>успехи</small><div class="c-dia">${[0, 1, 2].map((i) => dia(i < d.ok)).join(' ')}</div><small>провалы</small><div class="c-dia">${[0, 1, 2].map((i) => dia(i < d.fail)).join(' ')}</div>`, 'c-small')}</div>
-      <div class="c-title"><span></span><b>Распутье</b><span></span></div>
+      <div class="c-title"><span></span><b>Drop Dice</b><span></span></div>
       <div class="c-grid">
         <div class="c-col">${box('Бонус владения', html`<div class="c-big">${v.vitals.prof}</div>`)}${abil(ab.str)}${abil(ab.dex)}${abil(ab.con)}${box('Истощение', html`<div class="c-squares">${'▣'.repeat(v.vitals.exhaustion)}${'▢'.repeat(Math.max(0, 6 - v.vitals.exhaustion))}</div>`)}${box('Героическое вдохновение', html`<div class="c-squares">${v.vitals.inspiration ? '▣' : '▢'}</div>`)}</div>
         <div class="c-col">${abil(ab.int)}${abil(ab.wis)}${abil(ab.cha)}</div>

@@ -94,7 +94,7 @@ export function mountRef(root, hash) {
     const u = user();
     if (u) return appHeader(u, 'ref');
     return html`<header class="app-header">
-      <a class="brand" href="#/ref">${logoButton()}<span>Распутье</span></a><span class="spacer"></span>
+      <a class="brand" href="#/ref">${logoButton()}<span>Drop Dice</span></a><span class="spacer"></span>
       <button class="btn btn-secondary btn-sm" data-paste>${ic('link-01')}Вставить приглашение</button>
       <a class="btn btn-discord btn-sm" href="#/login">${ic('discord')}Войти через Discord</a>
     </header>`;

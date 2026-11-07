@@ -85,7 +85,7 @@ function creature(it, o) {
       <div class="ref-col">
         ${m.saves ? html`<div class="ref-kv"><small>Спасброски</small><span>${typeof m.saves === 'string' ? m.saves : Object.entries(m.saves).map(([k, v]) => `${ABIL.find((a) => a.id === k)?.short || k} ${fmtMod(v)}`).join(', ')}</span></div>` : ''}
         <div class="ref-kv"><small>Чувства</small><span>${m.senses || '—'}</span></div>
-        <div class="ref-kv"><small>Источник</small><span>${m.srd ? 'SRD 5.1 · CC BY 4.0' : 'Стартовый бестиарий «Распутья»'}</span></div>
+        <div class="ref-kv"><small>Источник</small><span>${m.srd ? 'SRD 5.1 · CC BY 4.0' : 'Стартовый бестиарий Drop Dice'}</span></div>
       </div>
       <div class="ref-col wide ref-text">
         ${(m.traits || []).length ? html`<h4>Особенности</h4>${m.traits.map(line)}` : ''}
