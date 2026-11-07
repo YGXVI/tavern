@@ -16,6 +16,7 @@ const keyOf = (x) => x.key || x.recipe?.key || x.ref;
 /** Рецепт не проходит проверку — движок его не применяет, а не гадает. Возвращает список ошибок. */
 export function validateRecipe(id, recipe) {
   const errors = [], bad = (m) => errors.push(`${id}: ${m}`);
+  if (recipe?.status && recipe.status !== 'draft') bad(`статус ${recipe.status}`);
   for (const part of recipe?.parts || []) {
     if (!MODES.includes(part.mode)) bad(`режим ${part.mode}`);
     if (part.window && !WINDOWS.includes(part.window)) bad(`окно ${part.window}`);
@@ -30,6 +31,8 @@ export function valueOf(v, params = {}) {
   if (typeof v === 'number') return v;
   if (typeof v === 'string' && v.startsWith('$')) return params[v.slice(1)] ?? null;
   if (typeof v === 'string') return v;
+  // Таблица по уровню или кругу: { table: '$level', rows: [[1, '1d6'], [3, '2d6']] } — берётся последняя строка не выше ключа.
+  if (Array.isArray(v?.rows)) { const k = valueOf(v.table, params); return Number.isFinite(k) ? v.rows.filter(([n]) => n <= k).at(-1)?.[1] ?? null : null; }
   if (Array.isArray(v?.sum)) { const parts = v.sum.map((x) => valueOf(x, params)); return parts.every(Number.isFinite) ? parts.reduce((a, b) => a + b, 0) : null; }
   return null;
 }
@@ -90,13 +93,15 @@ function collect(instances, tags, ctx) {
     if (!isOn(x)) { skipped.push({ ref: x.ref, reason: 'не надето или не настроено' }); continue; }
     const why = unmet(x.recipe?.requires, ctx);
     if (why) { skipped.push({ ref: x.ref, reason: why }); continue; }
+    // Черновик ждёт проверки человеком: пока это только напоминание, чисел он не трогает.
+    const draft = x.recipe?.status === 'draft';
     for (const part of x.recipe?.parts || []) {
       if (part.option && part.option !== x.option) continue;
       if (part.minLevel && !(x.level >= part.minLevel)) continue;
       const fit = whenMatches(part.when, tags, ctx);
       if (fit === false) continue;
       const row = { x, part };
-      if (part.mode === 'note') notes.push(row);
+      if (part.mode === 'note' || draft) notes.push(row);
       else if (part.mode === 'ask' || fit === 'unknown') { if (ctx.chosen?.includes(part.id)) auto.push(row); else ask.push(row); } else auto.push(row);
     }
   }
@@ -105,7 +110,7 @@ function collect(instances, tags, ctx) {
 // «check» подходит и к check:str, «save» — к save:dex: общая метка стоит на броске рядом с точной.
 const touches = (e, tags) => !e.to || e.to.some((t) => tags.includes(t));
 const label = (x) => x.label || x.recipe?.label || x.ref;
-const paramsOf = (x, ctx) => ({ bonus: x.bonus, slotLevel: ctx.numbers?.spellLevel, ...x.params });
+const paramsOf = (x, ctx) => ({ bonus: x.bonus, level: x.level, slotLevel: ctx.numbers?.spellLevel ?? x.slotLevel, ...x.params });
 
 /**
  * Что получилось с характеристиками: atLeast — «не меньше», сильнее большее; ниже текущего значения он не действует,
@@ -129,12 +134,16 @@ export function armorClass({ armorBase, mods, wearingArmor = false, shield = 0 }
   const c = collect(instances, [], { ...ctx, state });
   const ways = [{ value: armorBase, label: wearingArmor ? 'Доспех' : 'Без доспехов' }];
   const plus = [];
+  let floor = -Infinity;
   for (const { x, part } of c.auto) for (const e of part.effects || []) {
+    if (e.op === 'atLeast' && e.stat === 'ac') floor = Math.max(floor, valueOf(e.value, paramsOf(x, ctx)));
     if (e.op === 'acFormula') ways.push({ value: e.base + e.plus.reduce((n, k) => n + (mods[k] ?? 0), 0), label: label(x) });
     if (e.op === 'add' && e.stat === 'ac') plus.push({ value: valueOf(e.value, paramsOf(x, ctx)), label: label(x) });
   }
   const best = ways.reduce((a, b) => (b.value > a.value ? b : a));
-  return { value: best.value + shield + plus.reduce((n, p) => n + p.value, 0), formula: best, plus, skipped: c.skipped };
+  // «КД не меньше» держит только основу: прибавки вроде Щита веры идут сверху.
+  const body = Math.max(best.value + shield, floor);
+  return { value: body + plus.reduce((n, p) => n + p.value, 0), formula: best, plus, skipped: c.skipped };
 }
 
 /**
@@ -155,17 +164,18 @@ export function rollPlan({ tags, base = [] }, instances, ctx = {}, target = []) 
     else if (e.op === 'critRange') crit = Math.min(crit, e.value);
     else if (e.op === 'add' && !e.stat) {
       const v = valueOf(e.value, paramsOf(x, ctx));
-      if (typeof v === 'number') lines.push({ value: v, label: label(x) }); else if (v) dice.push({ dice: v, label: label(x) });
+      if (typeof v === 'number') lines.push({ value: v, label: label(x) });
+      else if (v) dice.push({ dice: v.replace(/^-/, ''), sign: v.startsWith('-') ? -1 : 1, label: label(x) });
     }
   }
-  return { mode: adv && dis ? 'normal' : adv ? 'advantage' : dis ? 'disadvantage' : 'normal', lines, dice, crit, autoFail, autoCrit, why: [...new Set(why)], ask: mine.ask.map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })), notes: mine.notes.map(({ part }) => part.label), skipped: mine.skipped };
+  return { mode: adv && dis ? 'normal' : adv ? 'advantage' : dis ? 'disadvantage' : 'normal', lines, dice, crit, autoFail, autoCrit, why: [...new Set(why)], ask: [...mine.ask.filter(({ part }) => part.side !== 'target'), ...theirs.ask.filter(({ part }) => part.side === 'target')].map(({ x, part }) => ({ ref: x.ref, id: part.id, label: part.label })), notes: mine.notes.map(({ part }) => part.label), skipped: mine.skipped };
 }
 
 /** Итог броска как чек: d20 — выпавшие кости (две при преимуществе), diceRolled — результаты бонусных кубов по порядку. */
 export function rollResult(plan, { d20, diceRolled = [] }) {
   const kept = plan.mode === 'advantage' ? Math.max(...d20) : plan.mode === 'disadvantage' ? Math.min(...d20) : d20[0];
   const extra = plan.dice.map((d, i) => ({ ...d, rolled: diceRolled[i] ?? 0 }));
-  const total = kept + plan.lines.reduce((n, l) => n + l.value, 0) + extra.reduce((n, d) => n + d.rolled, 0);
+  const total = kept + plan.lines.reduce((n, l) => n + l.value, 0) + extra.reduce((n, d) => n + (d.sign ?? 1) * d.rolled, 0);
   return { d20, kept, total, lines: plan.lines, dice: extra, crit: kept >= plan.crit, miss: kept === 1 };
 }
 
@@ -193,13 +203,14 @@ export function damagePlan({ tags, dice, flat = 0, hit = true, crit = false }, i
 
 /** Скорость: сначала прибавки, потом «вдвое меньше», в конце «обнулить» — бонусы к скорости тогда не помогают. */
 export function speedOf(base, instances, ctx = {}) {
-  let halve = false, zero = false;
+  let halve = false, zero = false, plus = 0;
   for (const { part } of collect(instances, [], ctx).auto) for (const e of part.effects || []) {
     if (e.stat !== 'speed') continue;
+    if (e.op === 'add' && Number.isFinite(e.value)) plus += e.value;
     if (e.op === 'halve') halve = true;
     if (e.op === 'set' && e.value === 0) zero = true;
   }
-  return zero ? 0 : halve ? Math.floor(base / 2) : base;
+  return zero ? 0 : halve ? Math.floor((base + plus) / 2) : base + plus;
 }
 
 /** Сопротивления не умножаются: иммунитет — 0, уязвимость и сопротивление применяются по разу. */

@@ -49,6 +49,23 @@ try {
  assert.doesNotMatch(JSON.stringify((await logs())[0]),/помех|"adv":"dis"/,'без состояний бросок обычный');
  await closeAll();
 
+ // Наложения: проверенный рецепт бросает свой куб, черновик ничего не меняет
+ const setEffects=(effects)=>page.evaluate(async({effects})=>{(await import('/js/core/campaign.js')).updateCampaign('c-crypt',c=>{c.effects=effects;});},{effects});
+ await page.waitForFunction(async()=>!!(await import('/js/rules/effect-rows.js')).recipeOf('dndsu:spell:9'));
+ await setEffects([{id:'e1',target:'cond-pc',ref:'dndsu:spell:9',cast:'k1'}]);await open('edit');
+ await page.click('[data-tab="combat"]');await page.waitForSelector('[data-attack="0"]');
+ await page.click('[data-attack="0"]');
+ assert.match((await logs())[0].detail,/4/,'Благословение добавляет к4: '+(await logs())[0].detail);
+ assert.match((await logs())[0].detail,/\+/);
+ const blessed=(await logs())[0].detail;
+ await closeAll();
+ await setEffects([{id:'e2',target:'cond-pc',ref:'dndsu:spell:254',cast:'k2'}]);await open('edit');
+ await page.click('[data-tab="combat"]');await page.waitForSelector('[data-attack="0"]');
+ await page.click('[data-attack="0"]');
+ assert.doesNotMatch((await logs())[0].label,/Порча/,'черновик не вычитает');
+ await closeAll();await setEffects([]);
+ console.log('blessed roll:',blessed);
+
  // Лист героя
  await setConditions(['paralyzed']);await open();
  await page.waitForSelector('[data-roll^="Проверка"]');

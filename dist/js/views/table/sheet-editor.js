@@ -12,6 +12,7 @@ import { abilityModifier, sheetProficiency, spellNumbers } from './sheet-rules.j
 import { validateSheetStatblock } from './sheet-creature.js';
 import { newSheetDialog } from './sheet-new.js';
 import { conditionRoll } from './effects-roll.js';
+import { effectInstances } from '../../rules/effect-rows.js';
 import { storeImage, resolveSrc, srcOf } from '../../core/assets.js';
 import { applyZeroHp, archiveLocalCharacter, restoreLocalCharacter } from './sheet-lifecycle.js';
 import { readCharacter } from './sheet-model.js';
@@ -146,9 +147,9 @@ export function createSheetEditor(ctx, host, id, initialTab, onClose, onOpen) {
     } finally {busy=false;if(!dead)render();}
   }
   function roll(value,label,kind,ability) { if(value==null)return ctx.toast('Бонус неизвестен: уточните поле'); if(archived||!active()||((draft.profile||'pc')!=='pc'&&!control()))return;
-    const plan=conditionRoll(draft,{kind:kind==='attack'?'attack':kind==='save'||/спасбросок/i.test(label)?'save':'check',what:label,ability});
+    const plan=conditionRoll(draft,{kind:kind==='attack'?'attack':kind==='save'||/спасбросок/i.test(label)?'save':'check',what:label,ability},effectInstances(ctx.c,id));
     if(plan.autoFail){ctx.toast({title:`${draft.name}: автопровал`,body:plan.why.join(', '),icon:'alert-circle'});return;}
-    doRoll(ctx,{label:`${draft.name}: ${label}`,dice:{20:1},mod:value,adv:plan.adv,...(kind?{kind}:{}),vis:poolVis(ctx)}); }
+    doRoll(ctx,{label:`${draft.name}: ${label}`,dice:{20:1,...plan.dice},mod:value+plan.mod,minus:plan.minus,adv:plan.adv,...(kind?{kind}:{}),vis:poolVis(ctx)}); }
   function hpDialog(kind) {
     if(!control()||busy||pending)return;
     const m=modal(`<div class="panel-section"><h3>${kind==='damage'?'Урон':'Лечение'}</h3><label>Количество <input data-amount inputmode="numeric" autofocus></label><p data-error role="alert"></p><button class="btn btn-primary" data-ok>Применить к черновику</button><button class="btn" data-close>Отмена</button></div>`);

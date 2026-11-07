@@ -6,8 +6,9 @@ import { toMonster } from '../rules/creature.js';
 import { sizeById } from '../data/rules.js';
 import { uid } from './dom.js';
 import { heroAc, heroInit, heroSpeed } from '../rules/hero-derived.js';
-import { speedOf } from '../rules/effects.js';
+import { speedOf, armorClass } from '../rules/effects.js';
 import { conditionInstances } from '../rules/condition-recipes.js';
+import { effectInstances } from '../rules/effect-rows.js';
 
 export const getCampaign = (id) => getDB().campaigns[id] || null;
 
@@ -52,13 +53,16 @@ export function ownerOfCharacter(c, ch) {
   return m ? userById(m.userId) : null;
 }
 
+// Наложения на КД: прибавки и «не меньше». Доспехи мага считает лист героя (нужны Ловкость и надетое), здесь их нет.
+const acWith = (ac, c, id) => { const list = effectInstances(c, id).filter((x) => !(x.recipe.parts || []).some((p) => (p.effects || []).some((e) => e.op === 'acFormula'))); return list.length ? armorClass({ armorBase: ac, mods: {} }, list).value : ac; };
+
 /** Числа токена: у героя — из листа, у существа — с токена. */
 export function tokenStats(c, t) {
   if (t.characterId) {
     const ch = characterOf(c, t.characterId);
     if (ch) {
       return {
-        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: heroAc(ch), speed: speedOf(heroSpeed(ch), conditionInstances(ch)),
+        name: ch.name, hp: ch.hp, hpMax: ch.hpMax, tempHp: ch.tempHp || 0, ac: acWith(heroAc(ch), c, ch.id), speed: speedOf(heroSpeed(ch), [...conditionInstances(ch), ...effectInstances(c, ch.id)]),
         initBonus: heroInit(ch), darkvision: ch.darkvision || 0, conditions: ch.conditions || [],
         deathSaves: ch.deathSaves, subtitle: ch.statblock ? [ch.statblock.type, ch.statblock.cr != null && ch.statblock.cr !== '' ? `КО ${ch.statblock.cr}` : ''].filter(Boolean).join(' · ') || 'NPC' : `${ch.className} ${ch.level} ур.`, character: ch,
       };
@@ -66,7 +70,7 @@ export function tokenStats(c, t) {
   }
   const m = t.monsterId ? monsterOf(c, t.monsterId) : null;
   return {
-    name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: t.ac ?? 10, speed: speedOf(t.speed ?? 30, conditionInstances(t)),
+    name: t.name, hp: t.hp ?? 0, hpMax: t.hpMax ?? 0, tempHp: t.tempHp || 0, ac: acWith(t.ac ?? 10, c, t.id), speed: speedOf(t.speed ?? 30, [...conditionInstances(t), ...effectInstances(c, t.id)]),
     initBonus: t.initBonus ?? 0, darkvision: t.darkvision || 0, conditions: t.conditions || [],
     subtitle: m ? [m.type, m.cr != null && m.cr !== '' ? `КО ${m.cr}` : ''].filter(Boolean).join(' · ') || 'Существо' : t.kind === 'hero' ? 'Герой' : 'Существо', monster: m,
   };
