@@ -242,7 +242,7 @@ test('топ-30: каждое число рецепта есть в тексте
   for (const ref of TOP30.filter((r) => R[r].src === 'srd51' && r !== 'srd51:action:dodge')) {
     const text = textOf(ref); assert.ok(text, ref);
     for (const part of R[ref].parts) for (const e of part.effects || []) {
-      if (e.value == null || typeof e.value === 'object') continue; // таблицы проверены ниже по таблицам классов
+      if (e.value == null || typeof e.value === 'object' || String(e.value).startsWith('$')) continue; // таблицы и параметры проверены ниже по таблицам классов
       const n = String(e.value).replace(/^-/, '');
       const needle = /d\d+/.test(n) ? n.replace(/^\d+/, '') : n;
       assert.ok(text.includes(needle), `${ref}: ${e.value} нет в тексте`);
@@ -377,5 +377,48 @@ test('заметки заменены расчётом', async () => {
   const shown = sheetWithEffects(v, {}, (ac) => ac + 2, on(spellRef(100)));
   assert.deepEqual([shown.vitals.ac.value, shown.vitals.speed], [16, '60 фт']);
   assert.equal(sheetWithEffects(v, {}, (ac) => ac, []), v, 'без эффектов лист не меняется');
+  setRecipes({});
+});
+
+test('смена хода: истечение, Героизм, Удержание, вялость, сопротивления, Ярость', async () => {
+  const { setRecipes, castRows, endCast, turnPlan, removeRows, damageRelation, effectInstances } = await import('../dist/js/rules/effect-rows.js');
+  const { castingBlocked } = await import('../dist/js/rules/effects.js');
+  setRecipes(R);
+  // Героизм: временные хиты от модификатора заклинателя в начале хода цели
+  const brave = [{ id: 'h', target: 'a', ref: spellRef(42), cast: 'k', casterMod: 4 }];
+  assert.deepEqual(turnPlan(brave, { started: ['a'], round: 2 }).tempHp.map((x) => [x.target, x.value]), [['a', 4]]);
+  assert.equal(turnPlan(brave, { started: ['b'], round: 2 }).tempHp.length, 0);
+  assert.equal(turnPlan([{ ...brave[0], casterMod: undefined }], { started: ['a'], round: 2 }).tempHp.length, 0, 'модификатор неизвестен');
+  // Удержание: спасбросок в конце хода цели
+  const hold = [{ id: 'p', target: 'a', ref: spellRef(356), cast: 'k', dc: 15 }];
+  assert.deepEqual(turnPlan(hold, { ended: ['a'], round: 2 }).saves.map((x) => x.ability), ['wis']);
+  assert.equal(turnPlan(hold, { started: ['a'], round: 2 }).saves.length, 0);
+  // Длительность кончается в ход заклинателя
+  const bless = [{ id: 'b', target: 'a', from: 'cleric', ref: spellRef(9), cast: 'k', until: 12 }];
+  assert.equal(turnPlan(bless, { started: ['a'], round: 12 }).expire.length, 0);
+  assert.equal(turnPlan(bless, { started: ['cleric'], round: 11 }).expire.length, 0);
+  assert.equal(turnPlan(bless, { started: ['cleric'], round: 12 }).expire.length, 1);
+  // Вялость после Ускорения: скорость 0, недееспособность, конец следующего хода
+  const fast = castRows([], { ref: spellRef(100), targets: ['a'], by: 'u', cast: 'k', round: 1 }).rows;
+  const after = endCast(fast, 'k', 3);
+  assert.deepEqual(after.map((r) => [r.ref, r.until]), [['srd51:effect:lethargy', 4]]);
+  assert.equal(speedOf(30, effectInstances({ effects: after }, 'a')), 0);
+  assert.equal(effectInstances({ effects: after }, 'a').some((x) => x.ref === 'condition:incapacitated'), true);
+  assert.equal(turnPlan(after, { started: ['a'], round: 4 }).expire.length, 0, 'держится весь ход');
+  assert.equal(turnPlan(after, { ended: ['a'], round: 4 }).expire.length, 1);
+  assert.equal(endCast(fast, 'k').length, 0, 'вне боя последствий нет');
+  assert.equal(removeRows(after, after, 5).length, 0, 'у вялости нет своих последствий');
+  // Сопротивления
+  const raged = { effects: [{ target: 'a', ref: 'srd51:feature:barbarian:rage', level: 3 }, { target: 'b', ref: spellRef(129) }] };
+  assert.equal(damageRelation(raged, ['t', 'a'], 'рубящий'), 'resist');
+  assert.equal(damageRelation(raged, ['b'], 'Колющий'), 'resist');
+  assert.equal(damageRelation(raged, ['a'], 'огонь'), null);
+  assert.equal(damageRelation(raged, ['c'], 'рубящий'), null);
+  // Ярость: нельзя колдовать и снимает свою концентрацию; в тяжёлом доспехе не действует
+  assert.equal(castingBlocked(effectInstances(raged, 'a')), true);
+  assert.equal(castingBlocked(effectInstances(raged, 'a'), { state: ['wearing:heavy-armor'] }), false);
+  const held = castRows([], { ref: spellRef(9), targets: ['x'], by: 'u', cast: 'k1', from: 'barb' }).rows;
+  assert.deepEqual(castRows(held, { ref: 'srd51:feature:barbarian:rage', targets: ['barb'], by: 'u', cast: 'k2', from: 'barb' }).rows.map((r) => r.cast), ['k2']);
+  assert.equal(castRows(held, { ref: spellRef(254), targets: ['z'], by: 'u', cast: 'k3', from: 'other' }).rows.length, 2, 'у мастера два заклинателя');
   setRecipes({});
 });

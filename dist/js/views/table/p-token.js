@@ -1,4 +1,5 @@
 // Токен-бар снизу, редактор хитов, состояния, настройки токена, контекстные меню.
+import { resistNote } from '../../rules/effect-rows.js';
 import { esc, fmtMod, uid, plural, html, raw } from '../../core/dom.js';
 import { icon } from '../../icons.js';
 import { srcOf, storeImage } from '../../core/assets.js';
@@ -221,6 +222,7 @@ export function applyHp(ctx, ids, delta, { crit = false, relation = null } = {})
         let ds = x.deathSaves;
         if (delta < 0 && t.kind === 'hero') {
           const was = hp;
+          if (resistNote(c, [t.id, t.characterId])) notes.push(`${x.name || t.name}: есть сопротивление урону от заклинания или Ярости, учтите его в числе`);
           const r = heroDamage({ hp, hpMax: x.hpMax, tempHp: temp, deathSaves: x.deathSaves }, -delta, { crit });
           hp = r.hp; temp = r.tempHp; ds = r.deathSaves;
           const nm = x.name || t.name;
@@ -230,6 +232,7 @@ export function applyHp(ctx, ids, delta, { crit = false, relation = null } = {})
           else if (was === 0 && !r.dead && r.deathSaves.f > (x.deathSaves?.f || 0)) deathNotes.push(`${nm}: урон по лежащему — ${crit ? 'два провала' : 'провал'} спасброска от смерти (${r.deathSaves.f} из 3)`);
         } else if (delta < 0) {
           let dmg = -delta;
+          if (resistNote(c, [t.id, t.characterId])) notes.push(`${x.name || t.name}: есть сопротивление урону от заклинания или Ярости, учтите его в числе`);
           const absorbed = Math.min(temp, dmg); temp -= absorbed; dmg -= absorbed;
           hp = Math.max(0, hp - dmg);
           if (conds.has('concentration')) notes.push(`${x.name || t.name}: проверка концентрации — спасбросок ТЕЛ СЛ ${Math.max(10, Math.floor(-delta / 2))}`);

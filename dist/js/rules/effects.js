@@ -4,7 +4,7 @@
 // Экземпляр — рецепт на этом существе: { ref, recipe, key?, by?, cast?, since?, level?, option?, bonus?, equipped?, attuned?, off? }.
 
 // set, halve, autoFail, autoCrit добавлены для состояний (этап 2): план называет их «обнулить», «вдвое меньше», автопровал и автокрит.
-export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility', 'set', 'halve', 'double', 'autoFail', 'autoCrit', 'ignoreCondition']);
+export const OPS = Object.freeze(['add', 'atLeast', 'advantage', 'disadvantage', 'size', 'critRange', 'maxDice', 'acFormula', 'useAbility', 'set', 'halve', 'double', 'autoFail', 'autoCrit', 'ignoreCondition', 'tempHp', 'resist', 'noCasting']);
 export const MODES = Object.freeze(['auto', 'ask', 'note']);
 export const EVENTS = Object.freeze(['hit', 'miss', 'crit', 'reduced-to-0', 'died', 'turn-start', 'turn-end']);
 export const WINDOWS = Object.freeze(['before-roll', 'after-roll', 'after-result']);
@@ -110,7 +110,7 @@ function collect(instances, tags, ctx) {
 // «check» подходит и к check:str, «save» — к save:dex: общая метка стоит на броске рядом с точной.
 const touches = (e, tags) => !e.to || e.to.some((t) => tags.includes(t));
 const label = (x) => x.label || x.recipe?.label || x.ref;
-const paramsOf = (x, ctx) => ({ bonus: x.bonus, level: x.level, slotLevel: ctx.numbers?.spellLevel ?? x.slotLevel, ...x.params });
+const paramsOf = (x, ctx) => ({ bonus: x.bonus, level: x.level, casterMod: x.casterMod, slotLevel: ctx.numbers?.spellLevel ?? x.slotLevel, ...x.params });
 
 /**
  * Что получилось с характеристиками: atLeast — «не меньше», сильнее большее; ниже текущего значения он не действует,
@@ -223,6 +223,16 @@ export function hpMaxOf(base, instances, ctx = {}) {
     if (e.op === 'add' && e.stat === 'hp:max') { const v = valueOf(e.value, paramsOf(x, ctx)); if (Number.isFinite(v)) plus += v; }
   }
   return base + plus;
+}
+
+/** Запрещает ли что-то на существе колдовать: Ярость. */
+export function castingBlocked(instances, ctx = {}) {
+  return collect(instances, [], ctx).auto.some(({ part }) => (part.effects || []).some((e) => e.op === 'noCasting'));
+}
+
+/** Сопротивление урону этого типа от наложений. Немагический урон считаем обычным случаем: мастер переключит вручную. */
+export function resistsDamage(type, instances, ctx = {}) {
+  return collect(instances, [], ctx).auto.some(({ part }) => (part.effects || []).some((e) => e.op === 'resist' && e.types.includes(type)));
 }
 
 /** Состояния, которые наложения отменяют: Героизм — испуг, Огонь фей — пользу невидимости. */

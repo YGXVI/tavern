@@ -1,6 +1,6 @@
 // Состояния в бросках стола (#193, этап 2): что творится с самим бросающим. Цель броска пока не учитывается: стол не знает,
 // по кому идёт атака из листа; окно атаки существ считает это само.
-import { rollPlan, damagePlan, speedOf, hpMaxOf, ignoredConditions } from '../../rules/effects.js';
+import { rollPlan, damagePlan, speedOf, hpMaxOf, ignoredConditions, castingBlocked } from '../../rules/effects.js';
 import { conditionInstances } from '../../rules/condition-recipes.js';
 import { loadRecipes } from '../../rules/effect-rows.js';
 
@@ -67,7 +67,7 @@ export function sheetWithEffects(v, creature, ac, effects) {
   const speed = parseInt(v.vitals.speed, 10);
   if (!effects.length && !(creature?.conditions || []).length && !creature?.exhaustion) return v;
   const list = allOn(creature, effects);
-  return { ...v, vitals: { ...v.vitals, ac: { ...v.vitals.ac, value: ac(v.vitals.ac.value) },
+  return { ...v, noCast: castingBlocked(list), vitals: { ...v.vitals, ac: { ...v.vitals.ac, value: ac(v.vitals.ac.value) },
     speed: Number.isFinite(speed) ? String(v.vitals.speed).replace(String(speed), String(speedOf(speed, list))) : v.vitals.speed,
     hp: { ...v.vitals.hp, max: hpMaxOf(v.vitals.hp.max, effects) } } };
 }

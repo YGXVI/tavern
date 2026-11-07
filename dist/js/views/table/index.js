@@ -1,4 +1,5 @@
 // Стол кампании: связывает данные, камеру, слои мира, ввод, панели и события между вкладками.
+import { turnWatcher } from './effect-turns.js';
 import { el, throttle, debounce, uid } from '../../core/dom.js';
 import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMode } from '../../core/store.js';
 import { currentUser } from '../../core/auth.js';
@@ -445,12 +446,14 @@ export function mountTable(root, cid) {
   // ——— Синхронизация с данными ———
   let lastSceneRev = null;
   let heroPos = { scene: null, map: new Map() };
+  const watchTurns = turnWatcher(ctx);
   const unsub = subscribe((db, meta) => {
     const c = ctx.c;
     if (!c) { go('#/campaigns'); return; }
     const m = membership(c, ctx.userId);
     if (!m || m.status !== 'active') { go(`#/c/${ctx.cid}`); return; }
     if (m.role === 'player' && !m.characterId) { go(`#/c/${ctx.cid}`); return; }
+    watchTurns();
     const want = ctx.isMaster ? (ctx.sceneId && sceneOf(c, ctx.sceneId) ? ctx.sceneId : c.activeSceneId || c.scenes[0]?.id) : sceneIdFor(c, ctx.userId);
     if (want !== ctx.sceneId) {
       const fromScene = ctx.sceneId;

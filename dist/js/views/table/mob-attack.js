@@ -16,6 +16,7 @@ import { initiativeOrder, slotMembers } from './combat.js';
 import { attackOutcome, critDamageFormula, heroDamage, heroHpConditions, adjustDamage } from '../../rules/attack.js';
 import { showRollToast, poolVis } from './dice.js';
 import { hpLogVis } from './p-token.js';
+import { damageRelation } from '../../rules/effect-rows.js';
 
 // ——— Правила (чистые функции, покрыты тестами) ———
 const rnd = (sides, random = Math.random) => Math.floor(random() * sides) + 1;
@@ -152,7 +153,9 @@ export function mobAttack(ctx, tokenId) {
     || targets[0]?.id;
   if (!pickTarget) { ctx.toast({ title: 'Нет цели', body: 'Поставьте на сцену того, кого атакуют', icon: 'sword-03' }); return; }
 
-  const st = { target: pickTarget, action: actions[0].i, adv: null, cover: 0, rel: null, attacks: 1, on: new Set(pack.filter((e) => !e.token.hidden).map((e) => e.tokenId)), result: null, ac: null };
+  const st = { target: pickTarget, action: actions[0].i, adv: null, cover: 0, rel: undefined, attacks: 1, on: new Set(pack.filter((e) => !e.token.hidden).map((e) => e.tokenId)), result: null, ac: null };
+  // Пока мастер не выбрал сам, отношение к урону берём из наложений на цели: Ярость, Каменная кожа.
+  const relOf = () => { if (st.rel !== undefined) return st.rel; const t = targets.find((x) => x.id === st.target); return damageRelation(ctx.c, [t?.id, t?.characterId], actions.find((x) => x.i === st.action)?.type); };
   const name = (t) => ctx.nameOf(t);
   const packName = `${(ctx.nameOf(lead.token) || '').replace(/\s+\d+$/, '')} ×${pack.length}`;
   const dlg = modal('', { className: 'mob-modal' });
@@ -191,7 +194,7 @@ export function mobAttack(ctx, tokenId) {
       <div class="panel-section mob-marks">
         <div class="mob-mark"><span class="t-sm">Броски</span>${SEG('adv', st.adv, [[null, 'Обычно'], ['adv', 'Преим.'], ['dis', 'Помеха']])}</div>
         <div class="mob-mark"><span class="t-sm">Укрытие цели</span>${SEG('cover', st.cover, [[0, 'Нет'], [2, '+2'], [5, '+5']])}</div>
-        <div class="mob-mark"><span class="t-sm">Цель к урону${a?.type ? ` (${esc(a.type)})` : ''}</span>${SEG('rel', st.rel, [[null, 'Обычно'], ['resist', 'Сопр.'], ['vuln', 'Уязв.'], ['immune', 'Иммун.']])}</div>
+        <div class="mob-mark"><span class="t-sm">Цель к урону${a?.type ? ` (${esc(a.type)})` : ''}</span>${SEG('rel', relOf(), [[null, 'Обычно'], ['resist', 'Сопр.'], ['vuln', 'Уязв.'], ['immune', 'Иммун.']])}</div>
         <div class="mob-mark"><span class="t-sm">Атак у каждого</span>${SEG('attacks', st.attacks, [[1, '×1'], [2, '×2'], [3, '×3']])}</div>
       </div>
       <div class="panel-footer"><span class="t-sm muted grow">${tst ? `КД цели ${(tst.ac ?? 10) + Number(st.cover)}` : ''}</span><button class="btn btn-sm btn-ghost" data-close>Отмена</button><button class="btn btn-sm btn-primary" data-roll ${can.length && a?.damage ? '' : 'disabled'}>${icon('sword-03', 14)}Бросить ${can.length * st.attacks} ${plural(can.length * st.attacks, 'атаку', 'атаки', 'атак')}</button></div>`);
@@ -204,7 +207,7 @@ export function mobAttack(ctx, tokenId) {
     const rows = hitsOf();
     const hits = rows.filter((r) => r.res !== 'miss');
     const crits = hits.filter((r) => r.isCrit).length;
-    const sum = hits.reduce((s, r) => s + adjust(r.damage, st.rel), 0);
+    const sum = hits.reduce((s, r) => s + adjust(r.damage, relOf()), 0);
     dlg.set(`<div class="panel-header"><div class="titles"><div class="title">Атака толпой · ${esc(a.name)}</div><div class="subtitle">${esc(packName)} → ${esc(name(target))}</div></div><button class="icon-btn icon-btn-sm" data-close aria-label="Закрыть">${icon('cancel-01', 18)}</button></div>
       <div class="panel-section"><div class="mob-sum"><b>${rows.length} ${plural(rows.length, 'атака', 'атаки', 'атак')}: ${hits.length} ${plural(hits.length, 'попадание', 'попадания', 'попаданий')}${crits ? ` (${crits} ${plural(crits, 'крит', 'крита', 'критов')})` : ''}</b><span>урон ${sum}${st.rel ? ` · ${{ resist: 'сопротивление', vuln: 'уязвимость', immune: 'иммунитет' }[st.rel]}` : ''}</span></div>
         <label class="mob-ac"><span class="t-sm">КД цели</span><span class="input"><input type="number" min="0" max="40" data-ac value="${esc(st.ac)}"></span><small class="muted">Поправьте, если цель успела наложить «Щит», — попадания пересчитаются</small></label></div>
@@ -240,7 +243,7 @@ export function mobAttack(ctx, tokenId) {
     ctx.mutateScene((s, c) => {
       patchTokenStats(c, s, id, (x) => {
         before = pick(x);
-        res = applyHits({ ...pick(x), hpMax: x.hpMax }, hits, st.rel, isHero);
+        res = applyHits({ ...pick(x), hpMax: x.hpMax }, hits, relOf(), isHero);
         const out = { hp: res.state.hp, tempHp: res.state.tempHp, conditions: res.state.conditions, ...(res.state.deathSaves ? { deathSaves: res.state.deathSaves } : {}) };
         after = { ...before, ...out };
         return out;

@@ -126,7 +126,7 @@ function actionRow(v, a) {
   const hit = a.hit ? html`<button class="s-chip hit" data-roll="${a.name}: атака|к20 ${a.hit}" ${block} title="Бросить атаку">${ic('dice-faces-06', 12)}${a.hit}</button>` : '';
   const dc = a.dc ? html`<span class="s-chip dc" ${a.explain ? raw(`data-explain="${a.explain}"`) : ''}>${a.dc}</span>` : '';
   const dmg = a.dmg ? html`<button class="s-chip dmg" data-roll="${a.name}: урон|${dmgFormula(a.dmg)}" ${block} title="Бросить урон">${a.dmg}</button>` : '';
-  const cast = a.icon === 'spell' && a.slotLevel && v.live ? html`<button class="s-chip cast" data-cast="${a.id}" ${block} title="Сотворить: потратить ячейку">${ic('sparkles', 12)}${a.slotLevel} ур.</button>` : '';
+  const cast = a.icon === 'spell' && a.slotLevel && v.live ? html`<button class="s-chip cast" data-cast="${a.id}" ${v.noCast ? raw('data-blocked') : block} title="${v.noCast ? 'В ярости колдовать нельзя' : 'Сотворить: потратить ячейку'}">${ic('sparkles', 12)}${a.slotLevel} ур.</button>` : '';
   return html`<div class="s-act ${a.icon} ${noSlot ? 'noslot' : ''} ${off ? 'off' : ''}" data-act-row="${a.id}">
     <span class="s-act-ic">${ic(rowIcon(a.icon), 18)}</span>
     <span class="s-act-t"><b>${a.name}</b><small>${noSlot ? `${a.slotLevel} ур. · нет ячеек` : a.sub}</small></span>

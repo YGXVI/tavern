@@ -11,13 +11,14 @@
 | Состояния | `dist/js/rules/condition-recipes.js`: проверены по SRD 5.1, приложение PH-A |
 | Наложения в базе | таблица `effects`, в кампании `c.effects` |
 | Строки → весы, концентрация, длительность | `dist/js/rules/effect-rows.js` |
+| Смена хода: истечение, временные хиты, повторный спасбросок | `dist/js/views/table/effect-turns.js`, только у мастера |
 | Сценарии плана как тесты | `tests/effects.test.js` |
 
 Рецепты приложения A и топ-30 проверены людьми (топ-30 — YGXVI 07.11.2026) и работают. Новый рецепт получает `status: "draft"`: движок показывает его только напоминанием, какие бы режимы ни стояли в частях. Человек проверил — `status` убираем, рецепт начинает менять числа.
 
 Решение YGXVI 07.11: считать автоматически везде, где возможно, от показателей существа. Заметка остаётся только там, где расчёта нет: выбор игрока или часть игры, которой ещё нет.
 
-Дополнения к языку рецепта: операции `set`, `halve`, `double`, `autoFail`, `autoCrit`, `ignoreCondition`, поле `min` у урона, `add` к `hp:max`; значение `{ "table": "$level", "rows": [[1, "1d6"], [3, "2d6"]] }` для таблиц классов и кругов, куб со знаком `"-1d4"`, `status`, `src` (`srd51` или `non-srd`), `atLeast` для `ac`. Метка `wearing:heavy-armor` и отношения `attacker:sees-target`, `attacker:relies-on-sight`, `attacker:protected-type`, `target:sees-attacker`, `target:marked-by-me`: пока их никто не поставляет, поэтому движок спрашивает.
+Дополнения к языку рецепта: операции `set`, `halve`, `double`, `autoFail`, `autoCrit`, `ignoreCondition`, `tempHp`, `resist`, `noCasting`, поля рецепта `then`, `endsOn`, `breaks`, поле части `save`, поле `min` у урона, `add` к `hp:max`; значение `{ "table": "$level", "rows": [[1, "1d6"], [3, "2d6"]] }` для таблиц классов и кругов, куб со знаком `"-1d4"`, `status`, `src` (`srd51` или `non-srd`), `atLeast` для `ac`. Метка `wearing:heavy-armor` и отношения `attacker:sees-target`, `attacker:relies-on-sight`, `attacker:protected-type`, `target:sees-attacker`, `target:marked-by-me`: пока их никто не поставляет, поэтому движок спрашивает.
 
 ## Ответы на вопросы §18
 
@@ -37,6 +38,6 @@
 ## Что дальше
 
 1. Бросок с чеком: интерфейс sol0139.
-2. Топ-30: рецепты проверены. Кнопка наложения — интерфейс sol0139 (`castRows`, `endCast`, `expired`).
+2. Топ-30: рецепты проверены. Кнопка наложения — интерфейс sol0139 (`castRows`, `endCast`). Она передаёт `from` (существо заклинателя), `dc`, `casterMod`, `slotLevel`, `level`, `option`, `round`; Подмога сверх того поднимает текущие хиты.
 3. Полка рецептов мастера.
 4. Остальное конвейером.
