@@ -58,7 +58,7 @@ export function gallery(items, q, text, top) {
       ${pickRow('type', 'Тип', 'monster', types.map((t) => [t, t, TYPE_COLOR[t]]), q, { multi: true })}
     </section>
     <div data-rx-grid>${grid(items, q, text)}</div>
-    <p class="ref-foot">Статблоки — SRD 5.1 (CC BY 4.0), русские тексты — перевод проекта; несколько существ — стартовый бестиарий «Распутья».</p>
+    <p class="ref-foot">Статблоки — SRD 5.1 (CC BY 4.0), русские тексты — перевод проекта; несколько существ — стартовый бестиарий Drop Dice.</p>
   </main>`;
 }
 
@@ -106,7 +106,7 @@ export function page(it, items, q, o = {}) {
         ${sec('abil', 'Характеристики', 'Нажмите — бросок проверки', html`<div class="ref-abils cr-abils">${ABIL.map((a) => { const v = m.stats?.[a.id] ?? 10, md = abilityMod(v); return html`<button class="ref-abil" data-roll="1d20${md >= 0 ? '+' : '-'}${Math.abs(md)}"><small>${a.short}</small><b>${fmtMod(md)}</b><span>${v}</span></button>`; })}</div>
           <div class="cls-start cr-facts">
             <div class="cls-box"><div class="cls-kv"><small>Чувства</small><span>${sensesLine(m) || '—'}</span></div>${m.darkvision ? html`<div class="cls-kv"><small>Тёмное зрение</small><span>${m.darkvision} фт</span></div>` : ''}</div>
-            <div class="cls-box"><div class="cls-kv"><small>Спасброски</small><span>${saves || 'по характеристикам'}</span></div><div class="cls-kv"><small>Источник</small><span>${m.srd ? 'SRD 5.1 · CC BY 4.0' : 'Стартовый бестиарий «Распутья»'}</span></div></div>
+            <div class="cls-box"><div class="cls-kv"><small>Спасброски</small><span>${saves || 'по характеристикам'}</span></div><div class="cls-kv"><small>Источник</small><span>${m.srd ? 'SRD 5.1 · CC BY 4.0' : 'Стартовый бестиарий Drop Dice'}</span></div></div>
           </div>`)}
         ${lists.map(([k, t, hint]) => ((m[k] || []).length ? sec(k, t, hint, html`<div class="cr-list">${m[k].map(block)}</div>`) : ''))}
       </div>

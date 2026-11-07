@@ -54,7 +54,7 @@ export const races = {
         </header>
         ${sec('abil', 'Характеристики', it.id === 'half-elf' ? 'Харизма +2 и ещё +1 к двум на выбор' : 'Прибавка к значениям при создании героя', abilBars(it))}
         ${sec('traits', 'Черты', 'Суть по-русски и полный текст SRD', html`<div class="cr-list">${it.traits.map(trait)}</div>`)}
-        ${it.subs.length ? sec('sub', 'Подраса', 'В открытых правилах — одна; в Книге игрока есть и другие', html`${it.subs.map((s) => html`<div class="cls-fork"><span class="cls-fork-ic">${fork(22)}</span><div><small>Распутье · подраса</small><b>${s.name}</b><p>${s.inc.map((x) => `${ab(x.ability).name} +${x.value}`).join(', ')}</p><div class="cr-list">${s.traits.map(trait)}</div></div></div>`)}`) : ''}
+        ${it.subs.length ? sec('sub', 'Подраса', 'В открытых правилах — одна; в Книге игрока есть и другие', html`${it.subs.map((s) => html`<div class="cls-fork"><span class="cls-fork-ic">${fork(22)}</span><div><small>Развилка · подраса</small><b>${s.name}</b><p>${s.inc.map((x) => `${ab(x.ability).name} +${x.value}`).join(', ')}</p><div class="cr-list">${s.traits.map(trait)}</div></div></div>`)}`) : ''}
         ${o.modal ? '' : sec('life', 'Жизнь', '', html`<div class="cls-start"><div class="cls-box"><div class="cls-kv"><small>Возраст</small><span>${m.age}</span></div></div><div class="cls-box"><div class="cls-kv"><small>Мировоззрение</small><span>${m.align}</span></div></div></div>`)}
       </div>
       ${o.modal ? '' : html`<aside class="cls-side">${toolBox('race-fit', it, { cls: bestClass(it) }, { title: 'Примерить к классу', hint: 'Стандартный набор 15·14·13·12·10·8 + бонусы расы' })}</aside>`}</div>

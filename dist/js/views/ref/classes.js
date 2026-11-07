@@ -225,7 +225,7 @@ function road(it, st) {
         ${x.chips.length ? html`<div class="cls-chips">${x.chips.map((c) => html`<span>${c}</span>`)}</div>` : ''}
         ${x.fork ? html`<div class="cls-fork">
           <span class="cls-fork-ic">${fork(22)}</span>
-          <div><small>Распутье · выбор пути</small><b>${x.fork.name}</b><p>${SUM[x.fork.key] || ''} Путь даёт умения на ${md.subLevels.join(', ')} уровнях.</p>
+          <div><small>Развилка · выбор пути</small><b>${x.fork.name}</b><p>${SUM[x.fork.key] || ''} Путь даёт умения на ${md.subLevels.join(', ')} уровнях.</p>
             <div class="cls-branches">
               ${sub ? html`<div class="cls-branch"><b>${sub.name}</b><small>${SUB_INTRO[sub.id] || ''}</small><span>${fork(12)}умения пути — ниже на дороге, с пометкой</span></div>` : ''}
               <div class="cls-branch ghost"><b>Ещё ${meta(it.id).phb - 1} ${plural(meta(it.id).phb - 1, 'путь', 'пути', 'путей')}</b><small>в Книге игрока — не входят в открытые правила SRD</small></div>

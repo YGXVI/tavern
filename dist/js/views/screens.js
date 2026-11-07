@@ -58,7 +58,7 @@ export function mountLogin(root, { onSignedIn, message = null }) {
         <div class="login-party">${partyStrip()}</div>
         <div class="login-card">
           ${logoButton()}
-          <h1>Распутье</h1>
+          <h1>Drop Dice</h1>
           <p class="sub">Стол для D&amp;D 5e (2014): карта, листы героев и кубы в одной вкладке</p>
           ${message ? html`<p class="t-sm negative" role="alert">${message}</p>` : ''}
           <button class="btn btn-lg btn-discord btn-block" data-login>${raw(icon('discord', 20))}Войти через Discord</button>
@@ -105,12 +105,12 @@ export function openOAuth(onDone, { hint } = {}) {
   const accounts = [...demo, ...extra];
   const body = el(`<div class="oauth" role="document">
     <div class="oauth-top"><span class="app"><img src="assets/logo.webp" alt=""></span><span class="dots">• • •</span><span class="me">${icon('discord', 34)}</span></div>
-    <h3>Распутье хочет получить доступ к вашему аккаунту Discord</h3>
+    <h3>Drop Dice хочет получить доступ к вашему аккаунту Discord</h3>
     <div class="who">Выберите аккаунт для входа</div>
     <div class="sect">
       <div class="accounts">${accounts.map((u) => `<button class="acc" data-u="${esc(u.id)}" aria-pressed="${u.id === pick}">${userAvatar(u, '')}<span>${esc(u.name)}</span><small>@${esc(u.handle || u.name)}</small></button>`).join('')}</div>
       <div class="custom"><input data-nick placeholder="Или другой ник…" maxlength="32"></div>
-      <div class="label">Это позволит «Распутью»</div>
+      <div class="label">Это позволит Drop Dice</div>
       <div class="scope">${icon('tick-02', 18)}Узнать ваш ник и аватар</div>
       <div class="scope">${icon('tick-02', 18)}Ничего не публиковать от вашего имени</div>
     </div>
@@ -139,7 +139,7 @@ export function openOAuth(onDone, { hint } = {}) {
 /** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | workshop | ref (#203); false — без навигации. */
 export function appHeader(user, active = null) {
   return html`<header class="app-header">
-    <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
+    <a class="brand" href="#/campaigns">${logoButton()}<span>Drop Dice</span></a>
     <span class="spacer"></span>
     ${active === false ? '' : appNav(user, active)}
     <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? (user.provider === 'guest' ? 'гость · тестовая партия' : 'через Discord') : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
