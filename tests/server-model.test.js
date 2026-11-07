@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { seedDB } from '../dist/js/data/demo.js';
-import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves } from '../dist/js/server/model.js';
+import { explode, assemble, diffRows, applyOps, applyChange, emptyRows, tokenPatch, isTokenMove, groupTokenMoves, ownsDeleted, UNFILTERED_DELETES } from '../dist/js/server/model.js';
 
 const clone = (x) => structuredClone(x);
 const demo = () => clone(seedDB().campaigns['c-crypt']);
@@ -234,4 +234,66 @@ test('правка токена в мастерском diffRows даёт prev �
   const ops = diffRows(a, explode(c2, a), { isMaster: true }).filter((o) => o.table === 'tokens');
   assert.equal(ops.length, 1); assert.ok(ops[0].prev);
   assert.deepEqual(tokenPatch(ops[0].prev, ops[0].row), { cols: {}, set: { x: c.scenes[0].tokens[0].x + 70 }, unset: [] });
+});
+
+// ——— TASK-179 (TASK-097 п. 4.3): снимки своих существ в кампании ———
+const copyOf = (id, extra = {}) => ({ id, ownerId: null, sourceId: 'tpl-1', name: 'Каменный страж', source: 'manual', size: 'large', type: 'конструкт', ac: 17, hp: 60, hpFormula: '8к10+16',
+  speed: { walk: 30, fly: null, swim: null, climb: null, burrow: null }, stats: { str: 18, dex: 8, con: 15, int: 3, wis: 10, cha: 1 }, saves: [], skills: [],
+  traits: [], actions: [{ name: 'Кулак', text: '', attack: { bonus: 6, reach: 5 }, damage: [{ dice: '2к8+4', type: 'дробящий' }] }], bonusActions: [], reactions: [], legendary: { count: null, actions: [] }, ...extra });
+
+test('снимки существ: разложить и собрать — та же копия, колонки отдельно от data', () => {
+  const c = demo(); c.creatures = { 'cc-1': copyOf('cc-1') };
+  const rows = explode(c);
+  const row = rows.creatures.get('cc-1');
+  assert.deepEqual([row.campaign_id, row.id, row.owner_id, row.source_id], [c.id, 'cc-1', null, 'tpl-1']);
+  for (const k of ['id', 'ownerId', 'sourceId', 'updatedAt']) assert.ok(!(k in row.data), k);
+  assert.deepEqual(norm(assemble(rows).creatures), norm(c.creatures));
+});
+
+test('снимки существ: таблицы нет на сервере — кампания без них и без операций', () => {
+  const c = demo(); const server = explode(c); server.creatures = null;
+  const c2 = assemble(server);
+  assert.equal(c2.creatures, undefined);
+  c2.creatures = { 'cc-1': copyOf('cc-1') };
+  const ops = diffRows(explode(demo(), server), explode(c2, server), { isMaster: true });
+  assert.equal(ops.filter((o) => o.table === 'campaign_creatures').length, 0);
+});
+
+test('снимки существ: постановка — вставка копии раньше токена; игрок не правит и не удаляет чужие', () => {
+  const c = demo(); const prev = explode(c); // по умолчанию таблица есть
+  const c2 = clone(c); c2.creatures = { 'cc-1': copyOf('cc-1') };
+  c2.scenes[0].tokens.push({ id: 't-lib', kind: 'foe', monsterId: 'lib:cc-1', name: 'Каменный страж', size: 'large', x: 0, y: 0, hidden: false, conditions: [] });
+  const ops = diffRows(prev, explode(c2, prev), { isMaster: true }).filter((o) => ['campaign_creatures', 'tokens'].includes(o.table));
+  assert.deepEqual(ops.map((o) => `${o.table}:${o.op}`), ['campaign_creatures:insert', 'tokens:insert']);
+  const a = explode(c2, prev); const c3 = clone(c2); c3.creatures['cc-1'].hp = 1; delete c3.creatures['cc-1'];
+  const pops = diffRows(a, explode(c3, a), { isMaster: false });
+  assert.equal(pops.filter((o) => o.table === 'campaign_creatures').length, 0);
+  const rows = applyOps(clone(prev), ops);
+  assert.ok(rows.creatures.has('cc-1'));
+  applyChange(rows, 'campaign_creatures', 'DELETE', { id: 'cc-1' });
+  assert.ok(!rows.creatures.has('cc-1'));
+});
+
+
+// TASK-168: удаления приходят без фильтра по кампании — применяем только ключи своей.
+test('ownsDeleted: своё удаление — да, чужая кампания — нет, ключи scene_id', () => {
+  const db = seedDB();
+  const c = db.campaigns['c-crypt'];
+  const rows = explode(c);
+  const sc = c.scenes[0], tok = sc.tokens[0], ch = c.characters[0];
+  assert.equal(ownsDeleted(rows, 'tokens', { id: tok.id }), true);
+  assert.equal(ownsDeleted(rows, 'characters', { id: ch.id }), true);
+  assert.equal(ownsDeleted(rows, 'scenes', { id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { scene_id: sc.id }), true, 'ключ секретов сцены — scene_id');
+  assert.equal(ownsDeleted(rows, 'scene_explored', { scene_id: sc.id }), true);
+  assert.equal(ownsDeleted(rows, 'scene_secrets', { id: sc.id }), false, 'без scene_id — не наше');
+  assert.equal(ownsDeleted(rows, 'tokens', { id: 't-чужой' }), false);
+  assert.equal(ownsDeleted(rows, 'drawings', { id: tok.id }), false, 'id токена в таблице рисунков — не рисунок');
+  assert.equal(ownsDeleted(rows, 'tokens', {}), false);
+  assert.equal(ownsDeleted(undefined, 'tokens', { id: tok.id }), false, 'кампания ещё не загружена');
+  assert.equal(ownsDeleted(rows, 'campaign_members', { campaign_id: c.id, user_id: 'u-asya' }), false, 'эти — по фильтру, как раньше');
+  for (const t of UNFILTERED_DELETES) assert.equal(ownsDeleted(rows, t, { id: 'нет', scene_id: 'нет' }), false, t);
+  // Применение: удаление токена убирает его из кампании.
+  applyChange(rows, 'tokens', 'DELETE', { id: tok.id });
+  assert.equal(assemble(rows).scenes[0].tokens.some((t) => t.id === tok.id), false);
 });

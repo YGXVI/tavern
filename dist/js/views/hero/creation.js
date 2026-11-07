@@ -1,0 +1,674 @@
+// Мастер создания героя на настоящем конструкторе (#200/#202, P3): шаги окна sol0139 (views/hero/steps.js) получают
+// данные из движка rules/character-builder.js, а выборы игрока превращаются в изменения черновика конструктора.
+// Чистые функции: состояние (черновик конструктора и выборы окна) хранит вызывающий; справочники передаются явно.
+import { createDraft, evaluateBuild, proposeBuildChange, confirmBuildChange, toCharacterData, creationContextFromCampaign } from '../../rules/character-builder.js';
+import { creationHitPoints } from '../table/sheet-rules.js';
+import { ABILITIES, SKILLS, mod } from '../../data/rules.js';
+import { CREATION } from './fixture.js';
+import { EQ_RU, GEAR_RU } from '../ref/world-text.js';
+import { gearIndex, wornItems, armorClass } from './gear.js';
+import { heroPerks } from '../../rules/hero-derived.js';
+
+const MINUS = '−';
+const signed = (n) => (Number.isFinite(n) ? (n < 0 ? `${MINUS}${Math.abs(n)}` : `+${n}`) : '—');
+const tail = (id) => String(id || '').split(':').pop();
+// Умения сборки, меняющие КД на итоговом экране: те же правила, что на листе.
+const draftPerks = (di) => heroPerks({ featureEntries: di?.features || [] });
+export const PORTS = Object.freeze({ abilityModifier: (s) => (Number.isInteger(s) ? mod(s) : null), creationHitPoints });
+export const LANG_RU = {
+  common: 'Общий', dwarvish: 'Дварфийский', elvish: 'Эльфийский', giant: 'Великаний', gnomish: 'Гномий', goblin: 'Гоблинский', halfling: 'Полуросликов', orc: 'Орочий',
+  abyssal: 'Бездны', celestial: 'Небесный', draconic: 'Драконий', 'deep-speech': 'Глубинная речь', infernal: 'Инфернальный', primordial: 'Первичный', sylvan: 'Сильван', undercommon: 'Подземный',
+};
+// Главные характеристики класса — для «Расставить как обычно» (стандартный набор по убыванию).
+const PRIORITY = {
+  barbarian: ['str', 'con', 'dex'], bard: ['cha', 'dex', 'con'], cleric: ['wis', 'con', 'str'], druid: ['wis', 'con', 'dex'],
+  fighter: ['str', 'con', 'dex'], monk: ['dex', 'wis', 'con'], paladin: ['str', 'cha', 'con'], ranger: ['dex', 'wis', 'con'],
+  rogue: ['dex', 'cha', 'con'], sorcerer: ['cha', 'con', 'dex'], warlock: ['cha', 'con', 'dex'], wizard: ['int', 'con', 'dex'],
+};
+const METHOD_UI = { point_buy: 'buy', standard_array: 'array', rolled: 'roll' };
+const UI_METHOD = { buy: 'point_buy', array: 'standard_array', roll: 'rolled' };
+
+/** Справочники конструктора: { options, spells, equipment, features } (dist/js/data/*-2014.json) + справка заклинаний. */
+export function indexCreation(cats, spellRef = {}) {
+  const defs = new Map(cats.options.entries.map((e) => [e.id, e]));
+  const spells = new Map(cats.spells.entries.map((e) => [e.id, e]));
+  const equipment = new Map(cats.equipment.entries.map((e) => [e.id, e]));
+  const features = new Map((cats.features?.entries || []).map((e) => [e.id, e]));
+  return { cats, defs, spells, equipment, features, ref: spellRef.spells || {}, schools: spellRef.schools || {} };
+}
+// Снаряжение — русскими названиями справочника (как в сумке листа, gear.js): в каталоге SRD их часто нет.
+const eqName = (e) => (e ? EQ_RU[e.name.en] || GEAR_RU[e.name.en] || EQ_RU[String(e.name.en).replace(/’/g, "'")] || GEAR_RU[String(e.name.en).replace(/’/g, "'")] || e.name.ru || e.name.en : '');
+const nameOf = (ix, id) => ix.defs.get(id)?.name?.ru || ix.features.get(id)?.name?.ru || ix.features.get(id)?.name?.en || ix.spells.get(id)?.name?.ru || eqName(ix.equipment.get(id)) || tail(id);
+const skillName = (id) => SKILLS.find((s) => s.id === id)?.name || id;
+// Прочие выборы расы и класса (подкласс, боевой стиль, инструменты, излюбленные враг и местность, экспертиза,
+// наследие драконорождённого, прибавки полуэльфа) — блоком «Ещё выбор» на шаге, откуда выбор пришёл.
+const EXTRA_KINDS = { tool: 'Инструменты', subclass: 'Подкласс', feature_option: 'Особенность', favored_enemy: 'Излюбленный враг', terrain: 'Излюбленная местность', expertise: 'Экспертиза', ability_increase: 'Прибавка к характеристикам' };
+const ENEMY_RU = { aberration: 'Аберрации', beast: 'Звери', celestial: 'Небожители', construct: 'Конструкты', dragon: 'Драконы', elemental: 'Элементали', fey: 'Феи', fiend: 'Исчадия', giant: 'Великаны', monstrosity: 'Чудовища', ooze: 'Слизи', plant: 'Растения', undead: 'Нежить', humanoid: 'Гуманоиды' };
+const TERRAIN_RU = { arctic: 'Арктика', coast: 'Побережье', desert: 'Пустыня', forest: 'Лес', grassland: 'Равнины', mountain: 'Горы', swamp: 'Болота', underdark: 'Подземье' };
+function extraOptionName(ix, kind, o) {
+  if (kind === 'tool' || (kind === 'expertise' && !SKILLS.some((k) => k.id === o))) return nameOf(ix, `srd51:equipment:${o}`);
+  if (kind === 'expertise' || kind === 'skill') return skillName(o);
+  if (kind === 'favored_enemy') return ENEMY_RU[o] || o;
+  if (kind === 'terrain') return TERRAIN_RU[o] || o;
+  if (kind === 'ability_increase') return ABILITIES.find((a) => a.id === o)?.name || o;
+  return nameOf(ix, o);
+}
+const stepOfChoice = (id = '') => (/^srd51:(race|subrace):/.test(id) ? 'race' : /:skills$/.test(id) || /^srd51:background:/.test(id) && !/starting/.test(id) ? 'background' : /starting/.test(id) ? 'equipment' : /:spells:/.test(id) ? 'spells' : 'class');
+/** Улучшение характеристик героя выше 3 уровня: +2 к одной или +1 к двум. Выше 20 не предлагаем. */
+function asiBox(c, ev) {
+  const s = c.selected, inc = s?.type === 'asi' ? s.increases || {} : {};
+  const two = Object.keys(inc).find((k) => inc[k] === 2), ones = Object.keys(inc).filter((k) => inc[k] === 1);
+  const score = (id) => ev.derivedInputs?.abilityScores?.[id] ?? 0;
+  const room = (a, n) => a.id === two || ones.includes(a.id) || score(a.id) + n <= 20;
+  const lvl = /:L(\d+):/.exec(c.id)?.[1];
+  return { title: `Улучшение характеристик${lvl ? `, ${lvl} уровень` : ''}`, note: `выбрано ${two || ones.length === 2 ? 1 : 0} из 1`, choiceId: c.id,
+    list: [...ABILITIES.filter((a) => room(a, 2)).map((a) => ({ name: `${a.name} +2`, value: `asi2:${a.id}`, on: a.id === two || undefined })),
+      ...ABILITIES.filter((a) => room(a, 1)).map((a) => ({ name: `${a.short} +1`, value: `asi1:${a.id}`, on: ones.includes(a.id) || undefined }))] };
+}
+function extraBoxes(ix, ev) {
+  const out = { race: [], class: [] };
+  // Навыки класса и предыстории — на шаге предыстории; здесь остальные: разносторонность полуэльфа, навыки подкласса.
+  for (const c of ev.choices.filter((x) => EXTRA_KINDS[x.kind] || x.kind === 'asi_or_feat' || (x.kind === 'skill' && !/:skills$/.test(x.id) && !/^srd51:background:/.test(x.id)))) {
+    const step = stepOfChoice(c.id) === 'race' ? 'race' : 'class';
+    if (c.kind === 'asi_or_feat') { out.class.push(asiBox(c, ev)); continue; }
+    const bad = new Set((c.unavailable || []).map((u) => u.option));
+    // Компетентность, избранный враг и местность дважды не берутся: взятое на другом уровне не предлагаем.
+    if (['expertise', 'favored_enemy', 'terrain'].includes(c.kind)) for (const x of ev.choices) if (x.kind === c.kind && x.id !== c.id) for (const o of [].concat(x.selected || [])) bad.add(o);
+    out[step].push({
+      title: `${EXTRA_KINDS[c.kind] || 'Навыки'}: ${nameOf(ix, c.origin?.definitionId)}`, note: `выбрано ${Array.isArray(c.selected) ? c.selected.length : c.selected ? 1 : 0} из ${c.count}`, choiceId: c.id,
+      list: (c.options || []).filter((o) => !bad.has(o)).map((o) => ({ name: extraOptionName(ix, c.kind, o), value: o, on: (Array.isArray(c.selected) ? c.selected.includes(o) : c.selected === o) || undefined })),
+    });
+  }
+  return out;
+}
+
+/** Новое состояние мастера создания для кампании. */
+export function newCreation(ix, { campaign = null, userId = 'me', newId = () => crypto.randomUUID() } = {}) {
+  const { context } = creationContextFromCampaign(campaign);
+  const draft = createDraft({ draftId: newId(), accountScope: userId, mode: 'pc', context, rulesRevision: ix.cats.options.revision });
+  return freeHeroContext({ v: 1, campaignId: campaign?.id ?? null, context, draft, tab: 0, focus: null, look: {}, ids: {}, characterId: null, operationId: null });
+}
+/**
+ * Герой без кампании (#203, «Мои герои»): правил мастера над ним ещё нет, поэтому открыты оба способа книги игрока —
+ * стандартный набор (по умолчанию) и покупка очков. У героя кампании способы задаёт политика кампании (D3).
+ */
+export function freeHeroContext(st) {
+  if (st && !st.campaignId && st.context && !st.context.allowedAbilityMethods.includes('point_buy')) st.context = { ...st.context, allowedAbilityMethods: [...st.context.allowedAbilityMethods, 'point_buy'] };
+  return st;
+}
+
+const evaluate = (ix, st) => evaluateBuild(st.context, ix.cats, st.draft, PORTS);
+function change(ix, st, ch) {
+  st.draft = confirmBuildChange(proposeBuildChange(st.draft, ch, st.context, ix.cats, PORTS));
+  // Сборка изменилась — прежние ID экземпляров для отправки больше не подходят.
+  st.ids = {}; st.characterId = null; st.operationId = null;
+}
+const choiceOf = (ev, pred) => ev.choices.find(pred);
+const raceChoices = (ix, raceId) => [...ix.defs.values()].filter((d) => d.kind === 'subrace' && d.raceId === raceId);
+const levels = (st) => Math.max(1, st.context.startLevel || 1);
+
+/** Выбор окна → изменение черновика. Возвращает подсказку для экрана или null. */
+export function applyCreationChoice(ix, st, choice = {}) {
+  const note = applyChoice(ix, st, choice);
+  fillSingleEquipment(ix, st);
+  return note;
+}
+/** Группа снаряжения, где выбирать не из чего, выбрана сразу: игрок не должен нажимать единственный вариант. */
+function fillSingleEquipment(ix, st) {
+  for (const g of equipmentGroups(ix, evaluate(ix, st))) {
+    const open = g.alts.filter((a) => !a.unavailable);
+    if (open.length === 1 && g.selected === undefined) change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: open[0].id, picks: open[0].picks } });
+  }
+}
+function applyChoice(ix, st, { step, id, value } = {}) {
+  const ev0 = evaluate(ix, st);
+  const toggle = (choice, opt) => {
+    if (!choice) return null;
+    const cur = Array.isArray(choice.selected) ? [...choice.selected] : [];
+    const at = cur.indexOf(opt);
+    if (at >= 0) cur.splice(at, 1);
+    else if (cur.length < choice.count) cur.push(opt);
+    else return { title: 'Уже выбрано достаточно', body: `Снимите один из ${choice.count}, чтобы выбрать другой.` };
+    change(ix, st, { type: 'setSelection', choiceId: choice.id, value: cur.length ? cur : undefined });
+    return null;
+  };
+  if (step === 'race' && !value) {
+    const raceId = `srd51:race:${id}`;
+    if (!ix.defs.has(raceId)) return null;
+    change(ix, st, { type: 'setRace', raceId });
+    const subs = raceChoices(ix, raceId);
+    if (subs.length === 1) change(ix, st, { type: 'setSubrace', subraceId: subs[0].id }); // в SRD у каждой расы одна подраса
+    return null;
+  }
+  if (step === 'class' && !value) {
+    const classId = `srd51:class:${id}`;
+    if (!ix.defs.has(classId)) return null;
+    change(ix, st, { type: 'setLevelHistory', levelHistory: Array.from({ length: levels(st) }, () => ({ classId })) });
+    return null;
+  }
+  if (step === 'background' && !value && ix.defs.has(`srd51:background:${id}`)) { change(ix, st, { type: 'setBackground', backgroundId: `srd51:background:${id}` }); return null; }
+  if (step === 'abilities') {
+    if (id === 'abMode') {
+      const method = UI_METHOD[value];
+      if (!st.context.allowedAbilityMethods.includes(method)) return { title: 'Мастер этот способ не разрешил' };
+      if (st.draft.abilityMethod === method) return null;
+      change(ix, st, { type: 'setAbilityMethod', method });
+      // Покупка очков начинается со всех восьмёрок (27 очков свободны), набор — с пустых мест.
+      const start = method === 'point_buy' ? ix.cats.options.abilityMethods.pointBuy.min : null;
+      change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, start])) });
+      return null;
+    }
+    if (id === 'auto') return autoAbilities(ix, st, Array.isArray(value) ? value : null);
+    if (id === 'setRolls') {
+      // Бросок один на героя: повторно результат не меняется, сменить можно только способ.
+      if (st.draft.rollReceipts?.length || !Array.isArray(value)) return null;
+      change(ix, st, { type: 'setRollReceipts', receipts: value });
+      change(ix, st, { type: 'setBaseScores', scores: Object.fromEntries(ABILITIES.map((a) => [a.id, null])) });
+      return null;
+    }
+    if (id === 'abSet') { const [key, v] = String(value).split('|'); return setAbility(ix, st, key, v); }
+    if (id === 'abInc' || id === 'abDec') return stepAbility(ix, st, value, id === 'abInc' ? 1 : -1);
+    return null;
+  }
+  if (id === 'extra') {
+    const [choiceId, opt] = String(value).split('|');
+    const c = ev0.choices.find((x) => x.id === choiceId);
+    if (!c) return null;
+    if (c.kind === 'asi_or_feat') {
+      const sel = c.selected, ab = opt.replace(/^asi[12]:/, '');
+      let next;
+      if (opt.startsWith('asi1:')) {
+        const inc = sel?.type === 'asi' && Object.values(sel.increases || {}).every((x) => x === 1) ? { ...sel.increases } : {};
+        if (inc[ab]) delete inc[ab]; else { if (Object.keys(inc).length >= 2) delete inc[Object.keys(inc)[0]]; inc[ab] = 1; }
+        next = Object.keys(inc).length ? { type: 'asi', increases: inc } : undefined;
+      } else next = sel?.type === 'asi' && sel.increases?.[ab] === 2 ? undefined : { type: 'asi', increases: { [ab]: 2 } };
+      change(ix, st, { type: 'setSelection', choiceId, value: next });
+      return null;
+    }
+    // Одиночный выбор (подкласс, стиль) хранится значением, множественный — списком.
+    if (c.count === 1 && !Array.isArray(c.selected) && (c.kind === 'subclass' || c.kind === 'feature_option')) {
+      change(ix, st, { type: 'setSelection', choiceId, value: c.selected === opt ? undefined : opt });
+      return null;
+    }
+    return toggle(c, opt);
+  }
+  if (step === 'background' && id === 'skill') {
+    const sid = SKILLS.find((s) => s.name === value)?.id;
+    return toggle(choiceOf(ev0, (c) => c.kind === 'skill' && stepOfChoice(c.id) !== 'race' && c.options?.includes(sid)), sid);
+  }
+  if (step === 'background' && id === 'lang') {
+    const lid = Object.keys(LANG_RU).find((k) => LANG_RU[k] === value) || value;
+    const langs = ev0.choices.filter((c) => c.kind === 'language');
+    const has = langs.find((c) => Array.isArray(c.selected) && c.selected.includes(lid));
+    if (has) return toggle(has, lid);
+    const free = langs.find((c) => (c.selected?.length || 0) < c.count && c.options?.includes(lid) && !(c.unavailable || []).some((u) => u.option === lid));
+    return free ? toggle(free, lid) : { title: 'Языки уже выбраны', body: 'Снимите один, чтобы выбрать другой.' };
+  }
+  if (step === 'equipment' && id === 'eq') {
+    const [title, name] = String(value).split('|');
+    const g = equipmentGroups(ix, ev0).find((x) => x.title === title);
+    const alt = g?.alts.find((a) => a.name === name);
+    if (!g || !alt) return null;
+    change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: alt.id, picks: alt.picks } });
+    return null;
+  }
+  // Конкретный предмет из «любое воинское оружие»: «группа|вариант|предмет в варианте|место|ID».
+  if (step === 'equipment' && id === 'eqPick') {
+    const [title, altId, item, slot, ref] = String(value).split('|');
+    const g = equipmentGroups(ix, ev0).find((x) => x.title === title);
+    const alt = g?.alts.find((a) => a.id === altId);
+    if (!alt?.choose?.[item]?.list.some((x) => x.id === ref)) return null;
+    const picks = (g.selected === alt.id ? g.choice.selected.picks : alt.picks).map((p) => (Array.isArray(p) ? [...p] : p));
+    picks[item][slot] = ref;
+    change(ix, st, { type: 'setSelection', choiceId: g.choice.id, value: { alternative: alt.id, picks } });
+    return null;
+  }
+  if (step === 'spells') {
+    if (id === 'spTab') { st.tab = Number(value) || 0; return null; }
+    if (id === 'auto') return autoSpells(ix, st);
+    if (id === 'spFocus') {
+      const choice = spellChoices(evaluate(ix, st))[st.tab];
+      const sid = choice && optionsOf(choice, ev0).find((x) => spellName(ix, x) === value);
+      st.focus = value;
+      return sid ? toggle(choice, sid) : null;
+    }
+    return null;
+  }
+  if (step === 'look') {
+    if (id === 'name') { change(ix, st, { type: 'setIdentity', identity: { name: String(value ?? '').slice(0, 40) } }); return null; }
+    st.look[id] = value;
+    return null;
+  }
+  return null;
+}
+
+// ——— Характеристики ———
+/** Шесть чисел, которые раскладывают по характеристикам: стандартный набор или результат бросков 4к6 (каждый — без меньшей кости). */
+function abilityPool(ix, st) {
+  if (st.draft.abilityMethod === 'standard_array') return [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
+  const r = st.draft.rollReceipts || [];
+  if (st.draft.abilityMethod !== 'rolled' || r.length !== 6) return null;
+  return r.map((x) => x.dice.reduce((a, b) => a + b, 0) - Math.min(...x.dice)).sort((a, b) => b - a);
+}
+// Числа могут повторяться (две 14): занято столько, сколько раз число уже стоит у характеристик.
+function markUsed(pool, scores) {
+  const left = Object.values(scores).filter(Number.isInteger);
+  return pool.map((value) => { const i = left.indexOf(value); if (i >= 0) left.splice(i, 1); return { value, used: i >= 0 }; });
+}
+function stepAbility(ix, st, key, dir) {
+  const m = st.draft.abilityMethod, scores = { ...st.draft.baseScores };
+  let swapped = null;
+  if (abilityPool(ix, st)) {
+    const arr = abilityPool(ix, st);
+    const cur = scores[key];
+    let next;
+    if (cur == null) next = (dir > 0 ? arr : [...arr].reverse()).find((v) => !Object.values(scores).includes(v)) ?? arr[arr.length - 1];
+    else { const i = arr.indexOf(cur) - dir; if (i < 0 || i >= arr.length) return null; next = arr[i]; }
+    const holder = Object.keys(scores).find((k) => k !== key && scores[k] === next);
+    if (holder) scores[holder] = cur ?? null;
+    scores[key] = next;
+    // Стандартный набор — шесть чисел на шесть мест: «+» меняет значения местами, об этом надо сказать.
+    if (holder && cur != null) swapped = { title: 'Поменялись местами', body: `${ABILITIES.find((a) => a.id === key)?.name} ${next}, ${ABILITIES.find((a) => a.id === holder)?.name} ${cur}.` };
+  } else if (m === 'point_buy') {
+    const pb = ix.cats.options.abilityMethods.pointBuy;
+    const cur = scores[key] ?? pb.min, next = cur + dir;
+    if (next < pb.min || next > pb.max) return null;
+    const spent = Object.entries({ ...scores, [key]: next }).reduce((s, [, v]) => s + (pb.cost[v ?? pb.min] || 0), 0);
+    if (spent > pb.budget) return { title: 'Очки закончились', body: `Бюджет ${pb.budget}.` };
+    for (const a of ABILITIES) scores[a.id] ??= pb.min;
+    scores[key] = next;
+  } else return { title: 'Сначала бросьте кубы', body: 'Шесть бросков 4к6: меньшая кость каждого не считается.' };
+  change(ix, st, { type: 'setBaseScores', scores });
+  return swapped;
+}
+/** Стандартный набор: число из списка прямо в характеристику; если оно было у другой — они меняются местами. */
+function setAbility(ix, st, key, raw) {
+  const arr = abilityPool(ix, st);
+  if (!arr || !ABILITIES.some((a) => a.id === key)) return null;
+  const v = raw === '' || raw == null ? null : Number(raw);
+  if (v !== null && !arr.includes(v)) return null;
+  const scores = { ...st.draft.baseScores }, cur = scores[key] ?? null;
+  if (cur === v) return null;
+  // Занято, только если таких чисел в наборе больше нет: у двух 14 второй можно поставить без обмена.
+  const free = v !== null && arr.filter((x) => x === v).length > Object.keys(scores).filter((k) => k !== key && scores[k] === v).length;
+  const holder = v === null || free ? null : Object.keys(scores).find((k) => k !== key && scores[k] === v);
+  if (holder) scores[holder] = cur;
+  scores[key] = v;
+  change(ix, st, { type: 'setBaseScores', scores });
+  const name = (id) => ABILITIES.find((a) => a.id === id)?.name;
+  if (!holder) return null;
+  return cur === null
+    ? { title: `Число ${v} перенесли`, body: `Характеристике «${name(holder)}» выберите другое.` }
+    : { title: 'Поменялись местами', body: `${name(key)} ${v}, ${name(holder)} ${cur}.` };
+}
+// Лучшая раскладка набора: сумма модификаторов с весом важности характеристики, прибавки расы учтены.
+const WEIGHTS = [8, 5, 3, 1, 1, 1];
+function bestLayout(arr, order, bonus) {
+  let best = null, bestScore = -Infinity;
+  const walk = (rest, taken) => {
+    if (!rest.length) {
+      const score = taken.reduce((s, v, i) => s + WEIGHTS[i] * (mod(v + (bonus[order[i]] || 0)) * 100 + v), 0);
+      if (score > bestScore) { bestScore = score; best = taken; }
+      return;
+    }
+    rest.forEach((v, i) => walk(rest.filter((_, j) => j !== i), [...taken, v]));
+  };
+  walk(arr, []);
+  return Object.fromEntries(order.map((k, i) => [k, best[i]]));
+}
+function autoAbilities(ix, st, prefer = null) {
+  const cls = tail(st.draft.levelHistory[0]?.classId);
+  if (!cls) return { title: 'Сначала выберите класс' };
+  const rolled = st.draft.abilityMethod === 'rolled' && abilityPool(ix, st);
+  if (!rolled && st.draft.abilityMethod !== 'standard_array' && st.context.allowedAbilityMethods.includes('standard_array')) change(ix, st, { type: 'setAbilityMethod', method: 'standard_array' });
+  const order = [...(prefer || PRIORITY[cls] || []), ...ABILITIES.map((a) => a.id)].filter((v, i, a) => a.indexOf(v) === i);
+  const arr = rolled || [...ix.cats.options.abilityMethods.standardArray].sort((a, b) => b - a);
+  const bonus = {};
+  const ev = evaluate(ix, st);
+  for (const g of ev.grants.filter((x) => x.kind === 'ability_increase')) bonus[g.ability] = (bonus[g.ability] || 0) + g.value;
+  for (const c of ev.choices.filter((x) => x.kind === 'ability_increase')) for (const a of [].concat(c.selected || [])) bonus[a] = (bonus[a] || 0) + 1;
+  change(ix, st, { type: 'setBaseScores', scores: bestLayout(arr, order, bonus) });
+  return { title: 'Характеристики расставлены', body: 'Можно поменять стрелками.' };
+}
+
+// ——— Снаряжение ———
+const itemLabel = (ix, item) => (item.ref ? `${nameOf(ix, item.ref)}${item.quantity > 1 ? ` ×${item.quantity}` : ''}` : null);
+const matchAll = (ix, filter) => [...ix.equipment.values()].filter((e) => Object.entries(filter).every(([k, v]) => (k === 'exclude' ? !v.includes(e.id) : k === 'kind' ? e.kind === v : k === 'group' ? e.group === v : e.weapon?.[k] === v)))
+  .sort((a, b) => nameOf(ix, a.id).localeCompare(nameOf(ix, b.id), 'ru'));
+// Что подставить, пока игрок не выбрал сам: привычный вариант, а не первый по алфавиту. Со щитом — только одноручное.
+const USUAL = ['longsword', 'mace', 'lute', 'flute'];
+function firstMatch(ix, filter, { oneHand = false } = {}) {
+  const fit = matchAll(ix, filter).filter((e) => !oneHand || !(e.weapon?.properties || []).includes('two-handed'));
+  return USUAL.map((k) => fit.find((e) => e.id.endsWith(`:${k}`))).find(Boolean) || fit[0];
+}
+const FILTER_NAME = (f) => (f.kind === 'weapon' ? `${f.category === 'martial' ? 'воинское' : 'простое'}${f.range === 'melee' ? ' рукопашное' : ''} оружие` : f.group === 'musical-instrument' ? 'инструмент' : 'предмет');
+const capital = (t) => t[0].toUpperCase() + t.slice(1);
+// О чём группа: подпись вместо порядкового номера.
+function groupKind(ix, c) {
+  const items = (c.alternatives || []).flatMap((a) => a.items);
+  const kinds = new Set(items.map((it) => (it.ref ? ix.equipment.get(it.ref)?.kind : it.filter?.kind)));
+  return kinds.has('armor') ? 'доспех' : kinds.has('weapon') ? 'оружие' : kinds.has('pack') ? 'набор' : kinds.has('focus') ? 'фокус' : kinds.has('tool') ? 'инструмент' : 'снаряжение';
+}
+/** Группы выбора снаряжения: у каждой — варианты с готовыми picks; «любой из группы» игрок выбирает сам (choose). */
+export function equipmentGroups(ix, ev) {
+  const out = [], seen = new Map();
+  for (const c of ev.choices.filter((x) => x.kind === 'equipment')) {
+    const owner = nameOf(ix, c.origin?.definitionId);
+    const alts = (c.alternatives || []).map((a) => {
+      const oneHand = a.items.some((it) => it.ref === 'srd51:equipment:shield');
+      const picks = a.items.map((it) => (it.ref ? null : Array.from({ length: it.quantity }, () => firstMatch(ix, it.filter, { oneHand })?.id).filter(Boolean)));
+      const name = a.items.map((it) => itemLabel(ix, it) || `${capital(FILTER_NAME(it.filter))}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(' + ');
+      const choose = a.items.map((it) => (it.ref ? null : { label: FILTER_NAME(it.filter), slots: it.quantity, list: matchAll(ix, it.filter).filter((e) => !oneHand || !(e.weapon?.properties || []).includes('two-handed')).map((e) => ({ id: e.id, name: nameOf(ix, e.id) })) }));
+      return { id: a.id, name, picks, choose, unavailable: (c.unavailable || []).some((u) => u.option === a.id) };
+    });
+    const base = `${owner} · ${groupKind(ix, c)}`, n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    out.push({ title: n > 1 ? `${base} ${n}` : base, choice: c, alts, selected: c.selected?.alternative });
+  }
+  return out;
+}
+
+// ——— Заклинания ———
+const spellChoices = (ev) => ev.choices.filter((c) => c.kind === 'spell');
+const spellName = (ix, id) => ix.spells.get(id)?.name?.ru || ix.spells.get(id)?.name?.en || id;
+function optionsOf(choice, ev) {
+  if (choice.options?.length) return choice.options;
+  // «Подготовленные» волшебника — из книги: то, что выбрано в книге.
+  const book = ev.choices.find((c) => c.kind === 'spell' && /spellbook/.test(c.id));
+  return /prepared/.test(choice.id) && Array.isArray(book?.selected) ? book.selected : [];
+}
+function choiceLabel(c) {
+  if (/cantrips/.test(c.id)) return 'Заговоры';
+  if (/spellbook/.test(c.id)) return 'В книге';
+  if (/prepared/.test(c.id)) return 'Готово к бою';
+  return 'Заклинания';
+}
+function autoSpells(ix, st) {
+  for (let guard = 0; guard < 6; guard += 1) {
+    const ev = evaluate(ix, st);
+    const c = spellChoices(ev).find((x) => (x.selected?.length || 0) < x.count && optionsOf(x, ev).length);
+    if (!c) break;
+    const have = new Set(c.selected || []);
+    // Заклинания домена и клятвы и так всегда подготовлены: не тратим на них выбор.
+    const always = new Set((ev.derivedInputs?.spells?.granted || []).filter((g) => g.alwaysPrepared).map((g) => g.ref));
+    const pick = optionsOf(c, ev).filter((id) => !have.has(id) && !always.has(id) && !(c.unavailable || []).some((u) => u.option === id))
+      .sort((a, b) => spellName(ix, a).localeCompare(spellName(ix, b), 'ru'));
+    change(ix, st, { type: 'setSelection', choiceId: c.id, value: [...have, ...pick].slice(0, c.count) });
+  }
+  return { title: 'Заклинания выбраны', body: 'Поменять можно в списке.' };
+}
+
+// ——— Витрина для экранов ———
+const card = (ix, def, img, sub, tags = []) => ({ id: tail(def.id), name: def.name.ru || def.name.en, sub, tags, img });
+function raceSub(def) {
+  const inc = (def.grants || []).filter((g) => g.kind === 'ability_increase');
+  if (inc.length === 6) return '+1 ко всем шести';
+  return inc.map((g) => `+${g.value} ${ABILITIES.find((a) => a.id === g.ability)?.short || ''}`).join(', ') || 'Без прибавок';
+}
+
+/** creationView(): объект формы CREATION (fixture.js) по текущему состоянию. */
+export function creationModel(ix, st, { campaignName = '', userName = '' } = {}) {
+  const ev = evaluate(ix, st), d = st.draft, di = ev.derivedInputs;
+  const raceId = d.ancestry.raceId, classId = d.levelHistory[0]?.classId, bgId = d.background.backgroundId;
+  const cls = ix.defs.get(classId);
+  const races = [...ix.defs.values()].filter((x) => x.kind === 'race').map((r) => {
+    const speed = (r.grants || []).find((g) => g.kind === 'speed')?.value;
+    return card(ix, r, `assets/hero/race-${tail(r.id)}.webp`, raceSub(r), speed ? [`Скорость ${speed} фт`] : []);
+  });
+  const classes = [...ix.defs.values()].filter((x) => x.kind === 'class').map((c) => {
+    const ab = c.class?.spellcasting?.ability;
+    return card(ix, c, `assets/hero/class-${tail(c.id)}.webp`, `к${c.class?.hitDie} · ${ab ? ABILITIES.find((a) => a.id === ab)?.name : (PRIORITY[tail(c.id)] || []).slice(0, 1).map((k) => ABILITIES.find((a) => a.id === k)?.name).join('')}`, c.class?.spellcasting ? ['Магия'] : ['Оружие']);
+  });
+  const backgrounds = [...ix.defs.values()].filter((x) => x.kind === 'background').map((b) => ({
+    id: tail(b.id), name: b.name.ru || b.name.en, icon: 'sun-03', tags: [],
+    sub: (b.grants || []).filter((g) => g.kind === 'skill').map((g) => skillName(g.value)).join(', '), text: 'Предыстория SRD 5.1',
+  }));
+
+  // Характеристики
+  const method = d.abilityMethod, pb = ix.cats.options.abilityMethods.pointBuy;
+  const assigned = ABILITIES.filter((a) => Number.isInteger(d.baseScores[a.id])).length;
+  const spent = method === 'point_buy' ? ABILITIES.reduce((s, a) => s + (pb.cost[d.baseScores[a.id] ?? pb.min] || 0), 0) : assigned;
+  const of = method === 'point_buy' ? pb.budget : 6;
+  const main = PRIORITY[tail(classId)]?.[0];
+  const abilities = {
+    mode: METHOD_UI[method],
+    modes: [['buy', 'Покупка очков', 'point_buy'], ['array', 'Стандартный набор', 'standard_array'], ['roll', 'Бросить 4к6', 'rolled']]
+      .map(([id, name, m]) => ({ id, name, disabled: !st.context.allowedAbilityMethods.includes(m),
+        title: !st.context.allowedAbilityMethods.includes(m) ? 'Мастер кампании этот способ не включил' : '' })),
+    budget: { spent, of, left: Math.max(0, of - spent), min: pb.min, max: pb.max },
+    array: abilityPool(ix, st) ? markUsed(abilityPool(ix, st), d.baseScores) : null,
+    rolled: method === 'rolled' ? { done: (d.rollReceipts || []).length === 6, server: (d.rollReceipts || []).every((r) => r.source === 'server') } : null,
+    list: ABILITIES.map((a) => {
+      const base = d.baseScores[a.id], fin = di?.abilityScores?.[a.id];
+      const race = (di?.abilityIncreases || []).filter((x) => x.ability === a.id).reduce((s, x) => s + x.value, 0);
+      // Покупка: сколько стоит следующая единица — «+» гаснет, если не хватает очков.
+      const now = base ?? pb.min, up = method === 'point_buy' && now < pb.max ? pb.cost[now + 1] - pb.cost[now] : null;
+      return { key: a.id, name: a.name, base: base ?? '—', cost: method === 'point_buy' ? pb.cost[now] : '—', up, canUp: up !== null && up <= of - spent, canDown: method === 'point_buy' && now > pb.min, race: race ? `+${race}` : '—',
+        final: fin ?? '—', mod: Number.isInteger(fin) ? signed(mod(fin)) : '—', main: a.id === main || undefined };
+    }),
+    asi: { title: 'Улучшение характеристик — с 4 уровня', note: `Герой начинает с ${levels(st)} уровня`, options: [] },
+    auto: cls ? `Расставить как обычно: ${cls.name.ru}` : 'Расставить как обычно', autoNote: 'Стандартный набор по главным характеристикам класса с учётом расы.',
+    gave: Number.isInteger(di?.abilityScores?.con) ? [`Телосложение ${di.abilityScores.con}: ${signed(mod(di.abilityScores.con))} к хитам за уровень`] : ['Задайте все шесть характеристик'],
+  };
+
+  // Навыки и языки
+  const skillC = ev.choices.find((c) => c.kind === 'skill' && stepOfChoice(c.id) !== 'race');
+  const fixedSkills = new Map();
+  // «Уже есть» у навыка — откуда: «предыстория «Прислужник»», «раса «Полуорк»» (без склонения названия).
+  const KIND_RU = { background: 'предыстория', race: 'раса', subrace: 'раса', class: 'класс', subclass: 'подкласс' };
+  for (const g of ev.grants.filter((x) => x.kind === 'proficiency' && x.category === 'skill')) { const def = ix.defs.get(g.origin?.definitionId); fixedSkills.set(g.value, KIND_RU[def?.kind] ? `${KIND_RU[def.kind]} «${nameOf(ix, def.id)}»` : nameOf(ix, g.origin?.definitionId)); }
+  const backgroundSkills = skillC ? {
+    title: `Навыки: ${cls?.name.ru || 'класс'}`, note: `выбрано ${skillC.selected?.length || 0} из ${skillC.count}`,
+    hint: fixedSkills.size ? `Уже есть: ${[...fixedSkills.keys()].map(skillName).join(', ')}.` : '',
+    list: [...[...fixedSkills].map(([k, from]) => ({ name: skillName(k), from })),
+      ...skillC.options.filter((o) => !fixedSkills.has(o)).map((o) => (!skillC.selected?.includes(o) && (skillC.unavailable || []).some((u) => u.option === o)
+        ? { name: skillName(o), from: 'уже есть' } : { name: skillName(o), on: skillC.selected?.includes(o) || undefined }))],
+  } : { title: 'Навыки', note: 'сначала выберите класс', list: [...fixedSkills].map(([k, from]) => ({ name: skillName(k), from })) };
+  const langCs = ev.choices.filter((c) => c.kind === 'language');
+  const langNeed = langCs.reduce((s, c) => s + c.count, 0), langHave = langCs.reduce((s, c) => s + (c.selected?.length || 0), 0);
+  const knownLangs = new Set(ev.grants.filter((g) => g.kind === 'language').map((g) => g.value));
+  const backgroundLangs = {
+    title: `Языки: ещё ${langNeed}`, note: `выбрано ${langHave} из ${langNeed}`,
+    list: [...[...knownLangs].map((l) => ({ name: LANG_RU[l] || l, from: 'уже есть' })),
+      ...Object.keys(LANG_RU).filter((l) => !knownLangs.has(l) && langCs.some((c) => c.options?.includes(l))).map((l) => ({ name: LANG_RU[l], on: langCs.some((c) => c.selected?.includes(l)) || undefined }))],
+  };
+
+  // Снаряжение
+  const groups = equipmentGroups(ix, ev);
+  const equipment = {
+    modes: [{ id: 'kit', name: 'Набор класса и предыстории' }],
+    groups: groups.map((g) => ({ title: g.title, note: g.alts.filter((a) => !a.unavailable).length > 1 ? `одно из ${g.alts.filter((a) => !a.unavailable).length}` : 'без выбора', options: g.alts.filter((a) => !a.unavailable).map((a) => {
+      const on = a.id === g.selected, cur = on ? g.choice.selected?.picks : a.picks;
+      // Выпадающие списки — только у выбранного варианта и только если есть из чего выбрать.
+      const pick = on ? a.choose.flatMap((c, item) => (c && c.list.length > 1 ? Array.from({ length: c.slots }, (_, slot) => ({ item, slot, label: c.label, list: c.list, value: cur?.[item]?.[slot] || '' })) : [])) : [];
+      return { id: a.id, name: a.name, sub: on && !pick.length ? '' : '', icon: 'bag', on: on || undefined, pick };
+    }) })),
+    always: [],
+    gave: [di?.equipment?.currency?.gp ? `${di.equipment.currency.gp} зм` : 'Стартовое снаряжение класса и предыстории'],
+  };
+  equipment.always = Object.entries(di?.equipment?.currency || {}).filter(([, v]) => v).map(([k, v]) => ({ text: `${v} ${k === 'gp' ? 'зм' : k === 'sp' ? 'см' : k === 'cp' ? 'мм' : k}`, icon: 'bag' }));
+
+  // Заклинания
+  const sc = spellChoices(ev);
+  const tab = Math.min(st.tab, Math.max(0, sc.length - 1));
+  const curC = sc[tab];
+  const meta = (id) => { const p = ix.ref[id] || [], e = ix.spells.get(id); return [ix.schools[e?.school], p[1], p[0]].filter(Boolean).join(' · '); };
+  const list = curC ? optionsOf(curC, ev).map((id) => ({ name: spellName(ix, id), meta: meta(id), on: curC.selected?.includes(id) || undefined, conc: ix.spells.get(id)?.concentration || undefined, ritual: ix.spells.get(id)?.ritual || undefined, focus: spellName(ix, id) === st.focus || undefined })) : [];
+  const focusId = curC && optionsOf(curC, ev).find((id) => spellName(ix, id) === st.focus);
+  const spells = sc.length ? {
+    live: true,
+    progress: sc.map((c) => ({ label: choiceLabel(c), now: c.selected?.length || 0, max: c.count })),
+    tabs: sc.map(choiceLabel), tab, list,
+    detail: focusId ? { tag: `${ix.spells.get(focusId)?.level ? `${ix.spells.get(focusId).level} уровень` : 'Заговор'} · ${ix.schools[ix.spells.get(focusId)?.school] || ''}`, name: spellName(ix, focusId), text: (ix.ref[focusId] || []).slice(0, 4).filter(Boolean).join(' · ') }
+      : { tag: 'Заклинание', name: 'Выберите в списке', text: 'Нажмите на заклинание, чтобы взять его или убрать.' },
+    full: curC && (curC.selected?.length || 0) >= curC.count ? { title: `${choiceLabel(curC)}: выбрано ${curC.count} из ${curC.count}`, text: 'Чтобы взять другое, сначала уберите одно.', action: 'Понятно' }
+      : { title: curC ? `${choiceLabel(curC)}: ${curC.selected?.length || 0} из ${curC.count}` : '', text: 'Отмечайте заклинания в списке.', action: 'Понятно' },
+    gave: ['Заклинания попадут в лист вместе с ячейками'],
+  } : { live: true, progress: [], tabs: ['Без заклинаний'], tab: 0, list: [], detail: { tag: '', name: cls ? `${cls.name.ru}: заклинаний на старте нет` : 'Сначала выберите класс', text: '' }, full: { title: 'Шаг можно пропустить', text: 'Магия этого класса появится позже или её нет.', action: 'Понятно' }, gave: [] };
+
+  const look = { ...CREATION.look, name: d.identity.name || '', pronoun: st.look.pronoun || 'он', alignment: st.look.alignment || '', fields: CREATION.look.fields.map((f) => ({ ...f, value: st.look[f.id] || '' })), gave: ['Имя и мировоззрение попадут в лист'] };
+
+  const missing = [...ev.errors, ...(ev.missing || [])];
+  const stepOfMissing = (m) => (m.choiceId ? stepOfChoice(m.choiceId) : /abilit/.test(m.code) ? 'abilities' : /race/.test(m.code) ? 'race' : /class|level/.test(m.code) ? 'class' : /background/.test(m.code) ? 'background' : 'look');
+  const done = {
+    checks: [
+      { name: 'Раса', ok: !!raceId && !missing.some((m) => stepOfMissing(m) === 'race'), step: 'race' }, { name: 'Класс', ok: !!classId && !missing.some((m) => stepOfMissing(m) === 'class'), step: 'class' },
+      { name: 'Характеристики', ok: assigned === 6, step: 'abilities' }, { name: 'Предыстория', ok: !!bgId && !missing.some((m) => stepOfMissing(m) === 'background'), step: 'background' },
+      { name: 'Снаряжение', ok: !missing.some((m) => stepOfMissing(m) === 'equipment'), step: 'equipment' },
+      { name: 'Заклинания', ok: !missing.some((m) => stepOfMissing(m) === 'spells'), step: 'spells' },
+      { name: 'Имя', ok: !!d.identity.name, step: 'look' },
+    ],
+    note: campaignName ? `Герой сохранится в «Моих героях», а потом предложим привести его в «${campaignName}».` : 'Герой сохранится в «Моих героях» — в кампанию приведёте его потом, в любую, где играете.',
+  };
+
+  const rules = [`Старт: ${levels(st)} уровень`, `Характеристики: ${st.context.allowedAbilityMethods.map((m) => ({ point_buy: 'покупка очков', standard_array: 'стандартный набор', rolled: 'броски' }[m])).join(' или ')}`,
+    `Черты: ${st.context.optionalRules.feats ? 'включены' : 'выключены'}`, 'Книги: SRD 5.1', 'Снаряжение: стартовые наборы'];
+  const methodsRu = st.context.allowedAbilityMethods.map((m) => ({ point_buy: 'покупка очков', standard_array: 'стандартный набор', rolled: 'броски' }[m])).join(' или ');
+  const HINTS = {
+    race: ['Раса даёт прибавки к характеристикам, скорость и врождённые умения. Её выборы — под карточками.', 'Расы SRD 5.1', 'information-circle'],
+    class: ['Класс решает хиты, владения и магию. Подкласс, боевой стиль и другие выборы класса — под карточками.', `Кость хитов и спасброски — справа`, 'information-circle'],
+    abilities: ['Шесть чисел, из которых растут все броски. «Расставить как обычно» поставит большие значения в главные характеристики класса.', `Мастер разрешил: ${methodsRu}`, 'crown'],
+    background: ['Предыстория даёт навыки и языки. Здесь же — навыки класса и языки на выбор.', 'Навыки «от: …» уже есть', 'information-circle'],
+    equipment: ['Стартовые наборы класса и предыстории: в каждой группе один вариант.', 'Купленное позже появится в «Сумке» листа', 'information-circle'],
+    spells: ['Заговоры и заклинания на старте. Нажмите, чтобы взять или убрать; «Собрать за меня» возьмёт подходящие по алфавиту.', 'Ячейки появятся в листе сами', 'information-circle'],
+    look: ['Имя, мировоззрение и черты характера попадут в лист.', 'Портрет можно поменять за столом', 'information-circle'],
+  };
+  // ok — шаг без пропущенных выборов (у пройденного шага с пропуском вместо ✓ будет «!»).
+  const steps = CREATION.steps.map((x) => ({ ...(HINTS[x.id] ? { ...x, hint: HINTS[x.id][0], tip: HINTS[x.id][1], tipIcon: HINTS[x.id][2] } : x), ok: done.checks.find((c) => c.step === x.id)?.ok ?? true }));
+  return {
+    ...CREATION, steps, live: true, status: ev.status, missing,
+    campaign: { name: campaignName || 'кампании', level: levels(st), rules },
+    selected: { race: tail(raceId) || null, class: tail(classId) || null, background: tail(bgId) || null, abMode: METHOD_UI[method] },
+    extra: extraBoxes(ix, ev), races, classes, abilities, backgrounds, backgroundSkills, backgroundLangs, equipment, spells, look, done,
+    raceGave: raceId ? { [tail(raceId)]: [raceSub(ix.defs.get(raceId)), ...(Number.isFinite(di?.speed) ? [`Скорость ${di.speed} фт`] : [])] } : {},
+    classGave: classId ? { [tail(classId)]: [`Кость хитов к${cls.class.hitDie}`, `Спасброски: ${cls.class.savingThrows.map((k) => ABILITIES.find((a) => a.id === k)?.name).join(', ')}`] } : {},
+    backgroundGave: [...fixedSkills.keys()].length ? [`Навыки: ${[...fixedSkills.keys()].map(skillName).join(', ')}`] : ['Навыки и языки предыстории'],
+    userName,
+  };
+}
+
+/** Живой лист справа: { name, summary, stats, facts }. */
+export function creationLiveModel(ix, st) {
+  const ev = evaluate(ix, st), d = st.draft, di = ev.derivedInputs;
+  const cls = ix.defs.get(d.levelHistory[0]?.classId), race = ix.defs.get(d.ancestry.raceId);
+  const hp = di ? creationHitPoints({ ...di.hitPointInputs, constitution: di.abilityScores?.con }) : null;
+  const skills = di?.proficiencies?.skills || [];
+  return {
+    name: d.identity.name || 'Новый герой',
+    summary: [race?.name.ru, cls ? `${cls.name.ru} ${levels(st)}` : ''].filter(Boolean).join(' · ') || 'Начните с расы',
+    stats: ABILITIES.map((a) => { const s = di?.abilityScores?.[a.id]; return { short: a.short, mod: Number.isInteger(s) ? signed(mod(s)) : '—', score: Number.isInteger(s) ? s : '—' }; }),
+    facts: [
+      ['Скорость', Number.isFinite(di?.speed) ? `${di.speed} фт` : undefined],
+      ['Хиты', Number.isInteger(hp) ? String(hp) : undefined],
+      ['Мастерство', di?.proficiencyBonus ? signed(di.proficiencyBonus) : undefined],
+      ['Навыки', skills.length ? skills.map(skillName).join(', ') : undefined],
+      ['Языки', di?.languages?.length ? di.languages.map((l) => LANG_RU[l] || l).join(', ') : undefined],
+      ['Заклинания', di?.spells?.length ? `${di.spells.length}` : undefined],
+    ],
+  };
+}
+
+const gears = new WeakMap();
+const gearOf = (ix) => { if (!gears.has(ix)) gears.set(ix, gearIndex(ix.cats.equipment)); return gears.get(ix); };
+/** Итог «Герой готов» для экрана 53. */
+export function creationDoneModel(ix, st) {
+  const ev = evaluate(ix, st), di = ev.derivedInputs, live = creationLiveModel(ix, st);
+  const cls = ix.defs.get(st.draft.levelHistory[0]?.classId);
+  const hp = di ? creationHitPoints({ ...di.hitPointInputs, constitution: di.abilityScores?.con }) : null;
+  const dex = di?.abilityScores?.dex, prof = di?.proficiencyBonus;
+  const saves = new Set(cls?.class?.savingThrows || []);
+  const castAb = cls?.class?.spellcasting?.ability, castMod = castAb && Number.isInteger(di?.abilityScores?.[castAb]) ? mod(di.abilityScores[castAb]) : null;
+  // КД — по выбранному стартовому снаряжению (доспех, щит, Защита без доспехов), как его посчитает лист (gear.js).
+  const mods = Object.fromEntries(ABILITIES.map((a) => [a.id, Number.isInteger(di?.abilityScores?.[a.id]) ? mod(di.abilityScores[a.id]) : 0]));
+  const items = (di?.equipment?.items || []).map((it, i) => ({ id: `eq-${i}`, ref: it.ref, quantity: it.quantity }));
+  const ac = Number.isInteger(dex) ? armorClass(wornItems(items, gearOf(ix)), mods, [tail(cls?.id)], draftPerks(di)) : null;
+  return {
+    name: live.name, line: [live.summary, ix.defs.get(st.draft.background.backgroundId)?.name.ru, st.look.alignment].filter(Boolean).join(' · '),
+    art: cls ? `assets/hero/class-${tail(cls.id)}.webp` : 'assets/hero/race-human.webp',
+    facts: [
+      { label: 'Хиты', value: Number.isInteger(hp) ? String(hp) : '—', sub: cls ? `к${cls.class.hitDie} за уровень` : '' },
+      { label: 'Класс доспеха', value: ac ? String(ac.value) : '—', sub: ac?.note || 'без доспехов' },
+      { label: 'Инициатива', value: Number.isInteger(dex) ? signed(mod(dex)) : '—', sub: 'Ловкость' },
+      ...(castMod !== null && prof ? [{ label: 'Сл заклинаний', value: String(8 + prof + castMod), sub: `атака ${signed(prof + castMod)}` }] : []),
+      { label: 'Скорость', value: Number.isFinite(di?.speed) ? `${di.speed} фт` : '—', sub: 'ходьба' },
+    ],
+    abilities: ABILITIES.map((a, k) => { const s = di?.abilityScores?.[a.id]; return { ...live.stats[k], name: a.name, save: Number.isInteger(s) ? signed(mod(s) + (saves.has(a.id) ? prof || 0 : 0)) : '—', saveProf: saves.has(a.id) }; }),
+    status: ev.status, missing: [...ev.errors, ...(ev.missing || [])].map((m) => m.message),
+  };
+}
+
+/** Данные листа для команды создания. IDs сохраняются в состоянии: повтор после обрыва шлёт тот же запрос. */
+export function creationCharacter(ix, st, { newId = () => crypto.randomUUID(), userId = null } = {}) {
+  const ev = evaluate(ix, st);
+  if (ev.status !== 'valid') { const e = new Error('Сборка не закончена'); e.missing = [...ev.errors, ...(ev.missing || [])]; throw e; }
+  const res = toCharacterData(ev, st.draft, ix.cats, { ids: st.ids, makeId: () => newId() }, PORTS);
+  st.ids = res.ids;
+  st.characterId ||= newId(); st.operationId ||= newId();
+  const data = { ...res.data, alignment: st.look.alignment || res.data.alignment || '' };
+  // Черты с шага «Образ» — в личность героя (пустые не пишем).
+  const personality = Object.fromEntries(['traits', 'ideals', 'bonds', 'flaws'].map((k) => [k, String(st.look[k] ?? '').trim()]).filter(([, v]) => v));
+  if (Object.keys(personality).length) data.personality = personality;
+  // Образ правят и после неудачной отправки: другой запрос — другой ID операции, иначе сервер откажет.
+  const lookSig = JSON.stringify([data.alignment, data.personality ?? null]);
+  if (st.lookSig && st.lookSig !== lookSig) st.operationId = newId();
+  st.lookSig = lookSig;
+  return { characterId: st.characterId, operationId: st.operationId, data, ownerId: userId };
+}
+
+// ——— Быстрый герой ———
+export const quickClass = (role, talk) => ({
+  front: talk === 'fist' ? 'barbarian' : talk === 'word' ? 'paladin' : 'fighter', range: 'ranger',
+  magic: talk === 'word' ? 'sorcerer' : talk === 'trick' ? 'warlock' : 'wizard', heal: talk === 'word' ? 'bard' : talk === 'fist' ? 'druid' : 'cleric',
+  shadow: talk === 'fist' ? 'monk' : 'rogue',
+}[role] || 'fighter');
+// Раса — из подходящих классу (прибавка к главной характеристике), с уклоном второго ответа: кулак — полуорк и дварф,
+// слово — полуэльф и драконорождённый, хитрость — полурослик и тифлинг, знание — гном и эльф (#203, аудит C3).
+const QUICK_FIT = {
+  barbarian: ['half-orc', 'dragonborn', 'human', 'dwarf'], fighter: ['human', 'half-orc', 'dragonborn', 'dwarf', 'halfling', 'elf'], paladin: ['dragonborn', 'half-elf', 'human', 'half-orc'],
+  ranger: ['elf', 'halfling', 'human', 'half-elf', 'dwarf'], wizard: ['gnome', 'elf', 'tiefling', 'human'], sorcerer: ['tiefling', 'half-elf', 'dragonborn', 'human', 'gnome'],
+  warlock: ['tiefling', 'half-elf', 'human', 'halfling', 'gnome'], cleric: ['dwarf', 'human', 'half-elf', 'half-orc', 'elf'], bard: ['half-elf', 'tiefling', 'halfling', 'human', 'gnome'],
+  druid: ['elf', 'dwarf', 'human', 'half-orc', 'gnome'], rogue: ['halfling', 'elf', 'tiefling', 'human'], monk: ['elf', 'halfling', 'human', 'dwarf'],
+};
+const QUICK_TALK_RACE = { fist: ['half-orc', 'dwarf', 'dragonborn'], word: ['half-elf', 'dragonborn', 'human'], trick: ['halfling', 'tiefling'], book: ['gnome', 'elf', 'human'] };
+const quickRace = (cls, talk) => { const fit = QUICK_FIT[cls] || ['human']; return fit.find((r) => (QUICK_TALK_RACE[talk] || []).includes(r)) || fit[0]; };
+// Навыки по второму ответу — те, что класс разрешает, раньше остальных.
+const QUICK_SKILLS = {
+  fist: ['athletics', 'intimidation', 'survival', 'perception', 'animal'], word: ['persuasion', 'insight', 'performance', 'deception', 'medicine'],
+  trick: ['deception', 'sleight', 'stealth', 'acrobatics', 'perception'], book: ['history', 'investigation', 'arcana', 'religion', 'nature', 'medicine'],
+};
+const SKILL_ID = Object.fromEntries(SKILLS.map((s) => [s.name, s.id]));
+const byTalk = (list, talk, key) => { const want = QUICK_SKILLS[talk] || []; const rank = (x) => { const i = want.indexOf(key(x)); return i < 0 ? 99 : i; }; return [...list].sort((a, b) => rank(a) - rank(b)); };
+const full = (b) => !b || /выбрано (\d+) из \1/.test(b.note);
+/**
+ * Быстрый герой (89–90, #203): ответы { role, talk, name } → новый черновик кампании campaign. Класс — по обоим
+ * ответам, раса — подходящая классу с уклоном второго ответа, навыки класса и расы — сначала обещанные вторым ответом,
+ * остальные выборы — первые подходящие, характеристики — стандартный набор под класс.
+ */
+export function quickCreation(ix, { campaign = null, userId = 'me', answers = {}, newId } = {}) {
+  const next = newCreation(ix, { campaign, userId, ...(newId ? { newId } : {}) });
+  const ch = (x) => applyCreationChoice(ix, next, x);
+  const m = () => creationModel(ix, next);
+  const cls = quickClass(answers.role, answers.talk);
+  ch({ step: 'race', id: quickRace(cls, answers.talk) }); ch({ step: 'class', id: cls }); ch({ step: 'background', id: m().backgrounds[0]?.id || 'acolyte' }); const quickAuto = () => ch({ step: 'abilities', id: 'auto', value: cls === 'rogue' && answers.talk === 'book' ? ['dex', 'int', 'con'] : undefined });
+  quickAuto();
+  // Компетентности нужны навыки: что не заполнилось сейчас, заполнится вторым проходом, после навыков.
+  const fillExtras = () => { const stuck = new Set(); for (let i = 0; i < 40; i += 1) {
+    const box = [...m().extra.race, ...m().extra.class].find((b) => !full(b) && !stuck.has(b.choiceId)); if (!box) break;
+    // Свободные прибавки расы — в главные характеристики класса, а не в первые строки списка.
+    const main = PRIORITY[cls] || [], rank = (x) => { const i = main.indexOf(String(x.value).replace(/^asi[12]:/, '')); return i < 0 ? 99 : i; };
+    const asi = /^Улучшение/.test(box.title);
+    const list = asi ? box.list.filter((x) => x.value.startsWith('asi2:')).sort((a, b) => rank(a) - rank(b)).slice(0, 1)
+      : box.list.every((x) => ABILITIES.some((a) => a.id === x.value)) ? [...box.list].sort((a, b) => rank(a) - rank(b)) : byTalk(box.list, answers.talk, (x) => x.value);
+    for (const it of list) { if (full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) break; ch({ step: 'class', id: 'extra', value: `${box.choiceId}|${it.value}` }); }
+    if (!full([...m().extra.race, ...m().extra.class].find((x) => x.choiceId === box.choiceId))) stuck.add(box.choiceId);
+  } };
+  fillExtras();
+  quickAuto(); // прибавки расы уже известны: раскладка с их учётом
+  for (const s of byTalk(m().backgroundSkills?.list?.filter((x) => !x.from) || [], answers.talk, (x) => SKILL_ID[x.name])) if (!full(m().backgroundSkills)) ch({ step: 'background', id: 'skill', value: s.name });
+  fillExtras();
+  for (const l of m().backgroundLangs?.list?.filter((x) => !x.from) || []) { if (full(m().backgroundLangs)) break; ch({ step: 'background', id: 'lang', value: l.name }); }
+  for (const g of m().equipment?.groups || []) ch({ step: 'equipment', id: 'eq', value: `${g.title}|${g.options[0].name}` });
+  ch({ step: 'spells', id: 'auto' });
+  if (answers.name) ch({ step: 'look', id: 'name', value: answers.name });
+  return next;
+}

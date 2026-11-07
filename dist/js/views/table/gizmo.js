@@ -5,7 +5,7 @@ import { icon } from '../../icons.js';
 import { gridSize } from '../../rules/geometry.js';
 import { sizeById } from '../../data/rules.js';
 import { menu, closePopover } from '../../ui/kit.js';
-import { deleteTokens, duplicateTokens, tokenSettings, contextMenu } from './p-token.js';
+import { deleteTokens, duplicateTokens, tokenSettings, contextMenu, renameOwn, renameHeroOnMap } from './p-token.js';
 
 export const SCALE_MIN = 0.25, SCALE_MAX = 8;
 
@@ -41,7 +41,8 @@ function rights(ctx, t) {
   return {
     master,
     rot: !t.locked && (master || ctx.canControl(t)),
-    size: !t.locked && (master || ctx.isMine(t)),
+    size: !t.locked && (master || ctx.isMine(t) || ctx.owns(t)),
+    own: !master && ctx.owns(t), // свой токен и призыв игрока (TASK-183): имя и удаление
   };
 }
 
@@ -55,7 +56,7 @@ export function renderGizmo(L, ctx) {
   const r = rights(ctx, t);
   const look = tokenLook(ctx, t);
   const d = tokenDiameter(ctx, t);
-  const p = ctx.posOf(t);
+  const p = ctx.viewPosOf ? ctx.viewPosOf(t) : ctx.posOf(t);
   const s = gridSize(ctx.scene.grid);
   const gz = ctx.ui.gz?.id === t.id ? ctx.ui.gz : null;
   const val = gz ? (gz.mode === 'rot' ? `${Math.round(look.rot)}°` : fmtFt(baseFeet(ctx.scene, t) * look.scale)) : '';
@@ -65,12 +66,17 @@ export function renderGizmo(L, ctx) {
       btn('lock', t.locked ? 'square-lock-02' : 'square-unlock-02', t.locked ? 'Снять замок' : 'Закрепить — никто не сдвинет', t.locked ? 'on' : ''),
       t.locked ? '' : btn('layer', 'layers-01', 'Слой: поверх или под всеми'),
       t.locked || t.characterId ? '' : btn('dup', 'copy-01', 'Дублировать'),
-      t.locked || t.characterId ? '' : btn('name', 'text-font', 'Имя на карте'),
+      t.locked ? '' : btn('name', 'text-font', 'Имя на карте'),
       t.locked ? '' : btn('del', 'delete-02', 'Удалить', 'danger'),
       btn('more', 'more-vertical', 'Ещё'),
     ].join('')
-    : btn('layer', 'layers-01', 'Слой: поверх или под всеми') + btn('more', 'more-vertical', 'Ещё');
-  const sig = [t.id, r.rot, r.size, r.master, t.locked, !!t.characterId].join('|');
+    : [
+      t.locked ? '' : btn('layer', 'layers-01', 'Слой: поверх или под всеми'), // закреплённый сервер двигать не даст
+      r.own || ctx.isMine(t) ? btn('name', 'text-font', 'Имя на карте') : '', // у своего героя — короткое имя на карте (mapName)
+      r.own ? btn('del', 'delete-02', 'Удалить', 'danger') : '',
+      btn('more', 'more-vertical', 'Ещё'),
+    ].join('');
+  const sig = [t.id, r.rot, r.size, r.master, r.own, t.locked, !!t.characterId, ctx.isMine(t)].join('|');
   if (box.dataset.sig !== sig) {
     box.innerHTML = `<div class="gz">
       <div class="gz-ring"></div>
@@ -159,6 +165,8 @@ export function attachGizmo(L, ctx) {
       { icon: 'send-to-back', label: 'Под всеми', onClick: () => put({ movedAt: -Date.now() }, 'Вниз') },
     ], anchor, { placement: 'bottom' });
     if (k === 'dup') duplicateTokens(ctx, [t.id]);
+    if (k === 'name' && t.characterId) { renameHeroOnMap(ctx, t.id, anchor); return; }
+    if (k === 'name' && !ctx.isMasterView) { renameOwn(ctx, t.id); return; }
     if (k === 'name') { tokenSettings(ctx, t.id, anchor); setTimeout(() => document.querySelector('.popover [data-name]')?.select(), 40); }
     if (k === 'del') { closePopover(); deleteTokens(ctx, [t.id]); }
     if (k === 'more') contextMenu(ctx, { kind: 'token', id: t.id }, { x: t.x, y: t.y }, anchor);

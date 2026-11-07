@@ -2,14 +2,14 @@
 import { html, raw, esc, el, plural, $ } from '../core/dom.js';
 import { icon } from '../icons.js';
 import { getDB, commit, onlineUsers, isServerMode } from '../core/store.js';
-import { serverAllowed, setMode } from '../server/config.js';
+import { serverAllowed, setMode, guestAllowed } from '../server/config.js';
 import { currentUser, signIn, signOut } from '../core/auth.js';
 import { srcOf, BUILTIN_MAP_LIST, storeImage } from '../core/assets.js';
 import { campaignsFor, membership, roleIn, userById, characterOf } from '../core/campaign.js';
 import { modal, panelHeader, toast, userAvatar, portrait, menu, confirmDialog } from '../ui/kit.js';
-import { newCampaign, makeCharacter, DEMO_USERS, seedDB } from '../data/demo.js';
-import { CLASSES, RACES, classById, raceById } from '../data/rules.js';
+import { newCampaign, DEMO_USERS, seedDB } from '../data/demo.js';
 import { replaceDB } from '../core/store.js';
+import { heroAc } from '../rules/hero-derived.js';
 import { freeSpots } from '../rules/geometry.js';
 import { creaturesPage, bindCreatures } from './creatures.js';
 
@@ -25,10 +25,27 @@ export const go = (path) => {
 
 const d20 = raw(`<svg class="d20" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="dg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3e8d2"/><stop offset=".55" stop-color="#d9c49c"/><stop offset="1" stop-color="#9a7f55"/></linearGradient></defs><path d="M50 4 90 27v46L50 96 10 73V27z" fill="url(#dg)"/><path d="M50 4 72 46H28zM28 46 50 96 72 46M10 27l18 19M90 27 72 46M10 73l18-27M90 73 72 46" fill="none" stroke="#9a7f55" stroke-width="1.5" opacity=".8"/><path d="M28 46h44L50 82z" fill="#f3e8d2" opacity=".55"/><text x="50" y="64" text-anchor="middle" font-family="Unbounded, sans-serif" font-weight="600" font-size="20" fill="#2b1e15">20</text></svg>`);
 
-function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
+export function logoButton(cls = '') { return raw(`<span class="logo-btn ${cls}"><img src="assets/logo.webp" alt=""></span>`); }
 
 function partyStrip(ids = ['elian', 'mira', 'lira', 'torin', 'garr'], names = ['Элиан', 'Мира', 'Лира', 'Торин', 'Гарр'], me = 'lira') {
   return raw(ids.map((id, i) => `<div class="ptoken ${id === me ? 'me' : ''}"><div class="ring"><img src="${srcOf(id)}" alt=""></div><span class="np">${esc(names[i])}</span></div>`).join(''));
+}
+
+// ——— Вход гостем (#194, вариант А): ник без Discord, только по ссылке ?guest=1 и только на сервере ———
+const guestBlock = () => html`<form class="guest-login" data-guest-form>
+    <div class="guest-or"><span>или для тестовой партии</span></div>
+    <div class="row"><div class="input grow">${raw(icon('user', 18))}<input data-guest-name maxlength="40" autocomplete="nickname" placeholder="Ник гостя" aria-label="Ник гостя"></div><button class="btn btn-secondary" type="submit" data-guest>Войти гостем</button></div>
+    <p class="fineprint">Гостевой вход — только на время тестов, до публичного запуска его уберём.</p>
+  </form>`;
+function bindGuest(root, returnHash) {
+  const f = root.querySelector('[data-guest-form]'); if (!f) return;
+  const inp = f.querySelector('[data-guest-name]');
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const b = f.querySelector('[data-guest]'); b.disabled = true;
+    try { await (await server()).signInAsGuest(inp.value, returnHash); location.reload(); }
+    catch (err) { b.disabled = false; inp.focus(); toast({ title: 'Не получилось войти гостем', body: err.message, icon: 'alert-circle' }); }
+  });
 }
 
 // ——— Вход ———
@@ -41,10 +58,11 @@ export function mountLogin(root, { onSignedIn, message = null }) {
         <div class="login-party">${partyStrip()}</div>
         <div class="login-card">
           ${logoButton()}
-          <h1>Распутье</h1>
+          <h1>Drop Dice</h1>
           <p class="sub">Стол для D&amp;D 5e (2014): карта, листы героев и кубы в одной вкладке</p>
           ${message ? html`<p class="t-sm negative" role="alert">${message}</p>` : ''}
           <button class="btn btn-lg btn-discord btn-block" data-login>${raw(icon('discord', 20))}Войти через Discord</button>
+          ${real && guestAllowed() ? guestBlock() : ''}
           ${real
             ? html`<button class="btn btn-ghost btn-block" data-sandbox>Попробовать без входа</button><p class="fineprint">Возьмём только ник и аватар. Пароли не нужны. Без входа — песочница: всё живёт только в этом браузере.</p>`
             : html`<p class="fineprint">Возьмём только ник и аватар. Пароли не нужны.</p>${serverAllowed() ? html`<button class="btn btn-ghost btn-sm" data-real style="align-self:center">Это песочница · войти по-настоящему</button>` : ''}`}
@@ -61,6 +79,7 @@ export function mountLogin(root, { onSignedIn, message = null }) {
   });
   root.querySelector('[data-sandbox]')?.addEventListener('click', toSandbox);
   root.querySelector('[data-real]')?.addEventListener('click', toServer);
+  if (real) bindGuest(root, location.hash.startsWith('#/join/') ? location.hash : '#/campaigns');
   return {};
 }
 
@@ -86,12 +105,12 @@ export function openOAuth(onDone, { hint } = {}) {
   const accounts = [...demo, ...extra];
   const body = el(`<div class="oauth" role="document">
     <div class="oauth-top"><span class="app"><img src="assets/logo.webp" alt=""></span><span class="dots">• • •</span><span class="me">${icon('discord', 34)}</span></div>
-    <h3>Распутье хочет получить доступ к вашему аккаунту Discord</h3>
+    <h3>Drop Dice хочет получить доступ к вашему аккаунту Discord</h3>
     <div class="who">Выберите аккаунт для входа</div>
     <div class="sect">
       <div class="accounts">${accounts.map((u) => `<button class="acc" data-u="${esc(u.id)}" aria-pressed="${u.id === pick}">${userAvatar(u, '')}<span>${esc(u.name)}</span><small>@${esc(u.handle || u.name)}</small></button>`).join('')}</div>
       <div class="custom"><input data-nick placeholder="Или другой ник…" maxlength="32"></div>
-      <div class="label">Это позволит «Распутью»</div>
+      <div class="label">Это позволит Drop Dice</div>
       <div class="scope">${icon('tick-02', 18)}Узнать ваш ник и аватар</div>
       <div class="scope">${icon('tick-02', 18)}Ничего не публиковать от вашего имени</div>
     </div>
@@ -116,16 +135,31 @@ export function openOAuth(onDone, { hint } = {}) {
   nick.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok(); });
 }
 
-// ——— Шапка ———
-function appHeader(user) {
+// ——— Шапка ——— (экраны героя тоже берут её: views/hero/index.js)
+/** Шапка экранов вне стола. active — раздел навигации: campaigns | heroes | workshop | ref (#203); false — без навигации. */
+export function appHeader(user, active = null) {
   return html`<header class="app-header">
-    <a class="brand" href="#/campaigns">${logoButton()}<span>Распутье</span></a>
+    <a class="brand" href="#/campaigns">${logoButton()}<span>Drop Dice</span></a>
     <span class="spacer"></span>
-    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? 'через Discord' : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
+    ${active === false ? '' : appNav(user, active)}
+    <button class="user-pill" data-user>${userAvatar(user, 'sm')}<span class="who"><b>${user.name}</b><small>${isServerMode() ? (user.provider === 'guest' ? 'гость · тестовая партия' : 'через Discord') : 'песочница · демо'}</small></span>${raw(icon('logout-01', 18))}</button>
   </header>`;
 }
 
-function bindHeader(root, user) {
+/** Навигация (#203): один ряд, одно место — один путь. Карты и свои существа живут в «Мастерской» — она видна тому, кто ведёт кампанию. */
+export function appNav(user, active) {
+  const leads = campaignsFor(user.id).some((c) => roleIn(c, user.id) === 'master');
+  const tabs = [['campaigns', 'Кампании', '#/campaigns'], ['heroes', 'Герои', '#/heroes'], leads || active === 'workshop' ? ['workshop', 'Мастерская', '#/maps'] : null, ['ref', 'Справочник', '#/ref']].filter(Boolean);
+  return html`<nav class="app-nav" aria-label="Разделы">${tabs.map(([id, label, href]) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`)}</nav>`;
+}
+
+/** Заголовок «Мастерской»: крупные слова-вкладки «Карты · Существа» вместо второго ряда кнопок. */
+export function workshopSwitch(active) {
+  const a = (id, href, label) => html`<a href="${href}" ${active === id ? raw('aria-current="page"') : ''}>${label}</a>`;
+  return html`<nav class="page-switch" aria-label="Мастерская">${a('maps', '#/maps', 'Карты')}${a('creatures', '#/creatures', 'Существа')}</nav>`;
+}
+
+export function bindHeader(root, user) {
   root.querySelector('[data-user]')?.addEventListener('click', (e) => {
     if (isServerMode()) {
       menu([
@@ -155,34 +189,8 @@ export async function resetDemo() {
 }
 
 // ——— Кампании ———
-/** Вкладки главной — ссылки, открываются и в новой вкладке (TASK-096). Адреса #/characters и #/creatures (TASK-175) обрабатывает этот же экран. */
+/** Адреса #/characters (теперь ведёт на #/heroes) и #/creatures (TASK-175, «Мастерская · Существа») обрабатывает этот же экран. */
 const homeTab = () => (/^#\/characters\b/.test(location.hash) ? 'characters' : /^#\/creatures\b/.test(location.hash) ? 'creatures' : 'campaigns');
-function homeTabs(active) {
-  return html`<nav class="tabs home-tabs" aria-label="Разделы"><a class="tab" href="#/campaigns" aria-selected="${active === 'campaigns'}">Кампании</a><a class="tab" href="#/characters" aria-selected="${active === 'characters'}">Мои персонажи</a><a class="tab" href="#/creatures" aria-selected="${active === 'creatures'}">Существа</a></nav>`;
-}
-
-/** Герои пользователя из всех кампаний; у мастера — ещё герои его кампаний. Карточка открывает лист (TASK-096). */
-function charactersPage(user) {
-  const mine = [], led = [];
-  for (const c of campaignsFor(user.id)) {
-    const m = membership(c, user.id);
-    for (const ch of c.characters) {
-      if (ch.ownerId === user.id || (m?.role === 'player' && m.characterId === ch.id)) mine.push({ c, ch });
-      else if (m?.role === 'master') led.push({ c, ch });
-    }
-  }
-  const card = ({ c, ch }) => {
-    const owner = ch.ownerId && ch.ownerId !== user.id ? userById(ch.ownerId)?.name : null;
-    const sub = [ch.className || classById(ch.classId)?.name, ch.level ? `${ch.level} ур.` : '', ch.raceName || raceById(ch.raceId)?.name].filter(Boolean).join(' · ');
-    return html`<a class="char-card" href="#/c/${c.id}/sheet/${encodeURIComponent(ch.id)}">${portrait(ch.portrait, 'lg hero', ch.name)}
-      <span class="cc-text"><b>${ch.name}</b><small>${sub}</small><small class="cc-camp">${c.name}${owner ? ` · играет ${owner}` : ''}</small></span></a>`;
-  };
-  const section = (title, items) => (items.length ? html`<section class="char-section"><h3>${title}</h3><div class="char-cards">${items.map(card)}</div></section>` : '');
-  if (!mine.length && !led.length) {
-    return html`<div class="empty-hero">${d20}<h2>Героев пока нет</h2><p>Герой появится, когда вы выберете или создадите его в кампании.<br>Мастер увидит здесь героев своих игроков.</p></div>`;
-  }
-  return html`${section('Мои герои', mine)}${section('Герои в моих кампаниях', led)}`;
-}
 
 export function mountCampaigns(root) {
   let filter = 'all';
@@ -190,27 +198,23 @@ export function mountCampaigns(root) {
     const user = currentUser();
     if (homeTab() === 'creatures') {
       const { tools, body } = creaturesPage(user);
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-        <main class="page lib-page"><div class="title-row">${homeTabs('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
+      root.innerHTML = String(html`<div class="screen">${appHeader(user, 'workshop')}
+        <main class="page page-wide lib-page"><div class="title-row page-head">${workshopSwitch('creatures')}${raw(tools)}</div>${raw(body)}</main></div>`);
       bindHeader(root, user);
       bindCreatures(root, user, render);
       return;
     }
-    if (homeTab() === 'characters') {
-      root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-        <main class="page"><div class="title-row">${homeTabs('characters')}</div>${charactersPage(user)}</main></div>`);
-      bindHeader(root, user);
-      return;
-    }
+    // Старый список героев (TASK-096) заменён экраном «Герои» (#/heroes, #203): старые ссылки ведут туда.
+    if (homeTab() === 'characters') { location.replace('#/heroes'); return; }
     const list = campaignsFor(user.id);
     const mine = list.filter((c) => roleIn(c, user.id) === 'master').length;
     const play = list.filter((c) => membership(c, user.id)?.role === 'player').length;
     const shown = list.filter((c) => filter === 'all' || (filter === 'master' ? roleIn(c, user.id) === 'master' : membership(c, user.id)?.role === 'player'));
-    root.innerHTML = String(html`<div class="screen">${appHeader(user)}
-      <main class="page">
+    root.innerHTML = String(html`<div class="screen">${appHeader(user, 'campaigns')}
+      <main class="page page-wide">
         ${list.length ? html`
-          <div class="title-row">
-            ${homeTabs('campaigns')}
+          <div class="title-row page-head">
+            <h1>Кампании</h1>
             <button class="chip chip-md" data-f="all" aria-pressed="${filter === 'all'}">Все · ${list.length}</button>
             <button class="chip chip-md" data-f="master" aria-pressed="${filter === 'master'}">Веду · ${mine}</button>
             <button class="chip chip-md" data-f="player" aria-pressed="${filter === 'player'}">Играю · ${play}</button>
@@ -219,7 +223,7 @@ export function mountCampaigns(root) {
             <button class="btn btn-primary" data-new>${raw(icon('plus-sign', 18))}Новая кампания</button>
           </div>
           <div class="cards">${shown.map((c) => campaignCard(c, user))}${filter !== 'player' ? html`<button class="new-card" data-new>${raw(icon('plus-sign', 24))}<span>Новая кампания</span></button>` : ''}</div>`
-        : html`<div class="title-row">${homeTabs('campaigns')}</div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
+        : html`<div class="title-row page-head"><h1>Кампании</h1></div><div class="empty-hero">${d20}<h2>Пока ни одной кампании</h2><p>Создайте свою и позовите друзей ссылкой —<br>или попросите ссылку у мастера, если вас позвали играть.</p>
             <div class="row"><button class="btn btn-primary btn-lg" data-new>${raw(icon('plus-sign', 18))}Создать кампанию</button><button class="btn btn-secondary btn-lg" data-paste>${raw(icon('link-01', 18))}У меня есть ссылка</button></div></div>`}
       </main></div>`);
     bindHeader(root, user);
@@ -244,20 +248,20 @@ function campaignCard(c, user) {
     ? `${c.characters.length} ${plural(c.characters.length, 'герой', 'героя', 'героев')} · ${c.scenes.length} ${plural(c.scenes.length, 'сцена', 'сцены', 'сцен')}${c.status === 'draft' ? ' · черновик' : ''}`
     : m?.status === 'pending' ? `Ведёт ${master?.name || '—'} · ждёт одобрения` : `Ведёт ${master?.name || '—'}${myChar ? ` · вы играете ${myChar.name}` : ''}`;
   // Ссылка, а не кнопка: карточку можно открыть в новой вкладке (TASK-094).
-  return html`<a class="camp-card ${live ? 'live' : ''}" href="#/c/${c.id}">
+  return html`<a class="camp-card ${live ? 'live' : ''}" href="${m?.status === 'active' && (isMaster || m.characterId) ? `#/camp/${c.id}` : `#/c/${c.id}`}">
     <div class="cover" style="background-image:url(${srcOf(c.cover)})"><div class="chips"><span class="chip">${isMaster ? 'Мастер' : 'Игрок'}</span>${live ? html`<span class="chip live"><i class="dot"></i>Сессия идёт</span>` : ''}</div></div>
     <div class="body"><div class="name">${c.name}</div><div class="meta">${meta}</div></div>
     <div class="footer"><span class="avatar-stack">${heroes.map((h) => portrait(h.portrait, 'sm hero', h.name))}</span><span class="btn btn-sm ${live && !isMaster ? 'btn-primary' : 'btn-secondary'}">${isMaster ? 'Открыть' : 'Войти'}</span></div>
   </a>`;
 }
 
-function pasteInvite() {
+export function pasteInvite() {
   const m = modal(html`${panelHeader('Вставить приглашение', 'Ссылка или код от мастера')}
     <div class="panel-section"><div class="input">${raw(icon('link-01', 18))}<input data-v placeholder="rasputye.vercel.app/#/join/RSP-7Q2K или RSP-7Q2K" autofocus></div>${isServerMode() ? '' : html`<p class="t-sm tertiary">Для проверки: код демо-кампании — RSP-7Q2K</p>`}</div>
     <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Открыть</button></div>`);
   const submit = () => {
     const v = m.box.querySelector('[data-v]').value.trim();
-    const code = (v.match(/RSP-[A-Z0-9]{4}/i) || [])[0];
+    const code = (v.match(/RSP-[A-Z0-9]{4,8}/i) || [])[0];
     if (!code) { m.box.querySelector('.input').classList.add('error'); return; }
     m.close(); go(`#/join/${code.toUpperCase()}`);
   };
@@ -358,7 +362,7 @@ export function mountJoin(root, code, { onSignedIn }) {
           ${user
             ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button><button class="btn btn-ghost btn-sm" data-switch style="align-self:center">Это не я — сменить аккаунт</button>`
             : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
-          <p class="fineprint" style="text-align:center">Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.</p>
+          <p class="fineprint" style="text-align:center">${c.invite?.manual === false ? 'Возьмём только ник и аватар — и сразу за стол.' : 'Возьмём только ник и аватар. Мастер увидит заявку и пустит за стол.'}</p>
         </div>
       </div></div></div>`);
     const join = (uidv) => {
@@ -373,6 +377,8 @@ export function mountJoin(root, code, { onSignedIn }) {
         });
       }
       onSignedIn?.(uidv);
+      const now = membership(findByCode(code), uidv);
+      if (now?.status === 'active') { toast({ title: `${u.name}, вы в кампании`, icon: 'tick-02' }); go(`#/c/${cc.id}`); return; }
       toast({ title: `Заявка от ${u.name} отправлена`, icon: 'hourglass' });
       render();
     };
@@ -413,9 +419,11 @@ function mountJoinServer(root, code) {
           ${user
             ? html`<button class="btn btn-lg btn-primary btn-block" data-join style="margin-top:12px">Присоединиться как ${user.name}</button>`
             : html`<button class="btn btn-lg btn-discord btn-block" data-join style="margin-top:12px">${raw(icon('discord', 20))}Войти через Discord и присоединиться</button>`}
+          ${!user && guestAllowed() ? guestBlock() : ''}
           <p class="fineprint" style="text-align:center">Возьмём только ник и аватар.${p.manual ? ' Мастер увидит заявку и пустит за стол.' : ''}</p>
         </div>
       </div></div></div>`);
+    if (!user) bindGuest(root, `#/join/${code}`);
     root.querySelector('[data-join]').addEventListener('click', async (e) => {
       const b = e.currentTarget; b.disabled = true;
       try {
@@ -449,8 +457,7 @@ export function mountWaiting(root, c, user) {
     </div></div></div>`);
   root.querySelector('[data-cancel]').addEventListener('click', async () => {
     if (isServerMode()) {
-      try { await (await server()).deleteMembership(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
-      commit((db) => { delete db.campaigns[c.id]; });
+      try { await (await server()).leaveCampaign(c.id); } catch (err) { toast({ title: 'Не получилось', body: err.message, icon: 'alert-circle' }); return; }
       go('#/campaigns'); return;
     }
     commit((db) => { const cc = db.campaigns[c.id]; cc.members = cc.members.filter((m) => m.userId !== user.id); });
@@ -478,24 +485,25 @@ export function mountHeroPick(root, c0) {
     const chosen = c.characters.find((x) => x.id === pick);
     root.innerHTML = String(html`<div class="screen">${appHeader(user)}<main class="page">
       <h2>Кем вы сядете за стол?</h2>
-      <p class="muted t-para" style="margin-top:8px">Мастер подготовил героев для «${c.name}». Выберите свободного или создайте своего — подробный лист можно заполнить позже.</p>
+      <p class="muted t-para" style="margin-top:8px">${c.characters?.some((x) => !x.archivedAt) ? `Мастер подготовил героев для «${c.name}». Выберите свободного или создайте своего — подробный лист можно заполнить позже.` : `Готовых героев в «${c.name}» пока нет: создайте своего — подробный лист можно заполнить позже.`}</p>
       <div class="heroes">
         ${c.characters.map((ch) => {
           const owner = takenBy(ch);
           return html`<button class="hero-card" data-h="${ch.id}" aria-pressed="${pick === ch.id}" ${owner ? 'disabled' : ''}>
             <div class="portrait" style="background-image:url(${srcOf(ch.portrait)})">${pick === ch.id ? html`<span class="status-badge accent">${raw(icon('tick-02', 13))}</span>` : ''}</div>
             <div class="body"><div class="name">${ch.name}</div><div class="class">${ch.className} · ${ch.level} ур.</div>
-            <div class="stats"><span class="chip">ХП ${ch.hpMax}</span><span class="chip">КД ${ch.ac}</span></div>
+            <div class="stats"><span class="chip">ХП ${ch.hpMax}</span><span class="chip">КД ${heroAc(ch)}</span></div>
             <span class="chip ${owner ? '' : 'chip-success'}" style="align-self:flex-start">${owner ? `Играет ${owner.name}` : 'Свободен'}</span></div>
           </button>`;
         })}
-        <button class="own-hero" data-own>${raw(icon('plus-sign', 28))}<b>Свой герой</b><span class="t-sm">Создать с нуля по шаблону класса</span></button>
+        <button class="own-hero" data-own>${raw(icon('plus-sign', 28))}<b>Свой герой</b><span class="t-sm">Собрать пошагово по правилам кампании</span></button>
       </div>
       <button class="btn btn-primary btn-lg" data-sit ${chosen ? '' : 'disabled'}>${raw(icon('chess-pawn', 20))}${chosen ? `Сесть за стол как ${chosen.name}` : 'Выберите героя'}</button>
     </main></div>`);
     bindHeader(root, user);
     root.querySelectorAll('[data-h]').forEach((b) => b.addEventListener('click', () => { pick = b.dataset.h; render(); }));
-    root.querySelector('[data-own]').addEventListener('click', () => ownHeroModal(c, user));
+    // «Свой герой» — мастер создания этой кампании (#203); после «Создать» игрок садится за стол новым героем.
+    root.querySelector('[data-own]').addEventListener('click', () => go(`#/hero/new?c=${encodeURIComponent(c.id)}`));
     root.querySelector('[data-sit]').addEventListener('click', () => {
       if (!chosen) return;
       claim(c.id, user.id, chosen.id);
@@ -528,7 +536,24 @@ async function claimServer(cid, userId, chId) {
   go(`#/c/${cid}`);
 }
 
-function claim(cid, userId, chId) {
+/** Новый герой из мастера создания (#203) садится за стол: токен — на сцену игроков, запись в журнал, открывается стол. */
+export function seatHero(cid, userId, chId) {
+  commit((db) => {
+    const c = db.campaigns[cid]; if (!c) return;
+    const ch = c.characters.find((x) => x.id === chId); if (!ch) return;
+    const sc = c.scenes.find((s) => s.id === c.activeSceneId);
+    if (sc && !c.scenes.some((s) => s.tokens.some((t) => t.characterId === chId))) {
+      const friend = sc.tokens.find((t) => t.kind === 'hero');
+      const [p] = freeSpots(sc, friend || { x: sc.map.width / 2, y: sc.map.height / 2 }, 1, 1);
+      sc.tokens.push({ id: `t-${crypto.randomUUID().slice(0, 8)}`, kind: 'hero', characterId: chId, name: ch.name, img: ch.portrait, size: 'medium', x: p.x, y: p.y, hidden: false, conditions: [], light: ch.light || null, aura: ch.aura || null });
+    }
+    c.log.unshift({ id: crypto.randomUUID(), at: Date.now(), userId, kind: 'join', text: `${db.users[userId]?.name || 'Игрок'} за столом — ${ch.name}` });
+  });
+  go(`#/c/${cid}`);
+}
+
+/** Сесть за стол героем chId (выбор героя, перенос из LSS, «Привести в кампанию»): членство, токен, стол. */
+export function claim(cid, userId, chId) {
   if (isServerMode()) { claimServer(cid, userId, chId); return; }
   commit((db) => {
     const c = db.campaigns[cid];
@@ -549,28 +574,3 @@ function claim(cid, userId, chId) {
   go(`#/c/${cid}`);
 }
 
-function ownHeroModal(c, user) {
-  const m = modal(html`${panelHeader('Свой герой', 'Базовый шаблон — детали заполните в листе')}
-    <div class="panel-section">
-      <div class="field"><label>Имя</label><div class="input"><input data-n maxlength="40" placeholder="Как зовут героя" autofocus></div></div>
-      <div class="form-grid">
-        <div class="field"><label>Класс</label><div class="input"><select data-cl>${CLASSES.map((k) => html`<option value="${k.id}">${k.name}</option>`)}</select></div></div>
-        <div class="field"><label>Раса</label><div class="input"><select data-r>${RACES.map((r) => html`<option value="${r.id}">${r.name}</option>`)}</select></div></div>
-      </div>
-    </div>
-    <div class="panel-footer"><span class="spacer"></span><button class="btn btn-ghost" data-close>Отмена</button><button class="btn btn-primary" data-ok>Создать и сесть</button></div>`);
-  m.box.querySelector('[data-ok]').addEventListener('click', () => {
-    const name = m.box.querySelector('[data-n]').value.trim() || user.name;
-    const cl = classById(m.box.querySelector('[data-cl]').value);
-    const race = raceById(m.box.querySelector('[data-r]').value);
-    const level = c.level || 1;
-    const conMod = 1;
-    const hpMax = cl.hd + conMod + Math.max(0, level - 1) * (Math.floor(cl.hd / 2) + 1 + conMod);
-    const ch = makeCharacter({ name, portrait: `ini:${name}`, classId: cl.id, className: cl.name, raceId: race.id, raceName: race.name, level, hd: cl.hd, saves: cl.saves, hpMax, hp: hpMax, ac: 12, speed: race.speed, darkvision: race.darkvision, stats: { str: 12, dex: 14, con: 13, int: 10, wis: 12, cha: 10 } });
-    if (isServerMode()) ch.ownerId = user.id;
-    commit((db) => { db.campaigns[c.id].characters.push(ch); });
-    m.close();
-    if (isServerMode()) { server().then((sv) => sv.whenSynced(c.id)).then(() => claim(c.id, user.id, ch.id)); return; }
-    claim(c.id, user.id, ch.id);
-  });
-}

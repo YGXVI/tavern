@@ -125,8 +125,8 @@ function heroToken(ch, c, r, grid) {
   };
 }
 
-export function monsterToken(monsterId, name, c, r, grid, extra = {}) {
-  const m = monsterById(monsterId);
+/** m — статблок, если существо не из бестиария (своё из библиотеки, TASK-179); по умолчанию — по monsterId. */
+export function monsterToken(monsterId, name, c, r, grid, extra = {}, m = monsterById(monsterId)) {
   const n = { tiny: 1, small: 1, medium: 1, large: 2, huge: 3, gargantuan: 4 }[m.size] || 1;
   return {
     id: uid('t-'), kind: 'foe', monsterId, name, img: m.img, size: m.size,
@@ -256,7 +256,8 @@ function campaign(o) {
 
 export function makeInviteCode() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const a = crypto.getRandomValues(new Uint32Array(4));
+  // 8 знаков (~10¹² вариантов): по 4 код подбирался перебором (review C12). Формат сервера допускает 4–8.
+  const a = crypto.getRandomValues(new Uint32Array(8));
   return 'RSP-' + [...a].map((x) => abc[x % abc.length]).join('');
 }
 
@@ -268,7 +269,7 @@ export function seedDB() {
   const crypt = [HEROES.lira(), HEROES.torin(), HEROES.garr(), HEROES.elian(), HEROES.mira()];
   crypt[0].ownerId = 'u-asya'; crypt[1].ownerId = 'u-timur'; crypt[2].ownerId = 'u-roma'; crypt[4].ownerId = 'u-yara';
   const c1 = campaign({
-    id: 'c-crypt', code: 'RSP-7Q2K', name: 'Склеп культа', description: 'Под кладбищем Распутья проснулся культ Безликого. Отряд спускается в склеп, пока свечи ещё горят.',
+    id: 'c-crypt', code: 'RSP-7Q2K', name: 'Склеп культа', description: 'Под кладбищем Костяного Брода проснулся культ Безликого. Отряд спускается в склеп, пока свечи ещё горят.',
     cover: 'map:crypt', level: 5, seats: 6, ownerId: 'u-sol', createdAt: now - 2 * DAY,
     members: [
       { userId: 'u-sol', role: 'master', status: 'active', joinedAt: now - 2 * DAY },
@@ -282,7 +283,7 @@ export function seedDB() {
     scenes: [
       cryptScene(crypt),
       simpleScene('s-forest', 'Лесная дорога', { src: 'map:forest', width: 1024, height: 1024 }, 20, '20×20 клеток · засада волков'),
-      simpleScene('s-tavern', 'Таверна «Распутье»', { src: 'map:tavern', width: 1024, height: 1024 }, 20, '20×20 клеток · без боя'),
+      simpleScene('s-tavern', 'Таверна «Брошенная кость»', { src: 'map:tavern', width: 1024, height: 1024 }, 20, '20×20 клеток · без боя'),
       simpleScene('s-cave', 'Пещера гоблинов', { src: 'map:cave', width: 1024, height: 1024 }, 20, '20×20 клеток · черновик', { status: 'draft', lighting: 'dark', fog: { mode: 'vision' }, lights: [L(790, 560, 'campfire', 10, 10)] }),
     ],
     activeSceneId: 's-crypt',
@@ -291,11 +292,11 @@ export function seedDB() {
 
   const shadows = [HEROES.mira(), HEROES.garr(), HEROES.lira()];
   shadows[0].ownerId = 'u-sol'; shadows[2].ownerId = 'u-asya';
-  const tavern = simpleScene('s-tav2', 'Таверна «Распутье»', { src: 'map:tavern', width: 1024, height: 1024 }, 20, '20×20 клеток');
+  const tavern = simpleScene('s-tav2', 'Таверна «Брошенная кость»', { src: 'map:tavern', width: 1024, height: 1024 }, 20, '20×20 клеток');
   const tg = tavern.grid;
   tavern.tokens = [heroToken(shadows[0], 9, 10, tg), heroToken(shadows[1], 10, 10, tg), heroToken(shadows[2], 11, 10, tg)];
   const c2 = campaign({
-    id: 'c-shadows', code: 'RSP-T3NI', name: 'Тени Распутья', description: 'Городские интриги и пропавший караван.', cover: 'map:tavern', level: 3, seats: 5, ownerId: 'u-yara', createdAt: now - 9 * DAY,
+    id: 'c-shadows', code: 'RSP-T3NI', name: 'Тени Костяного Брода', description: 'Городские интриги и пропавший караван.', cover: 'map:tavern', level: 3, seats: 5, ownerId: 'u-yara', createdAt: now - 9 * DAY,
     members: [
       { userId: 'u-yara', role: 'master', status: 'active', joinedAt: now - 9 * DAY },
       { userId: 'u-sol', role: 'player', status: 'active', characterId: shadows[0].id, joinedAt: now - 8 * DAY },

@@ -3,18 +3,31 @@
 import { updateScene } from '../../core/campaign.js';
 
 export class History {
-  constructor() { this.done = []; this.undone = []; }
+  constructor() { this.done = []; this.undone = []; this.pending = false; }
   push(entry) { this.done.push(entry); if (this.done.length > 80) this.done.shift(); this.undone = []; }
-  get canUndo() { return this.done.length > 0; }
-  get canRedo() { return this.undone.length > 0; }
+  get canUndo() { return !this.pending && this.done.length > 0; }
+  get canRedo() { return !this.pending && this.undone.length > 0; }
   undo(ctx) {
+    if (this.pending) return null;
     const e = this.done.pop(); if (!e) return null;
     updateScene(ctx.cid, e.sceneId, (s, c) => e.undo(s, c));
     this.undone.push(e);
     return e;
   }
   redo(ctx) {
+    if (this.pending) return null;
     const e = this.undone.pop(); if (!e) return null;
+    if (e.redoRemote) {
+      this.pending = true;
+      Promise.resolve().then(() => e.redoRemote(ctx)).then(() => {
+        this.done.push(e);
+        ctx.toast({ title: `Повторено: ${e.label || 'действие'}`, icon: 'redo-02' });
+      }, (error) => {
+        this.undone.push(e);
+        ctx.toast({ title: 'Не удалось повторить', body: error.message || String(error), icon: 'alert-circle' });
+      }).finally(() => { this.pending = false; ctx.invalidate('chrome'); });
+      return null;
+    }
     updateScene(ctx.cid, e.sceneId, (s, c) => e.redo(s, c));
     this.done.push(e);
     return e;

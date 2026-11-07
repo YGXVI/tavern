@@ -20,7 +20,20 @@ create function auth.uid() returns uuid language sql stable as $$
  select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid
 $$;
 create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text references storage.buckets(id),name text,metadata jsonb,unique(bucket_id,name));
+-- Как в текущем Supabase Storage: уникальность (bucket_id,name) — частичные индексы, прямой DELETE
+-- запрещён, пока Storage API не выставит storage.allow_delete_query.
+create table storage.objects(id uuid default gen_random_uuid() primary key,bucket_id text references storage.buckets(id),name text,metadata jsonb,
+ is_versioned boolean not null default false,archived_at timestamptz);
+create unique index idx_objects_current_version on storage.objects(bucket_id,name) where archived_at is null;
+create unique index idx_objects_null_version on storage.objects(bucket_id,name) where not is_versioned;
+create function storage.protect_delete() returns trigger language plpgsql as $$
+begin
+ if coalesce(current_setting('storage.allow_delete_query',true),'false') != 'true' then
+  raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.' using errcode='42501';
+ end if;
+ return null;
+end $$;
+create trigger protect_objects_delete before delete on storage.objects for each statement execute function storage.protect_delete();
 alter table storage.objects enable row level security;
 create function storage.foldername(n text) returns text[] language sql immutable as $$
  select (string_to_array(n,'/'))[1:array_length(string_to_array(n,'/'),1)-1]
@@ -113,7 +126,7 @@ insert into storage.objects(bucket_id,name,metadata)
             return sql("select files,bytes from public.library_storage_usage where owner_id='00000000-0000-0000-0000-00000000000e';").stdout.strip()
 
         def clear_files():
-            sql("delete from storage.objects where bucket_id='library' and name like '00000000-0000-0000-0000-00000000000e/%';")
+            sql("set storage.allow_delete_query = 'true'; delete from storage.objects where bucket_id='library' and name like '00000000-0000-0000-0000-00000000000e/%';")
 
         for fill_count, size, constraint, expected in [(199, 1, 'files', '200|200'), (19, 5242880, 'bytes', '20|104857600')]:
             sql("""
@@ -140,7 +153,7 @@ insert into storage.objects(bucket_id,name,metadata)
         operations = [
             """insert into public.creatures(id,owner_id,data) values('race-image','00000000-0000-0000-0000-00000000000e',
             '{"name":"Image race","source":"image","statblockImage":"library:00000000-0000-0000-0000-00000000000e/contended.png"}');""",
-            "delete from storage.objects where bucket_id='library' and name='00000000-0000-0000-0000-00000000000e/contended.png';",
+            "set storage.allow_delete_query = 'true'; delete from storage.objects where bucket_id='library' and name='00000000-0000-0000-0000-00000000000e/contended.png';",
         ]
         with ThreadPoolExecutor(2) as pool:
             results = list(pool.map(lambda op: sql(authenticated(op), check=False), operations))
@@ -157,10 +170,13 @@ select count(*) from public.creatures c where c.id='race-image'
         sql("delete from auth.users where id='00000000-0000-0000-0000-00000000000e';")
         assert sql('select count(*) from public.creature_library_quota;').stdout.strip() == '0'
         assert sql('select count(*) from public.library_storage_usage;').stdout.strip() == '0'
+        from catalogue_checks import run_catalogue_checks
+        catalogue_checks = run_catalogue_checks(sql)
         print(json.dumps({'rls': count, 'concurrent_inserts': 'one success, one quota rejection',
                           'rows_and_quota': totals, 'cascade_cleanup': 'passed',
                           'file_count_and_byte_races': '200 files and 100 MiB enforced',
                           'save_vs_file_delete': 'one success, one rejection; no dangling reference',
+                          'private_catalogue': catalogue_checks,
                           'scope': 'isolated local PostgreSQL; Supabase service schemas stubbed'}, ensure_ascii=False))
     finally:
         if started:
