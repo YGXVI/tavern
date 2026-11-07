@@ -214,16 +214,17 @@ test('бросок стола: автопровал и помеха от сос�
   assert.deepEqual(conditionRoll({ conditions: ['poisoned'] }, { kind: 'attack' }).why, ['Отравлен']);
 });
 
-// Топ-30 (#193, этап 5). Новые рецепты — черновики, пока их не проверил человек; ниже они проверяются и как проверенные.
+// Топ-30 (#193, этап 5). Новый рецепт — черновик, пока его не проверил человек; топ-30 проверен YGXVI 07.11.2026.
 const TOP30 = ['dndsu:spell:9', 'dndsu:spell:254', 'dndsu:spell:105', 'dndsu:spell:332', 'dndsu:spell:70', 'dndsu:spell:69', 'dndsu:spell:100', 'dndsu:spell:83', 'dndsu:spell:355', 'dndsu:spell:207', 'dndsu:spell:164', 'dndsu:spell:312', 'dndsu:spell:60', 'dndsu:spell:10', 'dndsu:spell:42', 'dndsu:spell:236', 'dndsu:spell:316', 'dndsu:spell:74', 'dndsu:spell:129', 'dndsu:spell:295', 'dndsu:spell:99', 'dndsu:spell:165', 'dndsu:spell:356', 'dndsu:spell:38',
   'srd51:feature:barbarian:rage', 'srd51:feature:bard:bardic-inspiration', 'srd51:feature:rogue:sneak-attack', 'srd51:feature:barbarian:reckless-attack', 'srd51:feature:paladin:divine-smite', 'srd51:action:dodge'];
-const checked = (ref, more = {}) => { const { status, ...recipe } = R[ref]; return { ref, recipe, ...more }; };
+const checked = (ref, more = {}) => ({ ref, recipe: R[ref], ...more });
+const draft = (ref) => ({ ref, recipe: { ...R[ref], status: 'draft' } });
 const spellRef = (n) => `dndsu:spell:${n}`;
 
-test('топ-30: все на месте, схема верна, новые — черновики', () => {
+test('топ-30: все на месте, схема верна, все проверены человеком', () => {
   assert.equal(new Set(TOP30).size, 30);
   for (const ref of TOP30) { assert.ok(R[ref], ref); assert.deepEqual(validateRecipe(ref, R[ref]), []); }
-  assert.equal(TOP30.filter((ref) => R[ref].status === 'draft').length, 26, 'четыре из приложения A уже подтверждены');
+  assert.equal(TOP30.filter((ref) => R[ref].status).length, 0, 'проверил YGXVI 07.11.2026');
   const cat = JSON.parse(readFileSync(new URL('../dist/js/data/spells-2014.json', import.meta.url), 'utf8'));
   for (const e of cat.entries.filter((x) => TOP30.includes(x.id) && x.id !== spellRef(355))) assert.equal(!!R[e.id].concentration, e.concentration, e.id);
 });
@@ -238,7 +239,7 @@ test('топ-30: каждое число рецепта есть в тексте
     const s = en && list.find((x) => x.name.toLowerCase() === en.toLowerCase());
     return s ? [...s.text, s.higher || ''].join(' ') : feats.find((f) => f.id === ref)?.text.en || null;
   };
-  for (const ref of TOP30.filter((r) => R[r].status === 'draft' && R[r].src === 'srd51' && r !== 'srd51:action:dodge')) {
+  for (const ref of TOP30.filter((r) => R[r].src === 'srd51' && r !== 'srd51:action:dodge')) {
     const text = textOf(ref); assert.ok(text, ref);
     for (const part of R[ref].parts) for (const e of part.effects || []) {
       if (e.value == null || typeof e.value === 'object') continue; // таблицы проверены ниже по таблицам классов
@@ -251,10 +252,10 @@ test('топ-30: каждое число рецепта есть в тексте
 
 test('черновик только напоминает: числа и состояния не меняются', () => {
   const attack = { tags: ['attack'] };
-  const plan = rollPlan(attack, [{ ref: spellRef(254), recipe: R[spellRef(254)] }]);
+  const plan = rollPlan(attack, [draft(spellRef(254))]);
   assert.deepEqual([plan.dice, plan.lines, plan.mode], [[], [], 'normal']);
-  assert.equal(speedOf(30, [{ ref: spellRef(316), recipe: R[spellRef(316)] }]), 30);
-  assert.equal(armorClass({ armorBase: 12, mods: {} }, [{ ref: spellRef(70), recipe: R[spellRef(70)] }]).value, 12);
+  assert.equal(speedOf(30, [draft(spellRef(316))]), 30);
+  assert.equal(armorClass({ armorBase: 12, mods: {} }, [draft(spellRef(70))]).value, 12);
 });
 
 test('проверенные рецепты топ-30: броски', () => {
@@ -314,8 +315,7 @@ test('проверенные рецепты топ-30: таблицы, урон,
 test('наложения: концентрация, нить, длительность, состояния от заклинаний', async () => {
   const { setRecipes, castRows, endCast, expired, effectInstances, roundsOf } = await import('../dist/js/rules/effect-rows.js');
   const { conditionRoll } = await import('../dist/js/views/table/effects-roll.js');
-  const map = Object.fromEntries(Object.entries(R).map(([k, v]) => [k, (({ status, ...r }) => r)(v)]));
-  setRecipes(map);
+  setRecipes(R);
   let { rows } = castRows([], { ref: spellRef(9), targets: ['a', 'b', 'c'], by: 'u1', cast: 'k1', round: 2 });
   assert.equal(rows.length, 3); assert.equal(rows[0].until, 12, 'минута — 10 раундов');
   ({ rows } = castRows(rows, { ref: spellRef(316), targets: ['a'], by: 'u1', cast: 'k2' }));
@@ -332,7 +332,7 @@ test('наложения: концентрация, нить, длительно
   assert.equal(conditionRoll({}, { kind: 'save', what: 'Спасбросок: Сила' }, onA).autoFail, true, 'Удержание даёт паралич');
   assert.deepEqual(conditionRoll({}, { kind: 'attack' }, effectInstances({ effects: [{ target: 'a', ref: spellRef(9) }] }, 'a')).dice, { 4: 1 }, 'Благословение бросает к4');
   assert.deepEqual(conditionRoll({}, { kind: 'attack' }, effectInstances(c, 'b')).minus, [{ sides: 4, label: 'Порча' }]);
-  setRecipes(R);
+  setRecipes(Object.fromEntries(Object.entries(R).map(([k, v]) => [k, { ...v, status: 'draft' }])));
   assert.equal(conditionRoll({}, { kind: 'save', what: 'Спасбросок: Сила' }, effectInstances(c, 'a')).autoFail, false, 'черновик не парализует');
   assert.deepEqual(conditionRoll({}, { kind: 'attack' }, effectInstances(c, 'b')).minus, []);
   setRecipes({});

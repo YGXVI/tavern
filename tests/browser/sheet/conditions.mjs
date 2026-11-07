@@ -49,7 +49,7 @@ try {
  assert.doesNotMatch(JSON.stringify((await logs())[0]),/помех|"adv":"dis"/,'без состояний бросок обычный');
  await closeAll();
 
- // Наложения: проверенный рецепт бросает свой куб, черновик ничего не меняет
+ // Наложения: Благословение бросает свой куб, Порча вычитает свой
  const setEffects=(effects)=>page.evaluate(async({effects})=>{(await import('/js/core/campaign.js')).updateCampaign('c-crypt',c=>{c.effects=effects;});},{effects});
  await page.waitForFunction(async()=>!!(await import('/js/rules/effect-rows.js')).recipeOf('dndsu:spell:9'));
  await setEffects([{id:'e1',target:'cond-pc',ref:'dndsu:spell:9',cast:'k1'}]);await open('edit');
@@ -62,7 +62,7 @@ try {
  await setEffects([{id:'e2',target:'cond-pc',ref:'dndsu:spell:254',cast:'k2'}]);await open('edit');
  await page.click('[data-tab="combat"]');await page.waitForSelector('[data-attack="0"]');
  await page.click('[data-attack="0"]');
- assert.doesNotMatch((await logs())[0].label,/Порча/,'черновик не вычитает');
+ assert.match((await logs())[0].label,/Порча −[1-4]/,'Порча вычитает: '+(await logs())[0].label);
  await closeAll();await setEffects([]);
  console.log('blessed roll:',blessed);
 
