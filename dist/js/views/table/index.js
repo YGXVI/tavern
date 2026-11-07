@@ -1,5 +1,5 @@
 // Стол кампании: связывает данные, камеру, слои мира, ввод, панели и события между вкладками.
-import { el, throttle, debounce, uid } from '../../core/dom.js';
+import { esc, el, throttle, debounce, uid } from '../../core/dom.js';
 import { getDB, subscribe, bus, setPresence, onlineUsers, emitLocal, isServerMode } from '../../core/store.js';
 import { currentUser } from '../../core/auth.js';
 import {
@@ -280,7 +280,7 @@ export function mountTable(root, cid) {
       const ang = Math.atan2(s.y - cy, s.x - cx);
       const k = Math.min((vr.width / 2 - 120) / Math.abs(Math.cos(ang) || 1e-6), (vr.height / 2 - 70) / Math.abs(Math.sin(ang) || 1e-6));
       const x = cx + Math.cos(ang) * k, y = cy + Math.sin(ang) * k;
-      html.push(`<button class="edge-indicator" data-edge="${id}" style="left:${x}px;top:${y}px;--rot:${ang}rad;--pc:${p.color}">${p.avatar}<span>${p.name} отметил</span><i class="arr"></i></button>`);
+      html.push(`<button class="edge-indicator" data-edge="${id}" style="left:${x}px;top:${y}px;--rot:${ang}rad;--pc:${p.color}">${p.avatar}<span>${esc(p.name)} отметил</span><i class="arr"></i></button>`);
     }
     ctx.edgeLayer.innerHTML = html.join('');
   }
